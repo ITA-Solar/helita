@@ -2,7 +2,7 @@
 Set of routines to read output from multi3d
 """
 from ..io.fio import fort_read, fort_write
-from tt.misc.waveconv import *
+from ..utils.waveconv import waveconv
 import numpy as np
 
 

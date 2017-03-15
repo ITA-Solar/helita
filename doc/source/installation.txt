@@ -8,10 +8,10 @@ Pre-requisites
 
 To make use of helita the you must first install the following:
 
- * `Python <http://www.python.org>`_ (2.7.x, 3.4.x or later)
- * `Astropy <http://astropy.org>`_
- * `NumPy <http://numpy.scipy.org>`_
- * `SciPy <http://www.scipy.org/>`_
+* `Python <http://www.python.org>`_ (2.7.x, 3.4.x or later)
+* `Astropy <http://astropy.org>`_
+* `NumPy <http://numpy.scipy.org>`_
+* `SciPy <http://www.scipy.org/>`_
 
 In addition, the following packages are also recommended to take advantage of all the features:
 
@@ -34,7 +34,7 @@ The easiest way is to use git to clone the repository. To grab the latest versio
 
 
 Non-root install
-----------------
+================
 
 If you don't have write permission to your Python packages directory, use the following option with ``setup.py``::
 
@@ -43,7 +43,7 @@ If you don't have write permission to your Python packages directory, use the fo
 This will install helita under your home directory (typically ``~/.local``).
 
 Developer install
------------------
+=================
 
 If you want to install helita but also actively change the code or contribute to its development, it is recommended that you do a developer install instead::
 
