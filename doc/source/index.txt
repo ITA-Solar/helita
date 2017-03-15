@@ -1,0 +1,12 @@
+.. Helita documentation master file
+
+Welcome to Helita's documentation!
+===================================
+
+Contents:
+
+.. toctree::
+   :maxdepth: 2
+
+   installation
+
