@@ -2,7 +2,7 @@
 Set of routines to read output from multi3d MPI (new version!)
 """
 from ..io.fio import fort_read
-from tt.misc.waveconv import *
+from ..utils.waveconv import waveconv
 import numpy as np
 import os
 
@@ -445,7 +445,7 @@ class m3dprof:
 class Multi3dout:
     """
     For latest Multi3d (RH solver).
-    OBSOLETE. WILL NEED TO SWAP BY LATEST PACKAGE FROM JOHANN/JORRIT.
+    OBSOLETE. WILL NEED TO SWAP BY LATEST PACKAGE FROM JOHAN/JORRIT.
     Also, does not work.
     """
     def __init__(self, fdir='.', precision='f4', verbose=True):

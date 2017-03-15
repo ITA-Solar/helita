@@ -150,7 +150,7 @@ def voigt(a, v):
 
     --Tiago, 20090728
     '''
-    from voigtv import voigtv
+    from .voigtv import voigtv
 
     if hasattr(a, '__len__'):
         raise TypeError('voigt: a must be a scalar!')
