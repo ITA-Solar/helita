@@ -10,7 +10,7 @@ Set of programs and tools to read the outputs from RH (Han's version)
  5. Ray      (no Stokes)
 
  These output files will have to be added later:
-ßN
+ 
   Atom (atom, collrate, damping, pops, radrate)
   Flux
   metals
