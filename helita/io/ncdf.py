@@ -82,7 +82,7 @@ def copy_ncdf(filein, transp=[], remove=[], memGb=16, step=None, tlimit=None,
     if os.path.isfile(fileout):
         raise IOError(
             '%s already exists, remove or rename for copy to proceeed.')
-    fin = nc.Dataset(filein, 'r')
+    finp = nc.Dataset(filein, 'r')
     fout = nc.Dataset(fileout, 'w')
     # copy dimensions
     for d in list(finp.dimensions.keys()):
@@ -143,7 +143,7 @@ def copy_var(filein, fileout, vars=[], step=15):
     fileout: output netCDF file (must exist), where to copy variable(s)
     vars: list of strings with variable names to be copied.
     '''
-    fin = nc.Dataset(filein, 'r')
+    finp = nc.Dataset(filein, 'r')
     fout = nc.Dataset(fileout, 'a')
     for v in vars:
         print(v)
