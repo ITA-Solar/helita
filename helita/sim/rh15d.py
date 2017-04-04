@@ -17,15 +17,15 @@ class Rh15dout:
                         "output_ray": self.read_ray,
                         "output_spectrum": self.read_spectrum}
         for outfile, func in OUTFILE_FUNC.items():
-            if (os.path.isfile("%s/%s.ncdf" % self.fdir) or
-                os.path.isfile("%s/%s.hdf5" % self.fdir)):
+            if (os.path.isfile("%s/%s.ncdf" % (self.fdir, outfile)) or
+                os.path.isfile("%s/%s.hdf5" % (self.fdir, outfile))):
                 func()
 
     def read_aux(self, infile=None):
         ''' Reads Aux file. '''
         if infile is None:
             infile = '%s/output_aux.hdf5' % self.fdir
-        self.files.append(read_ncdf(self, infile))
+        self.files.append(read_hdf5(self, infile))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
@@ -33,7 +33,7 @@ class Rh15dout:
         ''' Reads indata file. '''
         if infile is None:
             infile = '%s/output_indata.hdf5' % self.fdir
-        self.files.append(read_ncdf(self, infile))
+        self.files.append(read_hdf5(self, infile))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
@@ -42,7 +42,7 @@ class Rh15dout:
         if infile is None:
             infile = '%s/output_spectrum.ncdf' % self.fdir
         self.spectrum = DataHolder()
-        self.files.append(read_ncdf(self.spectrum, infile))
+        self.files.append(read_hdf5(self.spectrum, infile))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
@@ -51,13 +51,13 @@ class Rh15dout:
         if infile is None:
             infile = '%s/output_ray.hdf5' % self.fdir
         self.ray = DataHolder()
-        self.files.append(read_ncdf(self.ray, infile))
+        self.files.append(read_hdf5(self.ray, infile))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
     def read_J(self, infile='scratch/J.dat.hdf5'):
         ''' Reads angle averaged intensity file '''
-        self.files.append(read_ncdf(self, infile))
+        self.files.append(read_hdf5(self, infile))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
@@ -303,7 +303,7 @@ def read_ncdf(inclass, infile):
         are read into params dictionary. '''
     from warnings import warn
     import netCDF4 as nc
-    warnings.warn("Please use read_hdf5 instead", DeprecationWarning)
+    warn("Please use read_hdf5 instead", DeprecationWarning)
     # internal attributes of NetCDF groups
     ncdf_internals = dir(nc.Dataset)
     if not os.path.isfile(infile):
@@ -782,6 +782,7 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         y_var[:] = y
     z_var[nt[0]:nt[1]] = z
     nt_var[nt[0]:nt[1]] = snap
+    rootgrp.attrs['nt'] = z_var.shape[0]
     rootgrp.close()
     return
 
