@@ -343,9 +343,11 @@ def read_ncdf(inclass, infile):
 
 
 def read_hdf5(inclass, infile):
-    ''' Reads HDF5/netCDF4 file into inclass, instance of any class.
-        Variables are read into class attributes, dimensions and attributes
-        are read into params dictionary. '''
+    """
+    Reads HDF5/netCDF4 file into inclass, instance of any class.
+    Variables are read into class attributes, dimensions and attributes
+    are read into params dictionary.
+    """
     import h5py
     if not os.path.isfile(infile):
         raise IOError('read_hdf5: File %s not found' % infile)
@@ -882,7 +884,7 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
         wavelengths.
     """
     import xdrlib
-    from tt.misc.waveconv import waveconv
+    from ..utils.waveconv import waveconv
     if new_wave is None:
         new_wave = np.arange(start, end, step)
         if None in [start, end, step]:
