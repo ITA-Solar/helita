@@ -10,7 +10,7 @@ Set of programs and tools to read the outputs from RH (Han's version)
  5. Ray      (no Stokes)
 
  These output files will have to be added later:
- 
+
   Atom (atom, collrate, damping, pops, radrate)
   Flux
   metals
@@ -41,8 +41,7 @@ import xdrlib
 import numpy as np
 
 
-class rhout:
-
+class Rhout:
     def __init__(self, fdir='.', verbose=True):
         ''' Reads all the output data from a RH run.'''
         self.verbose = verbose
@@ -488,7 +487,6 @@ class rhout:
 
 
 class RhAtmos:
-
     def __init__(self, format="2D", filename=None, verbose=True):
         ''' Reads RH input atmospheres. '''
         self.verbose = verbose
@@ -552,7 +550,6 @@ class RhAtmos:
 # TOOLS
 #############################################################################
 class EmptyData:
-
     def __init__(self):
         pass
 
@@ -602,7 +599,6 @@ def close_xdr(buf, ofile='', verbose=False):
     except:  # .done() will raise error if data remaining
         if verbose:
             print(('(WWW) close_xdr: {0} not all data read!'.format(ofile)))
-
     return
 
 

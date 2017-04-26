@@ -80,8 +80,8 @@ def copy_ncdf(filein, transp=[], remove=[], memGb=16, step=None, tlimit=None,
         fileout = os.path.splitext(
             filein)[0] + '_copy' + os.path.splitext(filein)[1]
     if os.path.isfile(fileout):
-        raise IOError(
-            '%s already exists, remove or rename for copy to proceeed.')
+        raise IOError(("%s already exists"
+                       ", remove or rename for copy to proceeed." % fileout))
     finp = nc.Dataset(filein, 'r')
     fout = nc.Dataset(fileout, 'w')
     # copy dimensions
