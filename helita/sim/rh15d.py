@@ -5,7 +5,6 @@ import os
 import numpy as np
 
 
-
 class Rh15dout:
     def __init__(self, fdir='.', verbose=True):
         self.files = []
@@ -65,6 +64,7 @@ class Rh15dout:
         ''' Closes the open NetCDF files '''
         for f in self.files:
             f.close()
+
 
 class HDF5Atmos:
     def __init__(self, infile):
@@ -363,6 +363,10 @@ def read_hdf5(inclass, infile):
         name = element.replace(' ', '_')    # sanitise string for spaces
         if type(f[element]) == h5py._hl.dataset.Dataset:
             setattr(inclass, name, f[element])
+            # special case for netCDF dimensions, add them to param list
+            if 'NAME' in f[element].attrs:
+                if f[element].attrs['NAME'][:20] == b'This is a netCDF dim':
+                    inclass.params[element] = f[element].shape[0]
         if type(f[element]) == h5py._hl.group.Group:
             setattr(inclass, name, DataHolder())
             cur_class = getattr(inclass, name)
@@ -379,7 +383,8 @@ def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                     Bx=None, rho=None, ne=None, vx=None, vy=None, desc=None,
                     snap=None, boundary=[1, 0], comp=False, complev=2,
                     append=False):
-    ''' Creates NetCDF input file for rh15d.
+    """
+    Creates NetCDF input file for rh15d.
 
         IN:
            outfile:  string name of destination. If file exists it will be wiped.
@@ -399,7 +404,7 @@ def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
            append:   if True, will append to existing file (if any).
            comp:     if false, compress file.
            complev:  compression level.
-    '''
+    """
     import os
     import netCDF4 as nc
 
