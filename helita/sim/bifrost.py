@@ -349,7 +349,7 @@ class OSC_data:
                 snapstr = ''
                 fsuffix_b = ''
             else:
-                snapstr = self.snapstr
+                snapstr = self.snap_str
                 fsuffix_b = ''
 
             # mhd variables
