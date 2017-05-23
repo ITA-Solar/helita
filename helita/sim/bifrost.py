@@ -1,18 +1,20 @@
 """
 Set of programs to read and interact with output from Bifrost
 """
+
 import numpy as np
 import os
 
 
 class OSC_data:
 
-    def __init__(self, snap, template='qsmag-by00_t%03i', meshfile=None, fdir='.',
+    def __init__(self, snap, file_root='qsmag-by00_t', meshfile=None, fdir='.',
                  verbose=True, dtype='f4', big_endian=False):
         ''' Main object for extracting Bifrost datacubes. '''
         self.snap = snap
         self.fdir = fdir
-        self.template = fdir + '/' + template % (snap)
+        self.file_root = self.fdir + '/' + file_root
+        self.snap_str = '_%03i' % snap
         self.verbose = verbose
         # endianness and data type
         if big_endian:
@@ -20,31 +22,73 @@ class OSC_data:
         else:
             self.dtype = '<' + dtype
         # read .idl file
-        self.read_params()
+        self.__read_params()
+        self.mf_params = [v for k, v in self.params.items()
+                          if k.startswith('mf_')]
+        # multifluid if at least one mf_ param
+        self.multifluid = len(self.mf_params) > 0
+        if self.multifluid:
+            self.__read_mf_params()
+
         # read mesh file
-        if meshfile is None:
-            meshfile = self.params['meshfile'].strip()
-        if not os.path.isfile(meshfile):
-            raise IOError('Mesh file %s does not exist, aborting.' % meshfile)
-        self.read_mesh(meshfile)
+        self.__read_mesh(meshfile)
         # variables: lists and initialisation
         self.auxvars = self.params['aux'].split()
-        self.snapvars = ['r', 'px', 'py', 'pz', 'e', 'bx', 'by', 'bz']
+        self.snapvars = ['r', 'px', 'py', 'pz', 'e']
+        self.snapevars = ['er', 'epx', 'epy', 'epz', 'ee']  # electron specific
+        if (self.do_mhd):
+            self.mhdvars = ['bx', 'by', 'bz']
+        else:
+            self.mhdvars = []
         self.hionvars = ['hionne', 'hiontg', 'n1',
                          'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
-        self.compvars = ['ux', 'uy', 'uz', 'ee', 's']  # composite variables
+        self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup', 'dxdbup', 'dxdbdn',
+                         'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modb', 'modp']  # composite variables
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
         if 'ixy1' in self.auxvars:
             self.auxvars.remove('ixy1')
             self.auxxyvars.append('ixy1')
-        self.init_vars()
+        self.vars2d = []
+        # special case for the 2d variable, lives in a separate file
+        for var in self.auxvars:
+            if any(i in var for i in ('xy', 'yz', 'xz')):
+                self.auxvars.remove(var)
+                self.vars2d.append(var)
+
+        if self.multifluid:  # define name basis for multifluid files
+            if (self.mf_epf == 1):
+                self.varsmfe = [
+                    v for v in self.auxvars if v.startswith('mfe_')]
+                self.varsmfc = [
+                    v for v in self.auxvars if v.startswith('mfc_')]
+                self.varsmf = [v for v in self.auxvars if v.startswith('mf_')]
+
+                # Remove for the var list the mf aux vars, and stores these mf
+                # varnames.
+                for var in (self.varsmfe + self.varsmfc + self.varsmf):
+                    self.auxvars.remove(var)
+            else:  # add sinle fluid energy (same for all fluids)
+                self.mhdvars = 'e' + self.mhdvars
+                self.snapvars.remove('e')
+                if self.with_electrons:
+                    self.snapevars.remove('ee')
+
+        self.__init_vars()
         return
 
-    def read_params(self):
+    def __read_params(self):
         ''' Reads parameter file (.idl) '''
-        filename = self.template + '.idl'
+
+        if (self.snap < 0):
+            filename = self.file_root + self.snap_str + '.idl.src'
+        elif (self.snap == 0):
+            filename = self.file_root + '.idl'
+        else:
+            filename = self.file_root + self.snap_str + '.idl'
+
         self.params = read_idl_ascii(filename)
+
         # assign some parameters to root object
         try:
             self.nx = self.params['mx']
@@ -69,6 +113,25 @@ class OSC_data:
                 self.nzb = self.nz
         except KeyError:
             self.nzb = self.nz
+        try:
+            self.dx = self.params['dx']
+        except KeyError:
+            raise KeyError('read_params: could not find dx in idl file!')
+
+        try:
+            self.dy = self.params['dy']
+        except KeyError:
+            raise KeyError('read_params: could not find dy in idl file!')
+
+        try:
+            self.dz = self.params['dz']
+        except KeyError:
+            raise KeyError('read_params: could not find dz in idl file!')
+
+        try:
+            self.do_mhd = self.params['do_mhd']
+        except KeyError:
+            raise KeyError('read_params: could not find do_mhd in idl file!')
         # check if units are there, if not use defaults and print warning
         unit_def = {'u_l': 1.e8, 'u_t': 1.e2, 'u_r': 1.e-7, 'u_b': 1.121e3,
                     'u_ee': 1.e12}
@@ -79,42 +142,91 @@ class OSC_data:
                 self.params[unit] = unit_def[unit]
         return
 
-    def read_mesh(self, meshfile):
+    def __read_mf_params(self):
+        ''' Reads parameter file specific for Multi Fluid Bifrost '''
+        self.nspecies_max = 28
+        self.nlevels_max = 28
+        try:
+            self.mf_epf = self.params['mf_epf']
+        except KeyError:
+            raise KeyError('read_params: could not find mf_epf in idl file!')
+        try:
+            self.with_electrons = self.params['mf_electrons']
+        except KeyError:
+            raise KeyError(
+                'read_params: could not find with_electrons in idl file!')
+
+    def __read_mesh(self, meshfile):
         ''' Reads mesh.dat file '''
-        # perhaps one day we'll be able to use np.genfromtxt, but for now
-        # doing manually
-        f = open(meshfile, 'r')
-        mx = int(f.readline().strip('\n').strip())
-        assert mx == self.nx
-        self.x = np.array([float(v) for v in
-                           f.readline().strip('\n').split()])
-        self.xdn = np.array([float(v) for v in
-                             f.readline().strip('\n').split()])
-        self.dxidxup = np.array([float(v) for v in
+
+        if meshfile is None:
+            meshfile = self.fdir + '/' + self.params['meshfile'].strip()
+        if not os.path.isfile(meshfile):
+            print('(WWW) Mesh file %s does not exist.' % meshfile)
+
+        if os.path.isfile(meshfile):
+            f = open(meshfile, 'r')
+            mx = int(f.readline().strip('\n').strip())
+            assert mx == self.nx
+            self.x = np.array([float(v)
+                               for v in f.readline().strip('\n').split()])
+            self.xdn = np.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-        self.dxidxdn = np.array([float(v) for v in
+            self.dxidxup = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            self.dxidxdn = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            my = int(f.readline().strip('\n').strip())
+            assert my == self.ny
+            self.y = np.array([float(v) for v in
+                               f.readline().strip('\n').split()])
+            self.ydn = np.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-        my = int(f.readline().strip('\n').strip())
-        assert my == self.ny
-        self.y = np.array([float(v) for v in
-                           f.readline().strip('\n').split()])
-        self.ydn = np.array([float(v) for v in
-                             f.readline().strip('\n').split()])
-        self.dyidyup = np.array([float(v) for v in
+            self.dyidyup = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            self.dyidydn = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            mz = int(f.readline().strip('\n').strip())
+            assert mz == self.nz
+            self.z = np.array([float(v) for v in
+                               f.readline().strip('\n').split()])
+            self.zdn = np.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-        self.dyidydn = np.array([float(v) for v in
-                                 f.readline().strip('\n').split()])
-        mz = int(f.readline().strip('\n').strip())
-        assert mz == self.nz
-        self.z = np.array([float(v) for v in
-                           f.readline().strip('\n').split()])
-        self.zdn = np.array([float(v) for v in
-                             f.readline().strip('\n').split()])
-        self.dzidzup = np.array([float(v) for v in
-                                 f.readline().strip('\n').split()])
-        self.dzidzdn = np.array([float(v) for v in
-                                 f.readline().strip('\n').split()])
-        f.close()
+            self.dzidzup = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            self.dzidzdn = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            f.close()
+
+        else:  # no mesh file
+
+            if self.dx == 0.0:
+                self.dx = 1.0
+            if self.dy == 0.0:
+                self.dy = 1.0
+            if self.dz == 0.0:
+                self.dz = 1.0
+
+            print(('(WWW) Creating uniform grid with [dx,dy,dz] = '
+                   '[%f,%f,%f]') % (self.dx, self.dy, self.dz))
+
+            # x
+            self.x = np.arange(self.nx) * self.dx
+            self.xdn = self.x - 0.5 * self.dx
+            self.dxidxup = np.zeros(self.nx) + 1./self.dx
+            self.dxidxdn = np.zeros(self.nx) + 1./self.dx
+
+            # y
+            self.y = np.arange(self.ny) * self.dy
+            self.ydn = self.y - 0.5 * self.dy
+            self.dyidyup = np.zeros(self.ny) + 1./self.dy
+            self.dyidydn = np.zeros(self.ny) + 1./self.dy
+
+            # z
+            self.z = np.arange(self.nz) * self.dz
+            self.zdn = self.z - 0.5 * self.dz
+            self.dzidzup = np.zeros(self.nz) + 1./self.dz
+            self.dzidzdn = np.zeros(self.nz) + 1./self.dz
 
         def _add_boundaries(quant, nb):
             """ Adds boundaries by extrapolating quant by nb * 2. """
@@ -132,55 +244,6 @@ class OSC_data:
             self.dzidzup = _add_boundaries(self.dzidzup, self.nb)
             self.dzidzdn = _add_boundaries(self.dzidzdn, self.nb)
         return
-
-    def getvar(self, var, slice=None, order='F'):
-        ''' Reads a given variable from the relevant files. '''
-        import os
-        # find in which file the variable is
-        if var in self.compvars:
-            # if variable is composite, use getcompvar
-            return self.getcompvar(var, slice)
-        elif var in self.snapvars:
-            fsuffix = '.snap'
-            idx = self.snapvars.index(var)
-            filename = self.template + fsuffix
-        elif var in self.auxvars:
-            fsuffix = '.aux'
-            idx = self.auxvars.index(var)
-            filename = self.template + fsuffix
-        elif var in self.hionvars:
-            idx = self.hionvars.index(var)
-            isnap = self.params['isnap']
-            if isnap <= -1:
-                fsuffix = '.hion.snap.scr'
-                filename = self.template + fsuffix
-            elif isnap == 0:
-                fsuffix = '.hion.snap'
-                filename = self.template + fsuffix
-            elif isnap > 0:
-                fsuffix = '.hion_%03i.snap' % self.params['isnap']
-                filename = '%s.hion%s.snap' % (
-                    self.template.split(str(isnap))[0], isnap)
-            if not os.path.isfile(filename):
-                filename = self.template + '.snap'
-        else:
-            raise ValueError('getvar: variable ' +
-                             '%s not available. Available vars:' % (var) +
-                              '\n' + repr(self.auxvars + self.snapvars +
-                                          self.hionvars))
-        # Now memmap the variable
-        if not os.path.isfile(filename):
-            raise IOError('getvar: variable ' +
-                          '%s should be in %s file, not found!' % (var,
-                                                                   filename))
-        # size of the data type
-        if self.dtype[1:] == 'f4':
-            dsize = 4
-        else:
-            raise ValueError('getvar: datatype %s not supported' % self.dtype)
-        offset = self.nx * self.ny * self.nzb * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
-                         mode='r', shape=(self.nx, self.ny, self.nzb))
 
     def getvar_xy(self, var, slice=None, order='F'):
         ''' Reads a given 2D variable from the _XY.aux file'''
@@ -205,8 +268,138 @@ class OSC_data:
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode='r', shape=(self.nx, self.ny))
 
-    def getcompvar(self, var, slice=None):
-        ''' Gets composite variables. '''
+    def getvar(self, var, mf_ispecies=0, mf_ilevel=0, slice=None, order='F'):
+        ''' Reads a given variable from the relevant files. '''
+
+        if var == 'x':
+            return self.x
+        elif var == 'y':
+            return self.y
+        elif var == 'z':
+            return self.z
+
+        def _getvar(filename, order, idx):
+            '''core of get var routine'''
+
+            # Now memmap the variable
+            if not os.path.isfile(filename):
+                raise IOError('getvar: variable ' +
+                              '%s should be in %s file, not found!' % (var, filename))
+            # size of the data type
+            if self.dtype[1:] == 'f4':
+                dsize = 4
+            else:
+                raise ValueError(
+                    'getvar: datatype %s not supported' % self.dtype)
+            offset = self.nx * self.ny * self.nzb * idx * dsize
+            return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+                             mode='r', shape=(self.nx, self.ny, self.nzb))
+
+        def _sf_getvar(var, slice=None, order='F', **kwargs):
+
+            # find filename template
+            if self.snap < 0:
+                filename = self.file_root
+                fsuffix_b = '.scr'
+            elif self.snap == 0:
+                filename = self.file_root
+                fsuffix_b = ''
+            else:
+                filename = self.file_root + self.snap_str
+                fsuffix_b = ''
+
+            # find in which file the variable is
+            if var in self.compvars:
+                return self._get_sf_compvar(var, slice)
+            elif var in (self.snapvars + self.mhdvars):
+                fsuffix_a = '.snap'
+                idx = (self.snapvars + self.mhdvars).index(var)
+                filename = filename + fsuffix_a + fsuffix_b
+            elif var in self.auxvars:
+                fsuffix_a = '.aux'
+                idx = self.auxvars.index(var)
+                filename = filename + fsuffix_a + fsuffix_b
+            elif var in self.hionvars:
+                idx = self.hionvars.index(var)
+                isnap = self.params['isnap']
+                if isnap <= -1:
+                    fsuffix = '.hion.snap.scr'
+                    filename = filename + fsuffix
+                elif isnap == 0:
+                    fsuffix = '.hion.snap'
+                    filename = filename + fsuffix
+                elif isnap > 0:
+                    fsuffix = '.hion_%03i.snap' % self.params['isnap']
+                    filename = '%s.hion%s.snap' % (filename, isnap)
+            else:
+                raise ValueError('getvar: variable ' +
+                                 '%s not available. Available vars:' % (var) +
+                                 '\n' + repr(self.auxvars + self.snapvars +
+                                             self.hionvars))
+
+            return _getvar(filename, order, idx)
+
+        def _mf_getvar(var, mf_ispecies=0, mf_ilevel=0, slice=None, order='F'):
+
+            # find filename template
+            if self.snap < 0:
+                snapstr = ''
+                fsuffix_b = '.scr'
+            elif self.snap == 0:
+                snapstr = ''
+                fsuffix_b = ''
+            else:
+                snapstr = self.snapstr
+                fsuffix_b = ''
+
+            # mhd variables
+            if var in self.compvars:
+                return self._get_mf_compvar(var, mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, slice=slice)
+            elif var in self.mhdvars:  # could also have energy
+                idx = self.mhdvars.index(var)
+                fsuffix_a = '.snap'
+                filename = self.mf_common_file
+            elif var in self.snapvars:
+                idx = self.snapvars.index(var)
+                fsuffix_a = '.snap'
+                filename = self.mf_file
+            elif var in self.snapevars:
+                idx = self.snapevars.index(var)
+                filename = self.mf_e_file
+            elif var in self.auxvars:
+                idx = self.auxvars.index(var)
+                fsuffix_a = '.aux'
+                filename = self.mf_file
+            elif var in self.varsmf:
+                idx = self.varsmf.index(var)
+                fsuffix_a = '.aux'
+                filename = self.mf_file
+            elif var in self.varsmfe:
+                idx = self.varsmfe.index(var)
+                fsuffix_a = '.aux'
+                filename = self.mfe_file
+            elif var in self.varsmfc:
+                idx = self.varsmfc.index(var)
+                fsuffix_a = '.aux'
+                filename = self.mfc_file
+            else:
+                raise ValueError('getvar: variable %s not available. Available vars:'
+                                 % (var) + '\n' + repr(self.mhdvars + self.snapvars + self.auxvars + self.varsmf + self.varsmfe + self.varsmfc + self.compvars))
+
+            filename = (filename + snapstr + fsuffix_a + fsuffix_b)
+            if (not (var in self.mhdvars)):
+                filename = filename % (mf_ispecies, mf_ilevel)
+
+            return _getvar(filename, order, idx)
+
+        if (self.multifluid):
+            return _mf_getvar(var, mf_ispecies=mf_ispecies,
+                              mf_ilevel=mf_ilevel, slice=slice, order=order)
+        else:
+            return _sf_getvar(var, slice=slice, order=order)
+
+    def _get_sf_compvar(self, var, slice=None):
+        ''' Gets composite variables for single fluid. '''
         from . import cstagger
 
         # if rho is not loaded, do it (essential for composite variables)
@@ -248,26 +441,162 @@ class OSC_data:
                              % (var, repr(self.compvars)))
         return
 
-    def init_vars(self):
-        ''' Memmaps aux and snap variables, and maps them to methods. '''
-        self.variables = {}
-        # snap variables
-        for var in self.snapvars + self.auxvars:
-            try:
-                self.variables[var] = self.getvar(var)
-                setattr(self, var, self.variables[var])
-            except:
-                print(('(WWW) init_vars: could not read variable %s' % var))
-        for var in self.auxxyvars:
-            try:
-                self.variables[var] = self.getvar_xy(var)
-                setattr(self, var, self.variables[var])
-            except:
-                print(('(WWW) init_vars: could not read variable %s' % var))
+    def _get_mf_compvar(self, var, slice=None, mf_ispecies=0, mf_ilevel=0):
+        ''' Gets composite variables for single fluid. '''
+        from . import cstagger
+
+        var_sufix = '_s%dl%d' % (mf_ispecies, mf_ilevel)
+
+        # if rho is not loaded, do it (essential for composite variables)
+        if not hasattr(self, 'r' + var_sufix):
+            setattr(self, 'r'+var_sufix, self.getvar('r',
+                                                     mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+            self.variables['r' + var_sufix] = getattr(self, 'r' + var_sufix)
+        # rc is the same as r, but in C order (so that cstagger works)
+        if not hasattr(self, 'rc' + var_sufix):
+            setattr(self, 'rc'+var_sufix, self.getvar('r',
+                                                      mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, order='C'))
+            self.variables['rc' + var_sufix] = getattr(self, 'rc' + var_sufix)
+            # initialise cstagger
+            rdt = self.variables['rc' + var_sufix].dtype
+            cstagger.init_stagger(
+                self.nzb, self.z.astype(rdt), self.zdn.astype(rdt))
+        
+        if var == 'ux':  # x velocity
+            if not hasattr(self, 'px' + var_sufix):
+                setattr(self, 'px'+var_sufix, self.getvar('px',
+                                                          mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+                self.variables[
+                    'px' + var_sufix] = getattr(self, 'px' + var_sufix)
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                return getattr(self, 'px' + var_sufix) / getattr(self, 'rc' + var_sufix)
+            else:
+                return getattr(self, 'px' + var_sufix) / cstagger.xdn(getattr(self, 'rc' + var_sufix))
+        elif var == 'uy':  # y velocity
+            if not hasattr(self, 'py' + var_sufix):
+                setattr(self, 'py'+var_sufix, self.getvar('py',
+                                                          mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+                self.variables[
+                    'py' + var_sufix] = getattr(self, 'py' + var_sufix)
+            if self.ny < 5:  # do not recentre for 2D cases (or close)
+                return getattr(self, 'py' + var_sufix) / getattr(self, 'rc' + var_sufix)
+            else:
+                return getattr(self, 'py' + var_sufix) / cstagger.ydn(getattr(self, 'rc' + var_sufix))
+        elif var == 'uz':  # z velocity
+            if not hasattr(self, 'pz' + var_sufix):
+                setattr(self, 'pz' + var_sufix, self.getvar('pz', mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+                self.variables[
+                    'pz' + var_sufix] = getattr(self, 'pz' + var_sufix)
+            return getattr(self, 'pz' + var_sufix) / cstagger.zdn(getattr(self, 'rc' + var_sufix))
+        elif var == 'ee':   # internal energy?
+            if not hasattr(self, 'e' + var_sufix):
+                setattr(self, 'e' + var_sufix, self.getvar('e',
+                                                           mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+                self.variables[
+                    'e' + var_sufix] = getattr(self, 'e' + var_sufix)
+            return getattr(self, 'e' + var_sufix) / getattr(self, 'r' + var_sufix)
+        elif var == 'bxc':  # x field (cell center)
+            if (not hasattr(self, 'bxc')):
+                self.bxc = self.variables[
+                    'bxc'] = self.getvar('bx', order='C')
+            return cstagger.xup(self.bxc)
+        elif var == 'byc':  # y field (cell center)
+            if (not hasattr(self, 'byc')):
+                self.byc = self.variables[
+                    'byc'] = self.getvar('by', order='C')
+            return cstagger.yup(self.byc)
+        elif var == 'bzc':  # z field (cell center)
+            if (not hasattr(self, 'bzc')):
+                self.bzc = self.variables[
+                    'bzc'] = self.getvar('bz', order='C')
+            return cstagger.zup(self.bzc)
+        elif var == 'dxdbup':  # x field ddxup
+            if (not hasattr(self, 'bxc')):
+                self.bxc = self.variables[
+                    'bxc'] = self.getvar('bx', order='C')
+            return cstagger.ddxup(self.bxc)
+        elif var == 'dydbup':  # y field ddyup
+            if (not hasattr(self, 'byc')):
+                self.byc = self.variables[
+                    'byc'] = self.getvar('by', order='C')
+            return cstagger.ddyup(self.byc)
+        elif var == 'dzdbup':  # z field ddzup
+            if (not hasattr(self, 'bzc')):
+                self.bzc = self.variables[
+                    'bzc'] = self.getvar('bz', order='C')
+            return cstagger.ddzup(self.bzc)
+        elif var == 'dxdbdn':  # z field ddxdn
+            if (not hasattr(self, 'bxc')):
+                self.bxc = self.variables[
+                    'bxc'] = self.getvar('bx', order='C')
+            return cstagger.ddxdn(self.bxc)
+        elif var == 'dydbdn':  # z field
+            if (not hasattr(self, 'byc')):
+                self.byc = self.variables[
+                    'byc'] = self.getvar('by', order='C')
+            return cstagger.ddydn(self.byc)
+        elif var == 'dzdbdn':  # z field
+            if (not hasattr(self, 'bzc')):
+                self.bzc = self.variables[
+                    'bzc'] = self.getvar('bz', order='C')
+            return cstagger.ddzdn(self.bzc)
+        elif var == 'pxc':  # x momentum
+            if not hasattr(self, 'pxc' + var_sufix):
+                setattr(self, 'pxc'+var_sufix, self.getvar('px', order='C',
+                                                           mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+                self.variables[
+                    'pxc' + var_sufix] = getattr(self, 'pxc' + var_sufix)
+            return cstagger.xup(getattr(self, 'pxc' + var_sufix))
+        elif var == 'pyc':  # y momentum
+            if not hasattr(self, 'pyc' + var_sufix):
+                setattr(self, 'pyc'+var_sufix, self.getvar('py', order='C',
+                                                           mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+                self.variables[
+                    'pyc' + var_sufix] = getattr(self, 'pyc' + var_sufix)
+            return cstagger.yup(getattr(self, 'pyc' + var_sufix))
+        elif var == 'pzc':  # z momentum
+            if not hasattr(self, 'pzc' + var_sufix):
+                setattr(self, 'pzc'+var_sufix, self.getvar('pz', order='C',
+                                                           mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel))
+                self.variables[
+                    'pzc' + var_sufix] = getattr(self, 'pzc' + var_sufix)
+            return cstagger.xup(getattr(self, 'pzc' + var_sufix))
+        else:
+            raise ValueError('getcompvar: composite var %s not found. Available:\n %s'
+                             % (var, repr(self.compvars)))
         return
 
-    def write_rh15d(self, outfile, sx=None, sy=None, sz=None, desc=None,
-                    append=True):
+    def __init_vars(self):
+        ''' Memmaps aux and snap variables, and maps them to methods.
+            Also, sets file name[s] from which to read a data '''
+
+        self.variables = {}
+
+        if self.multifluid:
+            self.mf_common_file = (self.file_root + '_mf_common')
+            self.mf_file = (self.file_root + '_mf_%02i_%02i')
+            self.mfe_file = (self.file_root + '_mfe_%02i_%02i')
+            self.mfc_file = (self.file_root + '_mfc_%02i_%02i')
+
+            if self.with_electrons:
+                self.mf_e_file = self.file_root + '_mf_e'
+        else:
+            # snap variables
+            for var in self.snapvars + self.mhdvars + self.auxvars:
+                try:
+                    self.variables[var] = self.getvar(var)
+                    setattr(self, var, self.variables[var])
+                except:
+                    print(('(WWW) init_vars: could not read variable %s' % var))
+            for var in self.auxxyvars:
+                try:
+                    self.variables[var] = self.getvar_xy(var)
+                    setattr(self, var, self.variables[var])
+                except:
+                    print(('(WWW) init_vars: could not read variable %s' % var))
+        return
+
+    def write_rh15d(self, outfile, sx=None, sy=None, sz=None, desc=None, append=True):
         ''' Writes RH 1.5D NetCDF snapshot '''
         from . import rh15d
 
@@ -278,6 +607,7 @@ class OSC_data:
         uv = ul / ut
         ub = self.params['u_b'] * 1e-4  # to Tesla
         ue = self.params['u_ee']        # to erg/g
+
         # slicing and unit conversion
         if sx is None:
             sx = [0, self.nx, 1]
@@ -351,8 +681,7 @@ class OSC_data:
                               snap=self.snap)
         return
 
-    def write_multi3d(self, outfile, mesh='mesh.dat', sx=None, sy=None,
-                      sz=None, desc=None):
+    def write_multi3d(self, outfile, mesh='mesh.dat', sx=None, sy=None, sz=None, desc=None):
         """
         Writes multi3d format atmosphere. Does not write mesh yet.
         Should put this into new package called sunita or solita.
@@ -578,50 +907,52 @@ def read_idl_ascii(filename):
     ''' Reads IDL-formatted (command style) ascii file into dictionary '''
     li = 0
     params = {}
-    # go through the file, add stuff to dictionary
-    for line in file(filename):
-        # ignore empty lines and comments
-        line = line.strip()
-        if len(line) < 1:
-            li += 1
-            continue
-        if line[0] == ';':
-            li += 1
-            continue
-        line = line.split(';')[0].split('=')
-        if (len(line) != 2):
-            print(('(WWW) read_params: line %i is invalid, continuing' % li))
-            li += 1
-            continue
-        # force lowercase because IDL is case-insensitive
-        key = line[0].strip().lower()
-        value = line[1].strip()
-        # instead of the insecure 'exec', find out the datatypes
-        if (value.find('"') >= 0):
-            # string type
-            value = value.strip('"')
-        elif (value.find("'") >= 0):
-            value = value.strip("'")
-        elif (value.lower() in ['.false.', '.true.']):
-            # bool type
-            value = False if value.lower() == '.false.' else True
-        elif (value.find('[') >= 0 and value.find(']') >= 0):
-            # list type
-            value = eval(value)
-        elif ((value.upper().find('E') >= 0) or (value.find('.') >= 0)):
-            # float type
-            value = float(value)
-        else:
-            # int type
-            try:
-                value = int(value)
-            except:
-                print('(WWW) read_idl_ascii: could not find datatype in '
-                      'line %i, skipping' % li)
+    with open(filename) as docfile:
+        # doc = docfile.read()
+        # go through the file, add stuff to dictionary
+        for line in docfile:
+            # ignore empty lines and comments
+            line = line.strip()
+            if len(line) < 1:
                 li += 1
                 continue
-        params[key] = value
-        li += 1
+            if line[0] == ';':
+                li += 1
+                continue
+            line = line.split(';')[0].split('=')
+            if (len(line) != 2):
+                print(('(WWW) read_params: line %i is invalid, continuing' % li))
+                li += 1
+                continue
+            # force lowercase because IDL is case-insensitive
+            key = line[0].strip().lower()
+            value = line[1].strip()
+            # instead of the insecure 'exec', find out the datatypes
+            if (value.find('"') >= 0):
+                # string type
+                value = value.strip('"')
+            elif (value.find("'") >= 0):
+                value = value.strip("'")
+            elif (value.lower() in ['.false.', '.true.']):
+                # bool type
+                value = False if value.lower() == '.false.' else True
+            elif (value.find('[') >= 0 and value.find(']') >= 0):
+                # list type
+                value = eval(value)
+            elif ((value.upper().find('E') >= 0) or (value.find('.') >= 0)):
+                # float type
+                value = float(value)
+            else:
+                # int type
+                try:
+                    value = int(value)
+                except:
+                    print('(WWW) read_idl_ascii: could not find datatype in '
+                          'line %i, skipping' % li)
+                    li += 1
+                    continue
+            params[key] = value
+            li += 1
     return params
 
 
