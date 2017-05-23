@@ -346,7 +346,7 @@ class OSC_data:
                 desc = 'hion ' + desc
         # write to file
         print('Write to file...')
-        rh15d.make_ncdf_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
+        rh15d.make_hdf5_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
                               append=append, Bx=Bx, By=By, Bz=Bz, desc=desc,
                               snap=self.snap)
         return
