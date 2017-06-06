@@ -579,49 +579,50 @@ def read_idl_ascii(filename):
     li = 0
     params = {}
     # go through the file, add stuff to dictionary
-    for line in file(filename):
-        # ignore empty lines and comments
-        line = line.strip()
-        if len(line) < 1:
-            li += 1
-            continue
-        if line[0] == ';':
-            li += 1
-            continue
-        line = line.split(';')[0].split('=')
-        if (len(line) != 2):
-            print(('(WWW) read_params: line %i is invalid, continuing' % li))
-            li += 1
-            continue
-        # force lowercase because IDL is case-insensitive
-        key = line[0].strip().lower()
-        value = line[1].strip()
-        # instead of the insecure 'exec', find out the datatypes
-        if (value.find('"') >= 0):
-            # string type
-            value = value.strip('"')
-        elif (value.find("'") >= 0):
-            value = value.strip("'")
-        elif (value.lower() in ['.false.', '.true.']):
-            # bool type
-            value = False if value.lower() == '.false.' else True
-        elif (value.find('[') >= 0 and value.find(']') >= 0):
-            # list type
-            value = eval(value)
-        elif ((value.upper().find('E') >= 0) or (value.find('.') >= 0)):
-            # float type
-            value = float(value)
-        else:
-            # int type
-            try:
-                value = int(value)
-            except:
-                print('(WWW) read_idl_ascii: could not find datatype in '
-                      'line %i, skipping' % li)
+    with open(filename) as fp:
+        for line in fp:
+            # ignore empty lines and comments
+            line = line.strip()
+            if len(line) < 1:
                 li += 1
                 continue
-        params[key] = value
-        li += 1
+            if line[0] == ';':
+                li += 1
+                continue
+            line = line.split(';')[0].split('=')
+            if (len(line) != 2):
+                print(('(WWW) read_params: line %i is invalid, skipping' % li))
+                li += 1
+                continue
+            # force lowercase because IDL is case-insensitive
+            key = line[0].strip().lower()
+            value = line[1].strip()
+            # instead of the insecure 'exec', find out the datatypes
+            if (value.find('"') >= 0):
+                # string type
+                value = value.strip('"')
+            elif (value.find("'") >= 0):
+                value = value.strip("'")
+            elif (value.lower() in ['.false.', '.true.']):
+                # bool type
+                value = False if value.lower() == '.false.' else True
+            elif (value.find('[') >= 0 and value.find(']') >= 0):
+                # list type
+                value = eval(value)
+            elif ((value.upper().find('E') >= 0) or (value.find('.') >= 0)):
+                # float type
+                value = float(value)
+            else:
+                # int type
+                try:
+                    value = int(value)
+                except:
+                    print('(WWW) read_idl_ascii: could not find datatype in '
+                          'line %i, skipping' % li)
+                    li += 1
+                    continue
+            params[key] = value
+            li += 1
     return params
 
 
