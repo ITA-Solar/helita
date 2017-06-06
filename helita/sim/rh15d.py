@@ -684,7 +684,7 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                                             compression_opts=complev)
             ne_var.attrs["units"] = 'm^-3'
         x_var = rootgrp.create_dataset("x", dtype="f4", shape=(T.shape[1],))
-        y_var = rootgrp.create_dataset("y", dtype="f4", shape=(T.shape[1],))
+        y_var = rootgrp.create_dataset("y", dtype="f4", shape=(T.shape[2],))
         z_var = rootgrp.create_dataset("z", dtype="f4", shape=(nt, T.shape[3]),
                                        maxshape=(None, T.shape[3]))
         nt_var = rootgrp.create_dataset("snapshot_number", dtype="i4",
