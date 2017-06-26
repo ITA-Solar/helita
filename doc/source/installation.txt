@@ -5,8 +5,7 @@ Installation
 Pre-requisites
 ==============
 
-
-To make use of helita the you must first install the following:
+To make use of helita **you need a Fortran compiler** (`GFortran <https://gcc.gnu.org/wiki/GFortran>`_ is recommended), because some modules are compiled from Fortran. In addition, before attempting to install helita you need the following:
 
 * `Python <http://www.python.org>`_ (2.7.x, 3.4.x or later)
 * `Astropy <http://astropy.org>`_
@@ -16,10 +15,13 @@ To make use of helita the you must first install the following:
 In addition, the following packages are also recommended to take advantage of all the features:
 
 * `Matplotlib <http://matplotlib.sourceforge.net/>`_
+* `h5py <http://www.h5py.org/>`_
 * `netCDF4 <https://unidata.github.io/netcdf4-python/>`_
 * `Cython <http://www.cython.org>`_
 * `pandas <http://pandas.pydata.org>`_
 * `beautifulsoup4 <http://www.crummy.com/software/BeautifulSoup>`_
+
+Helita will install without the above packages, but functionality will be limited.
 
 All of the above packages are available through `Anaconda <https://docs.continuum.io/anaconda/>`_, and that is the recommended way of setting up your Python distribution.
 
@@ -49,4 +51,17 @@ If you want to install helita but also actively change the code or contribute to
 
     python setup.py develop
 
-This will set up the package such as the source files used are from the git repository that you cloned (only a link to it is placed on the Python packages directory). Can also be combined with the ``--user`` flag for local installs.
+This will set up the package such as the source files used are from the git repository that you cloned (only a link to it is placed on the Python packages directory). Can also be combined with the `--user` flag for local installs::
+
+    python setup.py develop --user
+
+Installing with different C or Fortran compilers
+================================================
+
+The procedure above will compile the C and Fortran modules using the default gcc/gfortran compilers. It will fail if these are not available in the system. If you want to use a different compiler, please use `setup.py` with the  `--compiler=xxx` and/or `--fcompiler=yyy` options, where `xxx`, `yyy` are C and Fortran compiler families (names depend on system). To check which Fortran compilers are available in your system, you can run::
+
+    python setup.py build --help-fcompiler
+
+and to check which C compilers are available::
+
+    python setup.py build --help-compiler
