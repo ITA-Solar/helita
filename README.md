@@ -6,22 +6,25 @@ Currently, the library is a loose collection of different scripts and classes wi
 
 ## Installation
 
-To make use of helita the you must first install the following:
+To make use of helita **you need a Fortran compiler** ([GFortran](https://gcc.gnu.org/wiki/GFortran) is recommended), because some modules are compiled from Fortran. In addition, before attempting to install helita you need the following:
 
  * [Python](http://www.python.org) (2.7.x, 3.4.x or later)
  * [Astropy](http://astropy.org)
  * [NumPy](http://numpy.scipy.org/)
  * [SciPy](http://www.scipy.org/)
 
-In addition, the following packages are also recommended to take advantage of all the features:
+The following packages are also recommended to take advantage of all the features:
 
 * [Matplotlib](http://matplotlib.sourceforge.net/) (1.1+)
+
 * [netCDF4](https://unidata.github.io/netcdf4-python/)
 * [Cython](http://www.cython.org)
 * [pandas](http://pandas.pydata.org/)
 * [beautifulsoup4](http://www.crummy.com/software/BeautifulSoup/)
 
-All of the above packages are available through [Anaconda](https://docs.continuum.io/anaconda/), and that is the recommended way of setting up your Python distribution.
+Helita will install without the above packages, but functionality will be limited.
+
+All of the above Python packages are available through [Anaconda](https://docs.continuum.io/anaconda/), and that is the recommended way of setting up your Python distribution.
 
 Next, use git to grab the latest version of helita:
 
