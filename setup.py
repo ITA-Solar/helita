@@ -13,7 +13,7 @@ except:
 
 NAME = "helita"
 PACKAGES = ["io", "obs", "sim", "utils"]
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 
 ext = '.pyx' if USE_CYTHON else '.c'
 NUMPY_INC = numpy.get_include()
@@ -29,7 +29,8 @@ EXT_PACKAGES = {   # C and Fortran extensions
                   [os.path.join(NAME, "utils/radtrans" + ext)]],
     "utilsfast" : ["utils", [NUMPY_INC],
                    [os.path.join(NAME, "utils/utilsfast" + ext)]],
-    "voigtv" : ["utils", [], [os.path.join(NAME, "utils/voigtv.f")]]
+    "voigtv" : ["utils", [], [os.path.join(NAME, "utils/voigtv.f")]],
+    "trnslt" : ["utils", [], [os.path.join(NAME, "utils/trnslt.f90")]],
 }
 
 extensions = [
