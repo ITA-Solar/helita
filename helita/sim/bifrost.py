@@ -509,12 +509,6 @@ class BifrostData(object):
             fout2.close()
 
 
-
-########################################
-########################################
-###############  OLD   #################
-########################################
-########################################
 class Rhoeetab:
 
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
@@ -653,10 +647,9 @@ def read_idl_ascii(filename):
     ''' Reads IDL-formatted (command style) ascii file into dictionary '''
     li = 0
     params = {}
-    with open(filename) as docfile:
-        # doc = docfile.read()
-        # go through the file, add stuff to dictionary
-        for line in docfile:
+    # go through the file, add stuff to dictionary
+    with open(filename) as fp:
+        for line in fp:
             # ignore empty lines and comments
             line = line.strip()
             if len(line) < 1:
@@ -667,7 +660,7 @@ def read_idl_ascii(filename):
                 continue
             line = line.split(';')[0].split('=')
             if (len(line) != 2):
-                print(('(WWW) read_params: line %i is invalid, continuing' % li))
+                print(('(WWW) read_params: line %i is invalid, skipping' % li))
                 li += 1
                 continue
             # force lowercase because IDL is case-insensitive

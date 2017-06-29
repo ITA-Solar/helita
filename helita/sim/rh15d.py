@@ -24,6 +24,12 @@ class Rh15dout:
         ''' Reads Aux file. '''
         if infile is None:
             infile = '%s/output_aux.hdf5' % self.fdir
+            if not os.path.isfile(infile):  # See if netCDF file exists
+                infile = os.path.splitext(infile)[0] + '.ncdf'
+        if not os.path.isfile(infile):
+            if self.verbose:
+                print('File %s not found, skipping.' % infile)
+            return
         self.files.append(read_hdf5(self, infile))
         if self.verbose:
             print(('--- Read %s file.' % infile))
@@ -32,6 +38,11 @@ class Rh15dout:
         ''' Reads indata file. '''
         if infile is None:
             infile = '%s/output_indata.hdf5' % self.fdir
+            if not os.path.isfile(infile):  # See if netCDF file exists
+                infile = os.path.splitext(infile)[0] + '.ncdf'
+        if not os.path.isfile(infile):
+            if self.verbose:
+                print('File %s not found, skipping.' % infile)
         self.files.append(read_hdf5(self, infile))
         if self.verbose:
             print(('--- Read %s file.' % infile))
@@ -49,6 +60,11 @@ class Rh15dout:
         ''' Reads ray file. '''
         if infile is None:
             infile = '%s/output_ray.hdf5' % self.fdir
+            if not os.path.isfile(infile):  # See if netCDF file exists
+                infile = os.path.splitext(infile)[0] + '.ncdf'
+        if not os.path.isfile(infile):
+            if self.verbose:
+                print('File %s not found, skipping.' % infile)
         self.ray = DataHolder()
         self.files.append(read_hdf5(self.ray, infile))
         if self.verbose:
@@ -569,9 +585,9 @@ def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
 
 
 def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
-                    Bx=None, rho=None, ne=None, vx=None, vy=None, desc=None,
-                    snap=None, boundary=[1, 0], comp=None, complev=None,
-                    append=False):
+                    Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
+                    desc=None, snap=None, boundary=[1, 0], comp=None,
+                    complev=None, append=False):
     """
     Creates HDF5 input file for RH 1.5D.
 
@@ -598,6 +614,11 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         x velocity in m/s. Same shape as T. Not in use by RH 1.5D.
     vy : n-D array, optional
         y velocity in m/s. Same shape as T. Not in use by RH 1.5D.
+    vturb : n-D array, optional
+        Turbulent velocity (Microturbulence) in km/s. Not usually needed
+        for MHD models, and should only be used when a depth dependent
+        microturbulence is needed (constant microturbulence can be added
+        in RH).
     Bx : n-D array, optional
         Magnetic field in x dimension, in Tesla. Same shape as T.
     By : n-D array, optional
@@ -652,6 +673,8 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         vx = vx[idx]
     if vy is not None:
         vy = vy[idx]
+    if vturb is not None:
+        vturb = vturb[idx]
     if len(T.shape) != 4:
         raise ValueError('Invalid shape for T')
     nt = T.shape[0]
@@ -684,7 +707,7 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                                             compression_opts=complev)
             ne_var.attrs["units"] = 'm^-3'
         x_var = rootgrp.create_dataset("x", dtype="f4", shape=(T.shape[1],))
-        y_var = rootgrp.create_dataset("y", dtype="f4", shape=(T.shape[1],))
+        y_var = rootgrp.create_dataset("y", dtype="f4", shape=(T.shape[2],))
         z_var = rootgrp.create_dataset("z", dtype="f4", shape=(nt, T.shape[3]),
                                        maxshape=(None, T.shape[3]))
         nt_var = rootgrp.create_dataset("snapshot_number", dtype="i4",
@@ -729,8 +752,14 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                                             fletcher32=True, compression=comp,
                                             compression_opts=complev)
             vy_var.attrs["units"] = 'm s^-1'
+        if vturb is not None:
+            vt_var = rootgrp.create_dataset("velocity_turbulent", dtype="f4",
+                                            shape=T.shape, maxshape=max_dims,
+                                            fletcher32=True, compression=comp,
+                                            compression_opts=complev)
+            vt_var.attrs["units"] = 'm s^-1'
         if desc is None:
-            rootgrp.attrs["description"] = ("Created with make_hdf5_atmos."
+            rootgrp.attrs["description"] = ("Created with make_hdf5_atmos "
                                             "on %s" % datetime.datetime.now())
         else:
             rootgrp.attrs["description"] = desc
@@ -766,6 +795,8 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
             vx_var = rootgrp['velocity_x']
         if vy is not None:
             vy_var = rootgrp['velocity_y']
+        if vturb is not None:
+            vt_var = rootgrp['velocity_turbulent']
         nti = int(rootgrp.attrs['nt'])
         nt = [nti, nti + nt]
     T_var[nt[0]:nt[1]] = T
@@ -783,6 +814,8 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         vx_var[nt[0]:nt[1]] = vx
     if vy is not None:
         vy_var[nt[0]:nt[1]] = vy
+    if vturb is not None:
+        vt_var[nt[0]:nt[1]] = vturb
     if x is not None:
         x_var[:] = x
     if y is not None:
