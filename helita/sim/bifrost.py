@@ -1,18 +1,45 @@
 """
 Set of programs to read and interact with output from Bifrost
 """
+
 import numpy as np
 import os
 
+class BifrostData(object):
 
-class OSC_data:
+    """
+    Class to hold data from Bifrost simulations in native format.
+    """
 
-    def __init__(self, snap, template='qsmag-by00_t%03i', meshfile=None, fdir='.',
+    def __init__(self, snap, file_root='qsmag-by00_t', meshfile=None, fdir='.',
                  verbose=True, dtype='f4', big_endian=False):
-        ''' Main object for extracting Bifrost datacubes. '''
+        """
+        Loads metadata and initialises variables.
+
+        Parameters
+        ----------
+        snap - integer
+            Snapshot number
+        file_root - string, optional
+            Basename for all file names. Snapshot number will be added
+            afterwards, and directory will be added before.
+        meshfile - string, optional
+            File name (including full path) for file with mesh. If set
+            to None (default), a uniform mesh will be created.
+        fdir - string, optional
+            Directory where simulation files are. Must be a real path.
+        verbose - bool
+            If True, will print out more diagnostic messages
+        dtype - string, optional
+            Data type for reading variables. Default is 32 bit float.
+        big_endian - string, optional
+            If True, will read variables in big endian. Default is False
+            (reading in little endian).
+        """
         self.snap = snap
         self.fdir = fdir
-        self.template = fdir + '/' + template % (snap)
+        self.file_root = os.path.join(self.fdir, file_root)
+        self.snap_str = '_%03i' % snap
         self.verbose = verbose
         # endianness and data type
         if big_endian:
@@ -20,31 +47,48 @@ class OSC_data:
         else:
             self.dtype = '<' + dtype
         # read .idl file
-        self.read_params()
+        self.__read_params()
         # read mesh file
-        if meshfile is None:
-            meshfile = self.params['meshfile'].strip()
-        if not os.path.isfile(meshfile):
-            raise IOError('Mesh file %s does not exist, aborting.' % meshfile)
-        self.read_mesh(meshfile)
+        self.__read_mesh(meshfile)
         # variables: lists and initialisation
         self.auxvars = self.params['aux'].split()
-        self.snapvars = ['r', 'px', 'py', 'pz', 'e', 'bx', 'by', 'bz']
+        self.snapvars = ['r', 'px', 'py', 'pz', 'e']
+        self.snapevars = ['er', 'epx', 'epy', 'epz', 'ee']  # electron specific
+        if (self.do_mhd):
+            self.mhdvars = ['bx', 'by', 'bz']
+        else:
+            self.mhdvars = []
         self.hionvars = ['hionne', 'hiontg', 'n1',
                          'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
-        self.compvars = ['ux', 'uy', 'uz', 'ee', 's']  # composite variables
+        self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup',
+                         'dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup',
+                         'dzdbdn', 'modb', 'modp']   # composite variables
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
         if 'ixy1' in self.auxvars:
             self.auxvars.remove('ixy1')
             self.auxxyvars.append('ixy1')
-        self.init_vars()
-        return
+        self.vars2d = []
+        # special case for the 2d variable, lives in a separate file
+        for var in self.auxvars:
+            if any(i in var for i in ('xy', 'yz', 'xz')):
+                self.auxvars.remove(var)
+                self.vars2d.append(var)
+        self._init_vars()
 
-    def read_params(self):
-        ''' Reads parameter file (.idl) '''
-        filename = self.template + '.idl'
+    def __read_params(self):
+        """
+        Reads parameter file (.idl)
+        """
+        if (self.snap < 0):
+            filename = self.file_root + self.snap_str + '.idl.src'
+        elif (self.snap == 0):
+            filename =self.file_root + '.idl'
+        else:
+            filename = self.file_root + self.snap_str + '.idl'
+
         self.params = read_idl_ascii(filename)
+
         # assign some parameters to root object
         try:
             self.nx = self.params['mx']
@@ -69,6 +113,25 @@ class OSC_data:
                 self.nzb = self.nz
         except KeyError:
             self.nzb = self.nz
+        try:
+            self.dx = self.params['dx']
+        except KeyError:
+            raise KeyError('read_params: could not find dx in idl file!')
+
+        try:
+            self.dy = self.params['dy']
+        except KeyError:
+            raise KeyError('read_params: could not find dy in idl file!')
+
+        try:
+            self.dz = self.params['dz']
+        except KeyError:
+            raise KeyError('read_params: could not find dz in idl file!')
+
+        try:
+            self.do_mhd = self.params['do_mhd']
+        except KeyError:
+            raise KeyError('read_params: could not find do_mhd in idl file!')
         # check if units are there, if not use defaults and print warning
         unit_def = {'u_l': 1.e8, 'u_t': 1.e2, 'u_r': 1.e-7, 'u_b': 1.121e3,
                     'u_ee': 1.e12}
@@ -77,113 +140,76 @@ class OSC_data:
                 print(("(WWW) read_params: %s not found, using default of %.3e" %
                        (unit, unit_def[unit])))
                 self.params[unit] = unit_def[unit]
-        return
 
-    def read_mesh(self, meshfile):
-        ''' Reads mesh.dat file '''
-        # perhaps one day we'll be able to use np.genfromtxt, but for now
-        # doing manually
-        f = open(meshfile, 'r')
-        mx = int(f.readline().strip('\n').strip())
-        assert mx == self.nx
-        self.x = np.array([float(v) for v in
-                           f.readline().strip('\n').split()])
-        self.xdn = np.array([float(v) for v in
-                             f.readline().strip('\n').split()])
-        self.dxidxup = np.array([float(v) for v in
+    def __read_mesh(self, meshfile):
+        """
+        Reads mesh file
+        """
+        if meshfile is None:
+            meshfile = os.path.join(self.fdir, self.params['meshfile'].strip())
+        if os.path.isfile(meshfile):
+            f = open(meshfile, 'r')
+            mx = int(f.readline().strip('\n').strip())
+            assert mx == self.nx
+            self.x = np.array([float(v)
+                               for v in f.readline().strip('\n').split()])
+            self.xdn = np.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-        self.dxidxdn = np.array([float(v) for v in
+            self.dxidxup = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            self.dxidxdn = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            my = int(f.readline().strip('\n').strip())
+            assert my == self.ny
+            self.y = np.array([float(v) for v in
+                               f.readline().strip('\n').split()])
+            self.ydn = np.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-        my = int(f.readline().strip('\n').strip())
-        assert my == self.ny
-        self.y = np.array([float(v) for v in
-                           f.readline().strip('\n').split()])
-        self.ydn = np.array([float(v) for v in
-                             f.readline().strip('\n').split()])
-        self.dyidyup = np.array([float(v) for v in
+            self.dyidyup = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            self.dyidydn = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            mz = int(f.readline().strip('\n').strip())
+            assert mz == self.nz
+            self.z = np.array([float(v) for v in
+                               f.readline().strip('\n').split()])
+            self.zdn = np.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-        self.dyidydn = np.array([float(v) for v in
-                                 f.readline().strip('\n').split()])
-        mz = int(f.readline().strip('\n').strip())
-        assert mz == self.nz
-        self.z = np.array([float(v) for v in
-                           f.readline().strip('\n').split()])
-        self.zdn = np.array([float(v) for v in
-                             f.readline().strip('\n').split()])
-        self.dzidzup = np.array([float(v) for v in
-                                 f.readline().strip('\n').split()])
-        self.dzidzdn = np.array([float(v) for v in
-                                 f.readline().strip('\n').split()])
-        f.close()
+            self.dzidzup = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            self.dzidzdn = np.array([float(v) for v in
+                                     f.readline().strip('\n').split()])
+            f.close()
+        else:  # no mesh file
+            print('(WWW) Mesh file %s does not exist.' % meshfile)
+            if self.dx == 0.0:
+                self.dx = 1.0
+            if self.dy == 0.0:
+                self.dy = 1.0
+            if self.dz == 0.0:
+                self.dz = 1.0
+            print(('(WWW) Creating uniform grid with [dx,dy,dz] = '
+                   '[%f,%f,%f]') % (self.dx, self.dy, self.dz))
+            # x
+            self.x = np.arange(self.nx) * self.dx
+            self.xdn = self.x - 0.5 * self.dx
+            self.dxidxup = np.zeros(self.nx) + 1./self.dx
+            self.dxidxdn = np.zeros(self.nx) + 1./self.dx
+            # y
+            self.y = np.arange(self.ny) * self.dy
+            self.ydn = self.y - 0.5 * self.dy
+            self.dyidyup = np.zeros(self.ny) + 1./self.dy
+            self.dyidydn = np.zeros(self.ny) + 1./self.dy
+            # z
+            self.z = np.arange(self.nz) * self.dz
+            self.zdn = self.z - 0.5 * self.dz
+            self.dzidzup = np.zeros(self.nz) + 1./self.dz
+            self.dzidzdn = np.zeros(self.nz) + 1./self.dz
 
-        def _add_boundaries(quant, nb):
-            """ Adds boundaries by extrapolating quant by nb * 2. """
-            botdif = quant[1] - quant[0]
-            topdif = quant[-1] - quant[-2]
-            qbot = np.arange(quant[0] - nb * botdif, quant[0], botdif)
-            qtop = np.arange(quant[-1] + topdif, quant[-1] + nb * botdif,
-                             botdif)
-            return np.concatenate([qbot, quant, qtop])
-
-        # account for boundaries when they are saved
-        if self.nz != self.nzb:
-            self.z = _add_boundaries(self.z, self.nb)
-            self.zdn = _add_boundaries(self.zdn, self.nb)
-            self.dzidzup = _add_boundaries(self.dzidzup, self.nb)
-            self.dzidzdn = _add_boundaries(self.dzidzdn, self.nb)
-        return
-
-    def getvar(self, var, slice=None, order='F'):
-        ''' Reads a given variable from the relevant files. '''
-        import os
-        # find in which file the variable is
-        if var in self.compvars:
-            # if variable is composite, use getcompvar
-            return self.getcompvar(var, slice)
-        elif var in self.snapvars:
-            fsuffix = '.snap'
-            idx = self.snapvars.index(var)
-            filename = self.template + fsuffix
-        elif var in self.auxvars:
-            fsuffix = '.aux'
-            idx = self.auxvars.index(var)
-            filename = self.template + fsuffix
-        elif var in self.hionvars:
-            idx = self.hionvars.index(var)
-            isnap = self.params['isnap']
-            if isnap <= -1:
-                fsuffix = '.hion.snap.scr'
-                filename = self.template + fsuffix
-            elif isnap == 0:
-                fsuffix = '.hion.snap'
-                filename = self.template + fsuffix
-            elif isnap > 0:
-                fsuffix = '.hion_%03i.snap' % self.params['isnap']
-                filename = '%s.hion%s.snap' % (
-                    self.template.split(str(isnap))[0], isnap)
-            if not os.path.isfile(filename):
-                filename = self.template + '.snap'
-        else:
-            raise ValueError('getvar: variable ' +
-                             '%s not available. Available vars:' % (var) +
-                              '\n' + repr(self.auxvars + self.snapvars +
-                                          self.hionvars))
-        # Now memmap the variable
-        if not os.path.isfile(filename):
-            raise IOError('getvar: variable ' +
-                          '%s should be in %s file, not found!' % (var,
-                                                                   filename))
-        # size of the data type
-        if self.dtype[1:] == 'f4':
-            dsize = 4
-        else:
-            raise ValueError('getvar: datatype %s not supported' % self.dtype)
-        offset = self.nx * self.ny * self.nzb * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
-                         mode='r', shape=(self.nx, self.ny, self.nzb))
-
-    def getvar_xy(self, var, slice=None, order='F'):
-        ''' Reads a given 2D variable from the _XY.aux file'''
+    def getvar_xy(self, var, order='F', mode='r'):
+        """
+        Reads a given 2D variable from the _XY.aux file
+        """
         import os
         if var in self.auxxyvars:
             fsuffix = '_XY.aux'
@@ -197,18 +223,62 @@ class OSC_data:
             raise IOError('getvar: variable %s should be in %s file, not found!' %
                           (var, filename))
         # size of the data type
-        if self.dtype[1:] == 'f4':
-            dsize = 4
-        else:
-            raise ValueError('getvar: datatype %s not supported' % self.dtype)
+        dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * idx * dsize
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
-                         mode='r', shape=(self.nx, self.ny))
+                         mode=mode, shape=(self.nx, self.ny))
 
-    def getcompvar(self, var, slice=None):
-        ''' Gets composite variables. '''
+    def getvar(self, var, order='F', mode='r'):
+        """
+        Reads a given variable from the relevant files.
+        """
+        if var in ['x', 'y', 'z']:
+            return getattr(self, var)
+        # find filename template
+        if self.snap < 0:
+            filename = self.file_root
+            fsuffix_b = '.scr'
+        elif self.snap == 0:
+            filename = self.file_root
+            fsuffix_b = ''
+        else:
+            filename = self.file_root + self.snap_str
+            fsuffix_b = ''
+        # find in which file the variable is
+        if var in self.compvars:
+            return self._get_compvar(var)
+        elif var in (self.snapvars + self.mhdvars):
+            fsuffix_a = '.snap'
+            idx = (self.snapvars + self.mhdvars).index(var)
+            filename = filename + fsuffix_a + fsuffix_b
+        elif var in self.auxvars:
+            fsuffix_a = '.aux'
+            idx = self.auxvars.index(var)
+            filename = filename + fsuffix_a + fsuffix_b
+        elif var in self.hionvars:
+            idx = self.hionvars.index(var)
+            isnap = self.params['isnap']
+            if isnap <= -1:
+                filename = filename + '.hion.snap.scr'
+            elif isnap == 0:
+                filename = filename + '.hion.snap'
+            elif isnap > 0:
+                filename = '%s_.hion%s.snap' % (self.file_root, isnap)
+        else:
+            raise ValueError('getvar: variable ' +
+                             '%s not available. Available vars:' % (var) +
+                             '\n' + repr(self.auxvars + self.snapvars +
+                                         self.hionvars))
+        dsize = np.dtype(self.dtype).itemsize
+        offset = self.nx * self.ny * self.nzb * idx * dsize
+        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+                         mode=mode, shape=(self.nx, self.ny, self.nzb))
+
+    def _get_compvar(self, var):
+        """
+        Gets composite variables (will load into memory).
+        """
         from . import cstagger
-
         # if rho is not loaded, do it (essential for composite variables)
         # rc is the same as r, but in C order (so that cstagger works)
         if not hasattr(self, 'rc'):
@@ -248,11 +318,14 @@ class OSC_data:
                              % (var, repr(self.compvars)))
         return
 
-    def init_vars(self):
-        ''' Memmaps aux and snap variables, and maps them to methods. '''
+    def _init_vars(self):
+        """
+        Memmaps aux and snap variables, and maps them to methods.
+        Also, sets file name[s] from which to read a data
+        """
         self.variables = {}
         # snap variables
-        for var in self.snapvars + self.auxvars:
+        for var in self.snapvars + self.mhdvars + self.auxvars:
             try:
                 self.variables[var] = self.getvar(var)
                 setattr(self, var, self.variables[var])
@@ -264,13 +337,13 @@ class OSC_data:
                 setattr(self, var, self.variables[var])
             except:
                 print(('(WWW) init_vars: could not read variable %s' % var))
-        return
 
     def write_rh15d(self, outfile, sx=None, sy=None, sz=None, desc=None,
                     append=True):
-        ''' Writes RH 1.5D NetCDF snapshot '''
+        """
+        Writes snapshot in RH 1.5D format
+        """
         from . import rh15d
-
         # unit conversion to SI
         ul = self.params['u_l'] / 1.e2  # to metres
         ur = self.params['u_r']         # to g/cm^3  (for ne_rt_table)
@@ -301,7 +374,7 @@ class OSC_data:
         Bx = Bx * ub
         By = -By * ub
         Bz = -Bz * ub
-        vz = self.getcompvar('uz')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
+        vz = self.getvar('uz')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
                                    sz[0]:sz[1]:sz[2]]
         vz *= -uv
         x = self.x[sx[0]:sx[1]:sx[2]] * ul
@@ -323,7 +396,7 @@ class OSC_data:
                            sz[0]:sz[1]:sz[2]]
             nh = nh * 1.e6
         else:
-            ee = self.getcompvar('ee')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
+            ee = self.getvar('ee')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
                                        sz[0]:sz[1]:sz[2]]
             ee = ee * ue
             if os.access('%s/subs.dat' % self.fdir, os.R_OK):
@@ -341,7 +414,7 @@ class OSC_data:
         # description
         if desc is None:
             desc = 'BIFROST snapshot from sequence %s, sx=%s sy=%s sz=%s.' % \
-                   (self.template, repr(sx), repr(sy), repr(sz))
+                   (self.file_root, repr(sx), repr(sy), repr(sz))
             if hion:
                 desc = 'hion ' + desc
         # write to file
@@ -349,16 +422,13 @@ class OSC_data:
         rh15d.make_hdf5_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
                               append=append, Bx=Bx, By=By, Bz=Bz, desc=desc,
                               snap=self.snap)
-        return
 
     def write_multi3d(self, outfile, mesh='mesh.dat', sx=None, sy=None,
                       sz=None, desc=None):
         """
-        Writes multi3d format atmosphere. Does not write mesh yet.
-        Should put this into new package called sunita or solita.
+        Writes snapshot in Multi3D format
         """
         from .multi3dn import Multi3dAtmos
-
         # unit conversion to cgs and km/s
         ul = self.params['u_l']   # to cm
         ur = self.params['u_r']   # to g/cm^3  (for ne_rt_table)
@@ -383,13 +453,13 @@ class OSC_data:
         rho = rho * ur
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
-        vx = self.getcompvar('ux')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
+        vx = self.getvar('ux')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
                                    sz[0]:sz[1]:sz[2]]
         vx *= uv
-        vy = self.getcompvar('uy')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
+        vy = self.getvar('uy')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
                                    sz[0]:sz[1]:sz[2]]
         vy *= -uv
-        vz = self.getcompvar('uz')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
+        vz = self.getvar('uz')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
                                    sz[0]:sz[1]:sz[2]]
         vz *= -uv
         x = self.x[sx[0]:sx[1]:sx[2]] * ul
@@ -410,7 +480,7 @@ class OSC_data:
                            sz[0]:sz[1]:sz[2]]
             nh = nh * 1.e6
         else:
-            ee = self.getcompvar('ee')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
+            ee = self.getvar('ee')[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
                                        sz[0]:sz[1]:sz[2]]
             ee = ee * ue
             # interpolate ne from the EOS table
@@ -437,7 +507,6 @@ class OSC_data:
             fout2.write("\n%i\n" % nz)
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
-        return
 
 
 class Rhoeetab:
@@ -693,8 +762,8 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
         print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
                'Table log(rho) max=%.2f, requested log(rho) max=%.2f' % (tlrmax, lrmax)))
 
-    # Tiago: this is for the real thing, global fit 2D interpolation:
-    # (commented because it is TREMENDOUSLY SLOW)
+    ## Tiago: this is for the real thing, global fit 2D interpolation:
+    ## (commented because it is TREMENDOUSLY SLOW)
     # x = np.repeat(tt['rho_tab'],  tt['theta_tab'].shape[0])
     # y = np.tile(  tt['theta_tab'],  tt['rho_tab'].shape[0])
     # 2D grid interpolation according to method (default: linear interpolation)
@@ -707,8 +776,8 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
     #    near = interp.griddata(np.transpose([x,y]), tt['ne_rt_table'].ravel(),
     #                            (lgrho, 5040./temp), method='nearest')
     #    result[idx] = near[idx]
-    # Tiago: this is the approximate thing (bilinear/cubic interpolation) with
-    # ndimage
+    ## Tiago: this is the approximate thing (bilinear/cubic interpolation) with
+    ## ndimage
     y = (5040. / temp - tt['theta_tab'][0]) / \
         (tt['theta_tab'][1] - tt['theta_tab'][0])
     x = (lgrho - tt['rho_tab'][0]) / (tt['rho_tab'][1] - tt['rho_tab'][0])
