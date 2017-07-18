@@ -11,7 +11,7 @@ class BifrostData(object):
     Class to hold data from Bifrost simulations in native format.
     """
 
-    def __init__(self, snap, file_root='qsmag-by00_t', meshfile=None, fdir='.',
+    def __init__(self, file_root='qsmag-by00_t', meshfile=None, fdir='.',
                  verbose=True, dtype='f4', big_endian=False):
         """
         Loads metadata and initialises variables.
@@ -36,24 +36,53 @@ class BifrostData(object):
             If True, will read variables in big endian. Default is False
             (reading in little endian).
         """
-        self.snap = snap
         self.fdir = fdir
         self.file_root = os.path.join(self.fdir, file_root)
-        self.snap_str = '_%03i' % snap
+
         self.verbose = verbose
         # endianness and data type
         if big_endian:
             self.dtype = '>' + dtype
         else:
             self.dtype = '<' + dtype
-        # read .idl file
+
+        self.variables = {}
+        # variables: lists and initialisation  
+
+        
+#------------------------------------------------------------------------
+    def initload(self, snap, meshfile=None,
+                 verbose=True,dtype='f4', **kwargs):
+        ''' Main object for extracting Bifrost datacubes. '''
+        self.snap     = snap
+        self.snap_str = '_%03i' % snap
+
+        if (snap >=0):
+            self.templatesnap = self.file_root + self.snap_str 
+        else:
+            self.templatesnap = self.file_root
+
+        # read idl file
         self.__read_params()
         # read mesh file
+        if meshfile is None:
+            if self.fdir.strip() == '':
+                meshfile = self.params['meshfile'].strip()
+            else:
+                meshfile = self.fdir + '/' + self.params['meshfile'].strip()
+                
+        if not os.path.isfile(meshfile):
+            if self.fdir.strip() == '':
+                meshfile = 'mesh.dat'
+            else:
+                meshfile = self.fdir + '/' + 'mesh.dat'
+
+        if not os.path.isfile(meshfile):
+            print('[Warning] Mesh file %s does not exist' % meshfile)
         self.__read_mesh(meshfile)
-        # variables: lists and initialisation
+        
         self.auxvars = self.params['aux'].split()
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
-        self.snapevars = ['er', 'epx', 'epy', 'epz', 'ee']  # electron specific
         if (self.do_mhd):
             self.mhdvars = ['bx', 'by', 'bz']
         else:
@@ -74,19 +103,16 @@ class BifrostData(object):
             if any(i in var for i in ('xy', 'yz', 'xz')):
                 self.auxvars.remove(var)
                 self.vars2d.append(var)
-        self._init_vars()
-
+        
     def __read_params(self):
         """
         Reads parameter file (.idl)
         """
         if (self.snap < 0):
-            filename = self.file_root + self.snap_str + '.idl.src'
-        elif (self.snap == 0):
-            filename =self.file_root + '.idl'
+            filename = self.templatesnap + '.idl.src'
         else:
-            filename = self.file_root + self.snap_str + '.idl'
-
+            filename =self.templatesnap + '.idl'
+        
         self.params = read_idl_ascii(filename)
 
         # assign some parameters to root object
@@ -127,6 +153,11 @@ class BifrostData(object):
             self.dz = self.params['dz']
         except KeyError:
             raise KeyError('read_params: could not find dz in idl file!')
+
+        try:
+            self.isnap = self.params['isnap']
+        except KeyError:
+            raise KeyError('read_params: could not find isnap in idl file!')
 
         try:
             self.do_mhd = self.params['do_mhd']
@@ -206,7 +237,19 @@ class BifrostData(object):
             self.dzidzup = np.zeros(self.nz) + 1./self.dz
             self.dzidzdn = np.zeros(self.nz) + 1./self.dz
 
-    def getvar_xy(self, var, order='F', mode='r'):
+    def clearattr(self):
+        "cleans storage variables"
+        for name in self.compvars:
+            if (hasattr(self,name)):
+                delattr(self,name)
+        for name in self.auxvars:
+            if (hasattr(self,name)):
+                delattr(self,name)
+        for name in self.snapvars:
+            if (hasattr(self,name)):
+                delattr(self,name)
+                
+    def getvar_xy(self, var, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
         """
         Reads a given 2D variable from the _XY.aux file
         """
@@ -214,7 +257,7 @@ class BifrostData(object):
         if var in self.auxxyvars:
             fsuffix = '_XY.aux'
             idx = self.auxxyvars.index(var)
-            filename = self.template + fsuffix
+            filename = self.file_root + fsuffix
         else:
             raise ValueError('getvar_xy: variable %s not available. Available vars:'
                              % (var) + '\n' + repr(self.auxxyvars))
@@ -228,12 +271,20 @@ class BifrostData(object):
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny))
 
-    def getvar(self, var, order='F', mode='r'):
+    def getvar(self, var, snap, slice=None, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
         """
         Reads a given variable from the relevant files.
         """
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
+
+        if (hasattr(self,'isnap')):
+            if (self.isnap != snap):
+                self.clearattr()
+                self.initload(snap)
+        else:
+            self.initload(snap)
+
         # find filename template
         if self.snap < 0:
             filename = self.file_root
@@ -246,7 +297,7 @@ class BifrostData(object):
             fsuffix_b = ''
         # find in which file the variable is
         if var in self.compvars:
-            return self._get_compvar(var)
+            return self._get_compvar(var, snap, slice, mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
         elif var in (self.snapvars + self.mhdvars):
             fsuffix_a = '.snap'
             idx = (self.snapvars + self.mhdvars).index(var)
@@ -274,48 +325,130 @@ class BifrostData(object):
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
-    def _get_compvar(self, var):
+    def _get_compvar(self, var,snap,slice=None,mf_ispecies=0, mf_ilevel=0):
         """
         Gets composite variables (will load into memory).
         """
-        from . import cstagger
+        import cstagger
+         
         # if rho is not loaded, do it (essential for composite variables)
         # rc is the same as r, but in C order (so that cstagger works)
-        if not hasattr(self, 'rc'):
-            self.rc = self.variables['rc'] = self.getvar('r', order='C')
+        if   var == 'rc':
+            if ( not hasattr(self,'rc')): self.rc = self.variables['rc'] = self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
             # initialise cstagger
-            rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),
-                                  self.zdn.astype(rdt))
-        if var == 'ux':  # x velocity
-            if not hasattr(self, 'px'):
-                self.px = self.variables['px'] = self.getvar('px')
+            rdt = self.rc.dtype
+            cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+            return self.rc
+
+        elif  var == 'ux':  # x velocity
+            if ( not hasattr(self,'rc')):  self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'px')):  self.px=self.variables['px']=self.getvar('px',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 return self.px / self.rc
             else:
-                return self.px / cstagger.xdn(self.rc)
+                return self.px/cstagger.xdn(self.rc)
+
         elif var == 'uy':  # y velocity
-            if not hasattr(self, 'py'):
-                self.py = self.variables['py'] = self.getvar('py')
+            if ( not hasattr(self,'rc')):  self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'py')): self.py=self.variables['py']=self.getvar('py',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
             if self.ny < 5:  # do not recentre for 2D cases (or close)
                 return self.py / self.rc
             else:
-                return self.py / cstagger.ydn(self.rc)
+                return self.py/cstagger.ydn(self.rc)
+           
+
         elif var == 'uz':  # z velocity
-            if not hasattr(self, 'pz'):
-                self.pz = self.variables['pz'] = self.getvar('pz')
+            if ( not hasattr(self,'rc')):  self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'pz')): self.pz=self.variables['pz']=self.getvar('pz',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
             return self.pz / cstagger.zdn(self.rc)
+
         elif var == 'ee':   # internal energy?
-            if not hasattr(self, 'e'):
-                self.e = self.variables['e'] = self.getvar('e')
-            return self.e / self.r
+            if ( not hasattr(self,'e')): self.e=self.variables['e']=self.getvar('e',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            return self.e/self.rc
+
         elif var == 's':   # entropy?
-            if not hasattr(self, 'p'):
-                self.p = self.variables['p'] = self.getvar('p')
-            return np.log(self.p) - 1.667 * np.log(self.r)
+            if not hasattr(self,'p') : self.p=self.variables['p']=self.getvar('p',snap)
+            return N.log(self.p) - 1.667*N.log(self.r)
+
+        elif var == 'bxc':  # x field
+            if (not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
+            return cstagger.xup(self.bxc)
+
+        elif var == 'byc':  # y field
+            if (not hasattr(self,'byc')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+            return cstagger.yup(self.byc)
+
+        elif var == 'bzc':  # z field
+            if (not hasattr(self,'bzc')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+            return cstagger.zup(self.bzc)
+
+        elif var == 'pxc':  # x momentum
+            if (not hasattr(self,'pxc')): self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            return cstagger.xup(self.pxc)
+
+        elif var == 'pyc':  # y momentum
+            if (not hasattr(self,'pyc')): self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            return cstagger.yup(self.pyc)
+
+        elif var == 'pzc':  # z momentum
+            if (not hasattr(self,'pzc')): self.bzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            return cstagger.zup(self.pzc)
+
+        elif var == 'dxdbup':  # z field
+            if ( not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
+            return cstagger.ddxup(self.bxc)
+
+        elif var == 'dydbup':  # z field
+            if ( not hasattr(self,'dydbup')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+            return cstagger.ddyup(self.byc)
+
+        elif var == 'dzdbup':  # z field
+            if ( not hasattr(self,'dzdbup')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+            return cstagger.ddzup(self.bzc)
+
+        elif var == 'dxdbdn':  # z field
+            if ( not hasattr(self,'dxdbdn')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
+            return cstagger.ddxdn(self.bxc)
+
+        elif var == 'dydbdn':  # z field
+            if ( not hasattr(self,'dydbdn')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+            return cstagger.ddydn(self.byc)
+
+        elif var == 'dzdbdn':  # z field
+            if ( not hasattr(self,'dzdbdn')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+            return cstagger.ddzdn(self.bzc)
+
+        elif var == 'modb':  # z field
+            #if (( not hasattr(self,'bxc')) or self.multifluid): self.bxc=self.variables['bxc']=self.getvar('bx',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if (( not hasattr(self,'byc')) or self.multifluid): self.byc=self.variables['byc']=self.getvar('by',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if (( not hasattr(self,'bzc')) or self.multifluid): self.bzc=self.variables['bzc']=self.getvar('bz',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if (not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if (not hasattr(self,'byc')): self.byc=self.variables['byc']=self.getvar('by',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if (not hasattr(self,'bzc')): self.bzc=self.variables['bzc']=self.getvar('bz',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if (not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
+            #if (not hasattr(self,'byc')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+            #if (not hasattr(self,'bzc')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+            self.bxc=self.variables['bxc']=self.getvar('bx',snap)
+            self.byc=self.variables['byc']=self.getvar('by',snap)
+            self.bzc=self.variables['bzc']=self.getvar('bz',snap)
+            #return N.sqrt(self.bxc**2+self.byc**2+self.bzc**2)
+            return N.sqrt(self.bxc**2+self.byc**2+self.bzc**2)
+
+        elif var == 'modp':  # z field
+            #if ( not hasattr(self,'pxc')): self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if ( not hasattr(self,'pyc')): self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            #if ( not hasattr(self,'pzc')): self.pzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            self.pzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            return N.sqrt(self.pxc.T**2+self.pyc.T**2+self.pzc.T**2)
+
+        elif var == 'rup':
+            return cscstagger.xup(self.r)
+
         else:
             raise ValueError('getcompvar: composite var %s not found. Available:\n %s'
-                             % (var, repr(self.compvars)))
+                             % (var, repr(self.compvars + self.snapvars + self.commvars + self.auxvars)))
         return
 
     def _init_vars(self):
@@ -517,16 +650,19 @@ class Rhoeetab:
         self.dtype = dtype
         self.verbose = verbose
         self.big_endian = big_endian
+        
         self.eosload = False
         self.radload = False
         # read table file and calculate parameters
         if tabfile is None:
             tabfile = '%s/tabparam.in' % (fdir)
         self.param = self.read_tab_file(tabfile)
+        
         # load table(s)
         self.load_eos_table()
         if radtab:
             self.load_rad_table()
+            
         return
 
     def read_tab_file(self, tabfile):
@@ -535,32 +671,40 @@ class Rhoeetab:
         if self.verbose:
             print(('*** Read parameters from ' + tabfile))
         p = self.params
+        
         # construct lnrho array
         self.lnrho = np.linspace(
             np.log(p['rhomin']), np.log(p['rhomax']), p['nrhobin'])
         self.dlnrho = self.lnrho[1] - self.lnrho[0]
+        
         # construct ei array
         self.lnei = np.linspace(
             np.log(p['eimin']), np.log(p['eimax']), p['neibin'])
         self.dlnei = self.lnei[1] - self.lnei[0]
+        
         return
 
     def load_eos_table(self, eostabfile=None):
         ''' Loads EOS table. '''
         if eostabfile is None:
             eostabfile = '%s/%s' % (self.fdir, self.params['eostablefile'])
+            
         nei = self.params['neibin']
         nrho = self.params['nrhobin']
+        
         dtype = ('>' if self.big_endian else '<') + self.dtype
         table = np.memmap(eostabfile, mode='r', shape=(nei, nrho, 4),
                           dtype=dtype, order='F')
+        
         self.lnpg = table[:, :, 0]
-        self.tgt = table[:, :, 1]
+        self.tgt  = table[:, :, 1]
         self.lnne = table[:, :, 2]
         self.lnrk = table[:, :, 3]
+        
         self.eosload = True
         if self.verbose:
             print(('*** Read EOS table from ' + eostabfile))
+            
         return
 
     def load_rad_table(self, radtabfile=None):
@@ -568,20 +712,48 @@ class Rhoeetab:
         if radtabfile is None:
             radtabfile = '%s/%s' % (self.fdir,
                                     self.params['rhoeiradtablefile'])
-        nei = self.params['neibin']
-        nrho = self.params['nrhobin']
+        nei   = self.params['neibin']
+        nrho  = self.params['nrhobin']
         nbins = self.params['nradbins']
+        
         dtype = ('>' if self.big_endian else '<') + self.dtype
         table = np.memmap(radtabfile, mode='r', shape=(nei, nrho, nbins, 3),
                           dtype=dtype, order='F')
+        
         self.epstab = table[:, :, :, 0]
         self.temtab = table[:, :, :, 1]
         self.opatab = table[:, :, :, 2]
+        
         self.radload = True
         if self.verbose:
             print(('*** Read rad table from ' + radtabfile))
+            
         return
 
+    #-------------------------------------------------------------------------------------
+
+    def get_table(self, out='ne', bine=None, order=1):
+        import scipy.ndimage as ndimage
+
+        qdict = {'ne':'lnne', 'tg':'tgt', 'pg':'lnpg', 'kr':'lnkr',
+                 'eps':'epstab', 'opa':'opatab', 'temp':'temtab'  }
+
+        if out in ['ne tg pg kr'.split()] and not self.eosload:
+            raise ValueError("(EEE) tab_interp: EOS table not loaded!")
+
+        if out in ['opa eps temp'.split()] and not self.radload:
+            raise ValueError("(EEE) tab_interp: rad table not loaded!")
+
+        quant = getattr(self, qdict[out])
+
+        if out in ['opa eps temp'.split()]:
+            if bin is None:
+                print("(WWW) tab_interp: radiation bin not set, using first bin.")
+                bin = 0
+            quant = quant[:,:,bin]
+
+        return quant
+    
     def tab_interp(self, rho, ei, out='ne', bin=None, order=1):
         ''' Interpolates the EOS/rad table for the required quantity in out.
 
@@ -713,6 +885,201 @@ def subs2grph(subsfile):
     return np.sum(ab * am)
 
 
+#-----------------------------------------------------------------------------------------
+
+class Opatab:
+    def __init__(self, tabname=None, fdir='.', big_endian=False, dtype='f4',
+                 verbose=True,lambd=100.0):
+
+        self.fdir = fdir
+        self.dtype = dtype
+        self.verbose = verbose
+        self.big_endian = big_endian
+        self.lambd = lambd
+        self.radload = False
+        self.teinit = 4.0
+        self.dte = 0.1
+        # read table file and calculate parameters
+        if tabname is None:
+            tabname = '%s/ionization.dat' % (fdir)
+
+        self.tabname = tabname
+        # load table(s)
+        self.load_opa_table()
+
+        return
+
+#-----------------------------------------------------------------------------------------
+
+    def hopac(self):
+        ''' Calculates the photoionization cross sections given by
+        from anzer & heinzel apj 622: 714-721, 2005, march 20
+        these clowns have a couple of great big typos in their reported c's.... correct values to
+        be found in rumph et al 1994 aj, 107: 2108, june 1994
+
+        gaunt factors are set to 0.99 for h and 0.85 for heii, which should be good enough
+        for the purposes of this code
+        '''
+
+        ghi = 0.99
+        o0 = 7.91e-18 # cm^2
+
+        ohi = 0
+        if self.lambd <= 912:
+            ohi = o0 * ghi * (self.lambd / 912.0)**3
+
+        return ohi
+#-----------------------------------------------------------------------------------------
+
+    def heiopac(self):
+        ''' Calculates the photoionization cross sections given by
+        from anzer & heinzel apj 622: 714-721, 2005, march 20
+        these clowns have a couple of great big typos in their reported c's.... correct values to
+        be found in rumph et al 1994 aj, 107: 2108, june 1994
+
+        gaunt factors are set to 0.99 for h and 0.85 for heii, which should be good enough
+        for the purposes of this code
+        '''
+
+        c = [-2.953607e1, 7.083061e0, 8.678646e-1,
+                -1.221932e0, 4.052997e-2, 1.317109e-1,
+                -3.265795e-2, 2.500933e-3]
+
+        ohei = 0
+        if self.lambd <= 504:
+            for i, cf in enumerate(c):
+                ohei += cf * (N.log10(self.lambd))**i
+            ohei = 10.0**ohei
+
+        return ohei
+
+#-----------------------------------------------------------------------------------------
+
+    def heiiopac(self):
+        ''' Calculates the photoionization cross sections given by
+        from anzer & heinzel apj 622: 714-721, 2005, march 20
+        these clowns have a couple of great big typos in their reported c's.... correct values to
+        be found in rumph et al 1994 aj, 107: 2108, june 1994
+
+        gaunt factors are set to 0.99 for h and 0.85 for heii, which should be good enough
+        for the purposes of this code
+        '''
+
+        gheii = 0.85
+        o0 = 7.91e-18 # cm^2
+
+        oheii = 0
+        if self.lambd <= 228:
+            oheii = 16 * o0 * gheii * (self.lambd / 912.0)**3
+
+        return oheii
+
+#------------------------------------------------------------------------------------------
+
+    def load_opa_table(self, tabname=None):
+       ''' Loads ionizationstate table. '''
+
+       if tabname is None:
+           tabname = '%s/%s' % (self.fdir, 'ionization.dat')
+
+       eostab = Rhoeetab(fdir=self.fdir)
+
+       nei  = eostab.params['neibin']
+       nrho = eostab.params['nrhobin']
+
+       dtype = ('>' if self.big_endian else '<') + self.dtype
+
+       table = N.memmap(tabname, mode='r', shape=(nei,nrho,3), dtype=dtype,
+                        order='F')
+
+       self.ionh = table[:,:,0]
+       self.ionhe  = table[:,:,1]
+       self.ionhei = table[:,:,2]
+
+       self.opaload = True
+       if self.verbose: print('*** Read EOS table from '+tabname)
+
+       return
+
+   #-------------------------------------------------------------------------------------
+
+    def tg_tab_interp(self, order=1):
+       ''' Interpolates the opa table to same format as tg table.
+       '''
+
+       import scipy.ndimage as ndimage
+
+       self.load_opa1d_table()
+
+       rhoeetab = Rhoeetab(fdir=self.fdir)
+       tgTable = rhoeetab.get_table('tg')
+
+
+       # translate to table coordinates
+       x = (N.log10(tgTable)  -  self.teinit) / self.dte
+
+       # interpolate quantity
+       self.ionh = ndimage.map_coordinates(self.ionh1d, [x], order=order)#, mode='nearest')
+       self.ionhe = ndimage.map_coordinates(self.ionhe1d, [x], order=order)#, mode='nearest')
+       self.ionhei = ndimage.map_coordinates(self.ionhei1d, [x], order=order)#, mode='nearest')
+
+       return
+
+#-----------------------------------------------------------------------------------------
+
+    def h_he_absorb(self,lambd=None):
+   # ''' from anzer & heinzel apj 622: 714-721, 2005, march 2  '''
+
+       rhe=0.1
+       epsilon=1.e-20
+
+       if lambd is not None:
+           self.lambd = lambd
+
+       self.tg_tab_interp()
+
+       ion_h = self.ionh
+       ion_he = self.ionhe
+
+       ion_hei=self.ionhei
+
+       ohi = self.hopac()
+       ohei = self.heiopac()
+       oheii = self.heiiopac()
+
+
+       arr = (1 - ion_h) * ohi + rhe * ((1 - ion_he - ion_hei) * ohei + ion_he * oheii)
+       arr[arr < 0] = 0
+       '''
+       Gets the opacities for a particular wavelength of light.
+       If lambd is None, then looks at the current level for wavelength
+       '''
+
+       return arr
+
+#----------------------------------------------------------------------------------------
+
+    def load_opa1d_table(self, tabname=None):
+       ''' Loads ionizationstate table. '''
+
+       if tabname is None:
+           tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
+
+       dtype = ('>' if self.big_endian else '<') + self.dtype
+
+       table = N.memmap(tabname, mode='r', shape=(41,3), dtype=dtype,
+                        order='F')
+
+       self.ionh1d = table[:,0]
+       self.ionhe1d  = table[:,1]
+       self.ionhei1d = table[:,2]
+
+       self.opaload = True
+       if self.verbose: print('*** Read OPA table from '+tabname)
+
+       return
+
+   
 def ne_rt_table(rho, temp, order=1, tabfile=None):
     ''' Calculates electron density by interpolating the rho/temp table.
         Based on Mats Carlsson's ne_rt_table.pro.
