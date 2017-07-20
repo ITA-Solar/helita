@@ -2,7 +2,7 @@
 Various tools for math and physics calculations, and utility functions.
 """
 
-__all__ = ["congrid", "fitting", "shell", "utilsmath", "waveconv", "voigtv"]
+__all__ = ["congrid", "fitting", "shell", "utilsmath", "waveconv"]
 
 from . import fitting
 from . import utilsmath
