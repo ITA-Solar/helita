@@ -167,6 +167,7 @@ def translate(data, z, mu, phi, dx=1, dy=1):
     from .trnslt import trnslt
     assert data.shape[-1] == z.shape[0]
     assert data.flags['F_CONTIGUOUS']
+    assert data.dtype == np.dtype("float32")
     theta = acos(mu)
     sinth = sin(theta)
     tanth = sinth / mu
@@ -652,3 +653,35 @@ def get_equidistant_points(x, y, scale=1., npts=100, order=3):
         if (newx.shape[0] - st < scale / incr):   # limit of points reached
             break
     return np.array(res).T
+
+
+def doppler_shift(wave, data, vel, order="linear"):
+    """
+    Doppler shifts a quantity that is a function of wavelength.
+
+    Parameters
+    ----------
+    wave : 1-D array
+        Wavelength values in nm.
+    data : ndarray (1-D or 2-D)
+        Data to shift. The last dimension should correspond to wavelength.
+    vel : number or 1-D array
+        Velocities in km/s.
+    order : string, optional
+        Interpolation order. Could be 'linear' (default), 'nearest', 'linear'
+        'quadratic', 'cubic'. The last three refer to spline interpolation of
+        first, second, and third order.
+
+    Returns
+    -------
+    data_shift : ndarray
+        Shifted values, same shape as data.
+    """
+    from scipy.constants import c
+    from scipy.interpolate import interp1d
+    wave_shift = wave * (1. + 1.e3 / c * vel)
+    fill = {"linear": "extrapolate", "nearest": 0., "slinear": 0.,
+            "quadratic": 0., "cubic": 0}
+    f = interp1d(wave, data, kind=order, bounds_error=False,
+                 fill_value=fill[order])
+    return f(wave_shift)
