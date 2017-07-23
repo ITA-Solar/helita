@@ -47,9 +47,9 @@ class BifrostData(object):
             self.dtype = '<' + dtype
 
         self.variables = {}
-        # variables: lists and initialisation  
+        # variables: lists and initialisation
 
-        
+
 #------------------------------------------------------------------------
     def initload(self, snap, meshfile=None,
                  verbose=True,dtype='f4', **kwargs):
@@ -58,19 +58,20 @@ class BifrostData(object):
         self.snap_str = '_%03i' % snap
 
         if (snap >=0):
-            self.templatesnap = self.file_root + self.snap_str 
+            self.templatesnap = self.file_root + self.snap_str
         else:
             self.templatesnap = self.file_root
 
         # read idl file
         self.__read_params()
         # read mesh file
+
         if meshfile is None:
             if self.fdir.strip() == '':
                 meshfile = self.params['meshfile'].strip()
             else:
                 meshfile = self.fdir + '/' + self.params['meshfile'].strip()
-                
+
         if not os.path.isfile(meshfile):
             if self.fdir.strip() == '':
                 meshfile = 'mesh.dat'
@@ -80,7 +81,7 @@ class BifrostData(object):
         if not os.path.isfile(meshfile):
             print('[Warning] Mesh file %s does not exist' % meshfile)
         self.__read_mesh(meshfile)
-        
+
         self.auxvars = self.params['aux'].split()
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
         if (self.do_mhd):
@@ -103,7 +104,7 @@ class BifrostData(object):
             if any(i in var for i in ('xy', 'yz', 'xz')):
                 self.auxvars.remove(var)
                 self.vars2d.append(var)
-        
+
     def __read_params(self):
         """
         Reads parameter file (.idl)
@@ -112,7 +113,7 @@ class BifrostData(object):
             filename = self.templatesnap + '.idl.src'
         else:
             filename =self.templatesnap + '.idl'
-        
+
         self.params = read_idl_ascii(filename)
 
         # assign some parameters to root object
@@ -248,7 +249,7 @@ class BifrostData(object):
         for name in self.snapvars:
             if (hasattr(self,name)):
                 delattr(self,name)
-                
+
     def getvar_xy(self, var, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
         """
         Reads a given 2D variable from the _XY.aux file
@@ -330,18 +331,24 @@ class BifrostData(object):
         Gets composite variables (will load into memory).
         """
         import cstagger
-         
+
         # if rho is not loaded, do it (essential for composite variables)
-        # rc is the same as r, but in C order (so that cstagger works)
+        # rc is the same as r, but in C order (so that cstagger works
+
         if   var == 'rc':
-            if ( not hasattr(self,'rc')): self.rc = self.variables['rc'] = self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            # initialise cstagger
-            rdt = self.rc.dtype
-            cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+            if ( not hasattr(self,'rc')):
+                self.rc = self.variables['rc'] = self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.rc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             return self.rc
 
         elif  var == 'ux':  # x velocity
-            if ( not hasattr(self,'rc')):  self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'rc')):
+                self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.rc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             if ( not hasattr(self,'px')):  self.px=self.variables['px']=self.getvar('px',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 return self.px / self.rc
@@ -349,102 +356,240 @@ class BifrostData(object):
                 return self.px/cstagger.xdn(self.rc)
 
         elif var == 'uy':  # y velocity
-            if ( not hasattr(self,'rc')):  self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'rc')):
+                self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.rc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             if ( not hasattr(self,'py')): self.py=self.variables['py']=self.getvar('py',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+
             if self.ny < 5:  # do not recentre for 2D cases (or close)
                 return self.py / self.rc
             else:
                 return self.py/cstagger.ydn(self.rc)
-           
+
 
         elif var == 'uz':  # z velocity
-            if ( not hasattr(self,'rc')):  self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'rc')):
+                self.rc=self.variables['rc']=self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.rc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             if ( not hasattr(self,'pz')): self.pz=self.variables['pz']=self.getvar('pz',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            return self.pz / cstagger.zdn(self.rc)
+
+            if self.nz < 5:  # do not recentre for 2D cases (or close)
+                return self.pz / self.rc
+            else:
+                return self.pz/cstagger.zdn(self.rc)
 
         elif var == 'ee':   # internal energy?
-            if ( not hasattr(self,'e')): self.e=self.variables['e']=self.getvar('e',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'e')):
+                self.e=self.variables['e']=self.getvar('e',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.e.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             return self.e/self.rc
 
         elif var == 's':   # entropy?
-            if not hasattr(self,'p') : self.p=self.variables['p']=self.getvar('p',snap)
+            if not hasattr(self,'p') :
+                self.p=self.variables['p']=self.getvar('p',snap)
+                # initialise cstagger
+                rdt = self.p.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             return N.log(self.p) - 1.667*N.log(self.r)
 
         elif var == 'bxc':  # x field
-            if (not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
-            return cstagger.xup(self.bxc)
+            if (not hasattr(self,'bxc')):
+                self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
+                # initialise cstagger
+                rdt = self.bxc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                return self.bxc
+            else:
+                return cstagger.xup(self.bxc)
 
         elif var == 'byc':  # y field
-            if (not hasattr(self,'byc')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
-            return cstagger.yup(self.byc)
+            if (not hasattr(self,'byc')):
+                self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+                # initialise cstagger
+                rdt = self.byc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.ny < 5:  # do not recentre for 2D cases (or close)
+                return self.byc
+            else:
+                return cstagger.yup(self.byc)
 
         elif var == 'bzc':  # z field
-            if (not hasattr(self,'bzc')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
-            return cstagger.zup(self.bzc)
+            if (not hasattr(self,'bzc')):
+                self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+                # initialise cstagger
+                rdt = self.bzc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nz < 5:  # do not recentre for 2D cases (or close)
+                return self.bzc
+            else:
+                return cstagger.zup(self.bzc)
 
         elif var == 'pxc':  # x momentum
-            if (not hasattr(self,'pxc')): self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            return cstagger.xup(self.pxc)
+            if (not hasattr(self,'pxc')):
+                self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.pxc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                return self.pxc
+            else:
+                return cstagger.xup(self.pxc)
 
         elif var == 'pyc':  # y momentum
-            if (not hasattr(self,'pyc')): self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            return cstagger.yup(self.pyc)
+            if (not hasattr(self,'pyc')):
+                self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.pyc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.ny < 5:  # do not recentre for 2D cases (or close)
+                return self.pyc
+            else:
+                return cstagger.yup(self.pyc)
 
         elif var == 'pzc':  # z momentum
-            if (not hasattr(self,'pzc')): self.bzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            return cstagger.zup(self.pzc)
+            if (not hasattr(self,'pzc')):
+                self.bzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.pzc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nz < 5:  # do not recentre for 2D cases (or close)
+                return self.pzc
+            else:
+                return cstagger.zup(self.pzc)
 
         elif var == 'dxdbup':  # z field
-            if ( not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
-            return cstagger.ddxup(self.bxc)
+            if ( not hasattr(self,'bxc')):
+                self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
+                # initialise cstagger
+                rdt = self.bxc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                print('WARNING: this model does not have x-axis, set ddxup(bx) = 0')
+                return self.bxc*0.0
+            else:
+                return cstagger.ddxup(self.bxc)
 
         elif var == 'dydbup':  # z field
-            if ( not hasattr(self,'dydbup')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
-            return cstagger.ddyup(self.byc)
+            if ( not hasattr(self,'dydbup')):
+                self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+                # initialise cstagger
+                rdt = self.byc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.ny < 5:  # do not recentre for 2D cases (or close)
+                print('WARNING: this model does not have y-axis, set ddyup(by) = 0')
+                return self.byc*0.0
+            else:
+                return cstagger.ddyup(self.byc)
 
         elif var == 'dzdbup':  # z field
-            if ( not hasattr(self,'dzdbup')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
-            return cstagger.ddzup(self.bzc)
+            if ( not hasattr(self,'dzdbup')):
+                self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+                # initialise cstagger
+                rdt = self.bzc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nz < 5:  # do not recentre for 2D cases (or close)
+                print('WARNING: this model does not have z-axis, set ddzup(bz) = 0')
+                return self.bzc*0.0
+            else:
+                return cstagger.ddzup(self.bzc)
 
         elif var == 'dxdbdn':  # z field
-            if ( not hasattr(self,'dxdbdn')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
-            return cstagger.ddxdn(self.bxc)
+            if ( not hasattr(self,'dxdbdn')):
+                self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
+                # initialise cstagger
+                rdt = self.bxc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                print('WARNING: this model does not have x-axis, set ddxdn(bx) = 0')
+                return self.bxc*0.0
+            else:
+                return cstagger.ddxdn(self.bxc)
 
         elif var == 'dydbdn':  # z field
-            if ( not hasattr(self,'dydbdn')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
-            return cstagger.ddydn(self.byc)
+            if ( not hasattr(self,'dydbdn')):
+                self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+                # initialise cstagger
+                rdt = self.byc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.ny < 5:  # do not recentre for 2D cases (or close)
+                print('WARNING: this model does not have y-axis, set ddydn(by) = 0')
+                return self.byc*0.0
+            else:
+                return cstagger.ddydn(self.byc)
 
         elif var == 'dzdbdn':  # z field
-            if ( not hasattr(self,'dzdbdn')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
-            return cstagger.ddzdn(self.bzc)
+            if ( not hasattr(self,'dzdbdn')):
+                self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+                # initialise cstagger
+                rdt = self.bzc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nz < 5:  # do not recentre for 2D cases (or close)
+                print('WARNING: this model does not have z-axis, set ddzdn(bz) = 0')
+                return self.bzc*0.0
+            else:
+                return cstagger.ddzdn(self.bzc)
 
         elif var == 'modb':  # z field
-            #if (( not hasattr(self,'bxc')) or self.multifluid): self.bxc=self.variables['bxc']=self.getvar('bx',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if (( not hasattr(self,'byc')) or self.multifluid): self.byc=self.variables['byc']=self.getvar('by',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if (( not hasattr(self,'bzc')) or self.multifluid): self.bzc=self.variables['bzc']=self.getvar('bz',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if (not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if (not hasattr(self,'byc')): self.byc=self.variables['byc']=self.getvar('by',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if (not hasattr(self,'bzc')): self.bzc=self.variables['bzc']=self.getvar('bz',order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if (not hasattr(self,'bxc')): self.bxc=self.variables['bxc']=self.getvar('bx',snap,order='C')
-            #if (not hasattr(self,'byc')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
-            #if (not hasattr(self,'bzc')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
-            self.bxc=self.variables['bxc']=self.getvar('bx',snap)
-            self.byc=self.variables['byc']=self.getvar('by',snap)
-            self.bzc=self.variables['bzc']=self.getvar('bz',snap)
-            #return N.sqrt(self.bxc**2+self.byc**2+self.bzc**2)
-            return N.sqrt(self.bxc**2+self.byc**2+self.bzc**2)
+            if (not hasattr(self,'bxc')):
+                self.bxc=self.variables['bxc']=self.getvar('bx',order='C')
+                # initialise cstagger
+                rdt = self.bxc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if (not hasattr(self,'byc')): self.byc=self.variables['byc']=self.getvar('by',snap,order='C')
+            if (not hasattr(self,'bzc')): self.bzc=self.variables['bzc']=self.getvar('bz',snap,order='C')
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                bxc=self.bxc
+            else:
+                bxc=cstagger.xup(self.bxc)
+            if self.ny < 5:  # do not recentre for 2D cases (or close)
+                byc=self.byc
+            else:
+                byc=cstagger.yup(self.byc)
+            if self.nz < 5:  # do not recentre for 2D cases (or close)
+                bzc=self.bzc
+            else:
+                bzc=cstagger.zup(self.bzc)
+            return N.sqrt(bxc**2+byc**2+bzc**2)
 
         elif var == 'modp':  # z field
-            #if ( not hasattr(self,'pxc')): self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if ( not hasattr(self,'pyc')): self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            #if ( not hasattr(self,'pzc')): self.pzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            self.pzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-            return N.sqrt(self.pxc.T**2+self.pyc.T**2+self.pzc.T**2)
+            if ( not hasattr(self,'pxc')):
+                self.pxc=self.variables['pxc']=self.getvar('px',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.pxc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if ( not hasattr(self,'pyc')): self.pyc=self.variables['pyc']=self.getvar('py',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if ( not hasattr(self,'pzc')): self.pzc=self.variables['pzc']=self.getvar('pz',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                pxc=self.pxc
+            else:
+                pxc=cstagger.xup(self.pxc)
+            if self.ny < 5:  # do not recentre for 2D cases (or close)
+                pyc=self.pyc
+            else:
+                pyc=cstagger.yup(self.pyc)
+            if self.nz < 5:  # do not recentre for 2D cases (or close)
+                pzc=self.pzc
+            else:
+                pzc=cstagger.zup(self.pzc)
+            return (N.sqrt(pxc**2+pyc**2+pzc**2)).T
 
         elif var == 'rup':
-            return cscstagger.xup(self.r)
+            if ( not hasattr(self,'rc')):
+                self.rc = self.variables['rc'] = self.getvar('r',snap,order='C',mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+                # initialise cstagger
+                rdt = self.rc.dtype
+                cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if self.nx < 5:  # do not recentre for 2D cases (or close)
+                return self.rc
+            else:
+                return cscstagger.xup(self.rc)
 
         else:
             raise ValueError('getcompvar: composite var %s not found. Available:\n %s'
@@ -650,19 +795,19 @@ class Rhoeetab:
         self.dtype = dtype
         self.verbose = verbose
         self.big_endian = big_endian
-        
+
         self.eosload = False
         self.radload = False
         # read table file and calculate parameters
         if tabfile is None:
             tabfile = '%s/tabparam.in' % (fdir)
         self.param = self.read_tab_file(tabfile)
-        
+
         # load table(s)
         self.load_eos_table()
         if radtab:
             self.load_rad_table()
-            
+
         return
 
     def read_tab_file(self, tabfile):
@@ -671,40 +816,40 @@ class Rhoeetab:
         if self.verbose:
             print(('*** Read parameters from ' + tabfile))
         p = self.params
-        
+
         # construct lnrho array
         self.lnrho = np.linspace(
             np.log(p['rhomin']), np.log(p['rhomax']), p['nrhobin'])
         self.dlnrho = self.lnrho[1] - self.lnrho[0]
-        
+
         # construct ei array
         self.lnei = np.linspace(
             np.log(p['eimin']), np.log(p['eimax']), p['neibin'])
         self.dlnei = self.lnei[1] - self.lnei[0]
-        
+
         return
 
     def load_eos_table(self, eostabfile=None):
         ''' Loads EOS table. '''
         if eostabfile is None:
             eostabfile = '%s/%s' % (self.fdir, self.params['eostablefile'])
-            
+
         nei = self.params['neibin']
         nrho = self.params['nrhobin']
-        
+
         dtype = ('>' if self.big_endian else '<') + self.dtype
         table = np.memmap(eostabfile, mode='r', shape=(nei, nrho, 4),
                           dtype=dtype, order='F')
-        
+
         self.lnpg = table[:, :, 0]
         self.tgt  = table[:, :, 1]
         self.lnne = table[:, :, 2]
         self.lnrk = table[:, :, 3]
-        
+
         self.eosload = True
         if self.verbose:
             print(('*** Read EOS table from ' + eostabfile))
-            
+
         return
 
     def load_rad_table(self, radtabfile=None):
@@ -715,19 +860,19 @@ class Rhoeetab:
         nei   = self.params['neibin']
         nrho  = self.params['nrhobin']
         nbins = self.params['nradbins']
-        
+
         dtype = ('>' if self.big_endian else '<') + self.dtype
         table = np.memmap(radtabfile, mode='r', shape=(nei, nrho, nbins, 3),
                           dtype=dtype, order='F')
-        
+
         self.epstab = table[:, :, :, 0]
         self.temtab = table[:, :, :, 1]
         self.opatab = table[:, :, :, 2]
-        
+
         self.radload = True
         if self.verbose:
             print(('*** Read rad table from ' + radtabfile))
-            
+
         return
 
     #-------------------------------------------------------------------------------------
@@ -753,7 +898,7 @@ class Rhoeetab:
             quant = quant[:,:,bin]
 
         return quant
-    
+
     def tab_interp(self, rho, ei, out='ne', bin=None, order=1):
         ''' Interpolates the EOS/rad table for the required quantity in out.
 
@@ -1079,7 +1224,7 @@ class Opatab:
 
        return
 
-   
+
 def ne_rt_table(rho, temp, order=1, tabfile=None):
     ''' Calculates electron density by interpolating the rho/temp table.
         Based on Mats Carlsson's ne_rt_table.pro.
