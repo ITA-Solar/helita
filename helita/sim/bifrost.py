@@ -2,7 +2,7 @@
 Set of programs to read and interact with output from Bifrost
 """
 
-import numpy as np
+import numpy as N
 import os
 
 class BifrostData(object):
@@ -183,33 +183,33 @@ class BifrostData(object):
             f = open(meshfile, 'r')
             mx = int(f.readline().strip('\n').strip())
             assert mx == self.nx
-            self.x = np.array([float(v)
+            self.x = N.array([float(v)
                                for v in f.readline().strip('\n').split()])
-            self.xdn = np.array([float(v) for v in
+            self.xdn = N.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-            self.dxidxup = np.array([float(v) for v in
+            self.dxidxup = N.array([float(v) for v in
                                      f.readline().strip('\n').split()])
-            self.dxidxdn = np.array([float(v) for v in
+            self.dxidxdn = N.array([float(v) for v in
                                      f.readline().strip('\n').split()])
             my = int(f.readline().strip('\n').strip())
             assert my == self.ny
-            self.y = np.array([float(v) for v in
+            self.y = N.array([float(v) for v in
                                f.readline().strip('\n').split()])
-            self.ydn = np.array([float(v) for v in
+            self.ydn = N.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-            self.dyidyup = np.array([float(v) for v in
+            self.dyidyup = N.array([float(v) for v in
                                      f.readline().strip('\n').split()])
-            self.dyidydn = np.array([float(v) for v in
+            self.dyidydn = N.array([float(v) for v in
                                      f.readline().strip('\n').split()])
             mz = int(f.readline().strip('\n').strip())
             assert mz == self.nz
-            self.z = np.array([float(v) for v in
+            self.z = N.array([float(v) for v in
                                f.readline().strip('\n').split()])
-            self.zdn = np.array([float(v) for v in
+            self.zdn = N.array([float(v) for v in
                                  f.readline().strip('\n').split()])
-            self.dzidzup = np.array([float(v) for v in
+            self.dzidzup = N.array([float(v) for v in
                                      f.readline().strip('\n').split()])
-            self.dzidzdn = np.array([float(v) for v in
+            self.dzidzdn = N.array([float(v) for v in
                                      f.readline().strip('\n').split()])
             f.close()
         else:  # no mesh file
@@ -223,20 +223,20 @@ class BifrostData(object):
             print(('(WWW) Creating uniform grid with [dx,dy,dz] = '
                    '[%f,%f,%f]') % (self.dx, self.dy, self.dz))
             # x
-            self.x = np.arange(self.nx) * self.dx
+            self.x = N.arange(self.nx) * self.dx
             self.xdn = self.x - 0.5 * self.dx
-            self.dxidxup = np.zeros(self.nx) + 1./self.dx
-            self.dxidxdn = np.zeros(self.nx) + 1./self.dx
+            self.dxidxup = N.zeros(self.nx) + 1./self.dx
+            self.dxidxdn = N.zeros(self.nx) + 1./self.dx
             # y
-            self.y = np.arange(self.ny) * self.dy
+            self.y = N.arange(self.ny) * self.dy
             self.ydn = self.y - 0.5 * self.dy
-            self.dyidyup = np.zeros(self.ny) + 1./self.dy
-            self.dyidydn = np.zeros(self.ny) + 1./self.dy
+            self.dyidyup = N.zeros(self.ny) + 1./self.dy
+            self.dyidydn = N.zeros(self.ny) + 1./self.dy
             # z
-            self.z = np.arange(self.nz) * self.dz
+            self.z = N.arange(self.nz) * self.dz
             self.zdn = self.z - 0.5 * self.dz
-            self.dzidzup = np.zeros(self.nz) + 1./self.dz
-            self.dzidzdn = np.zeros(self.nz) + 1./self.dz
+            self.dzidzup = N.zeros(self.nz) + 1./self.dz
+            self.dzidzdn = N.zeros(self.nz) + 1./self.dz
 
     def clearattr(self):
         "cleans storage variables"
@@ -267,9 +267,9 @@ class BifrostData(object):
             raise IOError('getvar: variable %s should be in %s file, not found!' %
                           (var, filename))
         # size of the data type
-        dsize = np.dtype(self.dtype).itemsize
+        dsize = N.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+        return N.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny))
 
     def getvar(self, var, snap, slice=None, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
@@ -321,16 +321,16 @@ class BifrostData(object):
                              '%s not available. Available vars:' % (var) +
                              '\n' + repr(self.auxvars + self.snapvars +
                                          self.hionvars))
-        dsize = np.dtype(self.dtype).itemsize
+        dsize = N.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+        return N.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
     def _get_compvar(self, var,snap,slice=None,mf_ispecies=0, mf_ilevel=0):
         """
         Gets composite variables (will load into memory).
         """
-        import cstagger
+        import helita.sim.cstagger
 
         # if rho is not loaded, do it (essential for composite variables)
         # rc is the same as r, but in C order (so that cstagger works
@@ -667,7 +667,7 @@ class BifrostData(object):
             ne = ne[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2], sz[0]:sz[1]:sz[2]]
             ne = ne * 1.e6
             # read hydrogen populations (they are saved in cm^-3)
-            nh = np.empty((6,) + temp.shape, dtype='Float32')
+            nh = N.empty((6,) + temp.shape, dtype='Float32')
             for k in range(6):
                 nv = self.getvar('n%i' % (k + 1))
                 nh[k] = nv[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
@@ -751,7 +751,7 @@ class BifrostData(object):
             ne = ne[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2], sz[0]:sz[1]:sz[2]]
             ne = ne * 1.e6
             # read hydrogen populations (they are saved in cm^-3)
-            nh = np.empty((6,) + temp.shape, dtype='Float32')
+            nh = N.empty((6,) + temp.shape, dtype='Float32')
             for k in range(6):
                 nv = self.getvar('n%i' % (k + 1))
                 nh[k] = nv[sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
@@ -818,13 +818,13 @@ class Rhoeetab:
         p = self.params
 
         # construct lnrho array
-        self.lnrho = np.linspace(
-            np.log(p['rhomin']), np.log(p['rhomax']), p['nrhobin'])
+        self.lnrho = N.linspace(
+            N.log(p['rhomin']), N.log(p['rhomax']), p['nrhobin'])
         self.dlnrho = self.lnrho[1] - self.lnrho[0]
 
         # construct ei array
-        self.lnei = np.linspace(
-            np.log(p['eimin']), np.log(p['eimax']), p['neibin'])
+        self.lnei = N.linspace(
+            N.log(p['eimin']), N.log(p['eimax']), p['neibin'])
         self.dlnei = self.lnei[1] - self.lnei[0]
 
         return
@@ -838,7 +838,7 @@ class Rhoeetab:
         nrho = self.params['nrhobin']
 
         dtype = ('>' if self.big_endian else '<') + self.dtype
-        table = np.memmap(eostabfile, mode='r', shape=(nei, nrho, 4),
+        table = N.memmap(eostabfile, mode='r', shape=(nei, nrho, 4),
                           dtype=dtype, order='F')
 
         self.lnpg = table[:, :, 0]
@@ -862,7 +862,7 @@ class Rhoeetab:
         nbins = self.params['nradbins']
 
         dtype = ('>' if self.big_endian else '<') + self.dtype
-        table = np.memmap(radtabfile, mode='r', shape=(nei, nrho, nbins, 3),
+        table = N.memmap(radtabfile, mode='r', shape=(nei, nrho, nbins, 3),
                           dtype=dtype, order='F')
 
         self.epstab = table[:, :, :, 0]
@@ -932,10 +932,10 @@ class Rhoeetab:
                 bin = 0
             quant = quant[:, :, bin]
         # warnings for values outside of table
-        rhomin = np.min(rho)
-        rhomax = np.max(rho)
-        eimin = np.min(ei)
-        eimax = np.max(ei)
+        rhomin = N.min(rho)
+        rhomax = N.max(rho)
+        eimin = N.min(ei)
+        eimax = N.max(ei)
         if rhomin < self.params['rhomin']:
             print('(WWW) tab_interp: density outside table bounds.' +
                   'Table rho min=%.3e, requested rho min=%.3e' % (self.params['rhomin'], rhomin))
@@ -949,12 +949,12 @@ class Rhoeetab:
             print('(WWW) tab_interp: Ei outside of table bounds. ' +
                   'Table Ei max=%.2f, requested Ei max=%.2f' % (self.params['eimax'], eimax))
         # translate to table coordinates
-        x = (np.log(ei) - self.lnei[0]) / self.dlnei
-        y = (np.log(rho) - self.lnrho[0]) / self.dlnrho
+        x = (N.log(ei) - self.lnei[0]) / self.dlnei
+        y = (N.log(rho) - self.lnrho[0]) / self.dlnrho
         # interpolate quantity
         result = ndimage.map_coordinates(
             quant, [x, y], order=order, mode='nearest')
-        return (np.exp(result) if out != 'tg' else result)
+        return (N.exp(result) if out != 'tg' else result)
 
 
 ###########
@@ -1018,16 +1018,16 @@ def subs2grph(subsfile):
     from scipy.constants import atomic_mass as amu
 
     f = open(subsfile, 'r')
-    nspecies = np.fromfile(f, count=1, sep=' ', dtype='i')[0]
+    nspecies = N.fromfile(f, count=1, sep=' ', dtype='i')[0]
     f.readline()  # second line not important
-    ab = np.fromfile(f, count=nspecies, sep=' ', dtype='f')
-    am = np.fromfile(f, count=nspecies, sep=' ', dtype='f')
+    ab = N.fromfile(f, count=nspecies, sep=' ', dtype='f')
+    am = N.fromfile(f, count=nspecies, sep=' ', dtype='f')
     f.close()
     # linear abundances
     ab = 10.**(ab - 12.)
     # mass in grams
     am *= amu * 1.e3
-    return np.sum(ab * am)
+    return N.sum(ab * am)
 
 
 #-----------------------------------------------------------------------------------------
@@ -1251,16 +1251,16 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
             os.path.isfile(os.getenv('TIAGO_DATA') + '/misc/' + tabfile):
         tabfile = os.getenv('TIAGO_DATA') + '/misc/' + tabfile
     tt = readsav(tabfile, verbose=False)
-    lgrho = np.log10(rho)
+    lgrho = N.log10(rho)
     # warnings for values outside of table
-    tmin = np.min(temp)
-    tmax = np.max(temp)
-    ttmin = np.min(5040. / tt['theta_tab'])
-    ttmax = np.max(5040. / tt['theta_tab'])
-    lrmin = np.min(lgrho)
-    lrmax = np.max(lgrho)
-    tlrmin = np.min(tt['rho_tab'])
-    tlrmax = np.max(tt['rho_tab'])
+    tmin = N.min(temp)
+    tmax = N.max(temp)
+    ttmin = N.min(5040. / tt['theta_tab'])
+    ttmax = N.max(5040. / tt['theta_tab'])
+    lrmin = N.min(lgrho)
+    lrmax = N.max(lgrho)
+    tlrmin = N.min(tt['rho_tab'])
+    tlrmax = N.max(tt['rho_tab'])
     if tmin < ttmin:
         print(('(WWW) ne_rt_table: temperature outside table bounds. ' +
                'Table Tmin=%.1f, requested Tmin=%.1f' % (ttmin, tmin)))
