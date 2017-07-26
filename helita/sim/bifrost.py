@@ -330,7 +330,7 @@ class BifrostData(object):
         """
         Gets composite variables (will load into memory).
         """
-        import helita.sim.cstagger
+        import helita.sim.cstagger as cstagger
 
         # if rho is not loaded, do it (essential for composite variables)
         # rc is the same as r, but in C order (so that cstagger works
