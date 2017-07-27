@@ -240,13 +240,8 @@ class BifrostData(object):
 
     def clearattr(self):
         "cleans storage variables"
-        for name in self.compvars:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.auxvars:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.snapvars:
+        vars = [self.compvars + self.auxvars + self.snapvars]
+        for name in vars:
             if (hasattr(self,name)):
                 delattr(self,name)
 
@@ -334,7 +329,7 @@ class BifrostData(object):
         """
         Gets composite variables (will load into memory).
         """
-        import helita.sim.cstagger as cstagger
+        from . import cstagger as cstagger
 
         # if rho is not loaded, do it (essential for composite variables)
         # rc is the same as r, but in C order (so that cstagger works
@@ -400,6 +395,8 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.p.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            if not hasattr(self,'r') :
+                self.r=self.variables['r']=self.getvar('r',snap)
             return N.log(self.p) - 1.667*N.log(self.r)
 
         elif var == 'bxc':  # x field
