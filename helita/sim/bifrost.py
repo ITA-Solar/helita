@@ -597,7 +597,7 @@ class BifrostData(object):
                              % (var, repr(self.compvars + self.snapvars + self.commvars + self.auxvars)))
         return
 
-    def _init_vars(self,snap):
+    def _init_vars(self):
         """
         Memmaps aux and snap variables, and maps them to methods.
         Also, sets file name[s] from which to read a data
@@ -606,13 +606,13 @@ class BifrostData(object):
         # snap variables
         for var in self.snapvars + self.mhdvars + self.auxvars:
             try:
-                self.variables[var] = self.getvar(var,int(snap))
+                self.variables[var] = self.getvar(var,int(self.snap))
                 setattr(self, var, self.variables[var])
             except:
                 print(('(WWW) init_vars: could not read variable %s' % var))
         for var in self.auxxyvars:
             try:
-                self.variables[var] = self.getvar_xy(var,int(snap))
+                self.variables[var] = self.getvar_xy(var,int(self.snap))
                 setattr(self, var, self.variables[var])
             except:
                 print(('(WWW) init_vars: could not read variable %s' % var))
