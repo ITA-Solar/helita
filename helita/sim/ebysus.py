@@ -407,7 +407,7 @@ class EbysusData(BifrostData):
 
     #-----------------------------------------------------------------------
 
-    def init_vars(self,snap):
+    def init_vars(self):
         ''' Memmaps aux and snap variables, and maps them to methods. '''
 
         self.variables = {}
@@ -427,7 +427,7 @@ class EbysusData(BifrostData):
 
         # snap variables
         for var in avaible_variables:
-            self.variables[var] = self.getvar(var,int(snap))
+            self.variables[var] = self.getvar(var,(int(self.snap))
             setattr(self,var,self.variables[var])
 
         return
