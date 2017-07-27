@@ -411,14 +411,18 @@ class EbysusData(BifrostData):
         else:
             raise ValueError('getvar: datatype %s not supported' % self.dtype)
 
+
         if readingmm:
             offset = self.nx*self.ny*self.nz*idx*dsize*self.mf_total_nlevel
             if self.verbose: print('filename,offset',filename,offset)
-            return N.memmap(filename, dtype=self.dtype,order=order, offset=offset, mode='r', shape=(self.nx,self.ny,self.nz,self.mf_total_nlevel))
+            output = N.memmap(filename, dtype=self.dtype,order=order, offset=offset, mode='r', shape=(self.nx,self.ny,self.nz,self.mf_total_nlevel))
         else:
             offset = self.nx*self.ny*self.nz*idx*dsize
             if self.verbose: print('filename,offset',filename,offset)
-            return N.memmap(filename, dtype=self.dtype,order=order, offset=offset, mode='r', shape=(self.nx,self.ny,self.nz))
+            output = N.memmap(filename, dtype=self.dtype,order=order, offset=offset, mode='r', shape=(self.nx,self.ny,self.nz))
+
+        setattr(self,str(var),output)
+        return output
 
     #-----------------------------------------------------------------------
 
