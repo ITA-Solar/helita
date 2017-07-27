@@ -5,7 +5,7 @@
 import numpy as N
 import os
 import re
-from bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph
 
 class EbysusData(BifrostData):
 
@@ -257,30 +257,11 @@ class EbysusData(BifrostData):
 
     def clearattr(self):
         "cleans storage variables"
-        for name in self.compvars:
+        vars = [self.compvars + self.auxvars + self.snapvars + self.commvars + self.varsmf + self.varsmm + self.varsmfc + self.varsmfe]
+        for name in vars:
             if (hasattr(self,name)):
                 delattr(self,name)
-        for name in self.commvars:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.auxvars:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.snapvars:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.varsmf:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.varsmm:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.varsmfc:
-            if (hasattr(self,name)):
-                delattr(self,name)
-        for name in self.varsmfe:
-            if (hasattr(self,name)):
-                delattr(self,name)
+
     #------------------------------------------------------------------------
     def getvar(self, var, snap, slice=None, order='F', mf_ilevel=0, mf_ispecies=0, mf_electrons=False):
         ''' Reads a given variable from the relevant files. '''
