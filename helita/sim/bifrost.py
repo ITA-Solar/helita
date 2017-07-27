@@ -323,8 +323,12 @@ class BifrostData(object):
                                          self.hionvars))
         dsize = N.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize
-        return N.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+        output = N.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
+
+        setattr(self,str(var),output)
+
+        return output
 
     def _get_compvar(self, var,snap,slice=None,mf_ispecies=0, mf_ilevel=0):
         """
