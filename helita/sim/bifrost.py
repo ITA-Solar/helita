@@ -104,6 +104,8 @@ class BifrostData(object):
             if any(i in var for i in ('xy', 'yz', 'xz')):
                 self.auxvars.remove(var)
                 self.vars2d.append(var)
+        self.avaivars = []
+        self.avaivarsxy = []
 
     def __read_params(self):
         """
@@ -264,8 +266,10 @@ class BifrostData(object):
         # size of the data type
         dsize = N.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * idx * dsize
+        self.avaivarsxy = self.avaivarsxy + [str(var)]
         return N.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny))
+
 
     def getvar(self, var, snap, slice=None, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
         """
@@ -322,7 +326,7 @@ class BifrostData(object):
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
         setattr(self,str(var),output)
-
+        self.avaivars = self.avaivars + [str(var)]
         return output
 
     def _get_compvar(self, var,snap,slice=None,mf_ispecies=0, mf_ilevel=0):
@@ -340,6 +344,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.rc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+                self.avaivars = self.avaivars + [str(var)]
             return self.rc
 
         elif  var == 'ux':  # x velocity
@@ -349,6 +354,7 @@ class BifrostData(object):
                 rdt = self.rc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             if ( not hasattr(self,'px')):  self.px=self.variables['px']=self.getvar('px',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
+            self.avaivars = self.avaivars + [str(var)]
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 return self.px / self.rc
             else:
@@ -361,7 +367,7 @@ class BifrostData(object):
                 rdt = self.rc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             if ( not hasattr(self,'py')): self.py=self.variables['py']=self.getvar('py',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-
+            self.avaivars = self.avaivars + [str(var)]
             if self.ny < 5:  # do not recentre for 2D cases (or close)
                 return self.py / self.rc
             else:
@@ -375,7 +381,7 @@ class BifrostData(object):
                 rdt = self.rc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             if ( not hasattr(self,'pz')): self.pz=self.variables['pz']=self.getvar('pz',snap,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-
+            self.avaivars = self.avaivars + [str(var)]
             if self.nz < 5:  # do not recentre for 2D cases (or close)
                 return self.pz / self.rc
             else:
@@ -387,6 +393,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.e.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             return self.e/self.rc
 
         elif var == 's':   # entropy?
@@ -397,6 +404,7 @@ class BifrostData(object):
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
             if not hasattr(self,'r') :
                 self.r=self.variables['r']=self.getvar('r',snap)
+            self.avaivars = self.avaivars + [str(var)]
             return N.log(self.p) - 1.667*N.log(self.r)
 
         elif var == 'bxc':  # x field
@@ -405,6 +413,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.bxc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 return self.bxc
             else:
@@ -416,6 +425,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.byc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.ny < 5:  # do not recentre for 2D cases (or close)
                 return self.byc
             else:
@@ -427,6 +437,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.bzc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nz < 5:  # do not recentre for 2D cases (or close)
                 return self.bzc
             else:
@@ -438,6 +449,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.pxc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 return self.pxc
             else:
@@ -449,6 +461,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.pyc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.ny < 5:  # do not recentre for 2D cases (or close)
                 return self.pyc
             else:
@@ -460,6 +473,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.pzc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nz < 5:  # do not recentre for 2D cases (or close)
                 return self.pzc
             else:
@@ -471,6 +485,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.bxc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 print('WARNING: this model does not have x-axis, set ddxup(bx) = 0')
                 return self.bxc*0.0
@@ -483,6 +498,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.byc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.ny < 5:  # do not recentre for 2D cases (or close)
                 print('WARNING: this model does not have y-axis, set ddyup(by) = 0')
                 return self.byc*0.0
@@ -495,6 +511,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.bzc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nz < 5:  # do not recentre for 2D cases (or close)
                 print('WARNING: this model does not have z-axis, set ddzup(bz) = 0')
                 return self.bzc*0.0
@@ -507,6 +524,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.bxc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 print('WARNING: this model does not have x-axis, set ddxdn(bx) = 0')
                 return self.bxc*0.0
@@ -519,6 +537,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.byc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.ny < 5:  # do not recentre for 2D cases (or close)
                 print('WARNING: this model does not have y-axis, set ddydn(by) = 0')
                 return self.byc*0.0
@@ -531,6 +550,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.bzc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nz < 5:  # do not recentre for 2D cases (or close)
                 print('WARNING: this model does not have z-axis, set ddzdn(bz) = 0')
                 return self.bzc*0.0
@@ -557,6 +577,7 @@ class BifrostData(object):
                 bzc=self.bzc
             else:
                 bzc=cstagger.zup(self.bzc)
+            self.avaivars = self.avaivars + [str(var)]
             return N.sqrt(bxc**2+byc**2+bzc**2)
 
         elif var == 'modp':  # z field
@@ -579,6 +600,7 @@ class BifrostData(object):
                 pzc=self.pzc
             else:
                 pzc=cstagger.zup(self.pzc)
+            self.avaivars = self.avaivars + [str(var)]
             return (N.sqrt(pxc**2+pyc**2+pzc**2)).T
 
         elif var == 'rup':
@@ -587,6 +609,7 @@ class BifrostData(object):
                 # initialise cstagger
                 rdt = self.rc.dtype
                 cstagger.init_stagger(self.nz,self.z.astype(rdt), self.zdn.astype(rdt))
+            self.avaivars = self.avaivars + [str(var)]
             if self.nx < 5:  # do not recentre for 2D cases (or close)
                 return self.rc
             else:
@@ -602,18 +625,28 @@ class BifrostData(object):
         Memmaps aux and snap variables, and maps them to methods.
         Also, sets file name[s] from which to read a data
         """
-        self.variables = {}
+        templist = self.snapvars + self.auxvars +  self.mhdvars
+        for var in self.avaivars:
+            while var in templist: templist.remove(var)
         # snap variables
-        for var in self.snapvars + self.mhdvars + self.auxvars:
+        for var in templist:
             try:
-                self.variables[var] = self.getvar(var,int(self.snap))
-                setattr(self, var, self.variables[var])
+                output = self.getvar(str(var),int(self.snap))
+                setattr(self, str(var), self.output)
+                #self.variables[var] = self.getvar(var,int(self.snap))
+                #setattr(self, var, self.variables[var])
             except:
                 print(('(WWW) init_vars: could not read variable %s' % var))
-        for var in self.auxxyvars:
+
+        templist = self.avaivarsxy
+        for var in self.avaivarsxy:
+            while var in templist: templist.remove(var)
+        for var in templist:
             try:
-                self.variables[var] = self.getvar_xy(var,int(self.snap))
-                setattr(self, var, self.variables[var])
+                #self.variables[var] = self.getvar_xy(var,int(self.snap))
+                #setattr(self, var, self.variables[var])
+                output = self.getvar_xy(str(var),int(self.snap))
+                setattr(self, str(var), output)
             except:
                 print(('(WWW) init_vars: could not read variable %s' % var))
 
