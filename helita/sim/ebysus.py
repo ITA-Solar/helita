@@ -402,6 +402,7 @@ class EbysusData(BifrostData):
             if self.verbose: print('filename,offset',filename,offset)
             output = N.memmap(filename, dtype=self.dtype,order=order, offset=offset, mode='r', shape=(self.nx,self.ny,self.nz))
 
+        self.avaivars = self.avaivars + [str(var)]
         setattr(self,str(var),output)
         return output
 
@@ -414,20 +415,22 @@ class EbysusData(BifrostData):
 
         '''
         if self.no_aux:
-            avaible_variables = self.snapvars
+            avaivars = self.snapvars
         else:
             # remove ixy1 if in var
             if 'ixy1' in self.auxvars:
                 self.auxvars.remove('ixy1')
-            avaible_variables = self.snapvars + self.auxvars
+            avaivars = self.snapvars + self.auxvars
         '''
         if 'ixy1' in self.auxvars:
             self.auxvars.remove('ixy1')
-        avaible_variables = self.snapvars + self.auxvars +  self.commvars
 
+        templist = self.snapvars + self.auxvars +  self.commvars
+        for var in self.avaivars:
+            while var in templist: templist.remove(var)
         # snap variables
-        for var in avaible_variables:
-            self.variables[var] = self.getvar(var,(int(self.snap))
-            setattr(self,var,self.variables[var])
+        for var in templist:
+            output = self.getvar(str(var),(int(self.snap))
+            setattr(self,str(var),output)
 
         return
