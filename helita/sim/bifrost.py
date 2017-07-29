@@ -11,7 +11,7 @@ class BifrostData(object):
     Class to hold data from Bifrost simulations in native format.
     """
 
-    def __init__(self, file_root='qsmag-by00_t', meshfile=None, fdir='.',
+    def __init__(self, file_root='qsmag-by00_t', snap=None, meshfile=None, fdir='.',
                  verbose=True, dtype='f4', big_endian=False):
         """
         Loads metadata and initialises variables.
@@ -36,6 +36,11 @@ class BifrostData(object):
             If True, will read variables in big endian. Default is False
             (reading in little endian).
         """
+        if snap is None:
+            print('Warning: No snap shot number defined yet')
+        else:
+            self.snap = snap
+
         self.fdir = fdir
         self.file_root = os.path.join(self.fdir, file_root)
 
@@ -47,6 +52,8 @@ class BifrostData(object):
             self.dtype = '<' + dtype
 
         self.variables = {}
+        if hasattr(self,'snap'):
+            self.initload(int(snap))
         # variables: lists and initialisation
 
 
@@ -247,11 +254,17 @@ class BifrostData(object):
             if (hasattr(self,name)):
                 delattr(self,name)
 
-    def getvar_xy(self, var, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
+    def getvar_xy(self, var, snap=None, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
         """
         Reads a given 2D variable from the _XY.aux file
         """
         import os
+        if snap is None:
+            if hasattr(self,'snap'):
+                snap=self.snap
+            else:
+                raise ValueError('getvar_xy: does not have snap number defined yet')
+
         if var in self.auxxyvars:
             fsuffix = '_XY.aux'
             idx = self.auxxyvars.index(var)
@@ -271,12 +284,17 @@ class BifrostData(object):
                          mode=mode, shape=(self.nx, self.ny))
 
 
-    def getvar(self, var, snap, slice=None, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
+    def getvar(self, var, snap=None, slice=None, order='F', mode='r',mf_ispecies=0, mf_ilevel=0):
         """
         Reads a given variable from the relevant files.
         """
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
+        if snap is None:
+            if hasattr(self,'snap'):
+                snap=self.snap
+            else:
+                raise ValueError('getvar: does not have snap number defined yet')
 
         if (hasattr(self,'isnap')):
             if (self.isnap != snap):
