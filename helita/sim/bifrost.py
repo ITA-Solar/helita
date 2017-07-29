@@ -263,7 +263,13 @@ class BifrostData(object):
             if hasattr(self,'snap'):
                 snap=self.snap
             else:
-                raise ValueError('getvar_xy: does not have snap number defined yet')
+                raise ValueError('getvar_xy: does not have snap number defined yet. There are two ' +
+                                'ways to create the objects: \n ' +
+                                'obj=Bifrost.BifrostData("rootname") \n ' +
+                                'var=obj.getvar_xy("var",snapshotnumber) \n ' +
+                                'or \n ' +
+                                'obj=Bifrost.BifrostData("rootname",snapshotnumber)\n' +
+                                'var=obj.getvar_xy("var")')
 
         if var in self.auxxyvars:
             fsuffix = '_XY.aux'
@@ -294,7 +300,13 @@ class BifrostData(object):
             if hasattr(self,'snap'):
                 snap=self.snap
             else:
-                raise ValueError('getvar: does not have snap number defined yet')
+                raise ValueError('getvar: does not have snap number defined yet. There are two ' +
+                                'ways to create the objects: \n ' +
+                                'obj=Bifrost.BifrostData("rootname") \n ' +
+                                'var=obj.getvar("var",snapshotnumber) \n ' +
+                                'or \n ' +
+                                'obj=Bifrost.BifrostData("rootname",snapshotnumber)\n' +
+                                'var=obj.getvar("var")')
 
         if (hasattr(self,'isnap')):
             if (self.isnap != snap):
