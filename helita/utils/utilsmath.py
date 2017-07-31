@@ -1,4 +1,6 @@
 import numpy as np
+from numba import vectorize, float32, float64
+from math import exp
 
 
 def hist2d(x, y, nbins=30, norm=False, rx=0.08):
@@ -138,7 +140,7 @@ def translate(data, z, mu, phi, dx=1, dy=1):
     """
     Horizontally rotates a 3D array with periodic horizontal boundaries
     by a polar and azimuthal angle. Uses cubic splines, modifies data in-place
-    (therefore the rotation leads to an array with the same dimensions). 
+    (therefore the rotation leads to an array with the same dimensions).
 
     Parameters
     ----------
@@ -165,6 +167,7 @@ def translate(data, z, mu, phi, dx=1, dy=1):
     from .trnslt import trnslt
     assert data.shape[-1] == z.shape[0]
     assert data.flags['F_CONTIGUOUS']
+    assert data.dtype == np.dtype("float32")
     theta = acos(mu)
     sinth = sin(theta)
     tanth = sinth / mu
@@ -175,34 +178,49 @@ def translate(data, z, mu, phi, dx=1, dy=1):
     trnslt(dx, dy, z, data, dxdz, dydz)
 
 
+@vectorize([float32(float32, float32), float64(float64, float64)])
 def voigt(a, v):
-    ''' Returns the Voigt function:
+    """
+    Returns the Voigt function:
 
     H(a,v) = a/pi * \int_{-Inf}^{+Inf} exp(-y**2)/[(v-y)**2 + a**2] dy
 
-    Uses voigtv.f.
+    Based on approximation from old Fortran routine voigtv from Aake Nordlund.
+    Makes use of numba vectorize, can be used as numpy ufunc.
 
-    IN:
-    a -- scalar
-    v -- scalar or 1D array
+    Parameters
+    ----------
+    a : scalar or n-D array (float)
+        Parameter 'a' in Voigt function, typically a scalar. If n-D, must
+        have same shape of v.
+    v : scalar or n-D array (float)
+        Velocity or Doppler value for Voigt function, typically a 1D array.
 
-    OUT:
-    h -- same dimensions as v.
-
-    --Tiago, 20090728
-    '''
-    from .voigtv import voigtv
-
-    if hasattr(a, '__len__'):
-        raise TypeError('voigt: a must be a scalar!')
-    if hasattr(v, '__len__'):
-        n = len(v)
-    else:
-        n = 1
-    if a != 0:
-        return voigtv(np.repeat(a, n), v)
-    else:  # Gaussian limit
-        return np.exp(-v**2)
+    Returns
+    -------
+    h : scalar or n-D array (float)
+        Voigt function. Same shape and type as inputs.
+    """
+    a0 = 122.607931777104326
+    a1 = 214.382388694706425
+    a2 = 181.928533092181549
+    a3 = 93.155580458138441
+    a4 = 30.180142196210589
+    a5 = 5.912626209773153
+    a6 = 0.564189583562615
+    b0 = 122.607931773875350
+    b1 = 352.730625110963558
+    b2 = 457.334478783897737
+    b3 = 348.703917719495792
+    b4 = 170.354001821091472
+    b5 = 53.992906912940207
+    b6 = 10.479857114260399
+    if a == 0:
+        return exp(-v ** 2)
+    z = v * 1j + a
+    h = (((((((a6 * z + a5) * z + a4) * z + a3) * z + a2) * z + a1) * z + a0) /
+     (((((((z + b6) * z + b5) * z + b4) * z + b3) * z + b2) * z + b1) * z + b0))
+    return h.real
 
 
 def voigt_sigma(sigma, gamma, r):
@@ -635,3 +653,35 @@ def get_equidistant_points(x, y, scale=1., npts=100, order=3):
         if (newx.shape[0] - st < scale / incr):   # limit of points reached
             break
     return np.array(res).T
+
+
+def doppler_shift(wave, data, vel, order="linear"):
+    """
+    Doppler shifts a quantity that is a function of wavelength.
+
+    Parameters
+    ----------
+    wave : 1-D array
+        Wavelength values in nm.
+    data : ndarray (1-D or 2-D)
+        Data to shift. The last dimension should correspond to wavelength.
+    vel : number or 1-D array
+        Velocities in km/s.
+    order : string, optional
+        Interpolation order. Could be 'linear' (default), 'nearest', 'linear'
+        'quadratic', 'cubic'. The last three refer to spline interpolation of
+        first, second, and third order.
+
+    Returns
+    -------
+    data_shift : ndarray
+        Shifted values, same shape as data.
+    """
+    from scipy.constants import c
+    from scipy.interpolate import interp1d
+    wave_shift = wave * (1. + 1.e3 / c * vel)
+    fill = {"linear": "extrapolate", "nearest": 0., "slinear": 0.,
+            "quadratic": 0., "cubic": 0}
+    f = interp1d(wave, data, kind=order, bounds_error=False,
+                 fill_value=fill[order])
+    return f(wave_shift)

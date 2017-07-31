@@ -29,7 +29,6 @@ EXT_PACKAGES = {   # C and Fortran extensions
                   [os.path.join(NAME, "utils/radtrans" + ext)]],
     "utilsfast" : ["utils", [NUMPY_INC],
                    [os.path.join(NAME, "utils/utilsfast" + ext)]],
-    "voigtv" : ["utils", [], [os.path.join(NAME, "utils/voigtv.f")]],
     "trnslt" : ["utils", [], [os.path.join(NAME, "utils/trnslt.f90")]],
 }
 
