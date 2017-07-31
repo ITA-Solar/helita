@@ -568,6 +568,70 @@ cpdef interp3d(np.ndarray[DTYPEf_t, ndim=1] x, np.ndarray[DTYPEf_t, ndim=3] y,
     return new_y
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cpdef interp3d_vec(np.ndarray[DTYPEf_t, ndim=1] x,
+                   np.ndarray[np.float32_t, ndim=3] y,
+                   np.ndarray[DTYPEf_t, ndim=3] new_x):
+    """
+    interp3d_vec(x, y, new_x)
+
+    Performs linear interpolation over the last dimension of a 3D array,
+    according to new values from a 3D array new_x. Similar to interp3d(),
+    but the new_x array has an extra dimension, meaning that for each
+    1D slice y[i, j, :], the values are interpolated to a 1D array
+    new_x[i, j, :] and not just a single point like interp3d().
+
+    Thus, interpolates
+    (x[:], y[i, j, :]) for new_x[i, j, :].
+
+    For new_x[i, j, k] outside the range of x, it will extrapolate.
+
+    Parameters
+    ----------
+    x : 1-D array (double type)
+       Independent axis, must be monotonically increasing.
+    y : 3-D array (float type)
+       Array containing the values to interpolate. Last axis
+       is the interpolation axis.
+    new_x : 3-D array (double type)
+       New points to interpolate. Last axis is the interpolation axis,
+       doesn't need to be the same number of points as y.shape[-1].
+
+    Returns
+    -------
+    result : 3-D array (float type)
+        Interpolated values.
+    """
+    cdef int nx = y.shape[0]
+    cdef int ny = y.shape[1]
+    cdef int nw = y.shape[2]
+    cdef int npts = new_x.shape[2]
+    cdef int i, j, k
+    cdef np.ndarray[np.float32_t, ndim=3] result = np.empty((nx, ny, npts),
+                                                            dtype=np.float32)
+
+    for i in range(nx):
+        for j in range(ny):
+            k = 0   # index of x just above new_x[i, j, k]
+            for w in range(npts):
+                while (x[k] < new_x[i, j, w]) and (k < nw -1):
+                    k += 1
+                if k == 0:  # extrapolation at start of domain
+                    result[i, j, w] = ((y[i, j, 1] - y[i, j, 0]) *
+                                       (new_x[i, j, w] - x[1]) /
+                                       (x[1] - x[0])) + y[i, j, 0]
+                elif k < nw - 1:  # normal interpolation
+                    result[i, j, w] = ((y[i, j, k] - y[i, j, k - 1]) *
+                                       (new_x[i, j, w] - x[k - 1]) /
+                                       (x[k] - x[k - 1])) + y[i, j, k - 1]
+                else:  # extrapolation at end of domain
+                    result[i, j, w] = ((y[i, j, nw - 1] - y[i, j, nw - 2]) *
+                                       (new_x[i, j, w] - x[nw - 2]) /
+                                      (x[nw - 1] - x[nw - 2])) + y[i, j, nw - 2]
+    return result
+
+
 cdef inline float f_max(float a, float b):
     return a if a >= b else b
 
@@ -575,6 +639,13 @@ cdef inline float f_max(float a, float b):
 cdef inline float f_min(float a, float b):
     return a if a <= b else b
 
+
+cdef inline int i_max(int a, int b):
+    return a if a >= b else b
+
+
+cdef inline int i_min(int a, int b):
+    return a if a <= b else b
 
 cdef extern from "math.h":
     double sqrt(double)
