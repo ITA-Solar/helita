@@ -1,16 +1,18 @@
+cimport cython
 cimport numpy as np
 import numpy as np
 
-DTYPE = np.float32
-ctypedef np.float32_t DTYPE_t
+ctypedef fused FLOAT_t:
+    np.float32_t
+    np.float64_t
 
-nz = 0 # initialise nz
+nz = 0  # initialise nz
 
 ###
 ###  C functions
 ###
-cdef inline void xup_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
-    cdef DTYPE_t c = 3./256., b = -25./256., a = 150./256.
+cdef inline void xup_c(int mx, int my, int mz, FLOAT_t *f, FLOAT_t *o):
+    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
     cdef int i, j, k, l, m=mx
 
     for k in range(mz):
@@ -47,8 +49,8 @@ cdef inline void xup_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
     return
 
 
-cdef inline void yup_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
-    cdef DTYPE_t c = 3./256., b = -25./256., a = 150./256.
+cdef inline void yup_c(int mx, int my, int mz, FLOAT_t *f, FLOAT_t *o):
+    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
     cdef int i, j, k, l, m=my
 
     for k in range(mz):
@@ -84,9 +86,9 @@ cdef inline void yup_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
     return
 
 
-cdef inline void zup_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o,
-                       DTYPE_t *zzupc):
-    cdef DTYPE_t d
+cdef inline void zup_c(int mx, int my, int mz, FLOAT_t *f, FLOAT_t *o,
+                       FLOAT_t *zzupc):
+    cdef FLOAT_t d
     cdef int i, j, k, l, m=mz
 
     for k in range(mz):
@@ -102,8 +104,8 @@ cdef inline void zup_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o,
     return
 
 
-cdef inline void xdn_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
-    cdef DTYPE_t c = 3./256., b = -25./256., a = 150./256.
+cdef inline void xdn_c(int mx, int my, int mz, FLOAT_t *f, FLOAT_t *o):
+    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
     cdef int i, j, k, l, m=mx
 
     for k in range(mz):
@@ -139,8 +141,8 @@ cdef inline void xdn_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
     return
 
 
-cdef inline void ydn_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
-    cdef DTYPE_t c = 3./256., b = -25./256., a = 150./256.
+cdef inline void ydn_c(int mx, int my, int mz, FLOAT_t *f, FLOAT_t *o):
+    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
     cdef int i, j, k, l, m=my
 
     for k in range(mz):
@@ -176,9 +178,9 @@ cdef inline void ydn_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o):
     return
 
 
-cdef inline void zdn_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o,
-                       DTYPE_t *zzdnc):
-    cdef DTYPE_t d
+cdef inline void zdn_c(int mx, int my, int mz, FLOAT_t *f, FLOAT_t *o,
+                       FLOAT_t *zzdnc):
+    cdef FLOAT_t d
     cdef int i, j, k, l, m=mz
 
     for k in range(mz):
@@ -198,10 +200,15 @@ cdef inline void zdn_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o,
 ### Python wrappers
 ###
 ### init functions
-def calc_stagger_inv(x, int n, int y, int o, r):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def calc_stagger_inv(np.ndarray[FLOAT_t, ndim=1] x, int n, int y, int o,
+                     np.ndarray[FLOAT_t, ndim=1] r):
     ''' Auxiliary function for init_stagger. '''
 
-    cdef DTYPE_t c[6], b[6], t
+    cdef FLOAT_t c[6]
+    cdef FLOAT_t b[6]
+    cdef FLOAT_t t
     cdef int i, j
 
     for i in range(n+1): c[i] = 0.
@@ -222,25 +229,37 @@ def calc_stagger_inv(x, int n, int y, int o, r):
     return
 
 
-def init_stagger(int mz, np.ndarray[DTYPE_t, ndim=1] z,
-                 np.ndarray[DTYPE_t, ndim=1] zdn):
-    ''' init_stagger(int mz, np.ndarray[DTYPE_t] z, np.ndarray[DTYPE_t] zdn)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def init_stagger(int mz, np.ndarray[FLOAT_t, ndim=1] z,
+                 np.ndarray[FLOAT_t, ndim=1] zdn):
+    '''
+    init_stagger(int mz, np.ndarray[FLOAT_t] z, np.ndarray[FLOAT_t] zdn)
 
-        Initialises zupc and zdnc structures (for using with zdn and zup).
-        From init_stagger.c and init_stagger.pro
+    Initialises zupc and zdnc structures (for using with zdn and zup).
+    From init_stagger.c and init_stagger.pro
 
-        IN: mz, z, zdn (latter two are 'z' and 'zdn' from mesh)
-       '''
+    Parameters
+    ----------
+    mz - integer
+       Number of z points
+    z - 1-D ndarray, float
+        z scale
+    zdn - 1-D ndarray, float
+        z scale derivative
 
+    Returns
+    -------
+    None. Results saved in cstagger.zupc, cstagger.zdnc.
+    '''
     cdef int i, j, k
-
     global zupc, zdnc, nz
-    zupc = np.zeros((mz,6),dtype=DTYPE)
-    zdnc = np.zeros((mz,6),dtype=DTYPE)
+    zupc = np.zeros((mz,6),dtype=z.dtype)
+    zdnc = np.zeros((mz,6),dtype=z.dtype)
     nz = mz
 
-    cdef np.ndarray[DTYPE_t, ndim=1] zh = np.sort(np.concatenate([z,zdn]))
-    cdef np.ndarray[DTYPE_t, ndim=1] a = np.zeros(6, dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=1] zh = np.sort(np.concatenate([z,zdn]))
+    cdef np.ndarray[FLOAT_t, ndim=1] a = np.zeros(6, dtype=z.dtype)
 
     iordl = np.array([1,3,4,5])
     iordu = np.array([1,3,4,5])
@@ -275,120 +294,169 @@ def init_stagger(int mz, np.ndarray[DTYPE_t, ndim=1] z,
                          zdnc[k - 1])
     return
 
-#------------------------------------------------------------------------------
-### up and down functions
-#------------------------------------------------------------------------------
-def xup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' xup(np.ndarray[DTYPE_t, ndim=3] inarr)
 
-        stagger xup function.
+#------------------------------------------------------------------------------
+# up and down functions
+#------------------------------------------------------------------------------
+def xup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    """
+    xup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-        IN:  inarr (mx,my,mz)
-        OUT: array of same shape and type.
-    '''
+    Brings quantity from cell faces to cell centre, z direction.
+
+    Parameters
+    ----------
+    inarr - 3-D array, floating type
+        Input array. If not F contiguous, will make a copy (slower).
+
+    Returns
+    -------
+    result - 3-D array, floating type
+        Interpolated quantity. Same dtype as inarr.
+    """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz),
-                                                       dtype=DTYPE)
-
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz),
+                                                       dtype=inarr.dtype)
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
-    xup_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    xup_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 
-def yup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' yup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def yup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    """
+    yup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-        cstagger yup function.
+    Brings quantity from cell faces to cell centre, z direction.
 
-        IN:  inarr (mx,my,mz) float array
-        OUT: array of same shape and type.
-    '''
+    Parameters
+    ----------
+    inarr - 3-D array, floating type
+        Input array. If not F contiguous, will make a copy (slower).
+
+    Returns
+    -------
+    result - 3-D array, floating type
+        Interpolated quantity. Same dtype as inarr.
+    """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz),
-                                                       dtype=DTYPE)
-
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz),
+                                                       dtype=inarr.dtype)
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
-    yup_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    yup_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 
-def zup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' zup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def zup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    """
+    zup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-        cstagger zup function.
+    Brings quantity from cell faces to cell centre, z direction.
 
-        IN:  inarr (mx,my,mz) float array
-        OUT: array of same shape and type.'''
+    Parameters
+    ----------
+    inarr - 3-D array, floating type
+        Input array. If not F contiguous, will make a copy (slower).
 
+    Returns
+    -------
+    result - 3-D array, floating type
+        Interpolated quantity. Same dtype as inarr.
+    """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz),
-                                                       dtype=DTYPE)
-
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz),
+                                                       dtype=inarr.dtype)
     if (mz != nz):
         raise ValueError('zup: nz mismatch, must run init_stagger first!')
-    cdef np.ndarray[DTYPE_t, ndim=2] zz = zupc
-
+    cdef np.ndarray[FLOAT_t, ndim=2] zz = zupc
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
-    zup_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data,
-          <DTYPE_t *> zz.data)
+    zup_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data,
+          <FLOAT_t *> zz.data)
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 
-def xdn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' xdn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def xdn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    """
+    xdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-        stagger xdn function.
+    Brings quantity from cell centre to cell faces, x direction.
 
-        IN:  inarr (mx,my,mz)
-        OUT: array of same shape and type.
-    '''
+    Parameters
+    ----------
+    inarr - 3-D array, floating type
+        Input array. If not F contiguous, will make a copy (slower).
+
+    Returns
+    -------
+    result - 3-D array, floating type
+        Interpolated quantity. Same dtype as inarr.
+    """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz),
-                                                       dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz),
+                                                       dtype=inarr.dtype)
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
-    xdn_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    xdn_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 
-def ydn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ydn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ydn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    """
+    ydn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-        cstagger ydn function.
+    Brings quantity from cell centre to cell faces, y direction.
 
-        IN:  inarr (mx,my,mz) float array
-        OUT: array of same shape and type.'''
+    Parameters
+    ----------
+    inarr - 3-D array, floating type
+        Input array. If not F contiguous, will make a copy (slower).
 
+    Returns
+    -------
+    result - 3-D array, floating type
+        Interpolated quantity. Same dtype as inarr.
+    """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz),
-                                                       dtype=DTYPE)
-
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz),
+                                                       dtype=inarr.dtype)
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
-    ydn_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    ydn_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 
-def zdn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' zdn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def zdn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    """
+    zdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-        cstagger zdn function.
+    Brings quantity from cell centre to cell faces, z direction.
 
-        IN:  inarr (mx,my,mz) float array
-        OUT: array of same shape and type.
-    '''
+    Parameters
+    ----------
+    inarr - 3-D array, floating type
+        Input array. If not F contiguous, will make a copy (slower).
+
+    Returns
+    -------
+    result - 3-D array, floating type
+        Interpolated quantity. Same dtype as inarr.
+    """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz),
-                                                       dtype=DTYPE)
-
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz),
+                                                       dtype=inarr.dtype)
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if (mz != nz):
         raise ValueError('zdn: nz mismatch, must run init_stagger first!')
-    cdef np.ndarray[DTYPE_t, ndim=2] zz = zdnc
+    cdef np.ndarray[FLOAT_t, ndim=2] zz = zdnc
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
-    zdn_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data,
-          <DTYPE_t *> zz.data)
+    zdn_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data,
+          <FLOAT_t *> zz.data)
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
