@@ -112,6 +112,7 @@ class BifrostData(object):
                 self.vars2d.append(var)
         self._init_vars()
 
+
     def __read_params(self):
         """
         Reads parameter file (.idl)
@@ -202,6 +203,29 @@ class BifrostData(object):
             self.dzidzup = np.zeros(self.nz) + 1./self.dz
             self.dzidzdn = np.zeros(self.nz) + 1./self.dz
 
+    def _init_vars(self, *args, **kwargs):
+        """
+        Memmaps aux and snap variables, and maps them to methods.
+        Also, sets file name[s] from which to read a data
+        """
+        self.variables = {}
+        for var in self.simple_vars:
+            try:
+                self.variables[var] = self._get_simple_var(var, *args, **kwargs)
+                setattr(self, var, self.variables[var])
+            except:
+                if self.verbose:
+                    print(('(WWW) init_vars: could not read variable %s' % var))
+        for var in self.auxxyvars:
+            try:
+                self.variables[var] = self._get_simple_var_xy(var, *args,
+                                                              **kwargs)
+                setattr(self, var, self.variables[var])
+            except:
+                if self.verbose:
+                    print(('(WWW) init_vars: could not read variable %s' % var))
+
+
     def get_var(self, var, snap=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
@@ -217,8 +241,8 @@ class BifrostData(object):
         """
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
-        if var in ['x', 'y', 'z'] + list(self.variables.keys()):
-            return getattr(self, var)
+        if var in self.variables:  # is variable already loaded?
+            return self.variables[var]
         elif var in self.compvars:
             return self._get_composite_var(var, *args, **kwargs)
         else:
@@ -274,9 +298,9 @@ class BifrostData(object):
             elif isnap > 0:
                 filename = '%s_.hion%s.snap' % (self.file_root, isnap)
         else:
-            raise ValueError('_get_simple_var: could not find variable ' +
-                             '%s. Available variables:' % (var) +
-                             '\n' + repr(self.simple_vars))
+            raise ValueError(('_get_simple_var: could not find variable '
+                              '%s. Available variables:' % (var) +
+                              '\n' + repr(self.simple_vars)))
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
@@ -336,34 +360,13 @@ class BifrostData(object):
             rdt = self.r.dtype
             cstagger.init_stagger(self.nzb, self.z.astype(rdt),
                                   self.zdn.astype(rdt))
-            result = cstagger.xup(getattr(self, v+'x') ** 2
-            result += cstagger.yup(getattr(self, v+'y') ** 2
-            result += cstagger.zup(getattr(self, v+'z') ** 2
+            result = cstagger.xup(getattr(self, v+'x')) ** 2
+            result += cstagger.yup(getattr(self, v+'y')) ** 2
+            result += cstagger.zup(getattr(self, v+'z')) ** 2
             return np.sqrt(result)
         else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
                               'get composite variable %s.' % var))
-
-    def _init_vars(self):
-        """
-        Memmaps aux and snap variables, and maps them to methods.
-        Also, sets file name[s] from which to read a data
-        """
-        self.variables = {}
-        for var in self.simple_vars:
-            try:
-                self.variables[var] = self._get_simple_var(var)
-                setattr(self, var, self.variables[var])
-            except:
-                if self.verbose:
-                    print(('(WWW) init_vars: could not read variable %s' % var))
-        for var in self.auxxyvars:
-            try:
-                self.variables[var] = self._get_simple_var_xy(var)
-                setattr(self, var, self.variables[var])
-            except:
-                if self.verbose:
-                    print(('(WWW) init_vars: could not read variable %s' % var))
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
