@@ -82,7 +82,6 @@ class BifrostData(object):
                                   " .idl files found"))
         self.snap = snap
         self.snap_str = '_%03i' % snap
-        self.axisvars = ['x', 'y', 'z']
         self.__read_params()
         # Read mesh for all snaps because meshfiles could differ
         self.__read_mesh(self.meshfile)
@@ -92,7 +91,6 @@ class BifrostData(object):
         if (self.do_mhd):
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
-
         if 'do_hion' in self.params:
             if self.params['do_hion'] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
@@ -163,7 +161,7 @@ class BifrostData(object):
             meshfile = os.path.join(self.fdir, self.params['meshfile'].strip())
         if os.path.isfile(meshfile):
             f = open(meshfile, 'r')
-            for p in self.axisvars:
+            for p in ['x', 'y', 'z']:
                 dim = int(f.readline().strip('\n').strip())
                 assert dim == getattr(self, 'n' + p)
                 # quantity
@@ -245,16 +243,12 @@ class BifrostData(object):
             self.set_snap(snap)
         if var in self.variables:  # is variable already loaded?
             return self.variables[var]
-        elif var in self.axisvars:
-            if var == 'x': return self.x
-            if var == 'y': return self.y
-            if var == 'z': return self.z
         elif var in self.compvars:
             return self._get_composite_var(var, *args, **kwargs)
         else:
             raise ValueError(("get_var: could not read variable"
                       "%s. Must be one of %s" % (var, str(self.variables.keys()
-                                           + self.compvars + self.axisvars))))
+                                           + self.compvars + ['x', 'y', 'z']))))
 
     def _get_simple_var(self, var, order='F', mode='r'):
         """
