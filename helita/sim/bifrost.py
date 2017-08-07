@@ -88,6 +88,7 @@ class BifrostData(object):
         # variables: lists and initialisation
         self.auxvars = self.params['aux'].split()
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
+        self.axisvars = ['x', 'y', 'z']
         if (self.do_mhd):
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
@@ -98,7 +99,7 @@ class BifrostData(object):
         self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup',
                          'dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup',
                          'dzdbdn', 'modb', 'modp']   # composite variables
-        self.simple_vars = self.snapvars + self.auxvars + self.hionvars
+        self.simple_vars = self.snapvars + self.auxvars + self.hionvars 
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
         if 'ixy1' in self.auxvars:
@@ -243,12 +244,16 @@ class BifrostData(object):
             self.set_snap(snap)
         if var in self.variables:  # is variable already loaded?
             return self.variables[var]
+        elif var in self.axisvars:
+            if var == 'x': return self.x
+            if var == 'y': return self.y
+            if var == 'z': return self.z
         elif var in self.compvars:
             return self._get_composite_var(var, *args, **kwargs)
         else:
             raise ValueError(("get_var: could not read variable"
                       "%s. Must be one of %s" % (var, str(self.variables.keys()
-                                           + self.compvars + ['x', 'y', 'z']))))
+                                           + self.compvars + self.axisvars))))
 
     def _get_simple_var(self, var, order='F', mode='r'):
         """
@@ -337,8 +342,7 @@ class BifrostData(object):
         from . import cstagger
         if var in ['ux', 'uy', 'uz']:  # velocities
             rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),
-                                  self.zdn.astype(rdt))
+            cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
             p = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5:
                 return p / self.r   # do not recentre for 2D cases (or close)
@@ -358,8 +362,7 @@ class BifrostData(object):
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),
-                                  self.zdn.astype(rdt))
+            cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
             result = cstagger.xup(getattr(self, v+'x')) ** 2
             result += cstagger.yup(getattr(self, v+'y')) ** 2
             result += cstagger.zup(getattr(self, v+'z')) ** 2
