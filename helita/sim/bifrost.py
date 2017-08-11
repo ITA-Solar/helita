@@ -314,7 +314,7 @@ class BifrostData(object):
                               '\n' + repr(self.simple_vars)))
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize
-        print('Bifrost',self.dtype,order,mode)
+
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
