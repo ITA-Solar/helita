@@ -226,7 +226,7 @@ class BifrostData(object):
                     print(('(WWW) init_vars: could not read variable %s' % var))
 
 
-    def get_var(self, var, snap=None, *args, **kwargs):
+    def get_var(self, var, snap=None,order='F', *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -239,12 +239,23 @@ class BifrostData(object):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
-        if (snap is not None) and (snap != self.snap):
+        import os
+
+        if var == 'x':
+            return self.x
+        elif var == 'y':
+            return self.y
+        elif var == 'z':
+            return self.z
+        elif ((snap is not None) and (snap != self.snap)):
             self.set_snap(snap)
         if var in self.variables:  # is variable already loaded?
-            return self.variables[var]
+            if order == 'F':
+                return self.variables[var]
+            else:
+                return self._get_simple_var(var,order=order)
         elif var in self.compvars:
-            return self._get_composite_var(var, *args, **kwargs)
+            return self._get_composite_var(var,order=order, *args, **kwargs)
         else:
             raise ValueError(("get_var: could not read variable"
                       "%s. Must be one of %s" % (var, str(self.variables.keys()
@@ -303,10 +314,11 @@ class BifrostData(object):
                               '\n' + repr(self.simple_vars)))
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize
+        print('Bifrost',self.dtype,order,mode)
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
-    def _get_simple_var_xy(self, var, order='F', mode='r'):
+    def _get_simple_var_xy(self, var, mode='r', order='F',):
         """
         Reads a given 2D variable from the _XY.aux file
         """
@@ -330,24 +342,32 @@ class BifrostData(object):
                          mode=mode, shape=(self.nx, self.ny))
 
 
-    def _get_composite_var(self, var):
+    def _get_composite_var(self, var, order='F'):
         """
         Gets composite variables (will load into memory).
         """
-        from . import cstagger
+        import cstagger as cs
         if var in ['ux', 'uy', 'uz']:  # velocities
-            rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),
-                                  self.zdn.astype(rdt))
             p = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5:
                 return p / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / getattr(cstagger, var[1] + 'dn')(self.r)
+                rdt = self.r.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return p / getattr(cs, var[1] + 'dn')(self.r)
         elif var == 'ee':   # internal energy
             if not hasattr(self, 'e'):
                 self.e = self.variables['e'] = self.get_var('e')
             return self.e / self.r
+        elif var in ['bxc', 'byc', 'bzc']:   # internal energy
+            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2],order='C')
+            # initialise cstagger
+            if getattr(self, 'n' + var[1]) < 5:
+                return p
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return cs.xup(p)
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
                 self.p = self.variables['p'] = self.get_var('p')
@@ -358,11 +378,11 @@ class BifrostData(object):
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),
+            cs.init_stagger(self.nzb, self.z.astype(rdt),
                                   self.zdn.astype(rdt))
-            result = cstagger.xup(getattr(self, v+'x')) ** 2
-            result += cstagger.yup(getattr(self, v+'y')) ** 2
-            result += cstagger.zup(getattr(self, v+'z')) ** 2
+            result = cs.xup(getattr(self, v+'x')) ** 2
+            result += cs.yup(getattr(self, v+'y')) ** 2
+            result += cs.zup(getattr(self, v+'z')) ** 2
             return np.sqrt(result)
         else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
