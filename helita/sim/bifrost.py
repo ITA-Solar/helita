@@ -95,9 +95,9 @@ class BifrostData(object):
             if self.params['do_hion'] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
                                  'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
-        self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup',
+        '''self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup',
                          'dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup',
-                         'dzdbdn', 'modb', 'modp']   # composite variables
+                         'dzdbdn', 'modb', 'modp']   # composite variables'''
         self.simple_vars = self.snapvars + self.auxvars + self.hionvars
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
@@ -254,12 +254,14 @@ class BifrostData(object):
                 return self.variables[var]
             else:
                 return self._get_simple_var(var,order=order)
-        elif var in self.compvars:
+        '''elif var in self.compvars:
             return self._get_composite_var(var,order=order, *args, **kwargs)
         else:
             raise ValueError(("get_var: could not read variable"
                       "%s. Must be one of %s" % (var, str(self.variables.keys()
-                                           + self.compvars + ['x', 'y', 'z']))))
+                                           + self.compvars + ['x', 'y', 'z']))))'''
+        else:
+            return self._get_composite_var(var,order=order, *args, **kwargs)
 
     def _get_simple_var(self, var, order='F', mode='r'):
         """
@@ -373,7 +375,7 @@ class BifrostData(object):
                 if var[1] == 'y':
                         p=getattr(cs, 'xdn')(p)
                         return getattr(cs, 'zdn')(p)
-                if var[1] == 'z': 
+                if var[1] == 'z':
                         p=getattr(cs, 'xdn')(p)
                         return getattr(cs, 'ydn')(p)
         elif var[1:3] in ['xc', 'yc', 'zc']:   # internal energy
@@ -392,7 +394,7 @@ class BifrostData(object):
             else:
                 rdt = p.dtype
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                return p=getattr(cs, 'd'+var[1]+var[4:])(p)
+                return getattr(cs, 'd'+var[1]+var[4:])(p)
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
                 self.p = self.variables['p'] = self.get_var('p')
