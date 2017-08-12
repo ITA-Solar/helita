@@ -367,17 +367,17 @@ class BifrostData(object):
             else:
                 rdt = p.dtype
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                if var[1] == 'x': return :
+                if var[1] == 'x':
                         p=getattr(cs, 'ydn')(p)
                         return getattr(cs, 'zdn')(p)
-                if var[1] == 'y': return :
+                if var[1] == 'y':
                         p=getattr(cs, 'xdn')(p)
                         return getattr(cs, 'zdn')(p)
-                if var[1] == 'z': return :
+                if var[1] == 'z': 
                         p=getattr(cs, 'xdn')(p)
-                        return getattr(cs, 'ydn')(p)                                                
+                        return getattr(cs, 'ydn')(p)
         elif var[1:3] in ['xc', 'yc', 'zc']:   # internal energy
-            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2])
+            p = self.variables[var] = self.get_var(var[0:2])
             # initialise cstagger
             if getattr(self, 'n' + var[1]) < 5:
                 return p
@@ -385,6 +385,14 @@ class BifrostData(object):
                 rdt = p.dtype
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
                 return getattr(cs, var[1] + 'up')(p)
+        elif var[1] in ['x', 'y', 'z'] and var[0] == 'd' and var[2] == 'd' and var[4:] in ['dn', 'up']:
+            p = self.variables[var] = self.get_var(var[3]+var[1])
+            if getattr(self, 'n' + var[1]) < 5:
+                return p*0
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return p=getattr(cs, 'd'+var[1]+var[4:])(p)
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
                 self.p = self.variables['p'] = self.get_var('p')
