@@ -359,15 +359,32 @@ class BifrostData(object):
             if not hasattr(self, 'e'):
                 self.e = self.variables['e'] = self.get_var('e')
             return self.e / self.r
-        elif var in ['bxc', 'byc', 'bzc']:   # internal energy
-            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2],order='C')
+        elif var in ['ixc', 'iyc', 'izc'] or var in ['exc', 'eyc', 'ezc']:
+            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2])
             # initialise cstagger
             if getattr(self, 'n' + var[1]) < 5:
                 return p
             else:
                 rdt = p.dtype
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                return cs.xup(p)
+                if var[1] == 'x': return :
+                        p=getattr(cs, 'ydn')(p)
+                        return getattr(cs, 'zdn')(p)
+                if var[1] == 'y': return :
+                        p=getattr(cs, 'xdn')(p)
+                        return getattr(cs, 'zdn')(p)
+                if var[1] == 'z': return :
+                        p=getattr(cs, 'xdn')(p)
+                        return getattr(cs, 'ydn')(p)                                                
+        elif var[1:3] in ['xc', 'yc', 'zc']:   # internal energy
+            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2])
+            # initialise cstagger
+            if getattr(self, 'n' + var[1]) < 5:
+                return p
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return getattr(cs, var[1] + 'up')(p)
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
                 self.p = self.variables['p'] = self.get_var('p')
