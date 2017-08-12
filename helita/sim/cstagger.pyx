@@ -5,8 +5,8 @@ DTYPE = np.float32
 ctypedef np.float32_t DTYPE_t
 
 nz = 0 # initialise nz
-dxc = 0.1 # initialise dxc
-dyc = 0.1 # initialise dyc
+dxc = 0 # initialise dxc
+dyc = 0 # initialise dyc
 
 ###
 ###  C functions
@@ -518,6 +518,7 @@ def xup(np.ndarray[DTYPE_t, ndim=3] inarr):
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     xup_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
@@ -535,6 +536,7 @@ def yup(np.ndarray[DTYPE_t, ndim=3] inarr):
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -558,6 +560,7 @@ def zup(np.ndarray[DTYPE_t, ndim=3] inarr):
     if (mz != nz): raise ValueError('zup: nz mismatch, must run init_stagger first!')
     cdef np.ndarray[DTYPE_t, ndim=2] zz = zupc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -578,6 +581,7 @@ def xdn(np.ndarray[DTYPE_t, ndim=3] inarr):
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -598,6 +602,7 @@ def ydn(np.ndarray[DTYPE_t, ndim=3] inarr):
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -622,6 +627,7 @@ def zdn(np.ndarray[DTYPE_t, ndim=3] inarr):
 
     cdef np.ndarray[DTYPE_t, ndim=2] zz = zdnc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -643,6 +649,7 @@ def ddxup(np.ndarray[DTYPE_t, ndim=3] inarr):
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -664,6 +671,7 @@ def ddyup(np.ndarray[DTYPE_t, ndim=3] inarr):
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -688,6 +696,7 @@ def ddzup(np.ndarray[DTYPE_t, ndim=3] inarr):
 
     cdef np.ndarray[DTYPE_t, ndim=2] dzz = dzdnc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -708,6 +717,7 @@ def ddxdn(np.ndarray[DTYPE_t, ndim=3] inarr):
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -729,6 +739,7 @@ def ddydn(np.ndarray[DTYPE_t, ndim=3] inarr):
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
@@ -751,6 +762,7 @@ def ddzdn(np.ndarray[DTYPE_t, ndim=3] inarr):
     if (mz != nz): raise ValueError('zdn: nz mismatch, must run init_stagger first!')
     cdef np.ndarray[DTYPE_t, ndim=2] dzz = dzupc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
