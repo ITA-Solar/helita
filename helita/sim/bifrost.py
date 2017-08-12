@@ -346,7 +346,7 @@ class BifrostData(object):
         """
         Gets composite variables (will load into memory).
         """
-        import cstagger as cs
+        from helita.sim import cstagger as cs
         if var in ['ux', 'uy', 'uz']:  # velocities
             p = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5:
