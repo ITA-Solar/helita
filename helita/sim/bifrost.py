@@ -254,12 +254,6 @@ class BifrostData(object):
                 return self.variables[var]
             else:
                 return self._get_simple_var(var,order=order)
-        '''elif var in self.compvars:
-            return self._get_composite_var(var,order=order, *args, **kwargs)
-        else:
-            raise ValueError(("get_var: could not read variable"
-                      "%s. Must be one of %s" % (var, str(self.variables.keys()
-                                           + self.compvars + ['x', 'y', 'z']))))'''
         else:
             return self._get_composite_var(var,order=order, *args, **kwargs)
 
@@ -387,30 +381,59 @@ class BifrostData(object):
                 rdt = p.dtype
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
                 return getattr(cs, var[1] + 'up')(p)
-        elif var[1] in ['x', 'y', 'z'] and var[0] == 'd' and var[2] == 'd' and var[4:] in ['dn', 'up']:
-            p = self.variables[var] = self.get_var(var[3]+var[1])
-            if getattr(self, 'n' + var[1]) < 5:
+        elif var[3] in ['x', 'y', 'z'] and var[0] == 'd' and var[2] == 'd' and var[4:] in ['dn', 'up']:
+            p = self.variables[var] = self.get_var(var[1])
+            if getattr(self, 'n' + var[3]) < 5:
                 return p*0
             else:
                 rdt = p.dtype
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                return getattr(cs, 'd'+var[1]+var[4:])(p)
+                return getattr(cs, 'd'+var[3:])(p)
+        elif var[2] in ['x', 'y', 'z'] and var[4] in ['x', 'y', 'z'] and var[0] == 'd' and var[3] == 'd' and var[5:] in ['dn', 'up']:
+            p = self.variables[var] = self.get_var(var[1:3])
+            if getattr(self, 'n' + var[4]) < 5:
+                return p*0
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return getattr(cs, 'd'+var[5:])(p)
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
                 self.p = self.variables['p'] = self.get_var('p')
             return np.log(self.p) - 1.667 * np.log(self.r)
-        elif var in ['modb', 'modp']:   # total magnetic field
+        elif var[0:3] in ['mod']:   # total magnetic field
             v = var[3]
             if v == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             rdt = self.r.dtype
-            cs.init_stagger(self.nzb, self.z.astype(rdt),
-                                  self.zdn.astype(rdt))
+            cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
             result = cs.xup(getattr(self, v+'x')) ** 2
             result += cs.yup(getattr(self, v+'y')) ** 2
             result += cs.zup(getattr(self, v+'z')) ** 2
             return np.sqrt(result)
+        elif var[1] in ['2']:   # total magnetic field
+            v = var[0]
+            if v == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            rdt = self.r.dtype
+            cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+            result = cs.xup(getattr(self, v+'x')) ** 2
+            result += cs.yup(getattr(self, v+'y')) ** 2
+            result += cs.zup(getattr(self, v+'z')) ** 2
+            return result
+        elif var[0:3] in ['div']:   # total magnetic field
+            v = var[3]
+            if v == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            rdt = self.r.dtype
+            cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+            result = cs.ddxup(getattr(self, v+'x'))
+            result += cs.ddyup(getattr(self, v+'y'))
+            result += cs.ddzup(getattr(self, v+'z'))
+            return result
         else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
                               'get composite variable %s.' % var))
