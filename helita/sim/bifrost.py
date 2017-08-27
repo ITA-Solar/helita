@@ -61,33 +61,15 @@ class BifrostData(object):
             self.dtype = '>' + dtype
         else:
             self.dtype = '<' + dtype
+        
         self.set_snap(snap)
 
-    def set_snap(self, snap):
+    def _set_snapvars(self):
         """
-        Reads metadata and sets variable memmap links for a given snapshot
-        number.
-
-        Parameters
-        ----------
-        snap - integer
-            Number of simulation snapshot to load.
+            Sets list of avaible variables
         """
-        if snap is None:
-            try:
-                tmp = sorted(glob("%s*idl" % self.file_root))[0]
-                snap = int(tmp.split(self.file_root + '_')[1].split(".idl")[0])
-            except IndexError:
-                raise ValueError(("(EEE) set_snap: snapshot not defined and no"
-                                  " .idl files found"))
-        self.snap = snap
-        self.snap_str = '_%03i' % snap
-        self.__read_params()
-        # Read mesh for all snaps because meshfiles could differ
-        self.__read_mesh(self.meshfile)
-        # variables: lists and initialisation
-        self.auxvars = self.params['aux'].split()
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
+        self.auxvars = self.params['aux'].split()
         if (self.do_mhd):
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
@@ -110,10 +92,35 @@ class BifrostData(object):
             if any(i in var for i in ('xy', 'yz', 'xz')):
                 self.auxvars.remove(var)
                 self.vars2d.append(var)
+
+    def set_snap(self, snap):
+        """
+        Reads metadata and sets variable memmap links for a given snapshot
+        number.
+
+        Parameters
+        ----------
+        snap - integer
+            Number of simulation snapshot to load.
+        """
+        if snap is None:
+            try:
+                tmp = sorted(glob("%s*idl" % self.file_root))[0]
+                snap = int(tmp.split(self.file_root + '_')[1].split(".idl")[0])
+            except IndexError:
+                raise ValueError(("(EEE) set_snap: snapshot not defined and no"
+                                  " .idl files found"))
+        self.snap = snap
+        self.snap_str = '_%03i' % snap
+        
+        self._read_params()
+        # Read mesh for all snaps because meshfiles could differ
+        self.__read_mesh(self.meshfile)
+        # variables: lists and initialisation
+        self._set_snapvars()
         self._init_vars()
 
-
-    def __read_params(self):
+    def _read_params(self):
         """
         Reads parameter file (.idl)
         """
@@ -225,7 +232,6 @@ class BifrostData(object):
                 if self.verbose:
                     print(('(WWW) init_vars: could not read variable %s' % var))
 
-
     def get_var(self, var, snap=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
@@ -241,16 +247,22 @@ class BifrostData(object):
         """
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
-        if var in self.variables:  # is variable already loaded?
-            return self.variables[var]
+
+        # # check if already in memmory
+        # if var in self.variables:
+        #     return self.variables[var]
+
+        if var in self.simple_vars:  # is variable already loaded?
+            return self._get_simple_var(var, *args, **kwargs)
         elif var in self.compvars:
             return self._get_composite_var(var, *args, **kwargs)
+        elif var in self.auxxyvars:
+            return self._get_simple_var_xy(var, *args, **kwargs)
         else:
             raise ValueError(("get_var: could not read variable"
-                      "%s. Must be one of %s" % (var, str(self.variables.keys()
-                                           + self.compvars + ['x', 'y', 'z']))))
+                      "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
 
-    def _get_simple_var(self, var, order='F', mode='r'):
+    def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
 
@@ -269,7 +281,7 @@ class BifrostData(object):
         result - numpy.memmap array
             Requested variable.
         """
-        # find in which file the variable is
+
         if self.snap < 0:
             filename = self.file_root
             fsuffix_b = '.scr'
@@ -329,8 +341,7 @@ class BifrostData(object):
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny))
 
-
-    def _get_composite_var(self, var):
+    def _get_composite_var(self, var, order='F'):
         """
         Gets composite variables (will load into memory).
         """
@@ -339,19 +350,19 @@ class BifrostData(object):
             rdt = self.r.dtype
             cstagger.init_stagger(self.nzb, self.z.astype(rdt),
                                   self.zdn.astype(rdt))
-            p = self.get_var('p' + var[1])
+            p = self._get_simple_var('p' + var[1],order=order)
             if getattr(self, 'n' + var[1]) < 5:
                 return p / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
                 return p / getattr(cstagger, var[1] + 'dn')(self.r)
         elif var == 'ee':   # internal energy
             if not hasattr(self, 'e'):
-                self.e = self.variables['e'] = self.get_var('e')
+                self.e = self.variables['e'] = self._get_simple_var('e',order=order)
             return self.e / self.r
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
-                self.p = self.variables['p'] = self.get_var('p')
-            return np.log(self.p) - 1.667 * np.log(self.r)
+                self.p = self.variables['p'] = self._get_simple_var('p',order=order)
+            return np.log(self.p) - self.params['gamma'] * np.log(self.r)
         elif var in ['modb', 'modp']:   # total magnetic field
             v = var[3]
             if v == 'b':
