@@ -77,9 +77,11 @@ class BifrostData(object):
             if self.params['do_hion'] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
                                  'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
-        self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup',
-                         'dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup',
-                         'dzdbdn', 'modb', 'modp']   # composite variables
+        self.compvars = ['ux', 'uy', 'uz', 's', 'rup','dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup','dzdbdn', 'modp']
+        
+        if (self.do_mhd):
+            self.compvars = self.compvars + ['bxc', 'byc', 'bzc','modb']
+
         self.simple_vars = self.snapvars + self.auxvars + self.hionvars
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file

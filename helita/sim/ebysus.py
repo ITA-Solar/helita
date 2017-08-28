@@ -52,7 +52,9 @@ class EbysusData(BifrostData):
             self.auxxyvars.append('ixy1')
         
         self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + self.varsmf + self.varsmfe + self.varsmfc
-        self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup','dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup','dzdbdn', 'modb', 'modp']
+        self.compvars = ['ux', 'uy', 'uz', 's', 'rup','dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup','dzdbdn', 'modp']
+        if (self.do_mhd):
+            self.compvars = self.compvars + ['bxc', 'byc', 'bzc','modb']
 
     # def set_snap(self,snap):
     #     super(EbysusData, self).set_snap(snap)
@@ -87,11 +89,42 @@ class EbysusData(BifrostData):
                 if self.verbose:
                     print(('(WWW) init_vars: could not read variable %s' % var))
 
-    def get_var(self, var, mf_ispecies=0, mf_ilevel=0, snap=None, *args, **kwargs):
+    def get_var(self, var, mf_ispecies=1, mf_ilevel=1, snap=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
+
+        Parameters
+        ----------
+        var - string
+            Name of the variable to read. Must be Bifrost internal names.
+        mf_ispecies - integer [1, 28]
+            Species ID
+        mf_ilevel - integer
+            Ionization level
+        snap - integer, optional
+            Snapshot number to read. By default reads the loaded snapshot;
+            if a different number is requested, will load that snapshot
+            by running self.set_snap(snap).
         """
-        super(EbysusData,self).get_var(self, var, snap, mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, *args, **kwargs)
+        assert (mf_ispecies > 0 and mf_ispecies <= 28)
+
+        if (snap is not None) and (snap != self.snap):
+            self.set_snap(snap)
+
+        # # check if already in memmory
+        # if var in self.variables:
+        #     return self.variables[var]
+
+        if var in self.simple_vars:  # is variable already loaded?
+            return self._get_simple_var(var, mf_ispecies, mf_ilevel)
+        elif var in self.compvars:
+            return self._get_composite_var(var, mf_ispecies, mf_ilevel)
+        elif var in self.auxxyvars:
+            return super(EbysusData, self)._get_simple_var_xy(var)
+        else:
+            raise ValueError(("get_var: could not read variable"
+                      "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
+        
 
     def _get_simple_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r',*args, **kwargs):
         """
@@ -114,6 +147,7 @@ class EbysusData(BifrostData):
         result - numpy.memmap array
             Requested variable.
         """
+        var_sufix = '_s%dl%d' % (mf_ispecies, mf_ilevel)
 
         if self.snap < 0:
             snapstr = ''
@@ -178,10 +212,10 @@ class EbysusData(BifrostData):
         var_sufix = '_s%dl%d' % (mf_ispecies, mf_ilevel)
 
         if var in ['ux', 'uy', 'uz']:  # velocities
-            # rdt = self.r.dtype ## tricky
-            cstagger.init_stagger(self.nzb, self.z,self.zdn)
             p = self._get_simple_var('p' + var[1],mf_ispecies,mf_ilevel,order,mode)
             r = self._get_simple_var('r',mf_ispecies,mf_ilevel,order,mode)
+            rdt = r.dtype ## tricky
+            cstagger.init_stagger(self.nzb, self.z.astype(rdt),self.zdn.astype(rdt))
             if getattr(self, 'n' + var[1]) < 5:
                 return p / r
             else:  # will call xdn, ydn, or zdn to get r at cell faces
@@ -200,9 +234,10 @@ class EbysusData(BifrostData):
             if v == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            # rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z,self.zdn)
-            result = cstagger.xup(self._get_simple_var(v+'x',mf_ispecies,mf_ilevel,order,mode)) ** 2
+            varr = self._get_simple_var(v+'x',mf_ispecies,mf_ilevel,order,mode)
+            varrt = varr.dtype ## tricky
+            cstagger.init_stagger(self.nzb, self.z.astype(varrt),self.zdn.astype(varrt))
+            result = cstagger.xup(varr) ** 2 # varr == _get_simple_var(v+'x')
             result += cstagger.yup(self._get_simple_var(v+'y',mf_ispecies,mf_ilevel,order,mode)) ** 2
             result += cstagger.zup(self._get_simple_var(v+'z',mf_ispecies,mf_ilevel,order,mode)) ** 2
             return np.sqrt(result)
