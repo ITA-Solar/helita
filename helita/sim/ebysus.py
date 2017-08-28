@@ -233,16 +233,13 @@ class EbysusData(BifrostData):
         var_sufix = '_s%dl%d' % (mf_ispecies, mf_ilevel)
 
         if var in ['ux', 'uy', 'uz']:  # velocities
-            p = self._get_simple_var(
-                'p' + var[1], mf_ispecies, mf_ilevel, order, mode)
-            r = self._get_simple_var('r', mf_ispecies, mf_ilevel, order, mode)
-            rdt = r.dtype  # tricky
-            cstagger.init_stagger(
-                self.nzb, self.z.astype(rdt), self.zdn.astype(rdt))
+            p = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5:
-                return p / r
+                return p / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / getattr(cstagger, var[1] + 'dn')(r)
+                rdt = self.r.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return p / getattr(cs, var[1] + 'dn')(self.r)
         elif var == 'ee':   # internal energy
             if hasattr(self, 'e'):
                 e = self._get_simple_var(
