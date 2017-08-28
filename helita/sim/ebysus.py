@@ -6,6 +6,7 @@ import numpy as np
 import os
 from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph
 
+
 class EbysusData(BifrostData):
 
     """
@@ -27,7 +28,7 @@ class EbysusData(BifrostData):
         if (self.do_mhd):
             self.mhdvars = ['bx', 'by', 'bz']
         self.auxvars = self.params['aux'].split()
-        
+
         if (self.mf_epf):
             # add internal energy to basic snaps
             self.snapvars.append('e')
@@ -50,11 +51,13 @@ class EbysusData(BifrostData):
         if 'ixy1' in self.auxvars:
             self.auxvars.remove('ixy1')
             self.auxxyvars.append('ixy1')
-        
-        self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + self.varsmf + self.varsmfe + self.varsmfc
-        self.compvars = ['ux', 'uy', 'uz', 's', 'rup','dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup','dzdbdn', 'modp']
+
+        self.simple_vars = self.snapvars + self.mhdvars + \
+            self.auxvars + self.varsmf + self.varsmfe + self.varsmfc
+        self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
+                         'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
         if (self.do_mhd):
-            self.compvars = self.compvars + ['bxc', 'byc', 'bzc','modb']
+            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']
 
     # def set_snap(self,snap):
     #     super(EbysusData, self).set_snap(snap)
@@ -65,7 +68,7 @@ class EbysusData(BifrostData):
 
         self.nspecies_max = 28
         self.nlevels_max = 28
-  
+
         try:
             self.mf_epf = self.params['mf_epf']
         except KeyError:
@@ -81,9 +84,10 @@ class EbysusData(BifrostData):
         Initialises variable (common for all fluid)
         """
         self.variables = {}
-        for var in self.mhdvars: # for multispecies these are common
+        for var in self.mhdvars:  # for multispecies these are common
             try:
-                self.variables[var] = self._get_simple_var(var, *args, **kwargs)
+                self.variables[var] = self._get_simple_var(
+                    var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
             except:
                 if self.verbose:
@@ -123,13 +127,12 @@ class EbysusData(BifrostData):
             return super(EbysusData, self)._get_simple_var_xy(var)
         else:
             raise ValueError(("get_var: could not read variable"
-                      "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
-        
+                              "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
 
-    def _get_simple_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r',*args, **kwargs):
+    def _get_simple_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r', *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
-        
+
         Overloads super class to make a distinction between different filenames for different variables
 
         Parameters:
@@ -158,8 +161,8 @@ class EbysusData(BifrostData):
         else:
             snapstr = self.snap_str
             fsuffix_b = ''
-            
-        if var in self.mhdvars:  
+
+        if var in self.mhdvars:
             idx = self.mhdvars.index(var)
             fsuffix_a = '.snap'
             filename = self.mf_common_file
@@ -197,13 +200,13 @@ class EbysusData(BifrostData):
         mmap = np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
-        setattr(self, var + var_sufix,mmap)
+        setattr(self, var + var_sufix, mmap)
         self.variables[var + var_sufix] = mmap
 
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
-    def _get_composite_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r',*args, **kwargs):
+    def _get_composite_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r', *args, **kwargs):
         """
         Gets composite variables for multi species fluid.
         """
@@ -212,36 +215,43 @@ class EbysusData(BifrostData):
         var_sufix = '_s%dl%d' % (mf_ispecies, mf_ilevel)
 
         if var in ['ux', 'uy', 'uz']:  # velocities
-            p = self._get_simple_var('p' + var[1],mf_ispecies,mf_ilevel,order,mode)
-            r = self._get_simple_var('r',mf_ispecies,mf_ilevel,order,mode)
-            rdt = r.dtype ## tricky
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),self.zdn.astype(rdt))
+            p = self._get_simple_var(
+                'p' + var[1], mf_ispecies, mf_ilevel, order, mode)
+            r = self._get_simple_var('r', mf_ispecies, mf_ilevel, order, mode)
+            rdt = r.dtype  # tricky
+            cstagger.init_stagger(
+                self.nzb, self.z.astype(rdt), self.zdn.astype(rdt))
             if getattr(self, 'n' + var[1]) < 5:
                 return p / r
             else:  # will call xdn, ydn, or zdn to get r at cell faces
                 return p / getattr(cstagger, var[1] + 'dn')(r)
         elif var == 'ee':   # internal energy
             if hasattr(self, 'e'):
-                e = self._get_simple_var('e',mf_ispecies,mf_ilevel,order,mode)
-                r = self._get_simple_var('r',mf_ispecies,mf_ilevel,order,mode)
+                e = self._get_simple_var(
+                    'e', mf_ispecies, mf_ilevel, order, mode)
+                r = self._get_simple_var(
+                    'r', mf_ispecies, mf_ilevel, order, mode)
             return e / r
         elif var == 's':   # entropy?
-            p = self._get_simple_var('p',mf_ispecies,mf_ilevel,order,mode)
-            r = self._get_simple_var('r',mf_ispecies,mf_ilevel,order,mode)
+            p = self._get_simple_var('p', mf_ispecies, mf_ilevel, order, mode)
+            r = self._get_simple_var('r', mf_ispecies, mf_ilevel, order, mode)
             return np.log(p) - self.params['gamma'] * np.log(r)
         elif var in ['modb', 'modp']:   # total magnetic field
             v = var[3]
             if v == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            varr = self._get_simple_var(v+'x',mf_ispecies,mf_ilevel,order,mode)
-            varrt = varr.dtype ## tricky
-            cstagger.init_stagger(self.nzb, self.z.astype(varrt),self.zdn.astype(varrt))
-            result = cstagger.xup(varr) ** 2 # varr == _get_simple_var(v+'x')
-            result += cstagger.yup(self._get_simple_var(v+'y',mf_ispecies,mf_ilevel,order,mode)) ** 2
-            result += cstagger.zup(self._get_simple_var(v+'z',mf_ispecies,mf_ilevel,order,mode)) ** 2
+            varr = self._get_simple_var(
+                v+'x', mf_ispecies, mf_ilevel, order, mode)
+            varrt = varr.dtype  # tricky
+            cstagger.init_stagger(self.nzb, self.z.astype(
+                varrt), self.zdn.astype(varrt))
+            result = cstagger.xup(varr) ** 2  # varr == _get_simple_var(v+'x')
+            result += cstagger.yup(self._get_simple_var(v +
+                                                        'y', mf_ispecies, mf_ilevel, order, mode)) ** 2
+            result += cstagger.zup(self._get_simple_var(v +
+                                                        'z', mf_ispecies, mf_ilevel, order, mode)) ** 2
             return np.sqrt(result)
         else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
                               'get composite variable %s.' % var))
- 
