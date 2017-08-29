@@ -88,8 +88,9 @@ class EbysusData(BifrostData):
         Initialises variable (common for all fluid)
         """
         self.variables = {}
-        if not hasattr(self, 'mf_ilevel'): self.mf_ilevel=1
-        if not hasattr(self, 'mf_ispecies'): self.mf_ispecies=1
+
+        self.set_mfi(None, None)
+
         for var in self.simple_vars:
             try:
                 self.variables[var] = self._get_simple_var(
@@ -99,6 +100,27 @@ class EbysusData(BifrostData):
                 if self.verbose:
                     print(('(WWW) init_vars: could not read variable %s' % var))
 
+    def set_mfi(self, mf_ispecies=None, mf_ilevel=None):
+        """
+        adds mf_ispecies and mf_ilevel attributes if they don't exist and
+        changes mf_ispecies and mf_ilevel if needed. It will set defaults to 1
+        """
+
+        if (mf_ispecies is not None):
+            if (mf_ispecies != self.mf_ispecies):
+                self.mf_ispecies=mf_ispecies
+            elif not hasattr(self,'mf_ispecies'):
+                self.mf_ispecies=1
+        elif not hasattr(self,'mf_ispecies'):
+            self.mf_ispecies=1
+
+        if (mf_ilevel is not None):
+            if (mf_ilevel != self.mf_ilevel):
+                self.mf_ilevel=mf_ilevel
+            elif not hasattr(self,'mf_ilevel'):
+                self.mf_ilevel=1
+        elif not hasattr(self,'mf_ilevel'):
+            self.mf_ilevel=1
 
     def get_var(self, var, snap=None, mf_ispecies=None, mf_ilevel=None, *args, **kwargs):
         """
@@ -125,12 +147,10 @@ class EbysusData(BifrostData):
         elif var == 'z':
             return self.z
 
-
         if (((snap is not None) and (snap != self.snap)) or
             ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
             ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
-            if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)): self.mf_ispecies=mf_ispecies
-            if ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)): self.mf_ilevel=mf_ilevel
+            self.set_mfi(mf_ispecies, mf_ilevel)
             self.set_snap(snap)
 
         assert (self.mf_ispecies <= 28)
@@ -180,12 +200,6 @@ class EbysusData(BifrostData):
         else:
             snapstr = self.snap_str
             fsuffix_b = ''
-
-        if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)): self.mf_ispecies=mf_ispecies
-        if ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)): self.mf_ilevel=mf_ilevel
-
-        if not hasattr(self,'mf_ilevel'): self.mf_ilevel=1
-        if not hasattr(self,'mf_ispecies'): self.mf_ispecies=1
 
         if var in self.mhdvars and self.mf_ispecies > 0:
             idx = self.mhdvars.index(var)
