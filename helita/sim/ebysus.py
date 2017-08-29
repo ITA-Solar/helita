@@ -16,12 +16,7 @@ class EbysusData(BifrostData):
 
     def __init__(self, *args, **kwargs):
         super(EbysusData, self).__init__(*args, **kwargs)
-        self.mf_common_file = (self.file_root + '_mf_common')
-        self.mf_file = (self.file_root + '_mf_%02i_%02i')
-        self.mm_file = (self.file_root + '_mm_%02i_%02i')
-        self.mfe_file = (self.file_root + '_mfe_%02i_%02i')
-        self.mfc_file = (self.file_root + '_mfc_%02i_%02i')
-        self.mf_e_file = (self.file_root + '_mf_e_%02i_%02i')
+
 
     def _set_snapvars(self):
         self.snapvars = ['r', 'px', 'py', 'pz']
@@ -87,6 +82,14 @@ class EbysusData(BifrostData):
         """
         Initialises variable (common for all fluid)
         """
+
+        self.mf_common_file = (self.file_root + '_mf_common')
+        self.mf_file = (self.file_root + '_mf_%02i_%02i')
+        self.mm_file = (self.file_root + '_mm_%02i_%02i')
+        self.mfe_file = (self.file_root + '_mfe_%02i_%02i')
+        self.mfc_file = (self.file_root + '_mfc_%02i_%02i')
+        self.mf_e_file = (self.file_root + '_mf_e_%02i_%02i')
+
         self.variables = {}
 
         self.set_mfi(None, None)
@@ -208,9 +211,7 @@ class EbysusData(BifrostData):
         elif var in self.snapvars and self.mf_ispecies > 0:
             idx = self.snapvars.index(var)
             fsuffix_a = '.snap'
-            print('heresim8')
             filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
-            print('heresim10')
         elif var in self.snapevars and self.mf_ispecies < 0:
             idx = self.snapevars.index(var)
             filename = self.mf_e_file
