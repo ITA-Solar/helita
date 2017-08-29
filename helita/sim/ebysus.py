@@ -77,7 +77,12 @@ class EbysusData(BifrostData):
         except KeyError:
             raise KeyError(
                 'read_params: could not find with_electrons in idl file!')
-
+        try:
+            self.mf_total_nlevel = self.params['mf_total_nlevel']
+        except KeyError:
+            print('warning, this idl file does not include mf_total_nlevel')
+            #raise KeyError('read_params: could not find mf_total_nlevel in idl file!')
+            
     def _init_vars(self, *args, **kwargs):
         """
         Initialises variable (common for all fluid)
@@ -204,6 +209,7 @@ class EbysusData(BifrostData):
             snapstr = self.snap_str
             fsuffix_b = ''
 
+        mf_arr_size = 1
         if var in self.mhdvars and self.mf_ispecies > 0:
             idx = self.mhdvars.index(var)
             fsuffix_a = '.snap'
@@ -228,6 +234,7 @@ class EbysusData(BifrostData):
             idx = self.varsmm.index(var)
             fsuffix_a = '.aux'
             filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
+            mf_arr_size = self.mf_total_nlevel
         elif var in self.varsmfe:
             idx = self.varsmfe.index(var)
             fsuffix_a = '.aux'
@@ -243,7 +250,7 @@ class EbysusData(BifrostData):
             filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
 
         dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * self.nzb * idx * dsize
+        offset = self.nx * self.ny * self.nzb * idx * dsize * mf_arr_size
 
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
