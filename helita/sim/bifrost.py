@@ -6,10 +6,12 @@ import numpy as np
 import os
 from glob import glob
 
+
 class BifrostData(object):
     """
     Reads data from Bifrost simulations in native format.
     """
+
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
                  verbose=True, dtype='f4', big_endian=False):
         """
@@ -61,7 +63,39 @@ class BifrostData(object):
             self.dtype = '>' + dtype
         else:
             self.dtype = '<' + dtype
+
         self.set_snap(snap)
+
+    def _set_snapvars(self):
+        """
+            Sets list of avaible variables
+        """
+        self.snapvars = ['r', 'px', 'py', 'pz', 'e']
+        self.auxvars = self.params['aux'].split()
+        if (self.do_mhd):
+            self.snapvars += ['bx', 'by', 'bz']
+        self.hionvars = []
+        if 'do_hion' in self.params:
+            if self.params['do_hion'] > 0:
+                self.hionvars = ['hionne', 'hiontg', 'n1',
+                                 'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
+        '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
+                         'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
+        if (self.do_mhd):
+            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
+
+        self.simple_vars = self.snapvars + self.auxvars + self.hionvars
+        self.auxxyvars = []
+        # special case for the ixy1 variable, lives in a separate file
+        if 'ixy1' in self.auxvars:
+            self.auxvars.remove('ixy1')
+            self.auxxyvars.append('ixy1')
+        self.vars2d = []
+        # special case for 2D variables, stored in a separate file
+        for var in self.auxvars:
+            if any(i in var for i in ('xy', 'yz', 'xz')):
+                self.auxvars.remove(var)
+                self.vars2d.append(var)
 
     def set_snap(self, snap):
         """
@@ -82,45 +116,22 @@ class BifrostData(object):
                                   " .idl files found"))
         self.snap = snap
         self.snap_str = '_%03i' % snap
-        self.__read_params()
+
+        self._read_params()
         # Read mesh for all snaps because meshfiles could differ
         self.__read_mesh(self.meshfile)
         # variables: lists and initialisation
-        self.auxvars = self.params['aux'].split()
-        self.snapvars = ['r', 'px', 'py', 'pz', 'e']
-        if (self.do_mhd):
-            self.snapvars += ['bx', 'by', 'bz']
-        self.hionvars = []
-        if 'do_hion' in self.params:
-            if self.params['do_hion'] > 0:
-                self.hionvars = ['hionne', 'hiontg', 'n1',
-                                 'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
-        self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup',
-                         'dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup',
-                         'dzdbdn', 'modb', 'modp']   # composite variables
-        self.simple_vars = self.snapvars + self.auxvars + self.hionvars
-        self.auxxyvars = []
-        # special case for the ixy1 variable, lives in a separate file
-        if 'ixy1' in self.auxvars:
-            self.auxvars.remove('ixy1')
-            self.auxxyvars.append('ixy1')
-        self.vars2d = []
-        # special case for 2D variables, stored in a separate file
-        for var in self.auxvars:
-            if any(i in var for i in ('xy', 'yz', 'xz')):
-                self.auxvars.remove(var)
-                self.vars2d.append(var)
+        self._set_snapvars()
         self._init_vars()
 
-
-    def __read_params(self):
+    def _read_params(self):
         """
         Reads parameter file (.idl)
         """
         if (self.snap < 0):
             filename = self.file_root + self.snap_str + '.idl.src'
         elif (self.snap == 0):
-            filename =self.file_root + '.idl'
+            filename = self.file_root + '.idl'
         else:
             filename = self.file_root + self.snap_str + '.idl'
         self.params = read_idl_ascii(filename)
@@ -166,16 +177,16 @@ class BifrostData(object):
                 assert dim == getattr(self, 'n' + p)
                 # quantity
                 setattr(self, p, np.array([float(v)
-                                    for v in f.readline().strip('\n').split()]))
+                                           for v in f.readline().strip('\n').split()]))
                 # quantity "down"
                 setattr(self, p + 'dn', np.array([float(v)
-                                    for v in f.readline().strip('\n').split()]))
+                                                  for v in f.readline().strip('\n').split()]))
                 # up derivative of quantity
                 setattr(self, 'd%sid%sup' % (p, p), np.array([float(v)
-                                    for v in f.readline().strip('\n').split()]))
+                                                              for v in f.readline().strip('\n').split()]))
                 # down derivative of quantity
                 setattr(self, 'd%sid%sdn' % (p, p), np.array([float(v)
-                                    for v in f.readline().strip('\n').split()]))
+                                                              for v in f.readline().strip('\n').split()]))
             f.close()
         else:  # no mesh file
             print('(WWW) Mesh file %s does not exist.' % meshfile)
@@ -211,7 +222,8 @@ class BifrostData(object):
         self.variables = {}
         for var in self.simple_vars:
             try:
-                self.variables[var] = self._get_simple_var(var, *args, **kwargs)
+                self.variables[var] = self._get_simple_var(
+                    var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
             except:
                 if self.verbose:
@@ -224,7 +236,6 @@ class BifrostData(object):
             except:
                 if self.verbose:
                     print(('(WWW) init_vars: could not read variable %s' % var))
-
 
     def get_var(self, var, snap=None, *args, **kwargs):
         """
@@ -239,18 +250,38 @@ class BifrostData(object):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
+        if var == 'x':
+            return self.x
+        elif var == 'y':
+            return self.y
+        elif var == 'z':
+            return self.z
+
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
-        if var in self.variables:  # is variable already loaded?
-            return self.variables[var]
-        elif var in self.compvars:
-            return self._get_composite_var(var, *args, **kwargs)
-        else:
-            raise ValueError(("get_var: could not read variable"
-                      "%s. Must be one of %s" % (var, str(self.variables.keys()
-                                           + self.compvars + ['x', 'y', 'z']))))
 
-    def _get_simple_var(self, var, order='F', mode='r'):
+        # # check if already in memmory
+        # if var in self.variables:
+        #     return self.variables[var]
+        '''        if var in self.variables:  # is variable already loaded?
+                    if order == 'F':
+                        return self.variables[var]
+                    else:
+                        return self._get_simple_var(var,order=order)
+                else:
+                    return self._get_composite_var(var,order=order, *args, **kwargs)
+                    '''
+        if var in self.simple_vars:  # is variable already loaded?
+            return self._get_simple_var(var, *args, **kwargs)
+        elif var in self.auxxyvars:
+            return self._get_simple_var_xy(var, *args, **kwargs)
+        else:
+            return self._get_composite_var(var, *args, **kwargs)
+        #else:
+        #    raise ValueError(("get_var: could not read variable"
+        #                      "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
+
+    def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
 
@@ -269,7 +300,7 @@ class BifrostData(object):
         result - numpy.memmap array
             Requested variable.
         """
-        # find in which file the variable is
+
         if self.snap < 0:
             filename = self.file_root
             fsuffix_b = '.scr'
@@ -317,7 +348,7 @@ class BifrostData(object):
         else:
             raise ValueError(('_get_simple_var_xy: variable'
                               ' %s not available. Available vars:'
-                               % (var) + '\n' + repr(self.auxxyvars)))
+                              % (var) + '\n' + repr(self.auxxyvars)))
         # Now memmap the variable
         if not os.path.isfile(filename):
             raise IOError(('_get_simple_var_xy: variable'
@@ -329,44 +360,186 @@ class BifrostData(object):
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny))
 
-
-    def _get_composite_var(self, var):
+    def _get_composite_var(self, var, order='F'):
         """
         Gets composite variables (will load into memory).
         """
-        from . import cstagger
+        from . import cstagger as cs
         if var in ['ux', 'uy', 'uz']:  # velocities
-            rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),
-                                  self.zdn.astype(rdt))
-            p = self.get_var('p' + var[1])
+            if not hasattr(self, 'p'+ var[1]): setattr( self, 'p' + var[1],self.get_var('p' + var[1],self.snap))
+            if not hasattr(self, 'r'): self.r = self.variables['r']= self.get_var('r',self.snap)
             if getattr(self, 'n' + var[1]) < 5:
-                return p / self.r   # do not recentre for 2D cases (or close)
+                return getattr(self,'p'+ var[1]) / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / getattr(cstagger, var[1] + 'dn')(self.r)
+                rdt = self.r.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return getattr(self,'p'+ var[1]) / getattr(cs, var[1] + 'dn')(self.r)
         elif var == 'ee':   # internal energy
             if not hasattr(self, 'e'):
-                self.e = self.variables['e'] = self.get_var('e')
+                self.e = self.variables['e'] = self.get_var('e',self.snap)
+            if not hasattr(self, 'r'): self.r = self.variables['r'] = self.get_var('r',self.snap)
             return self.e / self.r
+        elif var in ['ixc', 'iyc', 'izc'] or var in ['exc', 'eyc', 'ezc']:
+            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2],self.snap)
+            # initialise cstagger
+            if getattr(self, 'n' + var[1]) < 5:
+                return p
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                if var[1] == 'x':
+                        p=getattr(cs, 'ydn')(p)
+                        return getattr(cs, 'zdn')(p)
+                if var[1] == 'y':
+                        p=getattr(cs, 'xdn')(p)
+                        return getattr(cs, 'zdn')(p)
+                if var[1] == 'z':
+                        p=getattr(cs, 'xdn')(p)
+                        return getattr(cs, 'ydn')(p)
+        elif var[1:3] in ['xc', 'yc', 'zc']:   # internal energy
+            p = self.variables[var] = self.get_var(var[0:2],self.snap)
+            # initialise cstagger
+            if getattr(self, 'n' + var[1]) < 5:
+                return p
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return getattr(cs, var[1] + 'up')(p)
+        elif var[3] in ['x', 'y', 'z'] and var[0] == 'd' and var[2] == 'd' and var[4:] in ['dn', 'up']:
+            p = self.variables[var] = self.get_var(var[1],self.snap)
+            if getattr(self, 'n' + var[3]) < 5:
+                return p*0
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return getattr(cs, 'd'+var[3:])(p)
+        elif var[2] in ['x', 'y', 'z'] and var[4] in ['x', 'y', 'z'] and var[0] == 'd' and var[3] == 'd' and var[5:] in ['dn', 'up']:
+            p = self.variables[var] = self.get_var(var[1:3],self.snap)
+            if getattr(self, 'n' + var[4]) < 5:
+                return p*0
+            else:
+                rdt = p.dtype
+                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+                return getattr(cs, 'd'+var[5:])(p)
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
-                self.p = self.variables['p'] = self.get_var('p')
-            return np.log(self.p) - 1.667 * np.log(self.r)
-        elif var in ['modb', 'modp']:   # total magnetic field
+                self.p = self.variables['p'] = self.get_var('p',self.snap)
+            return np.log(self.p) - self.params['gamma'] * np.log(self.r)
+        elif var[0:3] in ['mod']:   # total magnetic field
             v = var[3]
             if v == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             rdt = self.r.dtype
-            cstagger.init_stagger(self.nzb, self.z.astype(rdt),
-                                  self.zdn.astype(rdt))
-            result = cstagger.xup(getattr(self, v+'x')) ** 2
-            result += cstagger.yup(getattr(self, v+'y')) ** 2
-            result += cstagger.zup(getattr(self, v+'z')) ** 2
+            cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+            result = cs.xup(getattr(self, v+'x')) ** 2
+            result += cs.yup(getattr(self, v+'y')) ** 2
+            result += cs.zup(getattr(self, v+'z')) ** 2
             return np.sqrt(result)
+        elif var[1] in ['2']:   # total magnetic field
+            v = var[0]
+            if v == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            rdt = self.r.dtype
+            cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+            result = cs.xup(getattr(self, v+'x')) ** 2
+            result += cs.yup(getattr(self, v+'y')) ** 2
+            result += cs.zup(getattr(self, v+'z')) ** 2
+            return result
+        elif var[0:3] in ['div']:   # total magnetic field
+            v = var[3]
+            if v == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            rdt = self.r.dtype
+            cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
+            result = cs.ddxup(getattr(self, v+'x'))
+            result += cs.ddyup(getattr(self, v+'y'))
+            result += cs.ddzup(getattr(self, v+'z'))
+            return result
         else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
-                              'get composite variable %s.' % var))
+                              'get composite variable %s. Note that'
+                              'simple_var available variables are: %s' % (var,repr(self.simple_vars))))
+
+    def do_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
+                    dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
+
+
+        def xxdn(f):
+            '''
+            f is centered on (i-.5,j,k)
+            '''
+            nx = len(f)
+            d = np.float32(-5.)/np.float32(2048.)
+            c = np.float32(49.)/np.float32(2048.)
+            b = np.float32(-245.)/np.float32(2048.)
+            a = np.float32(.5)-b-c-d
+            x = a*(f + np.roll(f,1)) + b*(np.roll(f,-1) + np.roll(f,2)) + c*(np.roll(f,-2) + np.roll(f,3)) + d*(np.roll(f,-3) + np.roll(f,4))
+            for i in range(0,4): x[i]=x[4]-(4-i)*(x[5]-x[4])
+            for i in range(1,4): x[nx-i]=x[nx-4]+i*(x[nx-4]-x[nx-5])
+            return x
+
+        def ddxxup(f,dx=None):
+            '''
+            X partial up derivative
+            '''
+            if dx == None: dx=1.
+            nx = len(f)
+            d = np.float32(-75.)/np.float32(107520.)/np.float32(dx)
+            c = np.float32(1029)/np.float32(107520)/np.float32(dx)
+            b = np.float32(-8575)/np.float32(107520)/np.float32(dx)
+            a = (1./np.float32(dx)-3.*b-5.*c-7.*d)
+            x = a *(np.roll(f,-1) - f) + b *(np.roll(f,-2) - np.roll(f,1)) + c *(np.roll(f,-3) - np.roll(f,2)) + d *(np.roll(f,-4) - np.roll(f,3))
+            for i in range(0,3): x[i]=x[3]
+            for i in range(1,5): x[nx-i]=x[nx-5]
+            return x
+
+        def ddxxdn(f,dx=None):
+            '''
+            X partial down derivative
+            '''
+            if dx == None: dx=1.
+            nx = len(f)
+            d = np.float32(-75.)/np.float32(107520.)/np.float32(dx)
+            c = np.float32(1029)/np.float32(107520)/np.float32(dx)
+            b = np.float32(-8575)/np.float32(107520)/np.float32(dx)
+            a = (1./np.float32(dx)-3.*b-5.*c-7.*d)
+            x = a*(f - np.roll(f,1)) + b*(np.roll(f,-1) - np.roll(f,2)) + c*(np.roll(f,-2) - np.roll(f,3)) + d *(np.roll(f,-3) - np.roll(f,4))
+            for i in range(0,4): x[i]=x[4]
+            for i in range(1,4): x[nx-i]=x[nx-4]
+            return x
+
+        f = open(meshfile, 'w')
+
+        for p in ['x', 'y', 'z']:
+
+            exec("setattr(self,'"+p+"',"+p+")")
+            if (getattr(self,p) == None):
+                exec("setattr(self,'n"+p+"',n"+p+")")
+                exec("setattr(self,'d"+p+"',d"+p+")")
+                setattr(self,p,np.linspace(0, getattr(self,'n'+p)*getattr(self,'d'+p), getattr(self,'n'+p)))
+            else:
+                exec("setattr(self,'n"+p+"',len("+p+"))")
+
+            if getattr(self,'n'+p) > 1:
+                xmdn = xxdn(getattr(self,p))
+                dxidxup = ddxxup(getattr(self,p))
+                dxidxdn = ddxxdn(getattr(self,p))
+            else:
+                xmdn= getattr(self,p)
+                dxidxup=  np.array([1.0])
+                dxidxdn=  np.array([1.0])
+
+            f.write(str(getattr(self,'n'+p))+"\n")
+            f.write(" ".join(map("{:.5f}".format,getattr(self,p))) +"\n")
+            f.write(" ".join(map("{:.5f}".format,xmdn)) +"\n")
+            f.write(" ".join(map("{:.5f}".format,dxidxup)) +"\n")
+            f.write(" ".join(map("{:.5f}".format,dxidxdn)) +"\n")
+
+        f.close()
+
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
@@ -559,6 +732,7 @@ class BifrostData(object):
 
 
 class Rhoeetab:
+
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
                  verbose=True, radtab=False):
         self.fdir = fdir
@@ -632,8 +806,8 @@ class Rhoeetab:
 
     def get_table(self, out='ne', bine=None, order=1):
         import scipy.ndimage as ndimage
-        qdict = {'ne':'lnne', 'tg':'tgt', 'pg':'lnpg', 'kr':'lnkr',
-                 'eps':'epstab', 'opa':'opatab', 'temp':'temtab'  }
+        qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
+                 'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab'}
         if out in ['ne tg pg kr'.split()] and not self.eosload:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
         if out in ['opa eps temp'.split()] and not self.radload:
@@ -706,8 +880,9 @@ class Rhoeetab:
 
 
 class Opatab:
+
     def __init__(self, tabname=None, fdir='.', big_endian=False, dtype='f4',
-                 verbose=True,lambd=100.0):
+                 verbose=True, lambd=100.0):
         ''' Loads opacity table and calculates the photoionization cross
         sections given by anzer & heinzel apj 622: 714-721, 2005, march 20
         they have big typos in their reported c's.... correct values to
@@ -733,7 +908,7 @@ class Opatab:
 
     def hopac(self):
         ghi = 0.99
-        o0 = 7.91e-18 # cm^2
+        o0 = 7.91e-18  # cm^2
         ohi = 0
         if self.lambd <= 912:
             ohi = o0 * ghi * (self.lambd / 912.0)**3
@@ -759,70 +934,71 @@ class Opatab:
         return oheii
 
     def load_opa_table(self, tabname=None):
-       ''' Loads ionizationstate table. '''
-       if tabname is None:
-           tabname = '%s/%s' % (self.fdir, 'ionization.dat')
-       eostab = Rhoeetab(fdir=self.fdir)
-       nei  = eostab.params['neibin']
-       nrho = eostab.params['nrhobin']
-       dtype = ('>' if self.big_endian else '<') + self.dtype
-       table = np.memmap(tabname, mode='r', shape=(nei,nrho,3), dtype=dtype,
-                         order='F')
-       self.ionh = table[:,:,0]
-       self.ionhe = table[:,:,1]
-       self.ionhei = table[:,:,2]
-       self.opaload = True
-       if self.verbose: print('*** Read EOS table from '+tabname)
+        ''' Loads ionizationstate table. '''
+        if tabname is None:
+            tabname = '%s/%s' % (self.fdir, 'ionization.dat')
+        eostab = Rhoeetab(fdir=self.fdir)
+        nei = eostab.params['neibin']
+        nrho = eostab.params['nrhobin']
+        dtype = ('>' if self.big_endian else '<') + self.dtype
+        table = np.memmap(tabname, mode='r', shape=(nei, nrho, 3), dtype=dtype,
+                          order='F')
+        self.ionh = table[:, :, 0]
+        self.ionhe = table[:, :, 1]
+        self.ionhei = table[:, :, 2]
+        self.opaload = True
+        if self.verbose:
+            print('*** Read EOS table from '+tabname)
 
     def tg_tab_interp(self, order=1):
-       '''
-       Interpolates the opa table to same format as tg table.
-       '''
-       import scipy.ndimage as ndimage
-       self.load_opa1d_table()
-       rhoeetab = Rhoeetab(fdir=self.fdir)
-       tgTable = rhoeetab.get_table('tg')
-       # translate to table coordinates
-       x = (np.log10(tgTable)  -  self.teinit) / self.dte
-       # interpolate quantity
-       self.ionh = ndimage.map_coordinates(self.ionh1d, [x], order=order)
-       self.ionhe = ndimage.map_coordinates(self.ionhe1d, [x], order=order)
-       self.ionhei = ndimage.map_coordinates(self.ionhei1d, [x], order=order)
+        '''
+        Interpolates the opa table to same format as tg table.
+        '''
+        import scipy.ndimage as ndimage
+        self.load_opa1d_table()
+        rhoeetab = Rhoeetab(fdir=self.fdir)
+        tgTable = rhoeetab.get_table('tg')
+        # translate to table coordinates
+        x = (np.log10(tgTable) - self.teinit) / self.dte
+        # interpolate quantity
+        self.ionh = ndimage.map_coordinates(self.ionh1d, [x], order=order)
+        self.ionhe = ndimage.map_coordinates(self.ionhe1d, [x], order=order)
+        self.ionhei = ndimage.map_coordinates(self.ionhei1d, [x], order=order)
 
     def h_he_absorb(self, lambd=None):
-       '''
-       Gets the opacities for a particular wavelength of light.
-       If lambd is None, then looks at the current level for wavelength
-       '''
-       rhe = 0.1
-       epsilon = 1.e-20
-       if lambd is not None:
-           self.lambd = lambd
-       self.tg_tab_interp()
-       ion_h = self.ionh
-       ion_he = self.ionhe
-       ion_hei =self.ionhei
-       ohi = self.hopac()
-       ohei = self.heiopac()
-       oheii = self.heiiopac()
-       arr = (1 - ion_h) * ohi + rhe * ((1 - ion_he - ion_hei) *
-                                        ohei + ion_he * oheii)
-       arr[arr < 0] = 0
-       return arr
+        '''
+        Gets the opacities for a particular wavelength of light.
+        If lambd is None, then looks at the current level for wavelength
+        '''
+        rhe = 0.1
+        epsilon = 1.e-20
+        if lambd is not None:
+            self.lambd = lambd
+        self.tg_tab_interp()
+        ion_h = self.ionh
+        ion_he = self.ionhe
+        ion_hei = self.ionhei
+        ohi = self.hopac()
+        ohei = self.heiopac()
+        oheii = self.heiiopac()
+        arr = (1 - ion_h) * ohi + rhe * ((1 - ion_he - ion_hei) *
+                                         ohei + ion_he * oheii)
+        arr[arr < 0] = 0
+        return arr
 
     def load_opa1d_table(self, tabname=None):
-       ''' Loads ionizationstate table. '''
-       if tabname is None:
-           tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
-       dtype = ('>' if self.big_endian else '<') + self.dtype
-       table = np.memmap(tabname, mode='r', shape=(41,3), dtype=dtype,
-                         order='F')
-       self.ionh1d = table[:,0]
-       self.ionhe1d  = table[:,1]
-       self.ionhei1d = table[:,2]
-       self.opaload = True
-       if self.verbose:
-           print('*** Read OPA table from '+tabname)
+        ''' Loads ionizationstate table. '''
+        if tabname is None:
+            tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
+        dtype = ('>' if self.big_endian else '<') + self.dtype
+        table = np.memmap(tabname, mode='r', shape=(41, 3), dtype=dtype,
+                          order='F')
+        self.ionh1d = table[:, 0]
+        self.ionhe1d = table[:, 1]
+        self.ionhei1d = table[:, 2]
+        self.opaload = True
+        if self.verbose:
+            print('*** Read OPA table from '+tabname)
 
 
 ###########
