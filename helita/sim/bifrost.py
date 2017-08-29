@@ -424,7 +424,7 @@ class BifrostData(object):
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
                 self.p = self.variables['p'] = self.get_var('p',self.snap)
-            return np.log(self.p) - 1.667 * np.log(self.r)
+            return np.log(self.p) - self.params['gamma'] * np.log(self.r)
         elif var[0:3] in ['mod']:   # total magnetic field
             v = var[3]
             if v == 'b':
@@ -460,7 +460,8 @@ class BifrostData(object):
             return result
         else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
-                              'get composite variable %s.' % var))
+                              'get composite variable %s. Note that'
+                              'simple_var available variables are: %s' % (var,repr(self.simple_vars))))
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
