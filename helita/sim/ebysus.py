@@ -58,10 +58,10 @@ class EbysusData(BifrostData):
 
         self.simple_vars = self.snapvars + self.mhdvars + \
             self.auxvars + self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
-        self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
+        '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
                          'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
         if (self.do_mhd):
-            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']
+            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
 
     # def set_snap(self,snap):
     #     super(EbysusData, self).set_snap(snap)
@@ -88,16 +88,19 @@ class EbysusData(BifrostData):
         Initialises variable (common for all fluid)
         """
         self.variables = {}
-        for var in self.mhdvars:  # for multispecies these are common
+        if not hasattr(self, 'mf_ilevel'): self.mf_ilevel=1
+        if not hasattr(self, 'mf_ispecies'): self.mf_ispecies=1
+        for var in self.simple_vars:
             try:
                 self.variables[var] = self._get_simple_var(
-                    var, *args, **kwargs)
-                setattr(self, var, self.variables[var])
+                    var, self.mf_ispecies, self.mf_ilevel, *args, **kwargs)
+                setattr(self, var,  self.variables[var])
             except:
                 if self.verbose:
                     print(('(WWW) init_vars: could not read variable %s' % var))
 
-    def get_var(self, var, snap=None, mf_ispecies=1, mf_ilevel=1, *args, **kwargs):
+
+    def get_var(self, var, snap=None, mf_ispecies=None, mf_ilevel=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -122,27 +125,31 @@ class EbysusData(BifrostData):
         elif var == 'z':
             return self.z
 
-        assert (mf_ispecies <= 28)
 
-
-        if (snap is not None) and (snap != self.snap):
+        if (((snap is not None) and (snap != self.snap)) or
+            ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
+            ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
+            if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)): self.mf_ispecies=mf_ispecies
+            if ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)): self.mf_ilevel=mf_ilevel
             self.set_snap(snap)
+
+        assert (self.mf_ispecies <= 28)
 
         # # check if already in memmory
         # if var in self.variables:
         #     return self.variables[var]
 
         if var in self.simple_vars:  # is variable already loaded?
-            return self._get_simple_var(var, mf_ispecies, mf_ilevel)
-        elif var in self.compvars:
-            return self._get_composite_var(var, mf_ispecies, mf_ilevel)
+            return self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel)
         elif var in self.auxxyvars:
             return super(EbysusData, self)._get_simple_var_xy(var)
         else:
+            return self._get_composite_mf_var(var)
+        '''else:
             raise ValueError(("get_var: could not read variable"
-                              "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
+                              "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))'''
 
-    def _get_simple_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r', *args, **kwargs):
+    def _get_simple_var(self, var, mf_ispecies=None, mf_ilevel=None, order='F', mode='r', *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
 
@@ -163,7 +170,6 @@ class EbysusData(BifrostData):
         result - numpy.memmap array
             Requested variable.
         """
-        var_sufix = '_s%dl%d' % (mf_ispecies, mf_ilevel)
 
         if self.snap < 0:
             snapstr = ''
@@ -175,15 +181,23 @@ class EbysusData(BifrostData):
             snapstr = self.snap_str
             fsuffix_b = ''
 
-        if var in self.mhdvars and mf_ispecies > 0:
+        if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)): self.mf_ispecies=mf_ispecies
+        if ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)): self.mf_ilevel=mf_ilevel
+
+        if not hasattr(self,'mf_ilevel'): self.mf_ilevel=1
+        if not hasattr(self,'mf_ispecies'): self.mf_ispecies=1
+
+        if var in self.mhdvars and self.mf_ispecies > 0:
             idx = self.mhdvars.index(var)
             fsuffix_a = '.snap'
             filename = self.mf_common_file
-        elif var in self.snapvars and mf_ispecies > 0:
+        elif var in self.snapvars and self.mf_ispecies > 0:
             idx = self.snapvars.index(var)
             fsuffix_a = '.snap'
-            filename = self.mf_file
-        elif var in self.snapevars and mf_ispecies < 0:
+            print('heresim8')
+            filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
+            print('heresim10')
+        elif var in self.snapevars and self.mf_ispecies < 0:
             idx = self.snapevars.index(var)
             filename = self.mf_e_file
             fsuffix_a = '.snap'
@@ -194,79 +208,42 @@ class EbysusData(BifrostData):
         elif var in self.varsmf:
             idx = self.varsmf.index(var)
             fsuffix_a = '.aux'
-            filename = self.mf_file
+            filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
         elif var in self.varsmm:
             idx = self.varsmm.index(var)
             fsuffix_a = '.aux'
-            filename = self.mm_file
+            filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
         elif var in self.varsmfe:
             idx = self.varsmfe.index(var)
             fsuffix_a = '.aux'
-            filename = self.mfe_file
+            filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
         elif var in self.varsmfc:
             idx = self.varsmfc.index(var)
             fsuffix_a = '.aux'
-            filename = self.mfc_file
+            filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
 
         filename = filename + snapstr + fsuffix_a + fsuffix_b
-        if var not in self.mhdvars and not (var in self.snapevars and mf_ispecies < 0) and var not in self.auxvars :
-            filename = filename % (mf_ispecies, mf_ilevel)
+
+        '''if var not in self.mhdvars and not (var in self.snapevars and self.mf_ispecies < 0) and var not in self.auxvars :
+            filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
 
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize
 
-        mmap = np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
-                         mode=mode, shape=(self.nx, self.ny, self.nzb))
-
-        setattr(self, var + var_sufix, mmap)
-        self.variables[var + var_sufix] = mmap
-
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
 
-    def _get_composite_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r', *args, **kwargs):
+    def _get_composite_mf_var(self, var, order='F', mode='r', *args, **kwargs):
         """
         Gets composite variables for multi species fluid.
         """
-        from . import cstagger
+        from . import cstagger as cs
 
-        var_sufix = '_s%dl%d' % (mf_ispecies, mf_ilevel)
-
-        if var in ['ux', 'uy', 'uz']:  # velocities
-            p = self.get_var('p' + var[1])
-            if getattr(self, 'n' + var[1]) < 5:
-                return p / self.r   # do not recentre for 2D cases (or close)
-            else:  # will call xdn, ydn, or zdn to get r at cell faces
-                rdt = self.r.dtype
-                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                return p / getattr(cs, var[1] + 'dn')(self.r)
-        elif var == 'ee':   # internal energy
-            if hasattr(self, 'e'):
-                e = self._get_simple_var(
-                    'e', mf_ispecies, mf_ilevel, order, mode)
-                r = self._get_simple_var(
-                    'r', mf_ispecies, mf_ilevel, order, mode)
-            return e / r
-        elif var == 's':   # entropy?
-            p = self._get_simple_var('p', mf_ispecies, mf_ilevel, order, mode)
-            r = self._get_simple_var('r', mf_ispecies, mf_ilevel, order, mode)
-            return np.log(p) - self.params['gamma'] * np.log(r)
-        elif var in ['modb', 'modp']:   # total magnetic field
-            v = var[3]
-            if v == 'b':
-                if not self.do_mhd:
-                    raise ValueError("No magnetic field available.")
-            varr = self._get_simple_var(
-                v+'x', mf_ispecies, mf_ilevel, order, mode)
-            varrt = varr.dtype  # tricky
-            cstagger.init_stagger(self.nzb, self.z.astype(
-                varrt), self.zdn.astype(varrt))
-            result = cstagger.xup(varr) ** 2  # varr == _get_simple_var(v+'x')
-            result += cstagger.yup(self._get_simple_var(v +
-                                                        'y', mf_ispecies, mf_ilevel, order, mode)) ** 2
-            result += cstagger.zup(self._get_simple_var(v +
-                                                        'z', mf_ispecies, mf_ilevel, order, mode)) ** 2
-            return np.sqrt(result)
+        if var == 'totr':  # velocities
+            for mf_ispecies in range(28):
+                for mf_ispecies in range(28):
+                    r = self._get_simple_var(
+                        'e', mf_ispecies=self.mf_ispecies, mf_ilevel=self.mf_ilevel, order=order, mode=mode)
+            return r
         else:
-            raise ValueError(('_get_composite_var: do not know (yet) how to'
-                              'get composite variable %s.' % var))
+            return super(EbysusData, self)._get_composite_var(var)
