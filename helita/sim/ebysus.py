@@ -250,10 +250,13 @@ class EbysusData(BifrostData):
             filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
 
         dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * self.nzb * idx * dsize * mf_arr_size
-
-        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+        offset = self.nx * self.ny * self.nzb * idx * dsize  * mf_arr_size
+        if (mf_arr_size == 1):
+            return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
+        else: 
+            return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+                         mode=mode, shape=(self.nx, self.ny, self.nzb, mf_arr_size))
 
     def _get_composite_mf_var(self, var, order='F', mode='r', *args, **kwargs):
         """
