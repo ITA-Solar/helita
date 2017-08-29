@@ -79,10 +79,10 @@ class BifrostData(object):
             if self.params['do_hion'] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
                                  'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
-        self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
+        '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
                          'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
         if (self.do_mhd):
-            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']
+            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
 
         self.simple_vars = self.snapvars + self.auxvars + self.hionvars
         self.auxxyvars = []
@@ -273,13 +273,13 @@ class BifrostData(object):
                     '''
         if var in self.simple_vars:  # is variable already loaded?
             return self._get_simple_var(var, *args, **kwargs)
-        elif var in self.compvars:
-            return self._get_composite_var(var, *args, **kwargs)
         elif var in self.auxxyvars:
             return self._get_simple_var_xy(var, *args, **kwargs)
         else:
-            raise ValueError(("get_var: could not read variable"
-                              "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
+            return self._get_composite_var(var, *args, **kwargs)
+        #else:
+        #    raise ValueError(("get_var: could not read variable"
+        #                      "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -364,21 +364,23 @@ class BifrostData(object):
         """
         Gets composite variables (will load into memory).
         """
-        from . import cstagger
+        from . import cstagger as cs
         if var in ['ux', 'uy', 'uz']:  # velocities
-            p = self.get_var('p' + var[1])
+            if not hasattr(self, 'p'+ var[1]): setattr( self, 'p' + var[1],self.get_var('p' + var[1],self.snap))
+            if not hasattr(self, 'r'): self.r = self.variables['r']= self.get_var('r',self.snap)
             if getattr(self, 'n' + var[1]) < 5:
-                return p / self.r   # do not recentre for 2D cases (or close)
+                return getattr(self,'p'+ var[1]) / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
                 rdt = self.r.dtype
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                return p / getattr(cs, var[1] + 'dn')(self.r)
+                return getattr(self,'p'+ var[1]) / getattr(cs, var[1] + 'dn')(self.r)
         elif var == 'ee':   # internal energy
             if not hasattr(self, 'e'):
-                self.e = self.variables['e'] = self.get_var('e')
+                self.e = self.variables['e'] = self.get_var('e',self.snap)
+            if not hasattr(self, 'r'): self.r = self.variables['r'] = self.get_var('r',self.snap)
             return self.e / self.r
         elif var in ['ixc', 'iyc', 'izc'] or var in ['exc', 'eyc', 'ezc']:
-            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2])
+            p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2],self.snap)
             # initialise cstagger
             if getattr(self, 'n' + var[1]) < 5:
                 return p
@@ -395,7 +397,7 @@ class BifrostData(object):
                         p=getattr(cs, 'xdn')(p)
                         return getattr(cs, 'ydn')(p)
         elif var[1:3] in ['xc', 'yc', 'zc']:   # internal energy
-            p = self.variables[var] = self.get_var(var[0:2])
+            p = self.variables[var] = self.get_var(var[0:2],self.snap)
             # initialise cstagger
             if getattr(self, 'n' + var[1]) < 5:
                 return p
@@ -404,7 +406,7 @@ class BifrostData(object):
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
                 return getattr(cs, var[1] + 'up')(p)
         elif var[3] in ['x', 'y', 'z'] and var[0] == 'd' and var[2] == 'd' and var[4:] in ['dn', 'up']:
-            p = self.variables[var] = self.get_var(var[1])
+            p = self.variables[var] = self.get_var(var[1],self.snap)
             if getattr(self, 'n' + var[3]) < 5:
                 return p*0
             else:
@@ -412,7 +414,7 @@ class BifrostData(object):
                 cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
                 return getattr(cs, 'd'+var[3:])(p)
         elif var[2] in ['x', 'y', 'z'] and var[4] in ['x', 'y', 'z'] and var[0] == 'd' and var[3] == 'd' and var[5:] in ['dn', 'up']:
-            p = self.variables[var] = self.get_var(var[1:3])
+            p = self.variables[var] = self.get_var(var[1:3],self.snap)
             if getattr(self, 'n' + var[4]) < 5:
                 return p*0
             else:
@@ -421,7 +423,7 @@ class BifrostData(object):
                 return getattr(cs, 'd'+var[5:])(p)
         elif var == 's':   # entropy?
             if not hasattr(self, 'p'):
-                self.p = self.variables['p'] = self.get_var('p')
+                self.p = self.variables['p'] = self.get_var('p',self.snap)
             return np.log(self.p) - 1.667 * np.log(self.r)
         elif var[0:3] in ['mod']:   # total magnetic field
             v = var[3]
