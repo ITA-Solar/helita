@@ -1,11 +1,11 @@
-#
-# Set of programs to read and interact with output from Bifrost
-#
+"""
+Set of programs to read and interact with output from Multifluid/multispecies
+"""
 
-import numpy as N
+import numpy as np
 import os
-import re
 from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph
+
 
 class EbysusData(BifrostData):
 
@@ -14,270 +14,139 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, file_root='qsmag-by00_t', meshfile=None, fdir='.',
-                 verbose=True, dtype='f4', big_endian=False,*args, **kwargs):
-        super(EbysusData, self).__init__(file_root, meshfile, fdir,verbose, dtype, big_endian)
+    def __init__(self, *args, **kwargs):
+        super(EbysusData, self).__init__(*args, **kwargs)
 
-        if kwargs.has_key('no_aux'):
-            print "[no_aux argument is deprecated, you can skip it]"
 
-        '''
-        if not os.path.isfile(self.template +'.aux'):
-            self.no_aux = False
-        else:
-            self.no_aux = True
-        '''
+    def _set_snapvars(self):
+        self.snapvars = ['r', 'px', 'py', 'pz']
+        self.snapevars = ['e']
+        self.mhdvars = []
+        if (self.do_mhd):
+            self.mhdvars = ['bx', 'by', 'bz']
+        self.auxvars = self.params['aux'].split()
 
-        '''
-        # endianness and data type
-        if big_endian:
-            self.dtype = '>' + dtype
-        else:
-            self.dtype = '<' + dtype
-        '''
+        if (self.mf_epf):
+            # add internal energy to basic snaps
+            self.snapvars.append('e')
+            # make distiction between different aux variable
+            self.varsmfe = [v for v in self.auxvars if v.startswith('mfe_')]
+            self.varsmfc = [v for v in self.auxvars if v.startswith('mfc_')]
+            self.varsmf = [v for v in self.auxvars if v.startswith('mf_')]
+            self.varsmm = [v for v in self.auxvars if v.startswith('mm_')]
+            for var in (self.varsmfe + self.varsmfc + self.varsmf +self.varsmm):
+                self.auxvars.remove(var)
+        else:  # one energy for all fluid
+            self.mhdvars = 'e' + self.mhdvars
+            if self.with_electrons:
+                self.snapevars.remove('ee')
+        if hasattr(self, 'with_electrons'):
+            if self.with_electrons:
+                self.mf_e_file = self.file_root + '_mf_e'
 
-        # variables: lists and initialisation
-        #self.compvars = ['rc','ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup', 'dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modb', 'modp'] # composite variables
+        self.auxxyvars = []
+        # special case for the ixy1 variable, lives in a separate file
+        if 'ixy1' in self.auxvars:
+            self.auxvars.remove('ixy1')
+            self.auxxyvars.append('ixy1')
 
-        '''
-        if self.multifluid:
-           if (self.params['mf_multifluid'] == 1):
-              self.multifluid = True
-           else:
-              self.multifluid = False
-        '''
-        # Multifluid specific:
-        #if self.multifluid:
-        #  if self.verbose: print "[warning] : switching to multispiecies format!"
+        self.simple_vars = self.snapvars + self.mhdvars + \
+            self.auxvars + self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
+        '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
+                         'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
+        if (self.do_mhd):
+            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
 
-        self.variables = {}
-        #else:
-        #  self.init_vars()
-        return
+    # def set_snap(self,snap):
+    #     super(EbysusData, self).set_snap(snap)
 
-#------------------------------------------------------------------------
-    def init_mf_load(self, snap, meshfile=None,
-                 verbose=True,dtype='f4', **kwargs):
-        ''' Main object for extracting Bifrost datacubes. '''
-
-        self.snap     = snap
-        self.snap_str = '_%03i' % snap
-
-        if (snap >=0):
-            self.templatesnap = self.file_root + self.snap_str
-        else:
-            self.templatesnap = self.file_root
-
-        # read idl file
-        self._BifrostData__read_params()
-        # super(StaticEmRenderer, self).__init__(SERCUDACODE, snaprange, acont_filenames,
-                                               #name_template, data_dir, snap)
-        self.read_mf_params()
-        # read mesh file
-        if meshfile is None:
-            if self.fdir.strip() == '':
-                meshfile = self.params['meshfile'].strip()
-            else:
-                meshfile = self.fdir + '/' + self.params['meshfile'].strip()
-
-        if not os.path.isfile(meshfile):
-            if self.fdir.strip() == '':
-                meshfile = 'mesh.dat'
-            else:
-                meshfile = self.fdir + '/' + 'mesh.dat'
-
-        if not os.path.isfile(meshfile):
-            print('[Warning] Mesh file %s does not exist' % meshfile)
-        self._BifrostData__read_mesh(meshfile)
+    def _read_params(self):
+        ''' Reads parameter file specific for Multi Fluid Bifrost '''
+        super(EbysusData, self)._read_params()
 
         self.nspecies_max = 28
         self.nlevels_max = 28
-
-        self.mf_template = {} # empty dictionary
-        self.mm_template = {} # empty dictionary
-        self.mfe_template = {} # empty dictionary
-        self.mfc_template = {} # empty dictionary
-        tmp_basis, sep, tmp_ext = self.file_root.partition('%')
-        self.mf_b_template = (tmp_basis + '_mf_common' + sep + tmp_ext) #% snap
-        for mf_ilevel in range(self.nlevels_max):
-            for mf_ispecies in range(self.nspecies_max):
-                self.mf_template [(mf_ispecies,mf_ilevel)] = (tmp_basis + '_mf_%02i_%02i')  % (mf_ispecies+1, mf_ilevel+1)
-                self.mm_template [(mf_ispecies,mf_ilevel)] = (tmp_basis + '_mm_%02i_%02i')  % (mf_ispecies+1, mf_ilevel+1)
-                self.mfe_template[(mf_ispecies,mf_ilevel)] = (tmp_basis + '_mfe_%02i_%02i') % (mf_ispecies+1, mf_ilevel+1)
-                self.mfc_template[(mf_ispecies,mf_ilevel)] = (tmp_basis + '_mfc_%02i_%02i') % (mf_ispecies+1, mf_ilevel+1)
-
-        if (self.mf_epf==1):
-            self.snapvars = ['r', 'px', 'py', 'pz', 'e']
-        else:
-            self.snapvars = ['r', 'px', 'py', 'pz']
-
-        #self.multifluid = self.params.has_key('mf_multifluid')
-        if self.do_mhd == 1:
-            if (self.mf_epf==1):
-                self.commvars = ['bx', 'by', 'bz']
-            else:
-                self.commvars = ['e','bx', 'by', 'bz']
-        else:
-            if (self.mf_epf==1):
-                self.commvars = []
-            else:
-                self.commvars = ['e']
-        self.compvars = ['ux', 'uy', 'uz', 's', 'bxc', 'byc', 'bzc', 'rup',
-                     'dxdbup', 'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup',
-                     'dzdbdn', 'modb', 'modp']   # composite variables
-
-        self.with_electrons = self.params.has_key('mf_electrons')
-        tmp_basis, sep, tmp_ext = self.file_root.partition('%')
-        self.snapevars = []
-        if self.with_electrons:
-            if (self.params['mf_electrons'] == 1):
-              self.with_electrons = True
-              self.mf_e_template = (tmp_basis + '_mf_e' + sep + tmp_ext)
-              if (snap >= 0):
-                self.mf_e_templatesnap = self.mf_e_template +'_%03i' % snap
-              else:
-                  self.mf_e_templatesnap = self.mf_e_template
-              self.snapevars = ['r', 'px', 'py', 'pz','e']
-            elif (self.mf_epf == 1):
-                self.snapevars = ['e']
-                self.mf_e_template = (tmp_basis + '_mf_e' + sep + tmp_ext)
-                if (snap >= 0):
-                    self.mf_e_templatesnap = self.mf_e_template +'_%03i' % snap
-                else:
-                    self.mf_e_templatesnap = self.mf_e_template
-                self.with_electrons = False
-        elif (self.mf_epf == 1):
-            self.mf_e_template = (tmp_basis + '_mf_e' + sep + tmp_ext)
-            if (snap >= 0):
-                self.mf_e_templatesnap = self.mf_e_template +'_%03i' % snap
-            else:
-                self.mf_e_templatesnap = self.mf_e_template
-            self.snapevars = ['e']
-
-        if (snap >= 0):
-            self.mf_b_templatesnap = self.mf_b_template +'_%03i' % snap
-        else:
-            self.mf_b_templatesnap = self.mf_b_template
-
-        self.mf_templatesnap = {} # empty dictionary
-        self.mm_templatesnap = {} # empty dictionary
-        self.mfe_templatesnap = {} # empty dictionary
-        self.mfc_templatesnap = {} # empty dictionary
-        for mf_ilevel in range(self.nlevels_max):
-            for mf_ispecies in range(self.nspecies_max):
-                if (snap >= 0):
-                    self.mf_templatesnap[(mf_ispecies,mf_ilevel)]  = self.mf_template[(mf_ispecies,mf_ilevel)] +'_%03i' % snap
-                    self.mm_templatesnap[(mf_ispecies,mf_ilevel)]  = self.mm_template[(mf_ispecies,mf_ilevel)] +'_%03i' % snap
-                    self.mfc_templatesnap[(mf_ispecies,mf_ilevel)] = self.mfc_template[(mf_ispecies,mf_ilevel)] +'_%03i' % snap
-                    self.mfe_templatesnap[(mf_ispecies,mf_ilevel)] = self.mfe_template[(mf_ispecies,mf_ilevel)] +'_%03i' % snap
-                else:
-                    self.mf_templatesnap[(mf_ispecies,mf_ilevel)]  = self.mf_template[(mf_ispecies,mf_ilevel)]
-                    self.mm_templatesnap[(mf_ispecies,mf_ilevel)]  = self.mm_template[(mf_ispecies,mf_ilevel)]
-                    self.mfc_templatesnap[(mf_ispecies,mf_ilevel)] = self.mfc_template[(mf_ispecies,mf_ilevel)]
-                    self.mfe_templatesnap[(mf_ispecies,mf_ilevel)] = self.mfe_template[(mf_ispecies,mf_ilevel)]
-
-        return
-
-    #------------------------------------------------------------------------
-
-    def read_mf_params(self):
-        ''' Reads parameter file (.idl) '''
-
-        if (self.snap >=0):
-            filename = self.templatesnap + '.idl'
-        else:
-            filename = self.templatesnap + '.idl.scr'
-        self.params = read_idl_ascii(filename)
-
-        # assign some parameters to root object
-
 
         try:
             self.mf_epf = self.params['mf_epf']
         except KeyError:
             raise KeyError('read_params: could not find mf_epf in idl file!')
-
+        try:
+            self.with_electrons = self.params['mf_electrons']
+        except KeyError:
+            raise KeyError(
+                'read_params: could not find with_electrons in idl file!')
         try:
             self.mf_total_nlevel = self.params['mf_total_nlevel']
         except KeyError:
             print('warning, this idl file does not include mf_total_nlevel')
             #raise KeyError('read_params: could not find mf_total_nlevel in idl file!')
 
-        try:
-            self.auxvars  = self.params['aux'].split()
-            if self.verbose: print 'auxvars =',self.auxvars
-             # special case for the ixy1 variable, lives in a separate file
-            if 'ixy1' in self.auxvars:
-                self.auxvars.remove('ixy1')
-                self.auxxyvars.append('ixy1')
-            # Remove for the var list the 2D aux vars, and stores these 2D varnames in vars2d.
-            self.vars2d = []
-            for var in self.auxvars:
-                if any(i in var for i in ('xy','yz','xz')):
-                    self.vars2d.append(var)
-            for var in self.vars2d:
-                self.auxvars.remove(var)
-            # Remove for the var list the mfe aux vars, and stores these mfe varnames.
-            self.varsmfe = []
-            if (self.mf_epf == 1):
-                for var in self.auxvars:
-                    if any(i in var for i in ('mfe_','empty')):
-                        self.varsmfe.append(var)
-                for var in self.varsmfe:
-                    self.auxvars.remove(var)
-            # Remove for the var list the mfc aux vars, and stores these mfc varnames.
-            self.varsmfc = []
-            if (self.mf_epf == 1):
-                for var in self.auxvars:
-                    if any(i in var for i in ('mfc_','empty')):
-                        self.varsmfc.append(var)
-                for var in self.varsmfc:
-                    self.auxvars.remove(var)
-            # Remove for the var list the mf aux vars, and stores these mf varnames.
-            self.varsmf = []
-            if (self.mf_epf == 1):
-                for var in self.auxvars:
-                    if any(i in var for i in ('mf_','empty')):
-                        self.varsmf.append(var)
-                for var in self.varsmf:
-                    self.auxvars.remove(var)
-            self.varsmm = []
-            if (self.mf_epf == 1):
-                for var in self.auxvars:
-                    if any(i in var for i in ('mm_','empty')):
-                        self.varsmm.append(var)
-                for var in self.varsmm:
-                    self.auxvars.remove(var)
+    def _init_vars(self, *args, **kwargs):
+        """
+        Initialises variable (common for all fluid)
+        """
 
-        except KeyError:
-            self.auxvars = {}
-            raise KeyError('read_params: could not find aux idl file!')
+        self.mf_common_file = (self.file_root + '_mf_common')
+        self.mf_file = (self.file_root + '_mf_%02i_%02i')
+        self.mm_file = (self.file_root + '_mm_%02i_%02i')
+        self.mfe_file = (self.file_root + '_mfe_%02i_%02i')
+        self.mfc_file = (self.file_root + '_mfc_%02i_%02i')
+        self.mf_e_file = (self.file_root + '_mf_e')
 
-        return
+        self.variables = {}
 
-    def clearattr(self):
-        "cleans storage variables"
-        vars = [self.compvars + self.auxvars + self.snapvars + self.commvars + self.varsmf + self.varsmm + self.varsmfc + self.varsmfe]
-        for name in vars:
-            if (hasattr(self,name)):
-                delattr(self,name)
+        self.set_mfi(None, None)
 
-    #------------------------------------------------------------------------
-    def getvar(self, var, snap, slice=None, order='F', mf_ilevel=0, mf_ispecies=0, mf_electrons=False):
-        ''' Reads a given variable from the relevant files. '''
-        import os
+        for var in self.simple_vars:
+            try:
+                self.variables[var] = self._get_simple_var(
+                    var, self.mf_ispecies, self.mf_ilevel, *args, **kwargs)
+                setattr(self, var,  self.variables[var])
+            except:
+                if self.verbose:
+                    print(('(WWW) init_vars: could not read variable %s' % var))
 
-        if (hasattr(self,'isnap')) and (hasattr(self,'mf_ilevel')) and (hasattr(self,'mf_ispecies')):
-            if (self.isnap != snap) or (self.mf_ilevel != mf_ilevel) or (self.mf_ispecies != mf_ispecies):
-                self.clearattr()
-                self.init_mf_load(snap)
-        else:
-            self.init_mf_load(snap)
+    def set_mfi(self, mf_ispecies=None, mf_ilevel=None):
+        """
+        adds mf_ispecies and mf_ilevel attributes if they don't exist and
+        changes mf_ispecies and mf_ilevel if needed. It will set defaults to 1
+        """
 
-        self.mf_ilevel=mf_ilevel
-        self.mf_ispecies=mf_ispecies
+        if (mf_ispecies is not None):
+            if (mf_ispecies != self.mf_ispecies):
+                self.mf_ispecies=mf_ispecies
+            elif not hasattr(self,'mf_ispecies'):
+                self.mf_ispecies=1
+        elif not hasattr(self,'mf_ispecies'):
+            self.mf_ispecies=1
 
-        readingmm = False
+        if (mf_ilevel is not None):
+            if (mf_ilevel != self.mf_ilevel):
+                self.mf_ilevel=mf_ilevel
+            elif not hasattr(self,'mf_ilevel'):
+                self.mf_ilevel=1
+        elif not hasattr(self,'mf_ilevel'):
+            self.mf_ilevel=1
+
+    def get_var(self, var, snap=None, mf_ispecies=None, mf_ilevel=None, *args, **kwargs):
+        """
+        Reads a given variable from the relevant files.
+
+        Parameters
+        ----------
+        var - string
+            Name of the variable to read. Must be Bifrost internal names.
+        mf_ispecies - integer [1, 28]
+            Species ID
+        mf_ilevel - integer
+            Ionization level
+        snap - integer, optional
+            Snapshot number to read. By default reads the loaded snapshot;
+            if a different number is requested, will load that snapshot
+            by running self.set_snap(snap).
+        """
+        '''assert (mf_ispecies > 0 and mf_ispecies <= 28)'''
         if var == 'x':
             return self.x
         elif var == 'y':
@@ -285,152 +154,120 @@ class EbysusData(BifrostData):
         elif var == 'z':
             return self.z
 
-        if mf_electrons:
-            if (not self.with_electrons): print '[Error] Run without electrons'
-            template = self.mf_e_templatesnap
+        if (((snap is not None) and (snap != self.snap)) or
+            ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
+            ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
+            self.set_mfi(mf_ispecies, mf_ilevel)
+            self.set_snap(snap)
+
+        assert (self.mf_ispecies <= 28)
+
+        # # check if already in memmory
+        # if var in self.variables:
+        #     return self.variables[var]
+
+        if var in self.simple_vars:  # is variable already loaded?
+            return self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel)
+        elif var in self.auxxyvars:
+            return super(EbysusData, self)._get_simple_var_xy(var)
         else:
-            b_test = (var in self.commvars)
-            e_test = (var in self.snapevars and mf_ispecies == -1 and (self.mf_epf or self.with_electrons))
-            if (b_test):
-               template = self.mf_b_templatesnap
-            elif (e_test):
-               template = self.mf_e_templatesnap
-            else:
-                if (mf_ispecies >=0):
-                    template = self.mf_templatesnap[mf_ispecies,mf_ilevel]
-                    tmp_basis, sep, tmp_ext = self.file_root.partition('%')
-                    if (snap >= 0):
-                        auxtemplate = tmp_basis+'_%03i' % snap
-                    else:
-                        auxtemplate = tmp_basis
+            return self._get_composite_mf_var(var)
+        '''else:
+            raise ValueError(("get_var: could not read variable"
+                              "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))'''
 
-                    mmtemplate = self.mm_templatesnap[mf_ispecies,mf_ilevel]
-                    mfetemplate = self.mfe_templatesnap[mf_ispecies,mf_ilevel]
-                    mfctemplate = self.mfc_templatesnap[mf_ispecies,mf_ilevel]
-                else: # this is for common or electron aux variables
-                    tmp_basis, sep, tmp_ext = self.file_root.partition('%')
-                    if (snap >= 0):
-                        auxtemplate = tmp_basis+'_%03i' % snap
-                    else:
-                        auxtemplate = tmp_basis
-            if self.verbose: print '[Looking for %s in %s]' % (var, template)
+    def _get_simple_var(self, var, mf_ispecies=None, mf_ilevel=None, order='F', mode='r', *args, **kwargs):
+        """
+        Gets "simple" variable (ie, only memmap, not load into memory).
 
-        # find in which file the variable is
-        if var in self.compvars:
-            # if variable is composite, use getcompvar
-            return self._get_compvar(var,snap,slice,mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel)
-        elif var in self.snapvars:
-            if (snap >= 0):
-                fsuffix = '.snap'
-            else:
-                fsuffix = '.snap.scr'
-            if (e_test):
-                if var in self.snapevars:
-                    idx = self.snapevars.index(var)
-                else:
-                    raise ValueError('getvar: variable %s not available in electron snap file. Available vars:'
-                          % (var) + '\n' + repr(self.snapevars))
-            else:
-                idx = self.snapvars.index(var)
-            filename = template + fsuffix
-        elif var in self.commvars:
-            if (snap >= 0):
-                fsuffix = '.snap'
-            else:
-                fsuffix = '.snap.scr'
-            idx = self.commvars.index(var)
-            filename = template + fsuffix
+        Overloads super class to make a distinction between different filenames for different variables
+
+        Parameters:
+        -----------
+        var - string
+            Name of the variable to read. Must be Bifrost internal names.
+        order - string, optional
+            Must be either 'C' (C order) or 'F' (Fortran order, default).
+        mode - string, optional
+            numpy.memmap read mode. By default is read only ('r'), but
+            you can use 'r+' to read and write. DO NOT USE 'w+'.
+
+        Returns
+        -------
+        result - numpy.memmap array
+            Requested variable.
+        """
+
+        if self.snap < 0:
+            snapstr = ''
+            fsuffix_b = '.scr'
+        elif self.snap == 0:
+            snapstr = ''
+            fsuffix_b = ''
+        else:
+            snapstr = self.snap_str
+            fsuffix_b = ''
+
+        mf_arr_size = 1
+        if var in self.mhdvars and self.mf_ispecies > 0:
+            idx = self.mhdvars.index(var)
+            fsuffix_a = '.snap'
+            filename = self.mf_common_file
+        elif var in self.snapvars and self.mf_ispecies > 0:
+            idx = self.snapvars.index(var)
+            fsuffix_a = '.snap'
+            filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
+        elif var in self.snapevars and self.mf_ispecies < 0:
+            idx = self.snapevars.index(var)
+            filename = self.mf_e_file
+            fsuffix_a = '.snap'
         elif var in self.auxvars:
-            if (snap >= 0):
-                fsuffix = '.aux'
-            else:
-                fsuffix = '.aux.scr'
             idx = self.auxvars.index(var)
-            filename = auxtemplate + fsuffix
+            fsuffix_a = '.aux'
+            filename = self.file_root
         elif var in self.varsmf:
-            if (snap >= 0):
-                fsuffix = '.aux'
-            else:
-                fsuffix = '.aux.scr'
             idx = self.varsmf.index(var)
-            filename = template + fsuffix
+            fsuffix_a = '.aux'
+            filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
         elif var in self.varsmm:
-            if (snap >= 0):
-                fsuffix = '.aux'
-            else:
-                fsuffix = '.aux.scr'
             idx = self.varsmm.index(var)
-            filename = mmtemplate + fsuffix
-            readingmm = True
+            fsuffix_a = '.aux'
+            filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
+            mf_arr_size = self.mf_total_nlevel
         elif var in self.varsmfe:
-            if (snap >= 0):
-                fsuffix = '.aux'
-            else:
-                fsuffix = '.aux.scr'
             idx = self.varsmfe.index(var)
-            filename = mfetemplate + fsuffix
+            fsuffix_a = '.aux'
+            filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
         elif var in self.varsmfc:
-            #print self.varsmfc,self.varsmf,self.varsmfe,self.varsmm
-            if (snap >= 0):
-                fsuffix = '.aux'
-            else:
-                fsuffix = '.aux.scr'
             idx = self.varsmfc.index(var)
-            filename = mfctemplate + fsuffix
+            fsuffix_a = '.aux'
+            filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
+
+        filename = filename + snapstr + fsuffix_a + fsuffix_b
+
+        '''if var not in self.mhdvars and not (var in self.snapevars and self.mf_ispecies < 0) and var not in self.auxvars :
+            filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
+
+        dsize = np.dtype(self.dtype).itemsize
+        offset = self.nx * self.ny * self.nzb * idx * dsize  * mf_arr_size
+        if (mf_arr_size == 1):
+            return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+                         mode=mode, shape=(self.nx, self.ny, self.nzb))
         else:
-            raise ValueError('getvar: variable %s not available. Available vars:'
-                  % (var) + '\n' + repr(self.snapvars + self.commvars + self.auxvars + self.varsmf + self.varsmm + self.varsmfe + self.varsmfc + self.compvars))
+            return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
+                         mode=mode, shape=(self.nx, self.ny, self.nzb, mf_arr_size))
 
-        # Now memmap the variable
-        if not os.path.isfile(filename):
-            raise IOError('getvar: variable %s should be in %s file, not found!' %
-                            (var, filename))
+    def _get_composite_mf_var(self, var, order='F', mode='r', *args, **kwargs):
+        """
+        Gets composite variables for multi species fluid.
+        """
+        from . import cstagger as cs
 
-        # size of the data type
-        if self.dtype[1:] == 'f4':
-            dsize = 4
+        if var == 'totr':  # velocities
+            for mf_ispecies in range(28):
+                for mf_ispecies in range(28):
+                    r = self._get_simple_var(
+                        'e', mf_ispecies=self.mf_ispecies, mf_ilevel=self.mf_ilevel, order=order, mode=mode)
+            return r
         else:
-            raise ValueError('getvar: datatype %s not supported' % self.dtype)
-
-
-        if readingmm:
-            offset = self.nx*self.ny*self.nz*idx*dsize*self.mf_total_nlevel
-            if self.verbose: print('filename,offset',filename,offset)
-            output = N.memmap(filename, dtype=self.dtype,order=order, offset=offset, mode='r', shape=(self.nx,self.ny,self.nz,self.mf_total_nlevel))
-        else:
-            offset = self.nx*self.ny*self.nz*idx*dsize
-            if self.verbose: print('filename,offset',filename,offset)
-            output = N.memmap(filename, dtype=self.dtype,order=order, offset=offset, mode='r', shape=(self.nx,self.ny,self.nz))
-
-        self.avaivars = self.avaivars + [str(var)]
-        setattr(self,str(var),output)
-        return output
-
-    #-----------------------------------------------------------------------
-
-    def init_vars(self):
-        ''' Memmaps aux and snap variables, and maps them to methods. '''
-
-        self.variables = {}
-
-        '''
-        if self.no_aux:
-            avaivars = self.snapvars
-        else:
-            # remove ixy1 if in var
-            if 'ixy1' in self.auxvars:
-                self.auxvars.remove('ixy1')
-            avaivars = self.snapvars + self.auxvars
-        '''
-        if 'ixy1' in self.auxvars:
-            self.auxvars.remove('ixy1')
-
-        templist = self.snapvars + self.auxvars +  self.commvars
-        for var in self.avaivars:
-            while var in templist: templist.remove(var)
-        # snap variables
-        for var in templist:
-            output = self.getvar(str(var),(int(self.snap))
-            setattr(self,str(var),output)
-
-        return
+            return super(EbysusData, self)._get_composite_var(var)

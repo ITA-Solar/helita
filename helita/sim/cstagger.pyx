@@ -204,8 +204,8 @@ cdef inline void zdn_c(int mx, int my, int mz, DTYPE_t *f, DTYPE_t *o, DTYPE_t *
 
 #------------------------------------------------------------------------------
 
-cdef inline void ddxup_c(int mx, int my, int mz, DTYPE_t dxc, DTYPE_t *f, DTYPE_t *o):
-    cdef DTYPE_t a = 300./281./dxc, b =  -50./843./dxc, c = 6./1405./dxc
+cdef inline void ddxup_c(int mx, int my, int mz, FLOAT_t dxc, FLOAT_t *f, FLOAT_t *o):
+    cdef FLOAT_t a = 300./281./dxc, b =  -50./843./dxc, c = 6./1405./dxc
     cdef int i, j, k, l, m=mx
 
     for k in range(mz):
@@ -244,8 +244,8 @@ cdef inline void ddxup_c(int mx, int my, int mz, DTYPE_t dxc, DTYPE_t *f, DTYPE_
 
 #------------------------------------------------------------------------------
 
-cdef inline void ddyup_c(int mx, int my, int mz, DTYPE_t dyc, DTYPE_t *f, DTYPE_t *o):
-  cdef DTYPE_t a = 300./281./dyc, b =  -50./843./dyc, c = 6./1405./dyc
+cdef inline void ddyup_c(int mx, int my, int mz, FLOAT_t dyc, FLOAT_t *f, FLOAT_t *o):
+  cdef FLOAT_t a = 300./281./dyc, b =  -50./843./dyc, c = 6./1405./dyc
   cdef int i, j, k, l, m=my
 
   for k in range(mz):
@@ -284,8 +284,8 @@ cdef inline void ddyup_c(int mx, int my, int mz, DTYPE_t dyc, DTYPE_t *f, DTYPE_
 
 #------------------------------------------------------------------------------
 
-cdef inline void ddzup_c(int mx, int my, int mz, DTYPE_t *f,DTYPE_t *o, DTYPE_t *dzzupc):
-  cdef DTYPE_t d
+cdef inline void ddzup_c(int mx, int my, int mz, FLOAT_t *f,FLOAT_t *o, FLOAT_t *dzzupc):
+  cdef FLOAT_t d
   cdef int i, j, k, l, m=mz
 
 
@@ -303,8 +303,8 @@ cdef inline void ddzup_c(int mx, int my, int mz, DTYPE_t *f,DTYPE_t *o, DTYPE_t 
 
 #------------------------------------------------------------------------------
 
-cdef inline void ddxdn_c(int mx, int my, int mz, DTYPE_t dxc, DTYPE_t *f, DTYPE_t *o):
-  cdef DTYPE_t a = 300./281./dxc, b =  -50./843./dxc, c = 6./1405./dxc
+cdef inline void ddxdn_c(int mx, int my, int mz, FLOAT_t dxc, FLOAT_t *f, FLOAT_t *o):
+  cdef FLOAT_t a = 300./281./dxc, b =  -50./843./dxc, c = 6./1405./dxc
   cdef int i, j, k, l, m=mx
 
   for k in range(mz):
@@ -343,8 +343,8 @@ cdef inline void ddxdn_c(int mx, int my, int mz, DTYPE_t dxc, DTYPE_t *f, DTYPE_
 
 #------------------------------------------------------------------------------
 
-cdef inline void ddydn_c(int mx, int my, int mz, DTYPE_t dyc, DTYPE_t *f, DTYPE_t *o):
-  cdef DTYPE_t a = 300./281./dyc, b =  -50./843./dyc, c = 6./1405./dyc
+cdef inline void ddydn_c(int mx, int my, int mz, FLOAT_t dyc, FLOAT_t *f, FLOAT_t *o):
+  cdef FLOAT_t a = 300./281./dyc, b =  -50./843./dyc, c = 6./1405./dyc
   cdef int i, j, k, l, m=my
 
   for k in range(mz):
@@ -383,9 +383,9 @@ cdef inline void ddydn_c(int mx, int my, int mz, DTYPE_t dyc, DTYPE_t *f, DTYPE_
 
 #------------------------------------------------------------------------------
 
-cdef inline void ddzdn_c(int mx, int my, int mz, DTYPE_t *f,DTYPE_t *o, DTYPE_t *dzzdnc):
+cdef inline void ddzdn_c(int mx, int my, int mz, FLOAT_t *f,FLOAT_t *o, FLOAT_t *dzzdnc):
 
-  cdef DTYPE_t d
+  cdef FLOAT_t d
   cdef int i, j, k, l, m=mz
 
   for k in range(mz):
@@ -407,11 +407,13 @@ cdef inline void ddzdn_c(int mx, int my, int mz, DTYPE_t *f,DTYPE_t *o, DTYPE_t 
 #------------------------------------------------------------------------------
 ### init functions
 #------------------------------------------------------------------------------
-
-def calc_stagger_inv(x, int n, int y, int o, r):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def calc_stagger_inv(np.ndarray[FLOAT_t, ndim=1] x, int n, int y, int o,
+                     np.ndarray[FLOAT_t, ndim=1] r):
     ''' Auxiliary function for init_stagger. '''
 
-    cdef DTYPE_t c[6], b[6], t
+    cdef FLOAT_t c[6], b[6], t
     cdef int i, j
 
     for i in range(n+1): c[i] = 0.
@@ -433,29 +435,30 @@ def calc_stagger_inv(x, int n, int y, int o, r):
     return
 
 #------------------------------------------------------------------------------
-
-def init_stagger(int mz, DTYPE_t dx, DTYPE_t dy, np.ndarray[DTYPE_t, ndim=1] z, np.ndarray[DTYPE_t, ndim=1] zdn, np.ndarray[DTYPE_t, ndim=1] dzup, np.ndarray[DTYPE_t, ndim=1] dzdn):
-    ''' init_stagger(int mz, np.ndarray[DTYPE_t] z, np.ndarray[DTYPE_t] zdn)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def init_stagger(int mz, FLOAT_t dx, FLOAT_t dy, np.ndarray[FLOAT_t, ndim=1] z, np.ndarray[FLOAT_t, ndim=1] zdn, np.ndarray[FLOAT_t, ndim=1] dzup, np.ndarray[FLOAT_t, ndim=1] dzdn):
+    ''' init_stagger(nt mz, dx, dy, z, zdn, dzup, dzdn)
 
         Initialises zupc and zdnc structures (for using with zdn and zup).
         From init_stagger.c and init_stagger.pro
 
-        IN: mz, z, zdn (latter two are 'z' and 'zdn' from mesh)
+        IN: mz, dx, dy z, zdn, dzup, dzdn (latter four are 'z', 'zdn', 'dzup', and 'dzdn' from mesh)
        '''
 
     cdef int i, j, k
 
     global zupc, zdnc, nz, dxc, dyc, dzupc, dzdnc
-    zupc = np.zeros((mz,6),dtype=DTYPE)
-    zdnc = np.zeros((mz,6),dtype=DTYPE)
-    dzupc = np.zeros((mz,6),dtype=DTYPE)
-    dzdnc = np.zeros((mz,6),dtype=DTYPE)
+    zupc = np.zeros((mz,6),dtype=z.dtype)
+    zdnc = np.zeros((mz,6),dtype=z.dtype)
+    dzupc = np.zeros((mz,6),dtype=z.dtype)
+    dzdnc = np.zeros((mz,6),dtype=z.dtype)
     nz = mz
     dxc = dx
     dyc = dy
 
-    cdef np.ndarray[DTYPE_t, ndim=1] zh = np.sort(np.concatenate([z,zdn]))
-    cdef np.ndarray[DTYPE_t, ndim=1]  a = np.zeros(6, dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=1] zh = np.sort(np.concatenate([z,zdn]))
+    cdef np.ndarray[FLOAT_t, ndim=1]  a = np.zeros(6, dtype=z.dtype)
 
     iordl = np.array([1,3,4,5])
     iordu = np.array([1,3,4,5])
@@ -504,8 +507,8 @@ def init_stagger(int mz, DTYPE_t dx, DTYPE_t dy, np.ndarray[DTYPE_t, ndim=1] z, 
 ### up and down functions
 #------------------------------------------------------------------------------
 
-def xup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' xup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def xup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' xup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger xup function.
 
@@ -513,19 +516,20 @@ def xup(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    xup_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    xup_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 #------------------------------------------------------------------------------
 
-def yup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' yup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def yup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' yup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         cstagger yup function.
 
@@ -533,19 +537,20 @@ def yup(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    yup_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    yup_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 #------------------------------------------------------------------------------
 
-def zup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' zup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def zup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' zup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         cstagger zup function.
 
@@ -553,22 +558,23 @@ def zup(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
     if (mz != nz): raise ValueError('zup: nz mismatch, must run init_stagger first!')
-    cdef np.ndarray[DTYPE_t, ndim=2] zz = zupc
+    cdef np.ndarray[FLOAT_t, ndim=2] zz = zupc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    zup_c(mx,my,mz,<DTYPE_t *> inarr.data,<DTYPE_t *> outarr.data,<DTYPE_t *> zz.data)
+    zup_c(mx,my,mz,<FLOAT_t *> inarr.data,<FLOAT_t *> outarr.data,<FLOAT_t *> zz.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 #------------------------------------------------------------------------------
 
-def xdn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' xdn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def xdn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' xdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger xdn function.
 
@@ -576,19 +582,20 @@ def xdn(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    xdn_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    xdn_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 #------------------------------------------------------------------------------
 
-def ydn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ydn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ydn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' ydn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         cstagger ydn function.
 
@@ -596,19 +603,20 @@ def ydn(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    ydn_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    ydn_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 #------------------------------------------------------------------------------
 
-def zdn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' zdn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def zdn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' zdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         cstagger zdn function.
 
@@ -616,24 +624,25 @@ def zdn(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
     if (mz != nz): raise ValueError('zdn: nz mismatch, must run init_stagger first!')
 
-    cdef np.ndarray[DTYPE_t, ndim=2] zz = zdnc
+    cdef np.ndarray[FLOAT_t, ndim=2] zz = zdnc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    zdn_c(mx,my,mz,<DTYPE_t *> inarr.data,<DTYPE_t *> outarr.data,<DTYPE_t *> zz.data)
+    zdn_c(mx,my,mz,<FLOAT_t *> inarr.data,<FLOAT_t *> outarr.data,<FLOAT_t *> zz.data)
 
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 #------------------------------------------------------------------------------
 
-def ddxup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ddxup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ddxup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' ddxup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger ddxup function.
 
@@ -641,20 +650,20 @@ def ddxup(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    ddxup_c(mx, my, mz, dxc, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    ddxup_c(mx, my, mz, <FLOAT_t> dxc, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
-#    return outarr
 
 #------------------------------------------------------------------------------
 
-def ddyup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ddyup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ddyup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' ddyup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger ddyup function.
 
@@ -662,20 +671,21 @@ def ddyup(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    ddyup_c(mx, my, mz, dyc, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    ddyup_c(mx, my, mz, <FLOAT_t> dyc, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 
 #------------------------------------------------------------------------------
 
-def ddzup(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ddzup(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ddzup(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' ddzup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger ddzup function.
 
@@ -683,22 +693,23 @@ def ddzup(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
     if (mz != nz): raise ValueError('zdn: nz mismatch, must run init_stagger first!')
 
-    cdef np.ndarray[DTYPE_t, ndim=2] dzz = dzdnc
+    cdef np.ndarray[FLOAT_t, ndim=2] dzz = dzdnc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    ddzup_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data,<DTYPE_t *> dzz.data)
+    ddzup_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data,<FLOAT_t *> dzz.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
 #------------------------------------------------------------------------------
 
-def ddxdn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ddxdn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger ddxdn function.
 
@@ -706,20 +717,20 @@ def ddxdn(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    ddxdn_c(mx, my, mz, dxc, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    ddxdn_c(mx, my, mz, <FLOAT_t> dxc, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
-
 #------------------------------------------------------------------------------
 
-def ddydn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ddydn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ddydn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' ddydn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger ddydn function.
 
@@ -727,18 +738,20 @@ def ddydn(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    ddydn_c(mx, my, mz, dyc, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data)
+    ddydn_c(mx, my, mz, <FLOAT_t> dyc, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
 
+#------------------------------------------------------------------------------
 
-def ddzdn(np.ndarray[DTYPE_t, ndim=3] inarr):
-    ''' ddzdn(np.ndarray[DTYPE_t, ndim=3] inarr)
+def ddzdn(np.ndarray[FLOAT_t, ndim=3] inarr):
+    ''' ddzdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
         stagger ddzdn function.
 
@@ -746,14 +759,15 @@ def ddzdn(np.ndarray[DTYPE_t, ndim=3] inarr):
         OUT: array of same shape and type.'''
 
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef np.ndarray[DTYPE_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=DTYPE)
+    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros((mx, my, mz), dtype=inarr.dtype)
 
     if (mz != nz): raise ValueError('zdn: nz mismatch, must run init_stagger first!')
-    cdef np.ndarray[DTYPE_t, ndim=2] dzz = dzupc
+    cdef np.ndarray[FLOAT_t, ndim=2] dzz = dzupc
 
+    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
 
-    ddzdn_c(mx, my, mz, <DTYPE_t *> inarr.data, <DTYPE_t *> outarr.data,<DTYPE_t *> dzz.data)
+    ddzdn_c(mx, my, mz, <FLOAT_t *> inarr.data, <FLOAT_t *> outarr.data,<FLOAT_t *> dzz.data)
 
     return np.transpose(np.reshape(outarr, (mz, my, mx)))
