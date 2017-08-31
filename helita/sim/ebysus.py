@@ -34,7 +34,6 @@ class EbysusData(BifrostData):
             self.varsmfc = [v for v in self.auxvars if v.startswith('mfc_')]
             self.varsmf = [v for v in self.auxvars if v.startswith('mf_')]
             self.varsmm = [v for v in self.auxvars if v.startswith('mm_')]
-            self.mf_e_file = self.file_root + '_mf_e'
             for var in (self.varsmfe + self.varsmfc + self.varsmf +self.varsmm):
                 self.auxvars.remove(var)
         else:  # one energy for all fluid
@@ -82,7 +81,7 @@ class EbysusData(BifrostData):
         except KeyError:
             print('warning, this idl file does not include mf_total_nlevel')
             #raise KeyError('read_params: could not find mf_total_nlevel in idl file!')
-            
+
     def _init_vars(self, *args, **kwargs):
         """
         Initialises variable (common for all fluid)
@@ -93,7 +92,7 @@ class EbysusData(BifrostData):
         self.mm_file = (self.file_root + '_mm_%02i_%02i')
         self.mfe_file = (self.file_root + '_mfe_%02i_%02i')
         self.mfc_file = (self.file_root + '_mfc_%02i_%02i')
-        self.mf_e_file = (self.file_root + '_mf_e_%02i_%02i')
+        self.mf_e_file = (self.file_root + '_mf_e')
 
         self.variables = {}
 
@@ -222,6 +221,7 @@ class EbysusData(BifrostData):
             idx = self.snapevars.index(var)
             filename = self.mf_e_file
             fsuffix_a = '.snap'
+            print('here',filename)
         elif var in self.auxvars:
             idx = self.auxvars.index(var)
             fsuffix_a = '.aux'
@@ -254,7 +254,7 @@ class EbysusData(BifrostData):
         if (mf_arr_size == 1):
             return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
-        else: 
+        else:
             return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb, mf_arr_size))
 
