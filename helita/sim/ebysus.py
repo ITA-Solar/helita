@@ -221,7 +221,6 @@ class EbysusData(BifrostData):
             idx = self.snapevars.index(var)
             filename = self.mf_e_file
             fsuffix_a = '.snap'
-            print('here',filename)
         elif var in self.auxvars:
             idx = self.auxvars.index(var)
             fsuffix_a = '.aux'
