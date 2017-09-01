@@ -129,7 +129,7 @@ class BifrostData(object):
         Reads parameter file (.idl)
         """
         if (self.snap < 0):
-            filename = self.file_root + self.snap_str + '.idl.src'
+            filename = self.file_root + '.idl.scr'
         elif (self.snap == 0):
             filename = self.file_root + '.idl'
         else:
