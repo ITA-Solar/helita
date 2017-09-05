@@ -360,16 +360,21 @@ class BifrostData(object):
         return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny))
 
+    def boundcut(self, name,var):
+        if ((np.shape(var))[2] != self.nz):
+            var = var[:,:,self.nb:self.nb+self.nz]
+            setattr( self, name, var)
     def _get_composite_var(self, var, order='F'):
         """
         Gets composite variables (will load into memory).
         """
         from . import cstagger as cs
-        print(var)
         if var in ['ux', 'uy', 'uz']:  # velocities
             if not hasattr(self, 'p'+ var[1]): setattr( self, 'p' + var[1],self.get_var('p' + var[1],self.snap))
             if not hasattr(self, 'r'): self.r = self.variables['r']= self.get_var('r',self.snap)
-            if getattr(self, 'n' + var[1]) < 5:
+            self.boundcut('r',self.r)
+            self.boundcut('p'+ var[1],getattr(self,'p'+ var[1]))
+            if (getattr(self, 'n' + var[1]) < 5):
                 return getattr(self,'p'+ var[1]) / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
                 rdt = self.r.dtype
@@ -416,6 +421,7 @@ class BifrostData(object):
             elif var[1:3] in ['xc', 'yc', 'zc']:   # internal energy
                 p = self.variables[var] = self.get_var(var[0:2],self.snap)
                 # initialise cstagger
+                self.boundcut(var[0:2],p)
                 if getattr(self, 'n' + var[1]) < 5:
                     return p
                 else:
@@ -424,6 +430,7 @@ class BifrostData(object):
                     return getattr(cs, var[1] + 'up')(p)
             elif var[3] in ['x', 'y', 'z'] and var[0] == 'd' and var[2] == 'd' and var[4:] in ['dn', 'up']:
                 p = self.variables[var] = self.get_var(var[1],self.snap)
+                self.boundcut(var[1],p)
                 if getattr(self, 'n' + var[3]) < 5:
                     return p*0
                 else:
@@ -432,6 +439,7 @@ class BifrostData(object):
                     return getattr(cs, 'd'+var[3:])(p)
             elif var[2] in ['x', 'y', 'z'] and var[4] in ['x', 'y', 'z'] and var[0] == 'd' and var[3] == 'd' and var[5:] in ['dn', 'up']:
                 p = self.variables[var] = self.get_var(var[1:3],self.snap)
+                self.boundcut(var[1:3],p)
                 if getattr(self, 'n' + var[4]) < 5:
                     return p*0
                 else:
