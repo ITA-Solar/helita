@@ -209,7 +209,7 @@ class EbysusData(BifrostData):
             fsuffix_b = ''
 
         mf_arr_size = 1
-        if var in self.mhdvars and self.mf_ispecies > 0:
+        if (var in self.mhdvars and self.mf_ispecies > 0) or (var in ['bx','by','bz']):
             idx = self.mhdvars.index(var)
             fsuffix_a = '.snap'
             filename = self.mf_common_file
@@ -250,6 +250,7 @@ class EbysusData(BifrostData):
 
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize  * mf_arr_size
+
         if (mf_arr_size == 1):
             return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb))
