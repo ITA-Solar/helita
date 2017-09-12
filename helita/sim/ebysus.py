@@ -19,6 +19,7 @@ class EbysusData(BifrostData):
 
 
     def _set_snapvars(self):
+        ''' Sets list of avaible variables '''
         self.snapvars = ['r', 'px', 'py', 'pz']
         self.snapevars = ['e']
         self.mhdvars = []
@@ -80,6 +81,11 @@ class EbysusData(BifrostData):
             self.mf_total_nlevel = self.params['mf_total_nlevel']
         except KeyError:
             print('warning, this idl file does not include mf_total_nlevel')
+        try:
+            filename = os.path.join(self.fdir, self.params['mf_param_file'].strip())
+            self.mf_tabparam = read_mftab_ascii(filename)
+        except KeyError:
+            print('warning, this idl file does not include mf_param_file')
             #raise KeyError('read_params: could not find mf_total_nlevel in idl file!')
 
     def _init_vars(self, *args, **kwargs):
@@ -272,3 +278,234 @@ class EbysusData(BifrostData):
             return r
         else:
             return super(EbysusData, self)._get_composite_var(var)
+
+###########
+#  TOOLS  #
+###########
+def read_mftab_ascii(filename):
+    ''' Reads mf_tabparam.in-formatted (command style) ascii file into dictionary '''
+    li = 0
+    params = {}
+    # go through the file, add stuff to dictionary
+    with open(filename) as fp:
+        for line in fp:
+            # ignore empty lines and comments
+            line = line.strip()
+            if len(line) < 1:
+                li += 1
+                continue
+            if line[0] == '#':
+                li += 1
+                continue
+            line = line.split(';')[0].split('\t')
+            #if (len(line) > 2):
+            #    print(('(WWW) read_params: line %i is invalid, skipping' % li))
+            #    li += 1
+            #    continue
+            if (np.size(line) == 1):
+                key = line
+                ii=0
+            # force lowercase because IDL is case-insensitive
+            if (np.size(line) == 2):
+                value = line[0].strip()
+                text = line[1].strip().lower()
+                try:
+                    value = int(value)
+                except:
+                    print('(WWW) read_mftab_ascii: could not find datatype in '
+                          'line %i, skipping' % li)
+                    li += 1
+                    continue
+                if ii == 0:
+                    exec('params["'+key[0]+'"] = [value,text]')
+                    ii = 1
+                else:
+                    exec('params["'+key[0]+'"] = np.vstack((params["'+key[0]+'"],[value,text]))')
+            if (np.size(line) == 3):
+                value = line[0].strip()
+                value2 = line[1].strip()
+                text = line[2].strip()
+                if key != 'species':
+                    try:
+                        value = int(value)
+                    except:
+                        print('(WWW) read_mftab_ascii: could not find datatype in '
+                                'line %i, skipping' % li)
+                else:
+                    try:
+                        value = int(value)
+                        value2 = int(value2)
+                    except:
+                        print('(WWW) read_mftab_ascii: could not find datatype in '
+                                'line %i, skipping' % li)
+                    li += 1
+                    continue
+                if ii == 0:
+                    exec('params["'+key[0]+'"] = [value,value2,text]')
+                    ii = 1
+                else:
+                    exec('params["'+key[0]+'"] = np.vstack((params["'+key[0]+'"],[value,value2,text]))')
+            if (np.size(line) > 3):
+                # int type
+                try:
+                    arr = [int(numeric_string) for numeric_string in line]
+                except:
+                    print('(WWW) read_mftab_ascii: could not find datatype in '
+                          'line %i, skipping' % li)
+                    li += 1
+                    continue
+                if ii == 0:
+                    exec('params["'+key[0]+'"] = [arr]')
+                    ii = 1
+                else:
+                    exec('params["'+key[0]+'"] = np.vstack((params["'+key[0]+'"],[arr]))')
+            li += 1
+    return params
+
+def write_mftab_ascii(filename, NSPECIES_MAX=28, SPECIES= ['H_2.atom','He_3.atom'], EOS_TABLES = ['default.dat'],
+                     REC_TABLES = ['hrec.dat'], ION_TABLES = ['hion.dat'],
+                     CROSS_SECTIONS_TABLES = [[1,1,'p-H-elast.txt'],
+                                             [1,2,'p-He.txt'],
+                                             [2,2,'He-He.txt']],
+                    CROSS_SECTIONS_TABLES_I = [],CROSS_SECTIONS_TABLES_N = [], collist=np.linspace(1,28,28)):
+    '''
+    Writes mf_tabparam.in
+
+        Parameters
+        ----------
+        filename - string
+            Name of the file to write.
+        NSPECIES_MAX - integer [28], maximum # of species
+        SPECIES - list of strings containing the name of the atom files
+        EOS_TABLES - list of strings containing the name of the eos tables (no use)
+        REC_TABLES - list of strings containing the name of the rec tables (no use)
+        ION_TABLES - list of strings containing the name of the ion tables (no use)
+        CROSS_SECTIONS_TABLES - list of strings containing the name of the cross section files from VK between ion and neutrals
+        CROSS_SECTIONS_TABLES_I - list of strings containing the name of the cross section files from VK between ions
+        CROSS_SECTIONS_TABLES_N - list of strings containing the name of the cross section files from VK  between ions
+        collist - integer vector of the species used.
+                e.g., collist = [1,2,3] will include the H, He and Li
+
+    '''
+
+    params = ['NSPECIES_MAX','SPECIES','EOS_TABLES','REC_TABLES','ION_TABLES',
+            'COLISIONS_TABLES','CROSS_SECTIONS_TABLES','COLISIONS_MAP',
+            'COLISIONS_TABLES_N','CROSS_SECTIONS_TABLES_N','COLISIONS_MAP_N',
+            'COLISIONS_TABLES_I','CROSS_SECTIONS_TABLES_I','COLISIONS_MAP_I']
+    coll_vars_i = ['p','hei','lii','bei','bi','ci','n_i','oi','fi','nai','mgi','ali','sii','pi','s_i','cli','ari','ki','cai','sci','tii','vi','cri','mni','fei','coi','nii','cui']
+    coll_vars_n = ['h','he','li','be','b','c','n','o','f','na','mg','al','si','p','s','cl','ar','k','ca','sc','ti','v','cr','mn','fe','co','ni','cu']
+
+    coll_tabs_in=[]
+    coll_tabs_n=[]
+    coll_tabs_i=[]
+    coll_vars_list=[]
+
+    for i in range(0,NSPECIES_MAX):
+        for j in range(0,NSPECIES_MAX):
+            coll_tabs_in.append('momex_vk_'+coll_vars_i[i]+'_'+coll_vars_n[j]+'.dat')
+            coll_tabs_i.append('momex_vk_'+coll_vars_i[i]+'_'+coll_vars_i[j]+'.dat')
+            coll_tabs_n.append('momex_vk_'+coll_vars_n[i]+'_'+coll_vars_n[j]+'.dat')
+
+    if (np.shape(collist) != np.shape(SPECIES)):
+        print('write_mftab_ascii: WARNING the list of atom files is different \n than the selected list of species in collist')
+
+    CROSS_SECTIONS_TABLES_I = []
+    CROSS_SECTIONS_TABLES_N = []
+    COLISIONS_MAP=np.zeros((NSPECIES_MAX,NSPECIES_MAX))
+    COLISIONS_MAP_I=np.zeros((NSPECIES_MAX,NSPECIES_MAX))
+    COLISIONS_MAP_N=np.zeros((NSPECIES_MAX,NSPECIES_MAX))
+    for j in range(1,NSPECIES_MAX+1):
+        for i in range(1,j+1):
+            COLISIONS_MAP_I[j-1,i-1] = -1
+            COLISIONS_MAP_N[j-1,i-1] = -1
+            if (i in collist) and (j in collist):
+                COLISIONS_MAP[i-1,j-1] = (i-1)*NSPECIES_MAX +j
+                coll_vars_list.append(coll_vars_n[i-1])
+                coll_vars_list.append(coll_vars_n[j-1])
+                if (i < j):
+                    COLISIONS_MAP_I[i-1,j-1] = (i-1)*NSPECIES_MAX +j
+                    COLISIONS_MAP_N[i-1,j-1] = (i-1)*NSPECIES_MAX +j
+
+    for symb in SPECIES:
+        symb=symb.split('_')[0]
+        if not(symb.lower() in coll_vars_list):
+            print('write_mftab_ascii: WARNING there may be a mismatch between the atom files and selected species.')
+            print('                   Check for species',symb.lower())
+
+    f = open(filename, 'w')
+    for head in params:
+        f.write(head+"\n")
+        if head == 'NSPECIES_MAX':
+            f.write("\t"+str(NSPECIES_MAX)+"\n")
+            f.write("\n")
+        if head == 'SPECIES':
+            li=0
+            for spc in SPECIES:
+                symb=spc.split('_')[0]
+                li += 1
+                f.write("\t"+str(li).zfill(2)+"\t"+symb+"\t"+spc+"\n")
+            f.write("\n")
+        if head == 'EOS_TABLES':
+            li=0
+            for eos in EOS_TABLES:
+                f.write("\t"+str(li).zfill(2)+"\t"+eos+"\n")
+                li += 1
+            f.write("\n")
+        if head == 'REC_TABLES':
+            li=0
+            for rec in REC_TABLES:
+                li += 1
+                f.write("\t"+str(li).zfill(2)+"\t"+rec+"\n")
+            f.write("\n")
+        if head == 'ION_TABLES':
+            li=0
+            for ion in ION_TABLES:
+                li += 1
+                f.write("\t"+str(li).zfill(2)+"\t"+ion+"\n")
+            f.write("\n")
+        if head == 'COLISIONS_TABLES':
+            li=0
+            for coll in coll_tabs_in:
+                li += 1
+                if (li in COLISIONS_MAP): f.write("\t"+str(li).zfill(2)+"\t"+str(coll)+"\n")
+            f.write("\n")
+        if head == 'COLISIONS_TABLES_I':
+            li=0
+            for coll in coll_tabs_i:
+                li += 1
+                if (li in COLISIONS_MAP_I): f.write("\t"+str(li).zfill(2)+"\t"+str(coll)+"\n")
+            f.write("\n")
+        if head == 'COLISIONS_TABLES_N':
+            li=0
+            for coll in coll_tabs_n:
+                li += 1
+                if (li in COLISIONS_MAP_N): f.write("\t"+str(li).zfill(2)+"\t"+str(coll)+"\n")
+            f.write("\n")
+        if head == 'CROSS_SECTIONS_TABLES':
+            num_cs_tab=np.shape(CROSS_SECTIONS_TABLES)[:][0]
+            for crs in range(0,num_cs_tab):
+                f.write("\t"+str(int(CROSS_SECTIONS_TABLES[crs][0])).zfill(2)+"\t"+str(int(CROSS_SECTIONS_TABLES[crs][1])).zfill(2)+"\t"+CROSS_SECTIONS_TABLES[crs][2]+"\n")
+            f.write("\n")
+        if head == 'CROSS_SECTIONS_TABLES_N':
+            num_cs_tab=np.shape(CROSS_SECTIONS_TABLES_N)[:][0]
+            for crs in range(0,num_cs_tab):
+                f.write("\t"+str(int(CROSS_SECTIONS_TABLES_N[crs][0])).zfill(2)+"\t"+str(int(CROSS_SECTIONS_TABLES_N[crs][1])).zfill(2)+"\t"+CROSS_SECTIONS_TABLES_N[crs][2]+"\n")
+            f.write("\n")
+        if head == 'CROSS_SECTIONS_TABLES_I':
+            num_cs_tab=np.shape(CROSS_SECTIONS_TABLES_I)[:][0]
+            for crs in range(0,num_cs_tab):
+                f.write("\t"+str(int(CROSS_SECTIONS_TABLES_I[crs][0])).zfill(2)+"\t"+str(int(CROSS_SECTIONS_TABLES_I[crs][1])).zfill(2)+"\t"+CROSS_SECTIONS_TABLES_I[crs][2]+"\n")
+            f.write("\n")
+        if head == 'COLISIONS_MAP':
+            for crs in range(0,NSPECIES_MAX):
+                f.write("\t"+"\t".join([str(int(COLISIONS_MAP[crs][v])).zfill(2) for v in range(0,NSPECIES_MAX)])+"\n")
+            f.write("\n")
+        if head == 'COLISIONS_MAP_I':
+            for crs in range(0,NSPECIES_MAX):
+                f.write("\t"+"\t".join([str(int(COLISIONS_MAP_I[crs][v])).zfill(2) for v in range(0,NSPECIES_MAX)])+"\n")
+            f.write("\n")
+        if head == 'COLISIONS_MAP_N':
+            for crs in range(0,NSPECIES_MAX):
+                f.write("\t"+"\t".join([str(int(COLISIONS_MAP_I[crs][v])).zfill(2) for v in range(0,NSPECIES_MAX)])+"\n")
+            f.write("\n")
+    f.close()
