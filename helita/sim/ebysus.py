@@ -316,11 +316,10 @@ def read_mftab_ascii(filename):
                           'line %i, skipping' % li)
                     li += 1
                     continue
-                if ii == 0:
-                    exec('params["'+key[0]+'"] = [value,text]')
-                    ii = 1
+                if not (key[0] in params):
+                    params[key[0]] = [value,text]
                 else:
-                    exec('params["'+key[0]+'"] = np.vstack((params["'+key[0]+'"],[value,text]))')
+                    params[key[0]] = np.vstack((params[key[0]],[value,text]))
             if (np.size(line) == 3):
                 value = line[0].strip()
                 value2 = line[1].strip()
@@ -340,11 +339,10 @@ def read_mftab_ascii(filename):
                                 'line %i, skipping' % li)
                     li += 1
                     continue
-                if ii == 0:
-                    exec('params["'+key[0]+'"] = [value,value2,text]')
-                    ii = 1
+                if not (key[0] in params):
+                    params[key[0]] = [value,value2,text]
                 else:
-                    exec('params["'+key[0]+'"] = np.vstack((params["'+key[0]+'"],[value,value2,text]))')
+                    params[key[0]] = np.vstack((params[key[0]],[value,value2,text]))
             if (np.size(line) > 3):
                 # int type
                 try:
@@ -354,11 +352,10 @@ def read_mftab_ascii(filename):
                           'line %i, skipping' % li)
                     li += 1
                     continue
-                if ii == 0:
-                    exec('params["'+key[0]+'"] = [arr]')
-                    ii = 1
+                if not (key[0] in params):
+                    params[key[0]] = [arr]
                 else:
-                    exec('params["'+key[0]+'"] = np.vstack((params["'+key[0]+'"],[arr]))')
+                    params[key[0]] = np.vstack((params[key[0]],[arr]))
             li += 1
     return params
 
@@ -509,3 +506,739 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28, SPECIES= ['H_2.atom','He_3.atom
                 f.write("\t"+"\t".join([str(int(COLISIONS_MAP_I[crs][v])).zfill(2) for v in range(0,NSPECIES_MAX)])+"\n")
             f.write("\n")
     f.close()
+
+def read_voro_ascii(filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+    ''' Reads the miscelaneous Vofonov & abundances table formatted (command style) ascii file into dictionary '''
+    li = 0
+    params = {}
+    headers=['NSPECIES_MAX','NLVLS_MAX','SPECIES']
+    # go through the file, add stuff to dictionary
+    ii = 0
+    with open(filename) as fp:
+        for line in fp:
+            # ignore empty lines and comments
+            line = line.strip()
+            if len(line) < 1:
+                li += 1
+                continue
+            if line[0] == '#':
+                li += 1
+                continue
+            line = line.split(';')[0].split('\t')
+
+            if (np.size(line) == 1):
+                if (str(line[0]) in headers):
+                    key = line
+                    ii = 0
+                else:
+                    value = line[0].strip()
+                    try:
+                        value = int(value)
+                        exec('params["'+key[0]+'"] = [value]')
+                        ii = 1
+                    except:
+                        print('(WWW) read_voro_ascii: could not find datatype in '
+                              'line %i, skipping' % li)
+                        li += 1
+                        continue
+            elif (np.size(line) > 8):
+                val_arr=[]
+                for iv in range(0,9):
+                    if (iv == 0) or (iv == 4):
+                        try:
+                            value = int(line[iv].strip())
+                            val_arr.append(value)
+                        except:
+                            print('(WWW) read_voro_ascii: could not find datatype in '
+                                'line %i, skipping' % li)
+                            li += 1
+                            continue
+                    elif (iv == 1):
+                        val_arr.append(line[iv].strip().lower())
+                    else:
+                        try:
+                            value = float(line[iv].strip())
+                            val_arr.append(value)
+
+                        except:
+                            print('(WWW) read_voro_ascii: could not find datatype in '
+                                'line %i, skipping' % li)
+                            li += 1
+                            continue
+
+                if not key[0] in params:
+                    params[key[0]] = [val_arr]
+                else:
+                    params[key[0]].append(val_arr)
+
+            else:
+                print('(WWW) read_voro_ascii: could not find datatype in '
+                      'line %i, skipping' % li)
+                li += 1
+                continue
+
+        params['SPECIES']= np.array(params['SPECIES'])
+    return params
+
+def get_abund(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',Chianti=False):
+    '''
+        Returns abundances from the voronov.dat file.
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all abundances in the file.
+            In this case, one will access to it by, e.g., var['h']
+        filename - is the abundance file, default is voronov.dat withuot Chianti data base or sun_photospheric_1998_grevesse for
+            Chianti data base.
+    '''
+    if Chianti:
+        import ChiantiPy.core as ch
+        if ('.dat' in abundance): abundance = 'sun_photospheric_1998_grevesse'
+        ion = ch.ion(atom,abundance)
+
+        return ion.Abundance
+    else:
+        atom = atom.replace("_","")
+        if (len(params) == 0):
+            params = read_voro_ascii(filename)
+
+        if (len(atom) > 0):
+            return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],8].astype(np.float)[0][0]
+        else:
+            for ii in range(0,params['NLVLS_MAX'][0]):
+                if not( any(i.isdigit() for i in params['SPECIES'][ii,1])):
+                    try:
+                        abund_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,8].astype(np.float)
+                    except:
+                        abund_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,8].astype(np.float)}
+
+            return abund_dic
+
+def get_atomweight(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+    '''
+        Returns atomic weights from the voronov.dat file.
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all atomic weights in the file.
+            In this case, one will access to it by, e.g., var['h']
+    '''
+    atom = atom.replace("_","")
+    if (len(params) == 0):
+        params = read_voro_ascii(filename)
+    if (len(atom) > 0):
+        return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],2].astype(np.float)[0][0]
+    else:
+        for ii in range(0,params['NLVLS_MAX'][0]):
+            if not( any(i.isdigit() for i in params['SPECIES'][ii,1])):
+                try:
+                    weight_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,2].astype(np.float)
+                except:
+                    weight_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,2].astype(np.float)}
+
+        return weight_dic
+
+def get_atomde(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',Chianti=True,cm1=False):
+    '''
+        Returns ionization energy dE from the voronov.dat file.
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all ionization energy dE in the file.
+            In this case, one will access to it by, e.g., var['he2']
+        cm1 - boolean and if it is true converts from eV to cm-1
+    '''
+    if cm1:
+        units=1.0/(8.621738e-5/0.695)
+    else:
+        units=1.0
+    if Chianti and atom != '':
+        import ChiantiPy.core as ch
+        ion = ch.ion(atom)
+        return ion.Ip*units
+    else:
+        atom = atom.replace("_","")
+        if (len(params) == 0):
+            params = read_voro_ascii(filename)
+
+            if (len(atom) > 0):
+                return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],3].astype(np.float)[0][0]*units
+            else:
+                for ii in range(0,params['NLVLS_MAX'][0]):
+                    try:
+                        de_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,3].astype(np.float)*units
+                    except:
+                        de_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,3].astype(np.float)*units}
+
+                return de_dic
+
+def get_atomZ(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',Chianti=True):
+    '''
+        Returns atomic number Z from the voronov.dat file.
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all iatomic number Z in the file.
+            In this case, one will access to it by, e.g., var['he2']
+    '''
+
+    if Chianti:
+        import ChiantiPy.core as ch
+
+        ion = ch.ion(atom)
+
+        return ion.Z
+    else:
+        atom = atom.replace("_","")
+        if (len(params) == 0):
+            params = read_voro_ascii(filename)
+
+        if (len(atom) > 0):
+            return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],0].astype(np.int)[0][0]
+        else:
+            for ii in range(0,params['NLVLS_MAX'][0]):
+                if not( any(i.isdigit() for i in params['SPECIES'][ii,1])):
+                    try:
+                        z_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,0].astype(np.int)
+                    except:
+                        z_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,0].astype(np.int)}
+
+            return z_dic
+
+def get_atomP(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+    '''
+        Returns P parameter for Voronov rate fitting term from the voronov.dat file.
+            The parameter P was included to better fit the particular cross-section
+            behavior for certain ions near threshold; it only takes on the value 0 or 1
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all P parameter in the file.
+            In this case, one will access to it by, e.g., var['he2']
+    '''
+    atom = atom.replace("_","")
+    if (len(params) == 0):
+        params = read_voro_ascii(filename)
+
+    if (len(atom) > 0):
+        return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],4].astype(np.int)[0][0]
+    else:
+        for ii in range(0,params['NLVLS_MAX'][0]):
+            try:
+                p_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,4].astype(np.int)
+            except:
+                p_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,4].astype(np.int)}
+
+        return p_dic
+
+def get_atomA(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+    '''
+        Returns A parameter for Voronov rate fitting term  from the voronov.dat file.
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all A parameter in the file.
+            In this case, one will access to it by, e.g., var['he2']
+     '''
+    atom = atom.replace("_","")
+    if (len(params) == 0):
+        params = read_voro_ascii(filename)
+
+    if (len(atom) > 0):
+        return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],5].astype(np.float)[0][0]
+    else:
+        for ii in range(0,params['NLVLS_MAX'][0]):
+            try:
+                a_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,5].astype(np.float)
+            except:
+                a_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,5].astype(np.float)}
+
+        return a_dic
+
+def get_atomX(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+    '''
+        Returns X parameter for Voronov rate fitting term from the voronov.dat file.
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all X parameter in the file.
+            In this case, one will access to it by, e.g., var['he2']
+    '''
+    atom = atom.replace("_","")
+    if (len(params) == 0):
+        params = read_voro_ascii(filename)
+
+    if (len(atom) > 0):
+        return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],6].astype(np.float)[0][0]
+    else:
+        for ii in range(0,params['NLVLS_MAX'][0]):
+            try:
+                x_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,6].astype(np.float)
+            except:
+                x_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,6].astype(np.float)}
+
+        return x_dic
+
+def get_atomK(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+    '''
+        Returns K parameter for Voronov rate fitting term  from the voronov.dat file.
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter of the atom of interest.
+            If atom is not defined then it returns a list of all K parameter in the file.
+            In this case, one will access to it by, e.g., var['he2']
+    '''
+    atom = atom.replace("_","")
+    if (len(params) == 0):
+        params = read_voro_ascii(filename=filename)
+
+    if (len(atom) > 0):
+        return params['SPECIES'][[np.where(params['SPECIES'][:,1] == atom)[0]],7].astype(np.float)[0][0]
+    else:
+        for ii in range(0,params['NLVLS_MAX'][0]):
+            try:
+                k_dic[params['SPECIES'][ii,1]] = params['SPECIES'][ii,7].astype(np.float)
+            except:
+                k_dic = {params['SPECIES'][ii,1]:params['SPECIES'][ii,7].astype(np.float)}
+
+        return k_dic
+
+def info_atom(atom=''):
+    '''
+    provides general information about specific atom, e.g., ionization and excitation levels etc
+
+    Parameters
+    ----------
+    atom - lower case letter of the atom of interest, e.g., 'he'
+    '''
+    import ChiantiPy.core as ch
+
+    ion = ch.ion(atom+'_1')
+    Z=ion.Z
+    wgt=get_atomweight(atom)
+    print('Atom','Z','Weight  ','FIP  ','Abnd')
+    print(atom,' ',Z,wgt,ion.FIP,ion.Abundance)
+    for ilvl in range(1,Z+1):
+        ion = ch.ion(atom+'_'+str(ilvl))
+        print('    ','ion','Level','dE (eV)','g')
+        print('    ',ion.Spectroscopic,ion.Ion,' ',ion.Ip,'g')
+        if hasattr(ion,'Elvlc'):
+            nl=len(ion.Elvlc['lvl'])
+            print('        ','Level','str    ','dE (cm-1)','g')
+            for elvl in range(0,nl):
+                print('          ',ion.Elvlc['lvl'][elvl],ion.Elvlc['pretty'][elvl],ion.Elvlc['ecmth'][elvl],'g')
+
+def get_excidE(atom='',lvl=1,params=[],Chianti=True,cm1=False):
+    '''
+        Returns ionization energy dE for excited levels
+
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following the format of read_voro_ascii)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all ionization energy dE in the file.
+            In this case, one will access to it by, e.g., var['he2']
+        cm1 - boolean and if it is true converts from eV to cm-1
+    '''
+    import ChiantiPy.core as ch
+
+    unitscm1=1.0/(8.621738e-5/0.695)
+    if cm1:
+        units=1.0
+    else:
+        units = 1./unitscm1
+    import ChiantiPy.core as ch
+    ion = ch.ion(atom)
+    if hasattr(ion,'Elvlc'):
+        return (ion.Ip*unitscm1 + ion.Elvlc['ecmth'][lvl])*units
+    else:
+        print('No Elvlc in the Chianti Data base')
+
+
+def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+    '''
+        Add voronov information at the end of the atom file.
+
+        Parameters
+        ----------
+        inputfile - name of the input atom file
+        outputfile - name of the output atom file which will include the VORONOV information
+        atom - lower case letters of the atom of interest. Make sure that it matches with the atom file.
+        vorofile - voronot table file.
+    '''
+
+    import shutil
+
+    shutil.copy(inputfile,outputfile)
+
+    params = read_voro_ascii(vorofile)
+
+    infile = open(inputfile)
+    f=open(outputfile,"w")
+    for line in infile:
+        if not ('END' in line):
+            f.write(line)
+    infile.close()
+
+    f.write("\n")
+    f.write("VORONOV \n")
+    Z = get_atomZ(atom=atom)     # where I need to add a check if atom is the same as the one in the atom file or even better use directly the atom file info for this.
+
+    f.write(str(Z) + "\n")
+    jj=1
+    for ii in range(0,params['NLVLS_MAX'][0]):
+        if (atom in params['SPECIES'][ii,1]):
+            f.write('\t' + str(jj) +'\t' + str(jj + 1) +'\t' + str(get_atomde(atom=atom)) + '\t' + str(get_atomP(atom=atom)) + '\t' +
+                        str(get_atomA(atom=atom)) + '\t' + str(get_atomX(atom=atom)) + '\t'+ str(get_atomK(atom=atom)) + '\n')
+            jj += 1
+    f.write("END")
+    f.close()
+
+def read_atom_ascii(atomfile):
+    ''' Reads the atom (command style) ascii file into dictionary '''
+    li = 0
+    params = {}
+    # go through the file, add stuff to dictionary
+    ii = 0
+    kk = 0
+    f=open(atomfile)
+    start = True
+    key=''
+    headers = ['GENCOL','CEXC','AR85-CDI','TEMP','RECO','VORONOV','EMASK']
+    for line in iter(f):
+        # ignore empty lines and comments JMS THIS IS BAD IDEA...
+        line = line.strip()
+        if (start):
+            if len(line) < 1:
+                li += 1
+                continue
+            if line[0] == '#':
+                li += 1
+                continue
+            else:
+                start = False
+                ii = 1
+
+        line = line.split(';')[0].split(' ')
+        while '' in line:
+            line.remove('')
+        if (np.size(line) == 1) and (ii == 1):
+            params = {'atom':line[0].strip()}
+            ii += 1
+        elif (ii == 2) :
+            if line[0] == '#':
+                li += 1
+                continue
+            elif (np.size(line) == 2):
+                params['abund'] = line[0].strip()
+                params['weight'] = line[1].strip()
+                ii += 1
+                li += 1
+                continue
+        elif (ii == 3):
+            if (np.size(line) == 1 and line[0].strip() in headers):
+                ii = 5
+                li += 1
+                key = line[0].strip().lower()
+                continue
+            if (line[0] == '#'):
+                if (np.size(line) == 1):
+                    li += 1
+                    ii += 1
+                    continue
+                elif (line[1].strip().lower() != 'nk'):
+                    li += 1
+                    ii += 1
+                    continue
+                else:
+                    li += 1
+                    continue
+            elif (np.size(line) == 4):
+                params['nk'] = line[0].strip()
+                params['nlin'] = line[1].strip()
+                params['ncnt'] = line[2].strip()
+                params['nfix'] = line[3].strip()
+                li += 1
+                continue
+            elif( np.size(line) > 4):
+                    string=[" ".join(line[v].strip() for v in range(3,np.size(line)-3))]
+                    if 'lvl' in params:
+                        params['lvl'] = np.vstack((params['lvl'],[float(line[0].strip()),float(line[1].strip()),string[0],int(line[-2].strip()),int(line[-1].strip())]))
+                    else:
+                        params['lvl'] = [float(line[0].strip()),float(line[1].strip()),string[0],int(line[-2].strip()),int(line[-1].strip())]
+                    li += 1
+                    continue
+        elif(ii == 4):
+            if (np.size(line) == 1 and line[0].strip() in headers):
+                ii = 5
+                li += 1
+                key = line[0].strip().lower()
+                continue
+            if (np.size(line) == 1 and line[0].strip() == '#'):
+                li += 1
+                continue
+            if (line[0].strip() == '#' and line[1].strip().lower() == 'i'):
+                li += 1
+                ii4 = True
+                continue
+            elif (np.size(line) == 2) and ii4:
+                bins=line[0].strip()+line[1].strip()
+                ii4 = False
+            elif (line[0].strip() == '#' and line[1].strip().lower() == 'bin'):
+                li += 1
+                ii4b = True
+                continue
+            elif (np.size(line) == 2) and ii4b:
+                if not('photioncross' in params):
+                    params['photioncross'] = {}
+                try:
+                    params['photioncross'][bins] = np.vstack((params['photioncross'][bins],[int(line[0].strip()),float(line[1].strip())]))
+                except:
+                    params['photioncross'][bins] = [int(line[0].strip()),float(line[1].strip())]
+
+        elif(line[0].strip().lower() == 'gencol'):
+            key = 'gencol'
+            li += 1
+            continue
+            ### No clue what is going to be here...
+        elif(key == 'gencol' and line[0].strip() == '#'):
+            li += 1
+            continue
+        elif(line[0].strip().lower() == 'cexc'):
+            key='cexc'
+            niter=0
+            li += 1
+            continue
+        elif(key == 'cexc') and niter == 0:
+            niter=int(line[0].strip())
+            itercexc = 0
+            li += 1
+            continue
+        elif((key == 'cexc') and line[0].strip() == '#'):
+            li += 1
+            continue
+        elif(key == 'cexc') and niter > itercexc:
+            if (itercexc == 0):
+                params['cexc'] = float(line[0].strip())
+            else:
+                params['cexc'] = np.vstack((params['cexc'],float(line[0].strip())))
+            li += 1
+            itercexc += 1
+            continue
+        elif(line[0].strip().lower() == 'ar85-cdi'):
+            key = 'ar85-cdi'
+            niter=0
+            li += 1
+            continue
+        elif(key == 'ar85-cdi') and niter == 0 :
+            niter=1
+            temp= [int(line[0].strip()),int(line[1].strip())]
+            li += 1
+            continue
+        elif(key == 'ar85-cdi') and niter == 1 :
+            niter=2
+            temp= [temp,[int(line[0].strip())]]
+            li += 1
+            continue
+        elif(key == 'ar85-cdi') and niter == 2 :
+            niter=3
+            temp= [temp[0],temp[1],[float(line[v].strip()) for v in range(0,5)]]
+            if key in params:
+                params[key]=np.vstack((params[key],[temp]))
+            else:
+                params[key] = [temp]
+            li += 1
+            continue
+        elif(line[0].strip().lower() == 'temp'):
+            key = 'temp'
+            nitert=0
+            li += 1
+            continue
+        elif(key == 'temp') and nitert == 0 and line[0].strip().lower() != 'reco':
+            nitert=int(line[0].strip())
+            temp=np.zeros((nitert))
+            itertemp = 0
+            li += 1
+            continue
+        elif(key == 'temp') and nitert > itertemp and line[0].strip().lower() != 'reco':
+            for v in range(0,np.size(line)):
+                temp[itertemp]=float(line[v].strip())
+                itertemp += 1
+            if (nitert == itertemp):
+                params[key] = temp
+            li += 1
+            continue
+        elif(line[0].strip().lower() == 'reco'):
+            key = 'reco'
+            itereco = 0
+            li += 1
+            continue
+        elif(key == 'reco') and itereco == 0 :
+            ij=[int(line[0].strip()),int(line[1].strip())]
+            reco=np.zeros((nitert))
+            for v in range(2,np.size(line)):
+                reco[itereco]=float(line[v].strip())
+                itereco += 1
+            li += 1
+            continue
+        elif(key == 'reco') and nitert > itereco:
+            for v in range(0,np.size(line)):
+                reco[itereco]=float(line[v].strip())
+                itereco += 1
+            if(key == 'reco') and nitert == itereco:
+                reco=[ij,[reco]]
+                if key in params:
+                    params[key]=np.vstack((params[key],[reco]))
+                else:
+                    params[key] = [reco]
+            li += 1
+            continue
+        elif(line[0].strip().lower() == 'voronov'):
+            key = 'voronov'
+            z=0
+            li += 1
+            continue
+        elif(key == 'voronov') and z == 0:
+            z=int(line[0].strip)
+            vorpar=np.array((z,7))
+            iterv = 0
+            li += 1
+            continue
+        elif(key == 'voronov') and z > 0:
+            vorpar[iterv,:] = [int(line[0].strip),int(line[1].strip),float(line[2].strip),int(line[3].strip),float(line[4].strip),float(line[5].strip),float(line[6].strip)]
+            li += 1
+            continue
+
+    return params
+def write_atom_ascii(atomfile,atom):
+    ''' Writes the atom (command style) ascii file into dictionary '''
+    text=['# March 19  2014: \n' +
+        '# The recombination rate that is added as an extra rate is based on a \n ' +
+        '# temporal average from the he33 non-eq radyn run. The temp. grid \n ' +
+        '# is extended to cover a temp. range 1 000 - 10 000 000 K. \n ' +
+        '# \n ' +
+        '# This is the bifrost version of the atomfile. \n ' +
+        '# It is identical to the radyn-version file with one exception: \n ' +
+        '# photoionization cross sections are given for bins. Number of bins \n ' +
+        '# and bin grid is set in the hydrogen file. \n ' +
+        '# \n ' +
+        '# edit april 23 2014:  \n ' +
+        '# removed the AR85-CEA \n ' +
+        '# \n ' +
+        '# edit may 19 2014: \n ' +
+        '# added collision coeff. for 304-transition. \n ' +
+        '# \n ' +
+        '# edit july 1 2014: \n ' +
+        '# changed collisional excitation rate to 5 degree poly fit. \n ' +
+        '# \n ']
+    z=get_atomZ(atom=atom)
+    abund=get_abund(atom=atom)
+    awgt=get_atomweight(atom=atom)
+    nk=z+1
+    ncont=z
+    nlin=0 # Numero de lineas?
+    nfix=0
+    enerlvl = np.zeros(nk)
+    for iv in range(1,nk):
+        if iv > 1:
+            alvl=str(iv)
+        else:
+            alvl = ''
+        print(atom+alvl)
+        enerlvl[iv] = get_atomde(atom=atom+'_'+alvl,cm1=True) # JMS eventually we could use get_excidE
+    g = np.zeros(nk) #No clue where to get those...
+    levelname = ['noclue' for v in range(0,nk)]
+    phcross=[0.00000000000,0.00000000000, 4.9089501e-18, 1.6242972e-18, 1.1120017e-18 ,  9.3738273e-19] # No clue where to get those.
+    nbin=len(phcross)
+    f=open(atomfile,"w")
+    f.write(str(text[0]))
+    f.write(atom.upper() + "\n")
+    text=['# nk is number of levels, continuum included \n' +
+        '# nlin is number of spectral lines in detail \n' +
+        '# ncont is number of continua in detail \n ' +
+        '# nfix is number of fixed transitions \n' +
+        '#  ABUND    AWGT \n']
+    f.write(str(text[0]))
+    f.write('    ' + str(abund) + '  ' +str(awgt) + '\n')
+    f.write('#  NK NLIN NCNT NFIX \n')
+    f.write('    ' + str(nk) + '  ' +str(nlin) + '  '+ str(ncont) + '  ' +str(nfix) + '\n')
+    for iv in range(0,nk):
+        f.write('    ' + str(enerlvl[iv]) + '  ' +str(g[iv]) + '  '+ levelname[iv] + '  ' +str(iv) + '  ' + str(iv)+ '\n') # the two iv are wrong at the end...
+
+    text=['# \n' +
+        '# Mon Mar 17 12:01:26 2014 \n' +
+        '# photoionization cross sections for helium continua  \n' +
+        '# number of bins, boundaries and hydrogen data in hydrogen file \n' +
+        '# \n']
+    f.write(str(text[0]))
+    for iv in range(0,nk-1):
+        f.write('# i j \n')
+        f.write('  ' + str(iv+1) + '  ' + str(iv + 2) + ' \n')
+        f.write('# bin           sigma \n')
+        for it in range(0,nbin):
+            f.write('  ' + str(it) + '  ' + str(phcross[it]) + ' \n')
+    f.write(' GENCOL \n')
+    text = ['# Collisional excitation 304  \n ' +
+        '# data from Chianti. Maximum error about 3%. \n ' +
+        '# upsilon as function of (natural) logarithmic temp. \n ' +
+        '# rate coefficient: c = ne * upsilon * 8.63e-6 / sqrt(T) * exp(-E/kt) \n ']
+    f.write(str(text[0]))
+    f.write(' CEXC \n')
+    ncexc=nbin # No clue how to get this.
+    cexc=[5.9381e+00, -2.8455e+00,5.4103e-01,-4.9805e-02,2.1959e-03,-3.6167e-05]
+    f.write('   ' + str(ncexc) + '\n')
+    for iv in range(0,ncexc):
+        f.write('   ' + str(cexc[iv]) + '\n')
+    f.write('# \n')
+    AR85 = [24.60, 17.80, -11.00, 7.00, -23.20] # No clue how to get this.
+    for iv in range(0,nk-1):
+        f.write('AR85-CDI \n')
+        f.write('  ' + str(iv+1) + '  ' + str(iv + 2) + ' \n')
+        f.write('  ' + str(1) + ' \n') # No clue how to get this.
+        for it in range(0,5):
+            f.write('   ' + str(AR85[it]))
+        f.write('\n')
+    f.write(' TEMP \n')
+    temp=[1000.0000,1063.7600,1131.6000,1203.7500, 1280.5100]
+    f.write('   ' + str(len(temp)) + '\n')
+    it=0
+    while it < len(temp):
+        for iv in range(0,5):
+            f.write('   ' + str(temp[it]))
+            it += 1
+            if it == len(temp): continue
+        f.write('\n')
+    reco=[1.2960009e-13,1.2917243e-13,1.2871904e-13,1.2823854e-13,1.2772931e-13]
+    for iv in range(0,nk-1):
+        f.write(' RECO \n')
+        f.write('  ' + str(iv+1) + '  ' + str(iv + 2) + ' \n')
+        it=0
+        while it < len(reco):
+            for iv in range(0,5):
+                f.write('   ' + str(reco[it]))
+                it += 1
+                if it == len(reco): continue
+            f.write('\n')
+    f.write('END')
+    f.close()
+
+    import shutil
+    shutil.copy(atomfile,'temp.atom')
+
+    add_voro_atom('temp.atom',atomfile,atom=atom)
