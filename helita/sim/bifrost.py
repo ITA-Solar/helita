@@ -428,10 +428,10 @@ class BifrostData(object):
                     rdt = p.dtype
                     cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
                     return getattr(cs, var[1] + 'up')(p)
-            elif var[3] in ['x', 'y', 'z'] and var[0] == 'd' and var[2] == 'd' and var[4:] in ['dn', 'up']:
+            elif var[-3] in ['x', 'y', 'z'] and var[0] == 'd' and var[-4] == 'd' and var[-2:] in ['dn', 'up']:
                 p = self.variables[var] = self.get_var(var[1],self.snap)
-                self.boundcut(var[1],p)
-                if getattr(self, 'n' + var[3]) < 5:
+                self.boundcut(var[1:-4],p)
+                if getattr(self, 'n' + var[-3]) < 5:
                     return p*0
                 else:
                     rdt = p.dtype
