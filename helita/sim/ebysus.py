@@ -912,220 +912,286 @@ def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bif
 
 def read_atom_ascii(atomfile):
     ''' Reads the atom (command style) ascii file into dictionary '''
-    li = 0
-    params = {}
-    # go through the file, add stuff to dictionary
-    ii = 0
-    kk = 0
-    f=open(atomfile)
-    start = True
-    key=''
-    headers = ['GENCOL','CEXC','AR85-CDI','TEMP','RECO','VORONOV','EMASK']
-    for line in iter(f):
-        # ignore empty lines and comments JMS THIS IS BAD IDEA...
-        line = line.strip()
-        if (start):
-            if len(line) < 1:
-                li += 1
-                continue
-            if line[0] == '#':
-                li += 1
-                continue
-            else:
-                start = False
-                ii = 1
-
+    def readnextline(f,lp):
+        line=f.readline()
+        print('d',line)
+        while len(line) < 1 or line[0] == '#' or line[0] == '*':
+            line=f.readline()
+            lp += 1
         line = line.split(';')[0].split(' ')
         while '' in line:
             line.remove('')
+        return line,lp+1
+    li = 0
+    params = {}
+    # go through the file, add stuff to dictionary
+    ii = 1
+    kk = 0
+    bins=0
+    ncon=0
+    nlin=0
+    nk=0
+    f=open(atomfile)
+    start = True
+    key=''
+    headers = ['GENCOL','CEXC','AR85-CDI','AR85-CEA','AR85-CH','AR85-CHE','CI','CE','CP','OHM','BURGESS','SPLUPS','SHULL82','TEMP','RECO','VORONOV','EMASK'] #Missing AR85-RR, RADRAT, SPLUPS5, I think AR85-CHE is not used in OOE
+    headerslow = ['gencol','cexc','ar85-cdi','ar85-cea','ar85-ch','ar85-che','ci','ce','cp','ohm','burgess','slups','shull82','temp','reco','voronov','emask']
+    for line in iter(f):
+        # ignore empty lines and comments 
+        line = line.strip()
+        if len(line) < 1:
+            li += 1
+            continue
+        if line[0] == '#' or line[0] == '*':
+            li += 1
+            continue
+
+        line = line.split(';')[0].split(' ')
+
+        if line[0].strip().lower() in headerslow:
+            break
+        while '' in line:
+            line.remove('')
+
         if (np.size(line) == 1) and (ii == 1):
             params = {'atom':line[0].strip()}
-            ii += 1
+            ii = 2
+            li += 1
+            continue
         elif (ii == 2) :
             if line[0] == '#':
                 li += 1
                 continue
             elif (np.size(line) == 2):
-                params['abund'] = line[0].strip()
-                params['weight'] = line[1].strip()
+                params['abund'] = float(line[0].strip())
+                params['weight'] = float(line[1].strip())
                 ii += 1
                 li += 1
                 continue
         elif (ii == 3):
-            if (np.size(line) == 1 and line[0].strip() in headers):
-                ii = 5
-                li += 1
-                key = line[0].strip().lower()
-                continue
-            if (line[0] == '#'):
-                if (np.size(line) == 1):
-                    li += 1
-                    ii += 1
-                    continue
-                elif (line[1].strip().lower() != 'nk'):
-                    li += 1
-                    ii += 1
-                    continue
-                else:
-                    li += 1
-                    continue
-            elif (np.size(line) == 4):
-                params['nk'] = line[0].strip()
-                params['nlin'] = line[1].strip()
-                params['ncnt'] = line[2].strip()
-                params['nfix'] = line[3].strip()
-                li += 1
+            li += 1
+            if (np.size(line) == 4):
+                params['nk'] = int(line[0].strip())
+                params['nlin'] = int(line[1].strip())
+                params['ncnt'] = int(line[2].strip())
+                params['nfix'] = int(line[3].strip())
                 continue
             elif( np.size(line) > 4):
+                if nk < int(params['nk']):
                     string=[" ".join(line[v].strip() for v in range(3,np.size(line)-3))]
+                    nk += 1
                     if 'lvl' in params:
                         params['lvl'] = np.vstack((params['lvl'],[float(line[0].strip()),float(line[1].strip()),string[0],int(line[-2].strip()),int(line[-1].strip())]))
                     else:
                         params['lvl'] = [float(line[0].strip()),float(line[1].strip()),string[0],int(line[-2].strip()),int(line[-1].strip())]
-                    li += 1
                     continue
+                elif nlin < int(params['nlin']):
+                    nlin += 1
+                    if len(line) > 6: # this is for OOE standards
+                        if 'line' in params:
+                            params['line'] = np.vstack((params['line'],[int(line[0].strip()),int(line[1].strip()),float(line[2].strip()),int(line[3].strip()),float(line[4].strip()),float(line[5].strip()),int(line[6].strip()),float(line[7].strip()),float(line[8].strip()),float(line[9].strip())]))
+                        else:
+                            params['line'] = [int(line[0].strip()),int(line[1].strip()),float(line[2].strip()),int(line[3].strip()),float(line[4].strip()),float(line[5].strip()),int(line[6].strip()),float(line[7].strip()),float(line[8].strip()),float(line[9].strip())]
+                    else: # this is for HION, HELIUM or MF standards
+                        if 'line' in params:
+                            params['line'] = np.vstack((params['line'],[int(line[0].strip()),int(line[1].strip()),float(line[2].strip()),int(line[3].strip()),float(line[4].strip()),line[5].strip()]))
+                        else:
+                            params['line'] = [int(line[0].strip()),int(line[1].strip()),float(line[2].strip()),int(line[3].strip()),float(line[4].strip()),line[5].strip()]
+                    continue
+                elif ncon < int(params['ncnt']):
+                    ncon += 1
+                    if len(line) > 2: # this is for HION standards
+                        if 'cont' in params:
+                            params['cont'] = np.vstack((params['cont'],[int(line[0].strip()),int(line[1].strip()),float(line[2].strip()),int(line[3].strip()),float(line[4].strip()),line[5].strip()]))
+                        else:
+                            params['cont'] = [int(line[0].strip()),int(line[1].strip()),float(line[2].strip()),int(line[3].strip()),float(line[4].strip()),line[5].strip()]
+                    else:
+                        ii = 4 #this is for Helium format
+                    continue
+                if nk == int(params['nk'])-1 and nlin == int(params['nlin'])-1 and ncnt == int(params['ncon'])-1:
+                    ii = 4
+                continue
         elif(ii == 4):
-            if (np.size(line) == 1 and line[0].strip() in headers):
-                ii = 5
-                li += 1
-                key = line[0].strip().lower()
-                continue
-            if (np.size(line) == 1 and line[0].strip() == '#'):
-                li += 1
-                continue
-            if (line[0].strip() == '#' and line[1].strip().lower() == 'i'):
-                li += 1
-                ii4 = True
-                continue
-            elif (np.size(line) == 2) and ii4:
-                bins=line[0].strip()+line[1].strip()
-                ii4 = False
-            elif (line[0].strip() == '#' and line[1].strip().lower() == 'bin'):
-                li += 1
-                ii4b = True
-                continue
-            elif (np.size(line) == 2) and ii4b:
+            li += 1
+            if (np.size(line) ==1):
+                if kk == 0:
+                    nbin=int(line[0].strip())
+                    bin_euv = np.zeros(nbin)
+                else:
+                    bin_euv[kk-1] = float(line[0].strip)
+                kk += 1
+                params['bin_euv'] = [nbin,[bin_euv]]
+                if kk == 7: kk = 0
+            if (np.size(line) == 2):
+                if kk == 7: kk = 0
+                if kk == 0:
+                    kk += 1
+                    tr=line[0].strip()+line[1].strip()
+                    continue
+                kk += 1
+
                 if not('photioncross' in params):
                     params['photioncross'] = {}
                 try:
-                    params['photioncross'][bins] = np.vstack((params['photioncross'][bins],[int(line[0].strip()),float(line[1].strip())]))
+                    params['photioncross'][tr] = np.vstack((params['photioncross'][tr],[int(line[0].strip()),float(line[1].strip())]))
                 except:
-                    params['photioncross'][bins] = [int(line[0].strip()),float(line[1].strip())]
+                    params['photioncross'][tr] = [int(line[0].strip()),float(line[1].strip())]
 
-        elif(line[0].strip().lower() == 'gencol'):
-            key = 'gencol'
-            li += 1
-            continue
-            ### No clue what is going to be here...
-        elif(key == 'gencol' and line[0].strip() == '#'):
-            li += 1
-            continue
-        elif(line[0].strip().lower() == 'cexc'):
-            key='cexc'
-            niter=0
-            li += 1
-            continue
-        elif(key == 'cexc') and niter == 0:
-            niter=int(line[0].strip())
-            itercexc = 0
-            li += 1
-            continue
-        elif((key == 'cexc') and line[0].strip() == '#'):
-            li += 1
-            continue
-        elif(key == 'cexc') and niter > itercexc:
-            if (itercexc == 0):
-                params['cexc'] = float(line[0].strip())
-            else:
-                params['cexc'] = np.vstack((params['cexc'],float(line[0].strip())))
-            li += 1
-            itercexc += 1
-            continue
-        elif(line[0].strip().lower() == 'ar85-cdi'):
-            key = 'ar85-cdi'
-            niter=0
-            li += 1
-            continue
-        elif(key == 'ar85-cdi') and niter == 0 :
-            niter=1
-            temp= [int(line[0].strip()),int(line[1].strip())]
-            li += 1
-            continue
-        elif(key == 'ar85-cdi') and niter == 1 :
-            niter=2
-            temp= [temp,[int(line[0].strip())]]
-            li += 1
-            continue
-        elif(key == 'ar85-cdi') and niter == 2 :
-            niter=3
-            temp= [temp[0],temp[1],[float(line[v].strip()) for v in range(0,5)]]
-            if key in params:
-                params[key]=np.vstack((params[key],[temp]))
-            else:
-                params[key] = [temp]
-            li += 1
-            continue
-        elif(line[0].strip().lower() == 'temp'):
-            key = 'temp'
-            nitert=0
-            li += 1
-            continue
-        elif(key == 'temp') and nitert == 0 and line[0].strip().lower() != 'reco':
-            nitert=int(line[0].strip())
-            temp=np.zeros((nitert))
-            itertemp = 0
-            li += 1
-            continue
-        elif(key == 'temp') and nitert > itertemp and line[0].strip().lower() != 'reco':
-            for v in range(0,np.size(line)):
-                temp[itertemp]=float(line[v].strip())
-                itertemp += 1
-            if (nitert == itertemp):
-                params[key] = temp
-            li += 1
-            continue
-        elif(line[0].strip().lower() == 'reco'):
-            key = 'reco'
-            itereco = 0
-            li += 1
-            continue
-        elif(key == 'reco') and itereco == 0 :
-            ij=[int(line[0].strip()),int(line[1].strip())]
-            reco=np.zeros((nitert))
-            for v in range(2,np.size(line)):
-                reco[itereco]=float(line[v].strip())
-                itereco += 1
-            li += 1
-            continue
-        elif(key == 'reco') and nitert > itereco:
-            for v in range(0,np.size(line)):
-                reco[itereco]=float(line[v].strip())
-                itereco += 1
-            if(key == 'reco') and nitert == itereco:
-                reco=[ij,[reco]]
+    if not 'bin_euv' in params:
+        params['bin_euv'] = [6,[911.7,753.143,504.0,227.800,193.919,147.540,20.0]] #JMS default from HION, however, this should be check from HION.
+    nl=len(f.readlines())
+    f.close()
+    f=open(atomfile)
+    jj=0
+    while (jj < li):
+        line, jj = readnextline(f,jj)
+
+    lp=jj
+
+    for lp in range(li,nl):
+
+        line, lp = readnextline(f,lp)
+        if(line[0].strip().lower() == 'end'):
+            break
+        if line[0].strip().lower() in headerslow:
+            if(line[0].strip().lower() == 'gencol'):
+                key = 'gencol'
+                continue
+            elif(line[0].strip().lower() == 'cexc'): ## JMS we should add wavelength bins here.
+                key='cexc'
+                niter=0
+                line, lp = readnextline(f,lp)
+                niter=int(line[0].strip())
+                for itercexc in range(0,niter):
+                    line, lp = readnextline(f,lp)
+                    lp += 1
+                    if (itercexc == 0):
+                        params['cexc'] = float(line[0].strip())
+                    else:
+                        params['cexc'] = np.vstack((params['cexc'],float(line[0].strip())))
+
+            elif(line[0].strip().lower() == 'ar85-cdi'):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                temp0 = [int(line[0].strip()),int(line[1].strip())]
+                line, lp = readnextline(f,lp)
+                niter = int(line[0].strip())
+                for iterar in range(0,niter):
+                    line, lp = readnextline(f,lp)
+                    if iterar == 0:
+                        temp= [float(line[v].strip()) for v in range(0,5)]
+                    else:
+                        temp = np.vstack(temp,[float(line[v].strip()) for v in range(0,5)])
+                temp=[[temp0],niter,[temp]]
+                if key in params:
+                    params[key]=np.vstack((params[key],[temp]))
+                else:
+                    params[key] = [temp]
+
+            elif(line[0].strip().lower() == 'ar85-cea' or line[0].strip().lower() == 'burgess'):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                temp0 = [int(line[0].strip()),int(line[1].strip())]
+                line, lp = readnextline(f,lp)
+                temp= float(line[v].strip())
+                temp=[[temp0],temp]
+                if key in params:
+                    params[key]=np.vstack((params[key],[temp]))
+                else:
+                    params[key] = [temp]
+
+            elif(line[0].strip().lower() == 'ar85-ch') or (line[0].strip().lower() == 'ar85-che'):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                temp0 = [int(line[0].strip()),int(line[1].strip())]
+                line, lp = readnextline(f,lp)
+                temp= [float(line[v].strip()) for v in range(0,6)]
+                temp=[[temp0],[temp]]
+                if key in params:
+                    params[key]=np.vstack((params[key],[temp]))
+                else:
+                    params[key] = [temp]
+
+            elif(line[0].strip().lower() == 'splups9'):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                temp = [[int(line[v].strip()) for v in range(0,3)],[float(line[v].strip()) for v in range(3,15)]]
+                if key in params:
+                    params[key]=np.vstack((params[key],[temp]))
+                else:
+                    params[key] = [temp]
+            elif(line[0].strip().lower() == 'splups'):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                temp = [[int(line[v].strip()) for v in range(0,3)],[float(line[v].strip()) for v in range(3,11)]]
+                if key in params:
+                    params[key]=np.vstack((params[key],[temp]))
+                else:
+                    params[key] = [temp]
+
+            elif(line[0].strip().lower() == 'shull82'):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                temp = [[int(line[v].strip()) for v in range(0,2)],[float(line[v].strip()) for v in range(2,9)]]
+                line, lp = readnextline(f,lp)
+                temp = [temp,[float(line[0].strip())]]
+                if key in params:
+                    params[key]=np.vstack((params[key],[temp]))
+                else:
+                    params[key] = [temp]
+
+            elif(line[0].strip().lower() == 'voronov'):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                z=int(line[0].strip)
+                line, lp = readnextline(f,lp)
+                vorpar=np.array((z,7))
+                vorpar[iterv,:] = [int(line[0].strip),int(line[1].strip),float(line[2].strip),int(line[3].strip),float(line[4].strip),float(line[5].strip),float(line[6].strip)]
+                continue
+
+            elif(line[0].strip().lower() == 'temp'):
+                key = 'temp'
+                line, lp = readnextline(f,lp)
+                nitert=int(line[0].strip())
+                temp=np.zeros((nitert))
+                itertemp = 0
+                while itertemp < nitert:
+                    line, lp = readnextline(f,lp)
+                    for v in range(0,np.size(line)):
+                        temp[itertemp]=float(line[v].strip())
+                        itertemp += 1
+                temp=[[''],[nitert],[temp]]
+                if key in params:
+                    params[key]=np.vstack((params[key],[temp]))
+                else:
+                    params[key] = [temp]
+                continue
+
+            elif(line[0].strip().lower() in ['reco','ci','ohm','ce','cp']):
+                key = line[0].strip().lower()
+                line, lp = readnextline(f,lp)
+                params['temp'][-1][0] = key
+                ij=[int(line[0].strip()),int(line[1].strip())]
+                itertemp = 0
+                reco=np.zeros((nitert))
+                for v in range(2,np.size(line)):
+                    reco[itertemp]=float(line[v].strip())
+                    itertemp += 1
+                while itertemp < nitert:
+                    line, lp = readnextline(f,lp)
+                    for v in range(0,np.size(line)):
+                        reco[itertemp]=float(line[v].strip())
+                        itertemp += 1
+                reco=[ij,reco]
                 if key in params:
                     params[key]=np.vstack((params[key],[reco]))
                 else:
                     params[key] = [reco]
-            li += 1
-            continue
-        elif(line[0].strip().lower() == 'voronov'):
-            key = 'voronov'
-            z=0
-            li += 1
-            continue
-        elif(key == 'voronov') and z == 0:
-            z=int(line[0].strip)
-            vorpar=np.array((z,7))
-            iterv = 0
-            li += 1
-            continue
-        elif(key == 'voronov') and z > 0:
-            vorpar[iterv,:] = [int(line[0].strip),int(line[1].strip),float(line[2].strip),int(line[3].strip),float(line[4].strip),float(line[5].strip),float(line[6].strip)]
-            li += 1
-            continue
+                continue
 
     return params
+
+
 def write_atom_ascii(atomfile,atom):
     ''' Writes the atom (command style) ascii file into dictionary '''
     text=['# March 19  2014: \n' +
@@ -1160,7 +1226,6 @@ def write_atom_ascii(atomfile,atom):
             alvl=str(iv)
         else:
             alvl = ''
-        print(atom+alvl)
         enerlvl[iv] = get_atomde(atom=atom+'_'+alvl,cm1=True) # JMS eventually we could use get_excidE
     g = np.zeros(nk) #No clue where to get those...
     levelname = ['noclue' for v in range(0,nk)]
