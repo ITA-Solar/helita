@@ -601,6 +601,7 @@ def get_abund(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC
         return ion.Abundance
     else:
         atom = atom.replace("_","")
+        if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
         if (len(params) == 0):
             params = read_voro_ascii(filename)
 
@@ -628,6 +629,7 @@ def get_atomweight(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT
             In this case, one will access to it by, e.g., var['h']
     '''
     atom = atom.replace("_","")
+    if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
     if (len(params) == 0):
         params = read_voro_ascii(filename)
     if (len(atom) > 0):
@@ -660,10 +662,11 @@ def get_atomde(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MIS
         units=1.0
     if Chianti and atom != '':
         import ChiantiPy.core as ch
-        ion = ch.ion(atom)
+        ion = ch.ion(atom.lower())
         return ion.Ip*units
     else:
         atom = atom.replace("_","")
+        if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
         if (len(params) == 0):
             params = read_voro_ascii(filename)
 
@@ -693,11 +696,11 @@ def get_atomZ(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC
     if Chianti:
         import ChiantiPy.core as ch
 
-        ion = ch.ion(atom)
-
+        ion = ch.ion(atom.lower())
         return ion.Z
     else:
         atom = atom.replace("_","")
+        if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
         if (len(params) == 0):
             params = read_voro_ascii(filename)
 
@@ -727,6 +730,7 @@ def get_atomP(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC
             In this case, one will access to it by, e.g., var['he2']
     '''
     atom = atom.replace("_","")
+    if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
     if (len(params) == 0):
         params = read_voro_ascii(filename)
 
@@ -753,6 +757,7 @@ def get_atomA(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC
             In this case, one will access to it by, e.g., var['he2']
      '''
     atom = atom.replace("_","")
+    if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
     if (len(params) == 0):
         params = read_voro_ascii(filename)
 
@@ -779,6 +784,7 @@ def get_atomX(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC
             In this case, one will access to it by, e.g., var['he2']
     '''
     atom = atom.replace("_","")
+    if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
     if (len(params) == 0):
         params = read_voro_ascii(filename)
 
@@ -805,6 +811,8 @@ def get_atomK(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC
             In this case, one will access to it by, e.g., var['he2']
     '''
     atom = atom.replace("_","")
+    if len(''.join(x for x in atom if x.isdigit())) == 1: atom = atom.replace("1","")
+
     if (len(params) == 0):
         params = read_voro_ascii(filename=filename)
 
@@ -886,7 +894,7 @@ def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bif
     import shutil
 
     shutil.copy(inputfile,outputfile)
-
+    atom=atom.lower()
     params = read_voro_ascii(vorofile)
 
     infile = open(inputfile)
@@ -898,14 +906,25 @@ def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bif
 
     f.write("\n")
     f.write("VORONOV \n")
-    Z = get_atomZ(atom=atom)     # where I need to add a check if atom is the same as the one in the atom file or even better use directly the atom file info for this.
+    f.write("# from Voronov fit formula for ionization rates by electron impact \n" +
+            "# by G. S. Voronov: \n" +
+            "# ATOMIC DATA AND NUCLEAR DATA TABLES 65, 1-35 (1997) ARTICLE NO. DT970732\n" +
+            "# <cross> = A (1+P*U^(1/2))/(X + U)*U^K e-U (cm3/s) with U = dE/Te\n" )
+
+    strat= ''
+    if len(''.join(x for x in atom if x.isdigit())) == 0: strat='_1'
+
+    Z = get_atomZ(atom=atom+strat)     # where I need to add a check if atom is the same as the one in the atom file or even better use directly the atom file info for this.
 
     f.write(str(Z) + "\n")
     jj=1
+    f.write('#   i    j    P   A(cm3/s)   X      K  \n')
     for ii in range(0,params['NLVLS_MAX'][0]):
-        if (atom in params['SPECIES'][ii,1]):
-            f.write('\t' + str(jj) +'\t' + str(jj + 1) +'\t' + str(get_atomde(atom=atom)) + '\t' + str(get_atomP(atom=atom)) + '\t' +
-                        str(get_atomA(atom=atom)) + '\t' + str(get_atomX(atom=atom)) + '\t'+ str(get_atomK(atom=atom)) + '\n')
+        if (Z == int(params['SPECIES'][ii,0])):
+            strat= ''
+            if len(''.join(x for x in params['SPECIES'][ii,1] if x.isdigit())) == 0: strat='_1'
+            f.write('  {0:3d}'.format(jj) +'  {0:3d}'.format(jj + 1) + '  {0:3}'.format(get_atomP(atom=params['SPECIES'][ii,1])) +
+                    '  {0:7.3e}'.format(get_atomA(atom=params['SPECIES'][ii,1])) + ' {0:.3f}'.format(get_atomX(atom=params['SPECIES'][ii,1])) + ' {0:.3f}'.format(get_atomK(atom=params['SPECIES'][ii,1])) + '\n')
             jj += 1
     f.write("END")
     f.close()
@@ -932,12 +951,12 @@ def read_atom_ascii(atomfile):
     nlin=0
     nk=0
     f=open(atomfile)
-    start = True
+    start = Truee
     key=''
     headers = ['GENCOL','CEXC','AR85-CDI','AR85-CEA','AR85-CH','AR85-CHE','CI','CE','CP','OHM','BURGESS','SPLUPS','SHULL82','TEMP','RECO','VORONOV','EMASK'] #Missing AR85-RR, RADRAT, SPLUPS5, I think AR85-CHE is not used in OOE
     headerslow = ['gencol','cexc','ar85-cdi','ar85-cea','ar85-ch','ar85-che','ci','ce','cp','ohm','burgess','slups','shull82','temp','reco','voronov','emask']
     for line in iter(f):
-        # ignore empty lines and comments 
+        # ignore empty lines and comments
         line = line.strip()
         if len(line) < 1:
             li += 1
@@ -1194,38 +1213,37 @@ def read_atom_ascii(atomfile):
 
 def write_atom_ascii(atomfile,atom):
     ''' Writes the atom (command style) ascii file into dictionary '''
-    text=['# March 19  2014: \n' +
-        '# The recombination rate that is added as an extra rate is based on a \n ' +
-        '# temporal average from the he33 non-eq radyn run. The temp. grid \n ' +
-        '# is extended to cover a temp. range 1 000 - 10 000 000 K. \n ' +
-        '# \n ' +
-        '# This is the bifrost version of the atomfile. \n ' +
-        '# It is identical to the radyn-version file with one exception: \n ' +
-        '# photoionization cross sections are given for bins. Number of bins \n ' +
-        '# and bin grid is set in the hydrogen file. \n ' +
-        '# \n ' +
-        '# edit april 23 2014:  \n ' +
-        '# removed the AR85-CEA \n ' +
-        '# \n ' +
-        '# edit may 19 2014: \n ' +
-        '# added collision coeff. for 304-transition. \n ' +
-        '# \n ' +
-        '# edit july 1 2014: \n ' +
-        '# changed collisional excitation rate to 5 degree poly fit. \n ' +
+    num_map = [(1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'), (90, 'XC'),
+            (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')]
+    def num2roman(num):
+        ''' converts integer to roman number '''
+        roman = ''
+        while num > 0:
+            for i, r in num_map:
+                while num >= i:
+                    roman += r
+                    num -= i
+        return roman
+
+    import datetime
+    datelist=[]
+    today = datetime.date.today()
+    datelist.append(today)
+    text=['# Created on '+ str(datelist[0]) +' \n' +
+        '## ADD HERE NECESSARY INFORMATION \n' +
         '# \n ']
-    z=get_atomZ(atom=atom)
+    z=get_atomZ(atom=atom+'_1')
     abund=get_abund(atom=atom)
     awgt=get_atomweight(atom=atom)
     nk=z+1
     ncont=z
     nlin=0 # Numero de lineas?
     nfix=0
+    neuv_bins=6
+    euv_bound=[911.7,753.143,504.0,227.800,193.919,147.540,20.0]
     enerlvl = np.zeros(nk)
     for iv in range(1,nk):
-        if iv > 1:
-            alvl=str(iv)
-        else:
-            alvl = ''
+        alvl=str(iv)
         enerlvl[iv] = get_atomde(atom=atom+'_'+alvl,cm1=True) # JMS eventually we could use get_excidE
     g = np.zeros(nk) #No clue where to get those...
     levelname = ['noclue' for v in range(0,nk)]
@@ -1236,56 +1254,64 @@ def write_atom_ascii(atomfile,atom):
     f.write(atom.upper() + "\n")
     text=['# nk is number of levels, continuum included \n' +
         '# nlin is number of spectral lines in detail \n' +
-        '# ncont is number of continua in detail \n ' +
+        '# ncont is number of continua in detail \n' +
         '# nfix is number of fixed transitions \n' +
-        '#  ABUND    AWGT \n']
+        '#   ABUND     AWGT \n']
     f.write(str(text[0]))
-    f.write('    ' + str(abund) + '  ' +str(awgt) + '\n')
+    f.write('    {0:5.2f}'.format(float(abund)) + '   {0:5.2f}'.format(float(awgt)) + '\n')
     f.write('#  NK NLIN NCNT NFIX \n')
-    f.write('    ' + str(nk) + '  ' +str(nlin) + '  '+ str(ncont) + '  ' +str(nfix) + '\n')
+    f.write('    {0:3d}'.format(nk) + '  {0:3d}'.format(nlin) + '  {0:3d}'.format(ncont) + '  {0:3d}'.format(nfix) + '\n')
+
+    text =["# E[cm-1]    g                  label[20]         stage   levelNo \n"  +
+            "#                     '----|----|----|----|----'\n"]
+    f.write(str(text[0]))
     for iv in range(0,nk):
-        f.write('    ' + str(enerlvl[iv]) + '  ' +str(g[iv]) + '  '+ levelname[iv] + '  ' +str(iv) + '  ' + str(iv)+ '\n') # the two iv are wrong at the end...
+        f.write('    {0:10.3f}'.format(enerlvl[iv]) + '  {0:4.2}'.format(g[iv]) + ' {:2}'.format(atom.upper()))
+        f.write(' {:5}'.format(num2roman(iv+1)))
+        f.write(' {:12}'.format(levelname[iv]) + '  {0:3d}'.format(iv+1) + '  {0:3d}'.format(iv+1)+ '\n') # the two iv are wrong at the end...
 
     text=['# \n' +
-        '# Mon Mar 17 12:01:26 2014 \n' +
-        '# photoionization cross sections for helium continua  \n' +
-        '# number of bins, boundaries and hydrogen data in hydrogen file \n' +
-        '# \n']
+        '# photoionization cross sections for continua  \n' +
+        '# number of neuv_bins, \n']
     f.write(str(text[0]))
+    f.write('  ' + str(neuv_bins) + ' \n')
+    f.write('# bin boundaries\n')
+    for iv in range(0,7):
+        f.write('   {0:7.3f}'.format(euv_bound[iv]) + '\n')
     for iv in range(0,nk-1):
         f.write('# i j \n')
-        f.write('  ' + str(iv+1) + '  ' + str(iv + 2) + ' \n')
-        f.write('# bin           sigma \n')
+        f.write('  {0:2d}'.format(iv+1) + '  {0:2d}'.format(iv + 2) + ' \n')
+        f.write('# bin       sigma \n')
         for it in range(0,nbin):
-            f.write('  ' + str(it) + '  ' + str(phcross[it]) + ' \n')
+            f.write('  {0:2d}'.format(it) + '    {0:9.7e}'.format(phcross[it]) + ' \n')
     f.write(' GENCOL \n')
-    text = ['# Collisional excitation 304  \n ' +
-        '# data from Chianti. Maximum error about 3%. \n ' +
-        '# upsilon as function of (natural) logarithmic temp. \n ' +
-        '# rate coefficient: c = ne * upsilon * 8.63e-6 / sqrt(T) * exp(-E/kt) \n ']
+    text = ['# Collisional excitation 304  \n' +
+        '# data from Chianti. Maximum error about 3%. \n' +
+        '# upsilon as function of (natural) logarithmic temp. \n' +
+        '# rate coefficient: c = ne * upsilon * 8.63e-6 / sqrt(T) * exp(-E/kt) \n']
     f.write(str(text[0]))
     f.write(' CEXC \n')
     ncexc=nbin # No clue how to get this.
     cexc=[5.9381e+00, -2.8455e+00,5.4103e-01,-4.9805e-02,2.1959e-03,-3.6167e-05]
     f.write('   ' + str(ncexc) + '\n')
     for iv in range(0,ncexc):
-        f.write('   ' + str(cexc[iv]) + '\n')
+        f.write('   {0:10.4e}'.format(cexc[iv]) + '\n')
     f.write('# \n')
     AR85 = [24.60, 17.80, -11.00, 7.00, -23.20] # No clue how to get this.
     for iv in range(0,nk-1):
-        f.write('AR85-CDI \n')
-        f.write('  ' + str(iv+1) + '  ' + str(iv + 2) + ' \n')
-        f.write('  ' + str(1) + ' \n') # No clue how to get this.
+        f.write(' AR85-CDI \n')
+        f.write('  {0:2d}'.format(iv+1) + '  {0:2d}'.format(iv + 2) + ' \n')
+        f.write('  {0:2d}'.format(1) + ' \n') # No clue how to get this.
         for it in range(0,5):
-            f.write('   ' + str(AR85[it]))
+            f.write('   {0:6.2f}'.format(AR85[it]))
         f.write('\n')
     f.write(' TEMP \n')
-    temp=[1000.0000,1063.7600,1131.6000,1203.7500, 1280.5100]
-    f.write('   ' + str(len(temp)) + '\n')
+    temp=[1000.0000,1063.7600,1131.6000,1203.7500, 128000.50]
+    f.write('   {0:2d}'.format(len(temp)) + '\n')
     it=0
     while it < len(temp):
         for iv in range(0,5):
-            f.write('   ' + str(temp[it]))
+            f.write('  {0:10g}'.format(temp[it]))
             it += 1
             if it == len(temp): continue
         f.write('\n')
@@ -1296,7 +1322,7 @@ def write_atom_ascii(atomfile,atom):
         it=0
         while it < len(reco):
             for iv in range(0,5):
-                f.write('   ' + str(reco[it]))
+                f.write('  {0:9.7e}'.format(reco[it]))
                 it += 1
                 if it == len(reco): continue
             f.write('\n')
@@ -1307,3 +1333,154 @@ def write_atom_ascii(atomfile,atom):
     shutil.copy(atomfile,'temp.atom')
 
     add_voro_atom('temp.atom',atomfile,atom=atom)
+
+
+
+def diper2eb_atom_ascii(atomfile,output):
+    ''' Writes the atom (command style) ascii file into dictionary '''
+    num_map = [(1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'), (90, 'XC'),
+            (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')]
+    def num2roman(num):
+        ''' converts integer to roman number '''
+        roman = ''
+        while num > 0:
+            for i, r in num_map:
+                while num >= i:
+                    roman += r
+                    num -= i
+        return roman
+    def copyfile(scr,dest):
+        import shutil
+        try:
+            shutil.copy(scr,dest)
+        except shutil.Error as e: # scr and dest same
+            print('Error: %s' % e)
+        except IOError as e: # scr or dest does not exist
+            print('Error: %s' % e.strerror)
+
+    import datetime
+
+    datelist=[]
+    today = datetime.date.today()
+    datelist.append(today)
+    ''' Writes the atom (command style) ascii file into dictionary '''
+    text0 = ['# Created on '+ str(datelist[0]) +' \n' +
+        '# with diper2eb_atom_ascii only for ground ionized levels \n' +
+        '# the atom file has been created using diper 1.1, REGIME=1, APPROX=1 \n']
+
+    neuv_bins=6
+    euv_bound=[911.7,753.143,504.0,227.800,193.919,147.540,20.0]
+    phcross=[0.00000000000,0.00000000000, 4.9089501e-18, 1.6242972e-18, 1.1120017e-18 ,  9.3738273e-19] # No clue where to get those.
+    nbin=len(phcross)
+    copyfile(atomfile,output)
+    f=open(output,"r")
+    data=f.readlines()
+    f.close()
+    for v in range(0,len(data)): data[v]=data[v].replace("*","#")
+    data=data[0:2] + [str(data[2]).upper()] + [data[3]] + [str(data[4]).upper()] + data[5:]
+    data=text0+ data
+    text=['# nk is number of levels, continuum included \n' +
+        '# nlin is number of spectral lines in detail \n' +
+        '# ncont is number of continua in detail \n' +
+        '# nfix is number of fixed transitions \n' +
+        '#   ABUND   AWGT \n']
+    data = data[0:3] + text + data[4:]
+    line=data[2]
+    line = line.split(';')[0].split(' ')
+    while '' in line: line.remove('')
+    atom=str(line[0])
+    atom=atom.replace("\n","")
+    data[2] = ' ' + atom +'\n'
+    data = data[:5]+ ['#    NK NLIN NCNT NFIX \n'] + data[6:]
+    line=data[6]
+    line = line.split(';')[0].split(' ')
+    while '' in line: line.remove('')
+
+    nk=int(line[0])
+    nlin=int(line[1])
+    ncont=int(line[2])
+    nfix=int(line[3])
+
+    data[6]='    {0:3d}'.format(nk) + '  {0:3d}'.format(nlin) + '  {0:3d}'.format(ncont) + '  {0:3d}'.format(nfix) + '\n'
+
+    text = ["#        E[cm-1]    g              label[25]        stg  lvlN \n"  +
+            "#                       '----|----|----|----|----'\n"]
+    data=data[0:7] + text+ data[7:]
+
+    for iv in range(8,8+nk):
+        line=data[iv]
+        line = line.split(';')[0].split(' ')
+        while '' in line: line.remove('')
+        while "'" in line: line.remove("'")
+        line[2]=line[2].replace("'","")
+        strlvl=[" ".join(line[v].strip() for v in range(2,np.size(line)-1))]
+        data[iv] = ('    {0:13.3f}'.format(float(line[0])) + '  {0:4.2f}'.format(float(line[1])) + " ' {0:2}".format(atom.upper()) + ' {0:5}'.format(num2roman(int(line[-1]))) +
+                ' {0:16}'.format(strlvl[0]) + "'  {0:3d}".format(int(line[-1])) + '   {0:3d}'.format(iv-7)+ '\n') # the two iv are wrong at the end...
+
+    '''
+    text=['# \n' +
+        '# photoionization cross sections for continua  \n' +
+        '# number of neuv_bins, \n']
+    f.write(str(text[0]))
+    f.write('  ' + str(neuv_bins) + ' \n')
+    f.write('# bin boundaries\n')
+    for iv in range(0,7):
+        f.write('   {0:7.3f}'.format(euv_bound[iv]) + '\n')
+    for iv in range(0,nk-1):
+        f.write('# i j \n')
+        f.write('  {0:2d}'.format(iv+1) + '  {0:2d}'.format(iv + 2) + ' \n')
+        f.write('# bin       sigma \n')
+        for it in range(0,nbin):
+            f.write('  {0:2d}'.format(it) + '    {0:9.7e}'.format(phcross[it]) + ' \n')
+    f.write(' GENCOL \n')
+    text = ['# Collisional excitation 304  \n' +
+        '# data from Chianti. Maximum error about 3%. \n' +
+        '# upsilon as function of (natural) logarithmic temp. \n' +
+        '# rate coefficient: c = ne * upsilon * 8.63e-6 / sqrt(T) * exp(-E/kt) \n']
+    f.write(str(text[0]))
+    f.write(' CEXC \n')
+    ncexc=nbin # No clue how to get this.
+    cexc=[5.9381e+00, -2.8455e+00,5.4103e-01,-4.9805e-02,2.1959e-03,-3.6167e-05]
+    f.write('   ' + str(ncexc) + '\n')
+    for iv in range(0,ncexc):
+        f.write('   {0:10.4e}'.format(cexc[iv]) + '\n')
+    f.write('# \n')
+    AR85 = [24.60, 17.80, -11.00, 7.00, -23.20] # No clue how to get this.
+    for iv in range(0,nk-1):
+        f.write(' AR85-CDI \n')
+        f.write('  {0:2d}'.format(iv+1) + '  {0:2d}'.format(iv + 2) + ' \n')
+        f.write('  {0:2d}'.format(1) + ' \n') # No clue how to get this.
+        for it in range(0,5):
+            f.write('   {0:6.2f}'.format(AR85[it]))
+        f.write('\n')
+    f.write(' TEMP \n')
+    temp=[1000.0000,1063.7600,1131.6000,1203.7500, 128000.50]
+    f.write('   {0:2d}'.format(len(temp)) + '\n')
+    it=0
+    while it < len(temp):
+        for iv in range(0,5):
+            f.write('  {0:10g}'.format(temp[it]))
+            it += 1
+            if it == len(temp): continue
+        f.write('\n')
+    reco=[1.2960009e-13,1.2917243e-13,1.2871904e-13,1.2823854e-13,1.2772931e-13]
+    for iv in range(0,nk-1):
+        f.write(' RECO \n')
+        f.write('  ' + str(iv+1) + '  ' + str(iv + 2) + ' \n')
+        it=0
+        while it < len(reco):
+            for iv in range(0,5):
+                f.write('  {0:9.7e}'.format(reco[it]))
+                it += 1
+                if it == len(reco): continue
+            f.write('\n')
+    f.write('END')
+    f.close()
+    '''
+
+    f=open('temp.atom',"w")
+    for i in range(0,len(data)):
+        f.write(data[i])
+    f.write('GENCOL\n')
+    f.close()
+    add_voro_atom('temp.atom',output,atom=atom.lower())
