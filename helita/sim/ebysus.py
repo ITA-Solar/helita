@@ -5,6 +5,7 @@ Set of programs to read and interact with output from Multifluid/multispecies
 import numpy as np
 import os
 from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph
+from . import cstagger
 
 
 class EbysusData(BifrostData):
@@ -45,14 +46,20 @@ class EbysusData(BifrostData):
             if self.with_electrons:
                 self.mf_e_file = self.file_root + '_mf_e'
 
+        self.simple_vars = self.snapvars + self.mhdvars + \
+            self.auxvars + self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
+
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
         if 'ixy1' in self.auxvars:
             self.auxvars.remove('ixy1')
             self.auxxyvars.append('ixy1')
 
-        self.simple_vars = self.snapvars + self.mhdvars + \
-            self.auxvars + self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
+        for var in self.auxvars:
+            if any(i in var for i in ('xy', 'yz', 'xz')):
+                self.auxvars.remove(var)
+                self.vars2d.append(var)
+
         '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
                          'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
         if (self.do_mhd):
@@ -112,6 +119,11 @@ class EbysusData(BifrostData):
             except:
                 if self.verbose:
                     print(('(WWW) init_vars: could not read variable %s' % var))
+
+        rdt = self.r.dtype
+        cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
+                              self.zdn.astype(rdt), self.dzidzup.astype(rdt),
+                              self.dzidzdn.astype(rdt))
 
     def set_mfi(self, mf_ispecies=None, mf_ilevel=None):
         """
@@ -268,7 +280,6 @@ class EbysusData(BifrostData):
         """
         Gets composite variables for multi species fluid.
         """
-        from . import cstagger as cs
 
         if var == 'totr':  # velocities
             for mf_ispecies in range(28):
@@ -879,7 +890,7 @@ def get_excidE(atom='',lvl=1,params=[],Chianti=True,cm1=False):
         print('No Elvlc in the Chianti Data base')
 
 
-def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',nk='100'):
     '''
         Add voronov information at the end of the atom file.
 
@@ -896,7 +907,9 @@ def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bif
     shutil.copy(inputfile,outputfile)
     atom=atom.lower()
     params = read_voro_ascii(vorofile)
-
+    f=open(inputfile,"r")
+    data=f.readlines()
+    f.close()
     infile = open(inputfile)
     f=open(outputfile,"w")
     for line in infile:
@@ -905,7 +918,8 @@ def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bif
     infile.close()
 
     f.write("\n")
-    f.write("VORONOV \n")
+    f.write("VORONOV\n")
+
     f.write("# from Voronov fit formula for ionization rates by electron impact \n" +
             "# by G. S. Voronov: \n" +
             "# ATOMIC DATA AND NUCLEAR DATA TABLES 65, 1-35 (1997) ARTICLE NO. DT970732\n" +
@@ -918,12 +932,12 @@ def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bif
 
     f.write(str(Z) + "\n")
     jj=1
-    f.write('#   i    j    P   A(cm3/s)   X      K  \n')
+    f.write('#   i    j    dE(eV)     P  A(cm3/s)   X      K  \n')
     for ii in range(0,params['NLVLS_MAX'][0]):
-        if (Z == int(params['SPECIES'][ii,0])):
+        if (Z == int(params['SPECIES'][ii,0])) and jj < nk:
             strat= ''
             if len(''.join(x for x in params['SPECIES'][ii,1] if x.isdigit())) == 0: strat='_1'
-            f.write('  {0:3d}'.format(jj) +'  {0:3d}'.format(jj + 1) + '  {0:3}'.format(get_atomP(atom=params['SPECIES'][ii,1])) +
+            f.write('  {0:3d}'.format(jj) +'  {0:3d}'.format(jj + 1) + '  {0:9.3f}'.format(get_atomde(atom=params['SPECIES'][ii,1]+strat,Chianti=False)) +'  {0:3}'.format(get_atomP(atom=params['SPECIES'][ii,1])) +
                     '  {0:7.3e}'.format(get_atomA(atom=params['SPECIES'][ii,1])) + ' {0:.3f}'.format(get_atomX(atom=params['SPECIES'][ii,1])) + ' {0:.3f}'.format(get_atomK(atom=params['SPECIES'][ii,1])) + '\n')
             jj += 1
     f.write("END")
@@ -1414,8 +1428,86 @@ def diper2eb_atom_ascii(atomfile,output):
         while "'" in line: line.remove("'")
         line[2]=line[2].replace("'","")
         strlvl=[" ".join(line[v].strip() for v in range(2,np.size(line)-1))]
+        print(strlvl[0],line[0],line[1])
         data[iv] = ('    {0:13.3f}'.format(float(line[0])) + '  {0:4.2f}'.format(float(line[1])) + " ' {0:2}".format(atom.upper()) + ' {0:5}'.format(num2roman(int(line[-1]))) +
                 ' {0:16}'.format(strlvl[0]) + "'  {0:3d}".format(int(line[-1])) + '   {0:3d}'.format(iv-7)+ '\n') # the two iv are wrong at the end...
+
+    headers = ['GENCOL','CEXC','AR85-CDI','AR85-CEA','AR85-CH','AR85-CHE','CI','CE','CP','OHM','BURGESS','SPLUPS','SHULL82','TEMP','RECO','VORONOV','EMASK'] #Missing AR85-RR, RADRAT, SPLUPS5, I think AR85-CHE is not used in OOE
+    DONE= 'AR85-CDI','AR85-CH','AR85-CHE','SHULL82'
+
+    textar85cdi=['# Data for electron impact ionization Arnaud and Rothenflug (1985) \n' +
+                '# updated for Fe ions by Arnaud and Rothenflug (1992) \n' +
+                '# 1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) + D ln(u)/u) (cm^2)  \n'+
+                '#   i   j \n']
+
+    textar85cdishell=['# Numbers of shells \n' ]
+    textar85cdiparam=['# dE(eV)  A   B   C   D \n']
+
+    textar85ct=['# Data for charge transfer rate of ionization and recombination Arnaud and Rothenflug (1985) \n' +
+                '# updated for Fe ions by Arnaud and Rothenflug (1992) \n' ]
+    textar85cea=['# Data authoionization following excitation Arnaud and Rothenflug (1985) \n' +
+                ' (this is a bit of caos... uses different expression for different species) See appendix A.  \n' +
+                '#   i   j \n']
+
+    textshull82=['# Recombination rate coefficients Shull and Steenberg (1982) \n' +
+                '# provides direct collisional ionization with the following fitting: \n'+
+                '# Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T), with Ai ~ 0.1 \n'+
+                '# for the recombination rate combines the sum of radiative and dielectronic recombination rate \n' +
+                '# alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2) exp(-T0/T) (1+Bdi exp(-T1/T))\n' +
+                '#   i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi       T0       T1 \n']
+
+    textar85ch = ['# charge transfer recombination with neutral hydrogen Arnaud and Rothenflug (1985) \n' +
+                '# updated for Fe ions by Arnaud and Rothenflug (1992) \n' +
+                 '# alpha = a (T_4)^b (1 + c exp(d T_4)) \n'+
+                 '#   i   j \n']
+    textar85chparam = ['#   Temperature range (K)   a(1e-9cm3/s)    b      c    d \n']
+    textar85chem = ['# charge transfer recombination with ionized hydrogen Arnaud and Rothenflug (1985) \n' +
+                    '# updated for Fe ions by Arnaud and Rothenflug (1992) \n' +
+                    '# alpha = a (T_4)^b (1 + c exp(d T_4)) \n'
+                    '#   i   j \n']
+
+    #if 'SHULL82\n' in data:
+    try:
+        iloc=data.index('SHULL82\n')
+        if iloc > 1:
+            data = data[0:iloc+1] + textshull82+ data[iloc+1:]
+    except:
+        print('no key')
+
+    #if 'AR85-CHE+\n' in data:
+    try:
+        iloc=data.index('AR85-CHE+\n')
+        if iloc > 1:
+            data = data[0:iloc+1] + textar85chem+ data[iloc+1:]
+            data = data[0:iloc+3] + textar85chparam+ data[iloc+3:]
+    except:
+        print('no key')
+    #if 'AR85-CH\n' in data:
+    try:
+        iloc=data.index('AR85-CH\n')
+        if iloc > 1:
+            data = data[0:iloc+1] + textar85ch+ data[iloc+1:]
+            data = data[0:iloc+3] + textar85chparam+ data[iloc+3:]
+    except:
+        print('no key')
+
+    #if 'AR85-CDI\n' in data:
+    try:
+        iloc=data.index('AR85-CDI\n')
+        if iloc > 1:
+            data = data[0:iloc+1] + textar85cdi+ data[iloc+1:]
+            data = data[0:iloc+3] + textar85cdishell+ data[iloc+3:]
+            data = data[0:iloc+5] + textar85cdiparam+ data[iloc+5:]
+    except:
+        print('no key')
+
+    #if 'AR85-CEA\n' in data:
+    try:
+        iloc=data.index('AR85-CEA\n')
+        if iloc > 1:
+            data = data[0:iloc+1] + textar85cea+ data[iloc+1:]
+    except:
+        print('no key')
 
     '''
     text=['# \n' +
@@ -1481,6 +1573,10 @@ def diper2eb_atom_ascii(atomfile,output):
     f=open('temp.atom',"w")
     for i in range(0,len(data)):
         f.write(data[i])
-    f.write('GENCOL\n')
+
+    if not 'GENCOL\n' in data:
+        f.write('GENCOL\n')
+    else:
+        print('gencol is in data')
     f.close()
-    add_voro_atom('temp.atom',output,atom=atom.lower())
+    add_voro_atom('temp.atom',output,atom=atom.lower(),nk=nk)
