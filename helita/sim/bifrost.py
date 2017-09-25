@@ -419,7 +419,7 @@ class BifrostData(object):
                 result = getattr(self, q + 'x') ** 2
             else:
                 result = cstagger.xup(getattr(self, q + 'x')) ** 2
-            print('x',q)                
+            print('x',q)
             if getattr(self, 'ny') < 5:
                 result += getattr(self, q + 'y') ** 2
             else:
@@ -479,6 +479,7 @@ class BifrostData(object):
                 varx = self.get_var(q + 'x')
                 vary = self.get_var(q + 'y')
                 varz = self.get_var(q + 'z')
+            ###JMS warning if 2D this will cause issues:
             return (cstagger.ddxup(varx) + cstagger.ddyup(vary) +
                     cstagger.ddzup(varz))
         elif quant[-1] in SQUARE_QUANT:
@@ -487,9 +488,18 @@ class BifrostData(object):
             if q == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            result = cstagger.xup(getattr(self, q + 'x')) ** 2
-            result += cstagger.yup(getattr(self, q + 'y')) ** 2
-            result += cstagger.zup(getattr(self, q + 'z')) ** 2
+            if getattr(self, 'nx') < 5:
+                result = getattr(self, q + 'x') ** 2
+            else:
+                result = cstagger.xup(getattr(self, q + 'x')) ** 2
+            if getattr(self, 'ny') < 5:
+                result += getattr(self, q + 'y') ** 2
+            else:
+                result += cstagger.yup(getattr(self, q + 'y')) ** 2
+            if getattr(self, 'nz') < 5:
+                result += getattr(self, q + 'z') ** 2
+            else:
+                result += cstagger.zup(getattr(self, q + 'z')) ** 2
             return result
 
     def write_rh15d(self, outfile, desc=None, append=True,
