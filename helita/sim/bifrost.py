@@ -5,13 +5,17 @@ Set of programs to read and interact with output from Bifrost
 import numpy as np
 import os
 from glob import glob
+from . import cstagger
+
 
 class BifrostData(object):
     """
     Reads data from Bifrost simulations in native format.
     """
+
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
-                 verbose=True, dtype='f4', big_endian=False):
+                 verbose=True, dtype='f4', big_endian=False,
+                 ghost_analyse=False):
         """
         Loads metadata and initialises variables.
 
@@ -34,6 +38,9 @@ class BifrostData(object):
         big_endian - string, optional
             If True, will read variables in big endian. Default is False
             (reading in little endian).
+        ghost_analyse - bool, optional
+            If True, will read data from ghost zones when this is saved
+            to files. Default is never to read ghost zones.
 
         Examples
         --------
@@ -56,6 +63,7 @@ class BifrostData(object):
         self.verbose = verbose
         self.file_root = os.path.join(self.fdir, file_root)
         self.meshfile = meshfile
+        self.ghost_analyse = ghost_analyse
         # endianness and data type
         if big_endian:
             self.dtype = '>' + dtype
@@ -69,9 +77,7 @@ class BifrostData(object):
             Sets list of avaible variables
         """
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
-        self.axisvars = ['x', 'y', 'z']
         self.auxvars = self.params['aux'].split()
-
         if (self.do_mhd):
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
@@ -79,11 +85,7 @@ class BifrostData(object):
             if self.params['do_hion'] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
                                  'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
-        '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
-                         'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
-        if (self.do_mhd):
-            self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
-
+        self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
         self.simple_vars = self.snapvars + self.auxvars + self.hionvars
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
@@ -160,8 +162,8 @@ class BifrostData(object):
                     'u_b': 1.121e3, 'u_ee': 1.e12}
         for unit in unit_def:
             if unit not in self.params:
-                print(("(WWW) read_params:"" %s not found, using default of %.3e" %
-                       (unit, unit_def[unit])))
+                print(("(WWW) read_params:"" %s not found, using "
+                       "default of %.3e" % (unit, unit_def[unit])))
                 self.params[unit] = unit_def[unit]
 
     def __read_mesh(self, meshfile):
@@ -176,18 +178,37 @@ class BifrostData(object):
                 dim = int(f.readline().strip('\n').strip())
                 assert dim == getattr(self, 'n' + p)
                 # quantity
-                setattr(self, p, np.array([float(v)
-                                           for v in f.readline().strip('\n').split()]))
+                setattr(self, p, np.array(
+                    [float(v) for v in f.readline().strip('\n').split()]))
                 # quantity "down"
-                setattr(self, p + 'dn', np.array([float(v)
-                                                  for v in f.readline().strip('\n').split()]))
+                setattr(self, p + 'dn', np.array(
+                    [float(v) for v in f.readline().strip('\n').split()]))
                 # up derivative of quantity
-                setattr(self, 'd%sid%sup' % (p, p), np.array([float(v)
-                                                              for v in f.readline().strip('\n').split()]))
+                setattr(self, 'd%sid%sup' % (p, p), np.array(
+                    [float(v) for v in f.readline().strip('\n').split()]))
                 # down derivative of quantity
-                setattr(self, 'd%sid%sdn' % (p, p), np.array([float(v)
-                                                              for v in f.readline().strip('\n').split()]))
+                setattr(self, 'd%sid%sdn' % (p, p), np.array(
+                    [float(v) for v in f.readline().strip('\n').split()]))
             f.close()
+            if self.ghost_analyse:
+                # extend mesh to cover ghost zones
+                self.z = np.concatenate((
+                   self.z[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
+                   self.z,
+                   self.z[-1] + np.linspace(self.dz, self.dz*self.nb, self.nb)))
+                self.zdn = np.concatenate((
+                   self.zdn[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
+                   self.zdn, self.zdn[-1] +
+                                np.linspace(self.dz, self.dz*self.nb, self.nb)))
+                self.dzidzup = np.concatenate((
+                    np.repeat(self.dzidzup[0], self.nb),
+                    self.dzidzup,
+                    np.repeat(self.dzidzup[-1], self.nb)))
+                self.dzidzdn = np.concatenate((
+                    np.repeat(self.dzidzdn[0], self.nb),
+                    self.dzidzdn,
+                    np.repeat(self.dzidzdn[-1], self.nb)))
+                self.nz = self.nzb
         else:  # no mesh file
             print('(WWW) Mesh file %s does not exist.' % meshfile)
             if self.dx == 0.0:
@@ -201,22 +222,24 @@ class BifrostData(object):
             # x
             self.x = np.arange(self.nx) * self.dx
             self.xdn = self.x - 0.5 * self.dx
-            self.dxidxup = np.zeros(self.nx) + 1./self.dx
-            self.dxidxdn = np.zeros(self.nx) + 1./self.dx
+            self.dxidxup = np.zeros(self.nx) + 1. / self.dx
+            self.dxidxdn = np.zeros(self.nx) + 1. / self.dx
             # y
             self.y = np.arange(self.ny) * self.dy
             self.ydn = self.y - 0.5 * self.dy
-            self.dyidyup = np.zeros(self.ny) + 1./self.dy
-            self.dyidydn = np.zeros(self.ny) + 1./self.dy
+            self.dyidyup = np.zeros(self.ny) + 1. / self.dy
+            self.dyidydn = np.zeros(self.ny) + 1. / self.dy
             # z
+            if self.ghost_analyse:
+                self.nz = self.nzb
             self.z = np.arange(self.nz) * self.dz
             self.zdn = self.z - 0.5 * self.dz
-            self.dzidzup = np.zeros(self.nz) + 1./self.dz
-            self.dzidzdn = np.zeros(self.nz) + 1./self.dz
+            self.dzidzup = np.zeros(self.nz) + 1. / self.dz
+            self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
 
     def _init_vars(self, *args, **kwargs):
         """
-        Memmaps aux and snap variables, and maps them to methods.
+        Memmaps "simple" variables, and maps them to methods.
         Also, sets file name[s] from which to read a data
         """
         self.variables = {}
@@ -225,17 +248,23 @@ class BifrostData(object):
                 self.variables[var] = self._get_simple_var(
                     var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
-            except:
+            except Exception:
                 if self.verbose:
-                    print(('(WWW) init_vars: could not read variable %s' % var))
+                    print(('(WWW) init_vars: could not read '
+                           'variable %s' % var))
         for var in self.auxxyvars:
             try:
                 self.variables[var] = self._get_simple_var_xy(var, *args,
                                                               **kwargs)
                 setattr(self, var, self.variables[var])
-            except:
+            except Exception:
                 if self.verbose:
-                    print(('(WWW) init_vars: could not read variable %s' % var))
+                    print(('(WWW) init_vars: could not read '
+                           'variable %s' % var))
+        rdt = self.r.dtype
+        cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
+                              self.zdn.astype(rdt), self.dzidzup.astype(rdt),
+                              self.dzidzdn.astype(rdt))
 
     def get_var(self, var, snap=None, *args, **kwargs):
         """
@@ -250,36 +279,21 @@ class BifrostData(object):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
-        if var == 'x':
-            return self.x
-        elif var == 'y':
-            return self.y
-        elif var == 'z':
-            return self.z
-
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
-
-        # # check if already in memmory
-        # if var in self.variables:
-        #     return self.variables[var]
-        '''        if var in self.variables:  # is variable already loaded?
-                    if order == 'F':
-                        return self.variables[var]
-                    else:
-                        return self._get_simple_var(var,order=order)
-                else:
-                    return self._get_composite_var(var,order=order, *args, **kwargs)
-                    '''
         if var in self.simple_vars:  # is variable already loaded?
             return self._get_simple_var(var, *args, **kwargs)
         elif var in self.auxxyvars:
             return self._get_simple_var_xy(var, *args, **kwargs)
+        elif var in self.compvars:  # add to variable list
+            self.variables[var] = self._get_composite_var(var, *args, **kwargs)
+            setattr(self, var, self.variables[var])
+            return self.variables[var]
         else:
-            return self._get_composite_var(var, *args, **kwargs)
-        #else:
-        #    raise ValueError(("get_var: could not read variable"
-        #                      "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))
+            raise ValueError(
+                ("get_var: could not read variable %s. Must be "
+                 "one of %s" %
+                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -300,7 +314,6 @@ class BifrostData(object):
         result - numpy.memmap array
             Requested variable.
         """
-
         if self.snap < 0:
             filename = self.file_root
             fsuffix_b = '.scr'
@@ -333,9 +346,15 @@ class BifrostData(object):
                               '%s. Available variables:' % (var) +
                               '\n' + repr(self.simple_vars)))
         dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * self.nzb * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
-                         mode=mode, shape=(self.nx, self.ny, self.nzb))
+        if self.ghost_analyse:
+            offset = self.nx * self.ny * self.nzb * idx * dsize
+            ss = (self.nx, self.ny, self.nzb)
+        else:
+            offset = (self.nx * self.ny * (self.nzb + (self.nzb - self.nz) // 2)
+                      * idx * dsize)
+            ss = (self.nx, self.ny, self.nz)
+        return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
+                         offset=offset, shape=ss)
 
     def _get_simple_var_xy(self, var, order='F', mode='r'):
         """
@@ -357,199 +376,121 @@ class BifrostData(object):
         # size of the data type
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
-                         mode=mode, shape=(self.nx, self.ny))
+        return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
+                         offset=offset, shape=(self.nx, self.ny))
 
-    def boundcut(self, name,var):
-        if ((np.shape(var))[2] != self.nz):
-            var = var[:,:,self.nb:self.nb+self.nz]
-            setattr( self, name, var)
-    def _get_composite_var(self, var, order='F'):
+    def _get_composite_var(self, var, *args, **kwargs):
         """
         Gets composite variables (will load into memory).
         """
-        from . import cstagger as cs
         if var in ['ux', 'uy', 'uz']:  # velocities
-            if not hasattr(self, 'p'+ var[1]): setattr( self, 'p' + var[1],self.get_var('p' + var[1],self.snap))
-            if not hasattr(self, 'r'): self.r = self.variables['r']= self.get_var('r',self.snap)
-            self.boundcut('r',self.r)
-            self.boundcut('p'+ var[1],getattr(self,'p'+ var[1]))
-            if (getattr(self, 'n' + var[1]) < 5):
-                return getattr(self,'p'+ var[1]) / self.r   # do not recentre for 2D cases (or close)
+            p = self._get_simple_var('p' + var[1], order='F')
+            if getattr(self, 'n' + var[1]) < 5:
+                return p / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                rdt = self.r.dtype
-                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                return getattr(self,'p'+ var[1]) / getattr(cs, var[1] + 'dn')(self.r)
+                return p / cstagger.do(self.r, var[1] + 'dn')
         elif var == 'ee':   # internal energy
-            if not hasattr(self, 'e'):
-                self.e = self.variables['e'] = self.get_var('e',self.snap)
-            if not hasattr(self, 'r'): self.r = self.variables['r'] = self.get_var('r',self.snap)
             return self.e / self.r
         elif var == 's':   # entropy?
-            if not hasattr(self, 'p'):
-                self.p = self.variables['p'] = self.get_var('p',self.snap)
             return np.log(self.p) - self.params['gamma'] * np.log(self.r)
-        elif var[1] in ['2']:   # total magnetic field
-            v = var[0]
-            if v == 'b':
+        #else:
+        #    raise ValueError(('_get_composite_var: do not know (yet) how to'
+        #                      'get composite variable %s.' % var))
+
+    def get_quantity(self, quant, *args, **kwargs):
+        """
+        Calculates a quantity from the simulation quantiables.
+        """
+        quant = quant.lower()
+        DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
+        CENTRE_QUANT = ['xc', 'yc', 'zc']
+        MODULE_QUANT = ['mod']
+        DIV_QUANT = ['div']
+        SQUARE_QUANT = ['2']
+
+        if quant[:3] in MODULE_QUANT:
+            # Calculate module of vector quantity
+            q = quant[3:]
+            print(q)
+            if q == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            rdt = self.r.dtype
-            cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-            result = cs.xup(getattr(self, v+'x')) ** 2
-            result += cs.yup(getattr(self, v+'y')) ** 2
-            result += cs.zup(getattr(self, v+'z')) ** 2
+            if getattr(self, 'nx') < 5:
+                result = getattr(self, q + 'x') ** 2
+            else:
+                result = cstagger.xup(getattr(self, q + 'x')) ** 2
+            print('x',q)                
+            if getattr(self, 'ny') < 5:
+                result += getattr(self, q + 'y') ** 2
+            else:
+                result += cstagger.yup(getattr(self, q + 'y')) ** 2
+            print('y',q)
+            if getattr(self, 'nz') < 5:
+                result += getattr(self, q + 'z') ** 2
+            else:
+                result += cstagger.zup(getattr(self, q + 'z')) ** 2
+            print('z',q)
+            return np.sqrt(result)
+        elif quant[0] == 'd' and quant[-4:] in DERIV_QUANT:
+            # Calculate derivative of quantity
+            axis = quant[-3]
+            q = quant[1:-4]  # base variable
+            try:
+                var = getattr(self, q)
+            except AttributeError:
+                var = self.get_var(q)
+            if getattr(self, 'n' + axis) < 5:  # 2D or close
+                return np.zeros_like(var)
+            else:
+                return cstagger.do(var, 'd' + quant[-4:])
+        elif quant[-2:] in CENTRE_QUANT:
+            # This brings a given vector quantity to cell centres
+            axis = quant[-2]
+            q = quant[:-2]  # base variable
+            if q == 'i' or q == 'e':
+                AXIS_TRANSFORM = {'x': ['yup', 'zup'],
+                                'y': ['xup', 'zup'],
+                                'z': ['xup', 'yup']}
+            else:
+                AXIS_TRANSFORM = {'x': ['xup'],
+                                'y': ['yup'],
+                                'z': ['zup']}
+            transf = AXIS_TRANSFORM[axis]
+            try:
+                var = getattr(self, q)
+            except AttributeError:
+                var = self.get_var(q)
+            if getattr(self, 'n' + axis) < 5:  # 2D or close
+                return var
+            else:
+                if len(transf) == 2:
+                    tmp = cstagger.do(var, transf[0])
+                    return cstagger.do(tmp, transf[1])
+                else:
+                    return cstagger.do(tmp, transf)
+        elif quant[:3] in DIV_QUANT:
+            # Calculates divergence of vector quantity
+            q = quant[3:]  # base variable
+            try:
+                varx = getattr(self, q + 'x')
+                vary = getattr(self, q + 'y')
+                varz = getattr(self, q + 'z')
+            except AttributeError:
+                varx = self.get_var(q + 'x')
+                vary = self.get_var(q + 'y')
+                varz = self.get_var(q + 'z')
+            return (cstagger.ddxup(varx) + cstagger.ddyup(vary) +
+                    cstagger.ddzup(varz))
+        elif quant[-1] in SQUARE_QUANT:
+            # Calculate ^2 module vector quantity
+            q = quant[3:]
+            if q == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            result = cstagger.xup(getattr(self, q + 'x')) ** 2
+            result += cstagger.yup(getattr(self, q + 'y')) ** 2
+            result += cstagger.zup(getattr(self, q + 'z')) ** 2
             return result
-        elif (len(var) > 2):
-            if var in ['ixc', 'iyc', 'izc'] or var in ['exc', 'eyc', 'ezc']:
-                p = self.variables[var[0:2] +'c'] = self.get_var(var[0:2],self.snap)
-                # initialise cstagger
-                if getattr(self, 'n' + var[1]) < 5:
-                    return p
-                else:
-                    rdt = p.dtype
-                    cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                    if var[1] == 'x':
-                        p=getattr(cs, 'ydn')(p)
-                        return getattr(cs, 'zdn')(p)
-                    if var[1] == 'y':
-                        p=getattr(cs, 'xdn')(p)
-                        return getattr(cs, 'zdn')(p)
-                    if var[1] == 'z':
-                        p=getattr(cs, 'xdn')(p)
-                        return getattr(cs, 'ydn')(p)
-            elif var[1:3] in ['xc', 'yc', 'zc']:   # internal energy
-                p = self.variables[var] = self.get_var(var[0:2],self.snap)
-                # initialise cstagger
-                self.boundcut(var[0:2],p)
-                if getattr(self, 'n' + var[1]) < 5:
-                    return p
-                else:
-                    rdt = p.dtype
-                    cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                    return getattr(cs, var[1] + 'up')(p)
-            elif var[-3] in ['x', 'y', 'z'] and var[0] == 'd' and var[-4] == 'd' and var[-2:] in ['dn', 'up']:
-                p = self.variables[var] = self.get_var(var[1],self.snap)
-                self.boundcut(var[1:-4],p)
-                if getattr(self, 'n' + var[-3]) < 5:
-                    return p*0
-                else:
-                    rdt = p.dtype
-                    cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                    return getattr(cs, 'd'+var[3:])(p)
-            elif var[2] in ['x', 'y', 'z'] and var[4] in ['x', 'y', 'z'] and var[0] == 'd' and var[3] == 'd' and var[5:] in ['dn', 'up']:
-                p = self.variables[var] = self.get_var(var[1:3],self.snap)
-                self.boundcut(var[1:3],p)
-                if getattr(self, 'n' + var[4]) < 5:
-                    return p*0
-                else:
-                    rdt = p.dtype
-                    cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                    return getattr(cs, 'd'+var[5:])(p)
-            elif var[0:3] in ['mod']:   # total magnetic field
-                v = var[3]
-                if v == 'b':
-                    if not self.do_mhd:
-                        raise ValueError("No magnetic field available.")
-                rdt = self.r.dtype
-                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                result = cs.xup(getattr(self, v+'x')) ** 2
-                result += cs.yup(getattr(self, v+'y')) ** 2
-                result += cs.zup(getattr(self, v+'z')) ** 2
-                return np.sqrt(result)
-            elif var[0:3] in ['div']:   # total magnetic field
-                v = var[3]
-                if v == 'b':
-                    if not self.do_mhd:
-                        raise ValueError("No magnetic field available.")
-                rdt = self.r.dtype
-                cs.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt), self.zdn.astype(rdt), self.dzidzup.astype(rdt), self.dzidzdn.astype(rdt))
-                result = cs.ddxup(getattr(self, v+'x'))
-                result += cs.ddyup(getattr(self, v+'y'))
-                result += cs.ddzup(getattr(self, v+'z'))
-                return result
-        else:
-            raise ValueError(('_get_composite_var: do not know (yet) how to'
-                              'get composite variable %s. Note that'
-                              'simple_var available variables are: %s' % (var,repr(self.simple_vars))))
-
-    def do_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
-                    dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
-
-
-        def xxdn(f):
-            '''
-            f is centered on (i-.5,j,k)
-            '''
-            nx = len(f)
-            d = np.float32(-5.)/np.float32(2048.)
-            c = np.float32(49.)/np.float32(2048.)
-            b = np.float32(-245.)/np.float32(2048.)
-            a = np.float32(.5)-b-c-d
-            x = a*(f + np.roll(f,1)) + b*(np.roll(f,-1) + np.roll(f,2)) + c*(np.roll(f,-2) + np.roll(f,3)) + d*(np.roll(f,-3) + np.roll(f,4))
-            for i in range(0,4): x[i]=x[4]-(4-i)*(x[5]-x[4])
-            for i in range(1,4): x[nx-i]=x[nx-4]+i*(x[nx-4]-x[nx-5])
-            return x
-
-        def ddxxup(f,dx=None):
-            '''
-            X partial up derivative
-            '''
-            if dx == None: dx=1.
-            nx = len(f)
-            d = np.float32(-75.)/np.float32(107520.)/np.float32(dx)
-            c = np.float32(1029)/np.float32(107520)/np.float32(dx)
-            b = np.float32(-8575)/np.float32(107520)/np.float32(dx)
-            a = (1./np.float32(dx)-3.*b-5.*c-7.*d)
-            x = a *(np.roll(f,-1) - f) + b *(np.roll(f,-2) - np.roll(f,1)) + c *(np.roll(f,-3) - np.roll(f,2)) + d *(np.roll(f,-4) - np.roll(f,3))
-            for i in range(0,3): x[i]=x[3]
-            for i in range(1,5): x[nx-i]=x[nx-5]
-            return x
-
-        def ddxxdn(f,dx=None):
-            '''
-            X partial down derivative
-            '''
-            if dx == None: dx=1.
-            nx = len(f)
-            d = np.float32(-75.)/np.float32(107520.)/np.float32(dx)
-            c = np.float32(1029)/np.float32(107520)/np.float32(dx)
-            b = np.float32(-8575)/np.float32(107520)/np.float32(dx)
-            a = (1./np.float32(dx)-3.*b-5.*c-7.*d)
-            x = a*(f - np.roll(f,1)) + b*(np.roll(f,-1) - np.roll(f,2)) + c*(np.roll(f,-2) - np.roll(f,3)) + d *(np.roll(f,-3) - np.roll(f,4))
-            for i in range(0,4): x[i]=x[4]
-            for i in range(1,4): x[nx-i]=x[nx-4]
-            return x
-
-        f = open(meshfile, 'w')
-
-        for p in ['x', 'y', 'z']:
-
-            exec("setattr(self,'"+p+"',"+p+")")
-            if (getattr(self,p) == None):
-                exec("setattr(self,'n"+p+"',n"+p+")")
-                exec("setattr(self,'d"+p+"',d"+p+")")
-                setattr(self,p,np.linspace(0, getattr(self,'n'+p)*getattr(self,'d'+p), getattr(self,'n'+p)))
-            else:
-                exec("setattr(self,'n"+p+"',len("+p+"))")
-
-            if getattr(self,'n'+p) > 1:
-                xmdn = xxdn(getattr(self,p))
-                dxidxup = ddxxup(getattr(self,p))
-                dxidxdn = ddxxdn(getattr(self,p))
-            else:
-                xmdn= getattr(self,p)
-                dxidxup=  np.array([1.0])
-                dxidxdn=  np.array([1.0])
-
-            f.write(str(getattr(self,'n'+p))+"\n")
-            f.write(" ".join(map("{:.5f}".format,getattr(self,p))) +"\n")
-            f.write(" ".join(map("{:.5f}".format,xmdn)) +"\n")
-            f.write(" ".join(map("{:.5f}".format,dxidxup)) +"\n")
-            f.write(" ".join(map("{:.5f}".format,dxidxdn)) +"\n")
-
-        f.close()
-
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
@@ -740,9 +681,100 @@ class BifrostData(object):
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
+    def write_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
+                   dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
+        """
+        Writes mesh to ascii file.
+        """
+        def __xxdn(f):
+            '''
+            f is centered on (i-.5,j,k)
+            '''
+            nx = len(f)
+            d = -5. / 2048
+            c = 49. / 2048
+            b = -245. / 2048
+            a = .5 - b - c - d
+            x = (a * (f + np.roll(f, 1)) +
+                 b * (np.roll(f, -1) + np.roll(f, 2)) +
+                 c * (np.roll(f, -2) + np.roll(f, 3)) +
+                 d * (np.roll(f, -3) + np.roll(f, 4)))
+            for i in range(0, 4):
+                x[i] = x[4] - (4 - i) * (x[5] - x[4])
+            for i in range(1, 4):
+                x[nx - i] = x[nx - 4] + i * (x[nx - 4] - x[nx - 5])
+            return x
+
+        def __ddxxup(f, dx=None):
+            '''
+            X partial up derivative
+            '''
+            if dx is None:
+                dx = 1.
+            nx = len(f)
+            d = -75. / 107520. / dx
+            c = 1029 / 107520. / dx
+            b = -8575 / 107520. / dx
+            a = 1. / dx - 3 * b - 5 * c - 7 * d
+            x = (a * (np.roll(f, -1) - f) +
+                 b * (np.roll(f, -2) - np.roll(f, 1)) +
+                 c * (np.roll(f, -3) - np.roll(f, 2)) +
+                 d * (np.roll(f, -4) - np.roll(f, 3)))
+            x[:3] = x[3]
+            for i in range(1, 5):
+                x[nx - i] = x[nx - 5]
+            return x
+
+        def __ddxxdn(f, dx=None):
+            '''
+            X partial down derivative
+            '''
+            if dx is None:
+                dx = 1.
+            nx = len(f)
+            d = -75. / 107520. / dx
+            c = 1029 / 107520. / dx
+            b = -8575 / 107520. / dx
+            a = 1. / dx - 3 * b - 5 * c - 7 * d
+            x = (a * (f - np.roll(f, 1)) +
+                 b * (np.roll(f, -1) - np.roll(f, 2)) +
+                 c * (np.roll(f, -2) - np.roll(f, 3)) +
+                 d * (np.roll(f, -3) - np.roll(f, 4)))
+            x[:4] = x[4]
+            for i in range(1, 4):
+                x[nx - i] = x[nx - 4]
+            return x
+
+        f = open(meshfile, 'w')
+
+        for p in ['x', 'y', 'z']:
+            setattr(self, p, locals()[p])
+            if (getattr(self, p) is None):
+                setattr(self, 'n' + p, locals()['n' + p])
+                setattr(self, 'd' + p, locals()['d' + p])
+                setattr(self, p, np.linspace(0,
+                                             getattr(self, 'n' + p) *
+                                             getattr(self, 'd' + p),
+                                             getattr(self, 'n' + p)))
+            else:
+                setattr(self, 'n' + p, len(locals()[p]))
+            if getattr(self, 'n' + p) > 1:
+                xmdn = __xxdn(getattr(self, p))
+                dxidxup = __ddxxup(getattr(self, p))
+                dxidxdn = __ddxxdn(getattr(self, p))
+            else:
+                xmdn = getattr(self, p)
+                dxidxup = np.array([1.0])
+                dxidxdn = np.array([1.0])
+            f.write(str(getattr(self, 'n' + p)) + "\n")
+            f.write(" ".join(map("{:.5f}".format, getattr(self, p))) + "\n")
+            f.write(" ".join(map("{:.5f}".format, xmdn)) + "\n")
+            f.write(" ".join(map("{:.5f}".format, dxidxup)) + "\n")
+            f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
+        f.close()
+
 
 class Rhoeetab:
-
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
                  verbose=True, radtab=False):
         self.fdir = fdir
@@ -870,16 +902,20 @@ class Rhoeetab:
         eimax = np.max(ei)
         if rhomin < self.params['rhomin']:
             print('(WWW) tab_interp: density outside table bounds.' +
-                  'Table rho min=%.3e, requested rho min=%.3e' % (self.params['rhomin'], rhomin))
+                  'Table rho min=%.3e, requested rho min=%.3e' %
+                  (self.params['rhomin'], rhomin))
         if rhomax > self.params['rhomax']:
             print('(WWW) tab_interp: density outside table bounds. ' +
-                  'Table rho max=%.1f, requested rho max=%.1f' % (self.params['rhomax'], rhomax))
+                  'Table rho max=%.1f, requested rho max=%.1f' %
+                  (self.params['rhomax'], rhomax))
         if eimin < self.params['eimin']:
             print('(WWW) tab_interp: Ei outside of table bounds. ' +
-                  'Table Ei min=%.2f, requested Ei min=%.2f' % (self.params['eimin'], eimin))
+                  'Table Ei min=%.2f, requested Ei min=%.2f' %
+                  (self.params['eimin'], eimin))
         if eimax > self.params['eimax']:
             print('(WWW) tab_interp: Ei outside of table bounds. ' +
-                  'Table Ei max=%.2f, requested Ei max=%.2f' % (self.params['eimax'], eimax))
+                  'Table Ei max=%.2f, requested Ei max=%.2f' %
+                  (self.params['eimax'], eimax))
         # translate to table coordinates
         x = (np.log(ei) - self.lnei[0]) / self.dlnei
         y = (np.log(rho) - self.lnrho[0]) / self.dlnrho
@@ -958,7 +994,7 @@ class Opatab:
         self.ionhei = table[:, :, 2]
         self.opaload = True
         if self.verbose:
-            print('*** Read EOS table from '+tabname)
+            print('*** Read EOS table from ' + tabname)
 
     def tg_tab_interp(self, order=1):
         '''
@@ -1008,7 +1044,7 @@ class Opatab:
         self.ionhei1d = table[:, 2]
         self.opaload = True
         if self.verbose:
-            print('*** Read OPA table from '+tabname)
+            print('*** Read OPA table from ' + tabname)
 
 
 ###########
@@ -1056,7 +1092,7 @@ def read_idl_ascii(filename):
                 # int type
                 try:
                     value = int(value)
-                except:
+                except Exception:
                     print('(WWW) read_idl_ascii: could not find datatype in '
                           'line %i, skipping' % li)
                     li += 1
@@ -1128,10 +1164,12 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
                'Table Tmax=%.1f, requested Tmax=%.1f' % (ttmax, tmax)))
     if lrmin < tlrmin:
         print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) min=%.2f, requested log(rho) min=%.2f' % (tlrmin, lrmin)))
+               'Table log(rho) min=%.2f, requested log(rho) min=%.2f' %
+               (tlrmin, lrmin)))
     if lrmax > tlrmax:
         print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) max=%.2f, requested log(rho) max=%.2f' % (tlrmax, lrmax)))
+               'Table log(rho) max=%.2f, requested log(rho) max=%.2f' %
+               (tlrmax, lrmax)))
     # Approximate interpolation (bilinear/cubic interpolation) with ndimage
     y = (5040. / temp - tt['theta_tab'][0]) / \
         (tt['theta_tab'][1] - tt['theta_tab'][0])
