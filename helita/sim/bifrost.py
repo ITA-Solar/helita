@@ -400,6 +400,11 @@ class BifrostData(object):
     def get_quantity(self, quant, *args, **kwargs):
         """
         Calculates a quantity from the simulation quantiables.
+        DERIV_QUANT: allows to calculate derivatives of any variable. It must start with d followed with the varname and ending with dxdn etc, e.g., dbxdxdn
+        CENTRE_QUANT: allows to center any vector. It must end with xc etc, e.g., ixc,
+        MODULE_QUANT: allows to calcuate the module of any vector.  It must start with mod followed with the root leter of varname, e.g., modb
+        DIV_QUANT: allows to calcuate the divergence of any vector.  It must start with div followed with the root leter of the varname, e.g., divb
+        SQUARE_QUANT: allows to calculate ^2 for any vector. It must end with 2 after the root leter of the varname.
         """
         quant = quant.lower()
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
@@ -408,29 +413,31 @@ class BifrostData(object):
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
 
-        if quant[:3] in MODULE_QUANT:
+        if quant[:3] in MODULE_QUANT or quant[-1] in SQUARE_QUANT:
             # Calculate module of vector quantity
             q = quant[3:]
-            print(q)
             if q == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             if getattr(self, 'nx') < 5:
                 result = getattr(self, q + 'x') ** 2
             else:
-                result = cstagger.xup(getattr(self, q + 'x')) ** 2
-            print('x',q)
+                #result = cstagger.xup(getattr(self, q + 'x')) ** 2
+                result = self.get_quantity(q+'xc')**2
             if getattr(self, 'ny') < 5:
                 result += getattr(self, q + 'y') ** 2
             else:
-                result += cstagger.yup(getattr(self, q + 'y')) ** 2
-            print('y',q)
+                #result += cstagger.yup(getattr(self, q + 'y')) ** 2
+                result += self.get_quantity(q+'yc')**2
             if getattr(self, 'nz') < 5:
                 result += getattr(self, q + 'z') ** 2
             else:
-                result += cstagger.zup(getattr(self, q + 'z')) ** 2
-            print('z',q)
-            return np.sqrt(result)
+                #result += cstagger.zup(getattr(self, q + 'z')) ** 2
+                result += self.get_quantity(q+'zc')**2
+            if quant[:3] in MODULE_QUANT:
+                return np.sqrt(result)
+            elif quant[-1] in SQUARE_QUANT:
+                return result
         elif quant[0] == 'd' and quant[-4:] in DERIV_QUANT:
             # Calculate derivative of quantity
             axis = quant[-3]
@@ -480,27 +487,116 @@ class BifrostData(object):
                 vary = self.get_var(q + 'y')
                 varz = self.get_var(q + 'z')
             ###JMS warning if 2D this will cause issues:
-            return (cstagger.ddxup(varx) + cstagger.ddyup(vary) +
-                    cstagger.ddzup(varz))
-        elif quant[-1] in SQUARE_QUANT:
-            # Calculate ^2 module vector quantity
-            q = quant[3:]
-            if q == 'b':
-                if not self.do_mhd:
-                    raise ValueError("No magnetic field available.")
             if getattr(self, 'nx') < 5:
-                result = getattr(self, q + 'x') ** 2
+                result = 0.0*varx
             else:
-                result = cstagger.xup(getattr(self, q + 'x')) ** 2
-            if getattr(self, 'ny') < 5:
-                result += getattr(self, q + 'y') ** 2
-            else:
-                result += cstagger.yup(getattr(self, q + 'y')) ** 2
-            if getattr(self, 'nz') < 5:
-                result += getattr(self, q + 'z') ** 2
-            else:
-                result += cstagger.zup(getattr(self, q + 'z')) ** 2
+                result = cstagger.ddxup(varx)
+            if getattr(self, 'ny') > 5:
+                result += cstagger.ddyup(vary)
+            if getattr(self, 'nz') > 5:
+                result += cstagger.ddzup(varz)
             return result
+        else:
+            raise ValueError(('get_quantity: do not know (yet) how to'
+                              'get composite variable %s. Note that'
+                              'simple_var available variables are: %s. '
+                              'In addition get_quantity can read others computed variables, '
+                              'do help(self.get_quantity) for guidence.' % (quant,repr(self.simple_vars))
+
+    def do_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
+                    dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
+
+
+        def xxdn(f):
+            '''
+            f is centered on (i-.5,j,k)
+            '''
+            nx = len(f)
+            d = np.float32(-5.)/np.float32(2048.)
+            c = np.float32(49.)/np.float32(2048.)
+            b = np.float32(-245.)/np.float32(2048.)
+            a = np.float32(.5)-b-c-d
+            x = a*(f + np.roll(f,1)) + b*(np.roll(f,-1) + np.roll(f,2)) + c*(np.roll(f,-2) + np.roll(f,3)) + d*(np.roll(f,-3) + np.roll(f,4))
+            for i in range(0,4): x[i]=x[4]-(4-i)*(x[5]-x[4])
+            for i in range(1,4): x[nx-i]=x[nx-4]+i*(x[nx-4]-x[nx-5])
+            return x
+
+        def ddxxup(f,dx=None):
+            '''
+            X partial up derivative
+            '''
+            if dx == None: dx=1.
+            nx = len(f)
+            d = np.float32(-75.)/np.float32(107520.)/np.float32(dx)
+            c = np.float32(1029)/np.float32(107520)/np.float32(dx)
+            b = np.float32(-8575)/np.float32(107520)/np.float32(dx)
+            a = (1./np.float32(dx)-3.*b-5.*c-7.*d)
+            x = a *(np.roll(f,-1) - f) + b *(np.roll(f,-2) - np.roll(f,1)) + c *(np.roll(f,-3) - np.roll(f,2)) + d *(np.roll(f,-4) - np.roll(f,3))
+            for i in range(0,3): x[i]=x[3]
+            for i in range(1,5): x[nx-i]=x[nx-5]
+            return x
+
+        def ddxxdn(f,dx=None):
+            '''
+            X partial down derivative
+            '''
+            if dx == None: dx=1.
+            nx = len(f)
+            d = np.float32(-75.)/np.float32(107520.)/np.float32(dx)
+            c = np.float32(1029)/np.float32(107520)/np.float32(dx)
+            b = np.float32(-8575)/np.float32(107520)/np.float32(dx)
+            a = (1./np.float32(dx)-3.*b-5.*c-7.*d)
+            x = a*(f - np.roll(f,1)) + b*(np.roll(f,-1) - np.roll(f,2)) + c*(np.roll(f,-2) - np.roll(f,3)) + d *(np.roll(f,-3) - np.roll(f,4))
+            for i in range(0,4): x[i]=x[4]
+            for i in range(1,4): x[nx-i]=x[nx-4]
+            return x
+
+        f = open(meshfile, 'w')
+
+        for p in ['x', 'y', 'z']:
+
+            if p == 'x':
+                setattr(self,p,x)
+            elif p == 'y':
+                setattr(self,p,y)
+            elif p == 'z':
+                setattr(self,p,z)
+
+            if (getattr(self,p) == None):
+                if p == 'x':
+                    setattr(self,'n'+p,nx)
+                    setattr(self,'d'+p,dx)
+                elif p == 'y':
+                    setattr(self,'n'+p,ny)
+                    setattr(self,'d'+p,dy)
+                elif p =='z':
+                    setattr(self,'n'+p,nz)
+                    setattr(self,'d'+p,dz)
+                setattr(self,p,np.linspace(0, getattr(self,'n'+p)*getattr(self,'d'+p), getattr(self,'n'+p)))
+            else:
+                if p == 'x':
+                    setattr(self,'n'+p,len(x))
+                elif p == 'y':
+                    setattr(self,'n'+p,len(y))
+                elif p =='z':
+                    setattr(self,'n'+p,len(z))
+
+            if getattr(self,'n'+p) > 1:
+                xmdn = xxdn(getattr(self,p))
+                dxidxup = ddxxup(getattr(self,p))
+                dxidxdn = ddxxdn(getattr(self,p))
+            else:
+                xmdn= getattr(self,p)
+                dxidxup=  np.array([1.0])
+                dxidxdn=  np.array([1.0])
+
+            f.write(str(getattr(self,'n'+p))+"\n")
+            f.write(" ".join(map("{:.5f}".format,getattr(self,p))) +"\n")
+            f.write(" ".join(map("{:.5f}".format,xmdn)) +"\n")
+            f.write(" ".join(map("{:.5f}".format,dxidxup)) +"\n")
+            f.write(" ".join(map("{:.5f}".format,dxidxdn)) +"\n")
+
+        f.close()
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
