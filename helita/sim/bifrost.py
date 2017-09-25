@@ -453,8 +453,8 @@ class BifrostData(object):
         elif quant[-2:] in CENTRE_QUANT:
             # This brings a given vector quantity to cell centres
             axis = quant[-2]
-            q = quant[:-2]  # base variable
-            if q == 'i' or q == 'e':
+            q = quant[:-1]  # base variable
+            if q[:-1] == 'i' or q == 'e':
                 AXIS_TRANSFORM = {'x': ['yup', 'zup'],
                                 'y': ['xup', 'zup'],
                                 'z': ['xup', 'yup']}
@@ -474,7 +474,7 @@ class BifrostData(object):
                     tmp = cstagger.do(var, transf[0])
                     return cstagger.do(tmp, transf[1])
                 else:
-                    return cstagger.do(tmp, transf)
+                    return cstagger.do(var, transf[0])
         elif quant[:3] in DIV_QUANT:
             # Calculates divergence of vector quantity
             q = quant[3:]  # base variable
