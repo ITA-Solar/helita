@@ -144,7 +144,7 @@ class EbysusData(BifrostData):
         elif not hasattr(self,'mf_ilevel'):
             self.mf_ilevel=1
 
-    def get_var(self, var, mf_ispecies=1, mf_ilevel=1, snap=None, *args, **kwargs):
+    def get_var(self, var, snap=None, mf_ispecies=None, mf_ilevel=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -172,9 +172,10 @@ class EbysusData(BifrostData):
         if (((snap is not None) and (snap != self.snap)) or
             ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
             ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
+            print('eb0',mf_ispecies,mf_ilevel)
             self.set_mfi(mf_ispecies, mf_ilevel)
             self.set_snap(snap)
-
+        print('eb',self.mf_ispecies,self.mf_ilevel)
         assert (self.mf_ispecies <= 28)
 
         # # check if already in memmory
