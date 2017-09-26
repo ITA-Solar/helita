@@ -131,7 +131,7 @@ class BifrostData(object):
         Reads parameter file (.idl)
         """
         if (self.snap < 0):
-            filename = self.file_root + '.idl.src'
+            filename = self.file_root + '.idl.scr'
         elif (self.snap == 0):
             filename = self.file_root + '.idl'
         else:
@@ -193,13 +193,13 @@ class BifrostData(object):
             if self.ghost_analyse:
                 # extend mesh to cover ghost zones
                 self.z = np.concatenate((
-                   self.z[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
-                   self.z,
-                   self.z[-1] + np.linspace(self.dz, self.dz*self.nb, self.nb)))
+                  self.z[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
+                  self.z,
+                  self.z[-1] + np.linspace(self.dz, self.dz*self.nb, self.nb)))
                 self.zdn = np.concatenate((
-                   self.zdn[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
-                   self.zdn, self.zdn[-1] +
-                                np.linspace(self.dz, self.dz*self.nb, self.nb)))
+                  self.zdn[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
+                  self.zdn, (self.zdn[-1] +
+                             np.linspace(self.dz, self.dz*self.nb, self.nb))))
                 self.dzidzup = np.concatenate((
                     np.repeat(self.dzidzup[0], self.nb),
                     self.dzidzup,
@@ -299,8 +299,8 @@ class BifrostData(object):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         var - string
             Name of the variable to read. Must be Bifrost internal names.
         order - string, optional
@@ -350,8 +350,8 @@ class BifrostData(object):
             offset = self.nx * self.ny * self.nzb * idx * dsize
             ss = (self.nx, self.ny, self.nzb)
         else:
-            offset = (self.nx * self.ny * (self.nzb + (self.nzb - self.nz) // 2)
-                      * idx * dsize)
+            offset = (self.nx * self.ny *
+                      (self.nzb + (self.nzb - self.nz) // 2) * idx * dsize)
             ss = (self.nx, self.ny, self.nz)
         return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
                          offset=offset, shape=ss)
@@ -400,23 +400,65 @@ class BifrostData(object):
     def get_quantity(self, quant, *args, **kwargs):
         """
         Calculates a quantity from the simulation quantiables.
+
+        Parameters
+        ----------
+        quant - string
+            Name of the quantity to calculate (see below for some categories).
+
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the simulation.
+
+        Notes
+        -----
+        Not all possibilities for quantities are shown here. But there are
+        a few main categories:
+        - DERIV_QUANT: allows to calculate derivatives of any variable.
+                       It must start with d followed with the varname and
+                       ending with dxdn etc, e.g., 'dbxdxdn'
+        - CENTRE_QUANT: allows to center any vector. It must end with xc
+                        etc, e.g., 'ixc',
+        - MODULE_QUANT: allows to calculate the module of any vector.
+                        It must start with 'mod' followed with the root
+                        letter of varname, e.g., 'modb'
+        - DIV_QUANT: allows to calculate the divergence of any vector.
+                     It must start with div followed with the root letter
+                     of the varname, e.g., 'divb'
+        - SQUARE_QUANT: allows to calculate the squared modules for any
+                        vector. It must end with 2 after the root lelter
+                        of the varname, e.g. 'u2'.
         """
         quant = quant.lower()
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
         CENTRE_QUANT = ['xc', 'yc', 'zc']
         MODULE_QUANT = ['mod']
         DIV_QUANT = ['div']
+        SQUARE_QUANT = ['2']
 
-        if quant[:3] in MODULE_QUANT:
+        if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
             q = quant[3:]
             if q == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            result = cstagger.xup(getattr(self, q + 'x')) ** 2
-            result += cstagger.yup(getattr(self, q + 'y')) ** 2
-            result += cstagger.zup(getattr(self, q + 'z')) ** 2
-            return np.sqrt(result)
+            if getattr(self, 'nx') < 5:  # 2D or close
+                result = getattr(self, q + 'x') ** 2
+            else:
+                result = self.get_quantity(q + 'xc') ** 2
+            if getattr(self, 'ny') < 5:  # 2D or close
+                result += getattr(self, q + 'y') ** 2
+            else:
+                result += self.get_quantity(q + 'yc') ** 2
+            if getattr(self, 'nz') < 5:  # 2D or close
+                result += getattr(self, q + 'z') ** 2
+            else:
+                result += self.get_quantity(q + 'zc') ** 2
+            if quant[:3] in MODULE_QUANT:
+                return np.sqrt(result)
+            elif quant[-1] in SQUARE_QUANT:
+                return result
         elif quant[0] == 'd' and quant[-4:] in DERIV_QUANT:
             # Calculate derivative of quantity
             axis = quant[-3]
@@ -432,10 +474,15 @@ class BifrostData(object):
         elif quant[-2:] in CENTRE_QUANT:
             # This brings a given vector quantity to cell centres
             axis = quant[-2]
-            q = quant[:-2]  # base variable
-            AXIS_TRANSFORM = {'x': ['yup', 'zup'],
-                              'y': ['xup', 'zup'],
-                              'z': ['xup', 'yup']}
+            q = quant[:-1]  # base variable
+            if q[:-1] == 'i' or q == 'e':
+                AXIS_TRANSFORM = {'x': ['yup', 'zup'],
+                                  'y': ['xup', 'zup'],
+                                  'z': ['xup', 'yup']}
+            else:
+                AXIS_TRANSFORM = {'x': ['xup'],
+                                  'y': ['yup'],
+                                  'z': ['zup']}
             transf = AXIS_TRANSFORM[axis]
             try:
                 var = getattr(self, q)
@@ -444,8 +491,11 @@ class BifrostData(object):
             if getattr(self, 'n' + axis) < 5:  # 2D or close
                 return var
             else:
-                tmp = cstagger.do(var, transf[0])
-                return cstagger.do(tmp, transf[1])
+                if len(transf) == 2:
+                    tmp = cstagger.do(var, transf[0])
+                    return cstagger.do(tmp, transf[1])
+                else:
+                    return cstagger.do(var, transf[0])
         elif quant[:3] in DIV_QUANT:
             # Calculates divergence of vector quantity
             q = quant[3:]  # base variable
@@ -457,8 +507,22 @@ class BifrostData(object):
                 varx = self.get_var(q + 'x')
                 vary = self.get_var(q + 'y')
                 varz = self.get_var(q + 'z')
-            return (cstagger.ddxup(varx) + cstagger.ddyup(vary) +
-                    cstagger.ddzup(varz))
+            if getattr(self, 'nx') < 5:  # 2D or close
+                result = np.zeros_like(varx)
+            else:
+                result = cstagger.ddxup(varx)
+            if getattr(self, 'ny') > 5:
+                result += cstagger.ddyup(vary)
+            if getattr(self, 'nz') > 5:
+                result += cstagger.ddzup(varz)
+            return result
+        else:
+            raise ValueError(('get_quantity: do not know (yet) how to '
+                              'calculate quantity %s. Note that simple_var '
+                              'available variables are: %s.\nIn addition, '
+                              'get_quantity can read others computed variables'
+                              ' see e.g. help(self.get_quantity) for guidance'
+                              '.' % (quant, repr(self.simple_vars))))
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
