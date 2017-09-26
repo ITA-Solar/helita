@@ -290,10 +290,12 @@ class BifrostData(object):
             setattr(self, var, self.variables[var])
             return self.variables[var]
         else:
-            raise ValueError(
+            '''raise ValueError(
                 ("get_var: could not read variable %s. Must be "
                  "one of %s" %
-                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))
+                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
+            return  self.get_quantity(var, *args, **kwargs)
+
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -393,9 +395,9 @@ class BifrostData(object):
             return self.e / self.r
         elif var == 's':   # entropy?
             return np.log(self.p) - self.params['gamma'] * np.log(self.r)
-        else:
+        '''else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
-                              'get composite variable %s.' % var))
+                              'get composite variable %s.' % var))'''
 
     def get_quantity(self, quant, *args, **kwargs):
         """
@@ -521,7 +523,7 @@ class BifrostData(object):
                               'calculate quantity %s. Note that simple_var '
                               'available variables are: %s.\nIn addition, '
                               'get_quantity can read others computed variables'
-                              ' see e.g. help(self.get_quantity) for guidance'
+                              ' see e.g. self.get_quantity? for guidance'
                               '.' % (quant, repr(self.simple_vars))))
 
     def write_rh15d(self, outfile, desc=None, append=True,
