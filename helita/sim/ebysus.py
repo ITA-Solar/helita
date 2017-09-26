@@ -172,10 +172,9 @@ class EbysusData(BifrostData):
         if (((snap is not None) and (snap != self.snap)) or
             ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
             ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
-            print('eb0',mf_ispecies,mf_ilevel)
             self.set_mfi(mf_ispecies, mf_ilevel)
             self.set_snap(snap)
-        print('eb',self.mf_ispecies,self.mf_ilevel)
+
         assert (self.mf_ispecies <= 28)
 
         # # check if already in memmory
@@ -192,7 +191,7 @@ class EbysusData(BifrostData):
             raise ValueError(("get_var: could not read variable"
                               "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))'''
 
-    def _get_simple_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r', *args, **kwargs):
+    def _get_simple_var(self, var, mf_ispecies=None, mf_ilevel=None, order='F', mode='r', *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
 
@@ -273,7 +272,7 @@ class EbysusData(BifrostData):
             return np.memmap(filename, dtype=self.dtype, order=order, offset=offset,
                          mode=mode, shape=(self.nx, self.ny, self.nzb, mf_arr_size))
 
-    def _get_composite_var(self, var, mf_ispecies=0, mf_ilevel=0, order='F', mode='r', *args, **kwargs):
+    def _get_composite_mf_var(self, var, order='F', mode='r', *args, **kwargs):
         """
         Gets composite variables for multi species fluid.
         """
