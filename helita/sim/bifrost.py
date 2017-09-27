@@ -438,6 +438,7 @@ class BifrostData(object):
         MODULE_QUANT = ['mod']
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
+        EOSTAB_QUANT = ['ne','tg','pg','kr', 'eps', 'opa', 'temt']
 
         if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
@@ -518,6 +519,27 @@ class BifrostData(object):
             if getattr(self, 'nz') > 5:
                 result += cstagger.ddzup(varz)
             return result
+        elif quant in EOSTAB_QUANT:
+            # unit conversion to SI
+            ur = self.params['u_r']         # to g/cm^3  (for ne_rt_table)
+            ue = self.params['u_ee']        # to erg/g
+            if 'do_hion' in self.params and quant == 'ne':
+                if self.params['do_hion'] > 0:
+                    return self.get_var('hionne')
+                    pass
+            rho = self.r
+            rho = rho * ur
+            ee = self.get_var('ee')
+            ee = ee * ue
+            if self.verbose:
+                print('ne interpolation...')
+            if quant in ['eps', 'opa', 'temt']:
+                radtab = True
+            else:
+                radtab = False
+            eostab = Rhoeetab(fdir=self.fdir,radtab=radtab)
+            return eostab.tab_interp(rho, ee, order=1,out=quant) * 1.e6  # cm^-3 to m^-3
+
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
@@ -807,6 +829,85 @@ class BifrostData(object):
             f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
         f.close()
 
+class bifrost_units():
+    """
+    bifrost_units.py
+
+    Created by Mikolaj Szydlarski on 2017-01-20.
+    Copyright (c) 2014, ITA UiO - All rights reserved.
+    """
+
+    u_l    = 1e8
+    u_t    = 1e2
+    u_r    = 1e-7
+    u_u    = u_l/u_t
+    u_p    = u_r*(u_l/u_t)**2          # Pressure [dyne/cm2]
+    u_kr   = 1/(u_r*u_l)               # Rosseland opacity [cm2/g]
+    u_ee   = u_u**2
+    u_e    = u_r*u_ee
+    u_te   = u_e/u_t*u_l               # Box therm. em. [erg/(s ster cm2)]
+    mu     = 0.8
+    u_n    = 3.00e+10                  # Denisty number n_0 * 1/cm^3
+    k_B    = 1.38e-16
+    m_H    = 1.6726219e-24
+    m_He   = 6.65e-24
+    m_p    = mu*m_H
+    m_e    = 9.1093897E-28
+    u_tg   = (m_H/k_B)*u_ee
+    u_tge  = (m_e/k_B)*u_ee
+    pi     = 3.14159
+
+    usi_l  = 1e6
+    usi_r  = 1e-4
+    usi_u  = usi_l/u_t
+    usi_p  = usi_r*(usi_l/u_t)**2       # Pressure [N/m2]
+    usi_kr = 1/(usi_r*usi_l)            # Rosseland opacity [m2/kg]
+    usi_ee = usi_u**2
+    usi_e  = usi_r*usi_ee
+    usi_te = usi_e/u_t*usi_l            # Box therm. em. [J/(s ster m2)]
+    ksi_B  = 1.380650e-23               # Boltzman's cst. [J/K]
+    msi_H  = 1.67e-27
+    msi_He = 6.65e-27
+    msi_p  = mu*msi_H
+    usi_tg = (msi_H/ksi_B)*usi_ee
+
+    # Solar gravity
+    gsun   = 27400.0     #(cgs)
+
+    # --- ideal gas
+    gamma = 1.667
+
+    # --- physical constants and other useful quantities
+    CLIGHT             = 2.99792458E+10 # Speed of light [cm/s]
+    HPLANCK            = 6.6260755E-27  # Planck's constant [erg s]
+    KBOLTZMANN         = 1.380658E-16   # Boltzman's cst. [erg/K]
+    AMU                = 1.6605402E-24  # Atomic mass unit [g]
+    AMUSI              = 1.6605402E-27  # Atomic mass unit [kg]
+    M_ELECTRON         = 9.1093897E-28  # Electron mass [g]
+    Q_ELECTRON         = 4.80325E-10    # Electron charge [esu]
+    QSI_ELECTRON       = 1.6021765e-19  # Electron charge [C]
+    RBOHR              = 5.29177349E-9  # Bohr radius [cm]
+    E_RYDBERG          = 2.1798741E-11  # Ion. pot. Hydrogen [erg]
+    EH2DISS            = 4.478          # H2 dissociation energy [eV]
+    pie2_mec           = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
+    stefboltz          = 5.670400e-5    # Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
+    MION               = m_H            # Ion mass [g]
+    R_EI               = 1.44E-7        # Classical distance of closest approach e^2 / kT = 1.44x10^-7 T^-1 cm
+
+    # --- Unit conversions
+    EV_TO_ERG          = 1.60217733E-12 # One electronVolt [erg]
+    EV_TO_J            = 1.60217733E-19 # One electronVolt [J]
+    NM_TO_M            = 1.0E-09
+    CM_TO_M            = 1.0E-02
+    KM_TO_M            = 1.0E+03
+    ERG_TO_JOULE       = 1.0E-07
+    G_TO_KG            = 1.0E-03
+    MICRON_TO_NM       = 1.0E+03
+    MEGABARN_TO_M2     = 1.0E-22
+    ATM_TO_PA          = 1.0135E+05     # Atm to Pascal (N/m^2)
+    DYNE_CM2_TO_PASCAL = 0.1
+    K_TO_EV            = 8.621738E-5    # KtoeV
+    EV_TO_K            = 11604.50520    # KtoeV
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
@@ -855,7 +956,7 @@ class Rhoeetab:
         self.lnpg = table[:, :, 0]
         self.tgt = table[:, :, 1]
         self.lnne = table[:, :, 2]
-        self.lnrk = table[:, :, 3]
+        self.lnkr = table[:, :, 3]
         self.eosload = True
         if self.verbose:
             print(('*** Read EOS table from ' + eostabfile))
@@ -924,7 +1025,7 @@ class Rhoeetab:
         if out in ['opa eps temp'.split()] and not self.radload:
             raise ValueError("(EEE) tab_interp: rad table not loaded!")
         quant = getattr(self, qdict[out])
-        if out in ['opa eps temp'.split()]:
+        if out in ['opa','eps','temp']:
             if bin is None:
                 print("(WWW) tab_interp: radiation bin not set, using first.")
                 bin = 0
