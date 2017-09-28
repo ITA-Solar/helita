@@ -760,98 +760,97 @@ class BifrostData(object):
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
-    def write_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
-                   dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
-        """
-        Writes mesh to ascii file.
-        """
-        def __xxdn(f):
-            '''
-            f is centered on (i-.5,j,k)
-            '''
-            nx = len(f)
-            d = -5. / 2048
-            c = 49. / 2048
-            b = -245. / 2048
-            a = .5 - b - c - d
-            x = (a * (f + np.roll(f, 1)) +
-                 b * (np.roll(f, -1) + np.roll(f, 2)) +
-                 c * (np.roll(f, -2) + np.roll(f, 3)) +
-                 d * (np.roll(f, -3) + np.roll(f, 4)))
-            for i in range(0, 4):
-                x[i] = x[4] - (4 - i) * (x[5] - x[4])
-            for i in range(1, 4):
-                x[nx - i] = x[nx - 4] + i * (x[nx - 4] - x[nx - 5])
-            return x
+def write_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
+               dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
+    """
+    Writes mesh to ascii file.
+    """
+    def __xxdn(f):
+        '''
+        f is centered on (i-.5,j,k)
+        '''
+        nx = len(f)
+        d = -5. / 2048
+        c = 49. / 2048
+        b = -245. / 2048
+        a = .5 - b - c - d
+        x = (a * (f + np.roll(f, 1)) +
+             b * (np.roll(f, -1) + np.roll(f, 2)) +
+             c * (np.roll(f, -2) + np.roll(f, 3)) +
+             d * (np.roll(f, -3) + np.roll(f, 4)))
+        for i in range(0, 4):
+            x[i] = x[4] - (4 - i) * (x[5] - x[4])
+        for i in range(1, 4):
+            x[nx - i] = x[nx - 4] + i * (x[nx - 4] - x[nx - 5])
+        return x
 
-        def __ddxxup(f, dx=None):
-            '''
-            X partial up derivative
-            '''
-            if dx is None:
-                dx = 1.
-            nx = len(f)
-            d = -75. / 107520. / dx
-            c = 1029 / 107520. / dx
-            b = -8575 / 107520. / dx
-            a = 1. / dx - 3 * b - 5 * c - 7 * d
-            x = (a * (np.roll(f, -1) - f) +
-                 b * (np.roll(f, -2) - np.roll(f, 1)) +
-                 c * (np.roll(f, -3) - np.roll(f, 2)) +
-                 d * (np.roll(f, -4) - np.roll(f, 3)))
-            x[:3] = x[3]
-            for i in range(1, 5):
-                x[nx - i] = x[nx - 5]
-            return x
+    def __ddxxup(f, dx=None):
+        '''
+        X partial up derivative
+        '''
+        if dx is None:
+            dx = 1.
+        nx = len(f)
+        d = -75. / 107520. / dx
+        c = 1029 / 107520. / dx
+        b = -8575 / 107520. / dx
+        a = 1. / dx - 3 * b - 5 * c - 7 * d
+        x = (a * (np.roll(f, -1) - f) +
+             b * (np.roll(f, -2) - np.roll(f, 1)) +
+             c * (np.roll(f, -3) - np.roll(f, 2)) +
+             d * (np.roll(f, -4) - np.roll(f, 3)))
+        x[:3] = x[3]
+        for i in range(1, 5):
+            x[nx - i] = x[nx - 5]
+        return x
 
-        def __ddxxdn(f, dx=None):
-            '''
-            X partial down derivative
-            '''
-            if dx is None:
-                dx = 1.
-            nx = len(f)
-            d = -75. / 107520. / dx
-            c = 1029 / 107520. / dx
-            b = -8575 / 107520. / dx
-            a = 1. / dx - 3 * b - 5 * c - 7 * d
-            x = (a * (f - np.roll(f, 1)) +
-                 b * (np.roll(f, -1) - np.roll(f, 2)) +
-                 c * (np.roll(f, -2) - np.roll(f, 3)) +
-                 d * (np.roll(f, -3) - np.roll(f, 4)))
-            x[:4] = x[4]
-            for i in range(1, 4):
-                x[nx - i] = x[nx - 4]
-            return x
+    def __ddxxdn(f, dx=None):
+        '''
+        X partial down derivative
+        '''
+        if dx is None:
+            dx = 1.
+        nx = len(f)
+        d = -75. / 107520. / dx
+        c = 1029 / 107520. / dx
+        b = -8575 / 107520. / dx
+        a = 1. / dx - 3 * b - 5 * c - 7 * d
+        x = (a * (f - np.roll(f, 1)) +
+             b * (np.roll(f, -1) - np.roll(f, 2)) +
+             c * (np.roll(f, -2) - np.roll(f, 3)) +
+             d * (np.roll(f, -3) - np.roll(f, 4)))
+        x[:4] = x[4]
+        for i in range(1, 4):
+            x[nx - i] = x[nx - 4]
+        return x
 
-        f = open(meshfile, 'w')
+    f = open(meshfile, 'w')
 
-        for p in ['x', 'y', 'z']:
-            setattr(self, p, locals()[p])
-            if (getattr(self, p) is None):
-                setattr(self, 'n' + p, locals()['n' + p])
-                setattr(self, 'd' + p, locals()['d' + p])
-                setattr(self, p, np.linspace(0,
-                                             getattr(self, 'n' + p) *
-                                             getattr(self, 'd' + p),
-                                             getattr(self, 'n' + p)))
-            else:
-                setattr(self, 'n' + p, len(locals()[p]))
-            if getattr(self, 'n' + p) > 1:
-                xmdn = __xxdn(getattr(self, p))
-                dxidxup = __ddxxup(getattr(self, p))
-                dxidxdn = __ddxxdn(getattr(self, p))
-            else:
-                xmdn = getattr(self, p)
-                dxidxup = np.array([1.0])
-                dxidxdn = np.array([1.0])
-            f.write(str(getattr(self, 'n' + p)) + "\n")
-            f.write(" ".join(map("{:.5f}".format, getattr(self, p))) + "\n")
-            f.write(" ".join(map("{:.5f}".format, xmdn)) + "\n")
-            f.write(" ".join(map("{:.5f}".format, dxidxup)) + "\n")
-            f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
-        f.close()
-
+    for p in ['x', 'y', 'z']:
+        setattr(self, p, locals()[p])
+        if (getattr(self, p) is None):
+            setattr(self, 'n' + p, locals()['n' + p])
+            setattr(self, 'd' + p, locals()['d' + p])
+            setattr(self, p, np.linspace(0,
+                                         getattr(self, 'n' + p) *
+                                         getattr(self, 'd' + p),
+                                         getattr(self, 'n' + p)))
+        else:
+            setattr(self, 'n' + p, len(locals()[p]))
+        if getattr(self, 'n' + p) > 1:
+            xmdn = __xxdn(getattr(self, p))
+            dxidxup = __ddxxup(getattr(self, p))
+            dxidxdn = __ddxxdn(getattr(self, p))
+        else:
+            xmdn = getattr(self, p)
+            dxidxup = np.array([1.0])
+            dxidxdn = np.array([1.0])
+        f.write(str(getattr(self, 'n' + p)) + "\n")
+        f.write(" ".join(map("{:.5f}".format, getattr(self, p))) + "\n")
+        f.write(" ".join(map("{:.5f}".format, xmdn)) + "\n")
+        f.write(" ".join(map("{:.5f}".format, dxidxup)) + "\n")
+        f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
+    f.close()
 
 class bifrost_units():
     import scipy.constants as const
