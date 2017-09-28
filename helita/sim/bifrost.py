@@ -193,13 +193,13 @@ class BifrostData(object):
             if self.ghost_analyse:
                 # extend mesh to cover ghost zones
                 self.z = np.concatenate((
-                  self.z[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
-                  self.z,
-                  self.z[-1] + np.linspace(self.dz, self.dz*self.nb, self.nb)))
+                    self.z[0] - np.linspace(self.dz * self.nb, self.dz, self.nb),
+                    self.z,
+                    self.z[-1] + np.linspace(self.dz, self.dz * self.nb, self.nb)))
                 self.zdn = np.concatenate((
-                  self.zdn[0] - np.linspace(self.dz*self.nb, self.dz, self.nb),
-                  self.zdn, (self.zdn[-1] +
-                             np.linspace(self.dz, self.dz*self.nb, self.nb))))
+                    self.zdn[0] - np.linspace(self.dz * self.nb, self.dz, self.nb),
+                    self.zdn, (self.zdn[-1] +
+                               np.linspace(self.dz, self.dz * self.nb, self.nb))))
                 self.dzidzup = np.concatenate((
                     np.repeat(self.dzidzup[0], self.nb),
                     self.dzidzup,
@@ -290,12 +290,11 @@ class BifrostData(object):
             setattr(self, var, self.variables[var])
             return self.variables[var]
         else:
-            '''raise ValueError(
+            raise ValueError(
                 ("get_var: could not read variable %s. Must be "
                  "one of %s" %
-                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
-            return  self.get_quantity(var, *args, **kwargs)
-
+                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))
+            #return self.get_quantity(var, *args, **kwargs)
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -438,7 +437,7 @@ class BifrostData(object):
         MODULE_QUANT = ['mod']
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
-        EOSTAB_QUANT = ['ne','tg','pg','kr', 'eps', 'opa', 'temt']
+        EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt']
         PROJ_QUANT = ['par', 'per']
 
         if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
@@ -538,8 +537,9 @@ class BifrostData(object):
                 radtab = True
             else:
                 radtab = False
-            eostab = Rhoeetab(fdir=self.fdir,radtab=radtab)
-            return eostab.tab_interp(rho, ee, order=1,out=quant) * 1.e6  # cm^-3 to m^-3
+            eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
+            return eostab.tab_interp(
+                rho, ee, order=1, out=quant) * 1.e6  # cm^-3 to m^-3
         elif quant[1:4] in PROJ_QUANT:
             v1 = quant[0]
             v2 = quant[4]
@@ -556,13 +556,10 @@ class BifrostData(object):
             v2Mag = x2 * v1x + y2 * v1y + z2 * v1z
             result = v2Mag
 
-
             if quant[1:4] == 'per':
                 perX = x2 - v1x
                 perY = y2 - v1y
                 perZ = z2 - v1z
-                # print(np.min(x2*x2 + y2*y2 + z2*z2 - result**2))
-                # result1 = np.sqrt(x2*x2 + y2*y2 + z2*z2 - result**2)
                 v1Mag = np.sqrt(perX**2 + perY**2 + perZ**2)
                 result = v1Mag
             return result
@@ -855,7 +852,10 @@ class BifrostData(object):
             f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
         f.close()
 
+
 class bifrost_units():
+    import scipy.constants as const
+    from astropy import constants as aconst
     """
     bifrost_units.py
 
@@ -863,78 +863,79 @@ class bifrost_units():
     Copyright (c) 2014, ITA UiO - All rights reserved.
     """
 
-    u_l    = 1e8
-    u_t    = 1e2
-    u_r    = 1e-7
-    u_u    = u_l/u_t
-    u_p    = u_r*(u_l/u_t)**2          # Pressure [dyne/cm2]
-    u_kr   = 1/(u_r*u_l)               # Rosseland opacity [cm2/g]
-    u_ee   = u_u**2
-    u_e    = u_r*u_ee
-    u_te   = u_e/u_t*u_l               # Box therm. em. [erg/(s ster cm2)]
-    mu     = 0.8
-    u_n    = 3.00e+10                  # Denisty number n_0 * 1/cm^3
-    k_B    = 1.38e-16
-    m_H    = 1.6726219e-24
-    m_He   = 6.65e-24
-    m_p    = mu*m_H
-    m_e    = 9.1093897E-28
-    u_tg   = (m_H/k_B)*u_ee
-    u_tge  = (m_e/k_B)*u_ee
-    pi     = 3.14159
+    u_l = 1e8
+    u_t = 1e2
+    u_r = 1e-7
+    u_u = u_l / u_t
+    u_p = u_r * (u_l / u_t)**2          # Pressure [dyne/cm2]
+    u_kr = 1 / (u_r * u_l)               # Rosseland opacity [cm2/g]
+    u_ee = u_u**2
+    u_e = u_r * u_ee
+    u_te = u_e / u_t * u_l               # Box therm. em. [erg/(s ster cm2)]
+    mu = 0.8
+    u_n = 3.00e+10                  # Denisty number n_0 * 1/cm^3
+    k_B = aconst.k_B.to('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
+    m_H = const.m_n / const.gram # 1.674927471e-24
+    m_He = 6.65e-24
+    m_p = mu * m_H   # Mass per particle
+    m_e = const.m_e / const.gram # 9.1093897E-28
+    u_tg = (m_H / k_B) * u_ee
+    u_tge = (m_e / k_B) * u_ee
+    pi = const.pi
 
-    usi_l  = 1e6
-    usi_r  = 1e-4
-    usi_u  = usi_l/u_t
-    usi_p  = usi_r*(usi_l/u_t)**2       # Pressure [N/m2]
-    usi_kr = 1/(usi_r*usi_l)            # Rosseland opacity [m2/kg]
+    usi_l = u_l * const.centi # 1e6
+    usi_r = u_r * const.gram # 1e-4
+    usi_u = usi_l / u_t
+    usi_p = usi_r * (usi_l / u_t)**2       # Pressure [N/m2]
+    usi_kr = 1 / (usi_r * usi_l)            # Rosseland opacity [m2/kg]
     usi_ee = usi_u**2
-    usi_e  = usi_r*usi_ee
-    usi_te = usi_e/u_t*usi_l            # Box therm. em. [J/(s ster m2)]
-    ksi_B  = 1.380650e-23               # Boltzman's cst. [J/K]
-    msi_H  = 1.6726219e-27
+    usi_e = usi_r * usi_ee
+    usi_te = usi_e / u_t * usi_l            # Box therm. em. [J/(s ster m2)]
+    ksi_B = aconst.k_B.to('J/K')  # 1.380658E-23 Boltzman's cst. [J/K]
+    msi_H = const.m_n # 1.674927471e-27
     msi_He = 6.65e-27
-    msi_p  = mu*msi_H
-    usi_tg = (msi_H/ksi_B)*usi_ee
-    msi_e  = 9.1093897e-31
+    msi_p = mu * msi_H # Mass per particle
+    usi_tg = (msi_H / ksi_B) * usi_ee
+    msi_e = const.m_e # 9.1093897e-31
 
     # Solar gravity
-    gsun   = 27400.0     #(cgs)
+    gsun = 27400.0  # (cgs)
 
     # --- ideal gas
     gamma = 1.667
 
     # --- physical constants and other useful quantities
-    CLIGHT             = 2.99792458E+10 # Speed of light [cm/s]
-    HPLANCK            = 6.6260755E-27  # Planck's constant [erg s]
-    KBOLTZMANN         = 1.380658E-16   # Boltzman's cst. [erg/K]
-    AMU                = 1.6605402E-24  # Atomic mass unit [g]
-    AMUSI              = 1.6605402E-27  # Atomic mass unit [kg]
-    M_ELECTRON         = 9.1093897E-28  # Electron mass [g]
-    Q_ELECTRON         = 4.80325E-10    # Electron charge [esu]
-    QSI_ELECTRON       = 1.6021765e-19  # Electron charge [C]
-    RBOHR              = 5.29177349E-9  # Bohr radius [cm]
-    E_RYDBERG          = 2.1798741E-11  # Ion. pot. Hydrogen [erg]
-    EH2DISS            = 4.478          # H2 dissociation energy [eV]
-    pie2_mec           = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
-    stefboltz          = 5.670400e-5    # Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
-    MION               = m_H            # Ion mass [g]
-    R_EI               = 1.44E-7        # Classical distance of closest approach e^2 / kT = 1.44x10^-7 T^-1 cm
+    CLIGHT = aconst.c.to('cm/s')  # 2.99792458E+10 Speed of light [cm/s]
+    HPLANCK = aconst.h.to('erg s')  # 6.6260755E-27 Planck's constant [erg s]
+    KBOLTZMANN = aconst.k_B.to('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
+    AMU = aconst.u.to('kg')  # 1.6605402E-24 Atomic mass unit [g]
+    AMUSI = aconst.u.to('g')  # 1.6605402E-27 Atomic mass unit [kg]
+    M_ELECTRON = aconst.m_e.to('g')  # 9.1093897E-28 Electron mass [g]
+    Q_ELECTRON = 4.80325E-10    # Electron charge [esu]
+    QSI_ELECTRON = aconst.e  # 1.6021765e-19 Electron charge [C]
+    RBOHR = aconst.a0.to('cm')  # 5.29177349E-9 Bohr radius [cm]
+    E_RYDBERG = 2.1798741E-11  # Ion. pot. Hydrogen [erg]
+    EH2DISS = 4.478          # H2 dissociation energy [eV]
+    pie2_mec = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
+    stefboltz = const.sigma_sb.to('erg/(cm2 s K4)') # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
+    MION = m_H            # Ion mass [g]
+    R_EI = 1.44E-7        # Classical distance of closest approach e^2 / kT = 1.44x10^-7 T^-1 cm
 
     # --- Unit conversions
-    EV_TO_ERG          = 1.60217733E-12 # One electronVolt [erg]
-    EV_TO_J            = 1.60217733E-19 # One electronVolt [J]
-    NM_TO_M            = 1.0E-09
-    CM_TO_M            = 1.0E-02
-    KM_TO_M            = 1.0E+03
-    ERG_TO_JOULE       = 1.0E-07
-    G_TO_KG            = 1.0E-03
-    MICRON_TO_NM       = 1.0E+03
-    MEGABARN_TO_M2     = 1.0E-22
-    ATM_TO_PA          = 1.0135E+05     # Atm to Pascal (N/m^2)
+    EV_TO_ERG = const.eV/const.erg # 1.60217733E-12 One electronVolt [erg]
+    EV_TO_J =  const.eV # 1.60217733E-19 One electronVolt [J]
+    NM_TO_M = const.nano # 1.0E-09
+    CM_TO_M = const.centi # 1.0E-02
+    KM_TO_M = const.kilo # 1.0E+03
+    ERG_TO_JOULE = const.erg # 1.0E-07
+    G_TO_KG = const.gram # 1.0E-03
+    MICRON_TO_NM = 1.0E+03
+    MEGABARN_TO_M2 = 1.0E-22
+    ATM_TO_PA = const.atm # 1.0135E+05 Atm to Pascal (N/m^2)
     DYNE_CM2_TO_PASCAL = 0.1
-    K_TO_EV            = 8.621738E-5    # KtoeV
-    EV_TO_K            = 11604.50520    # KtoeV
+    K_TO_EV = 8.621738E-5    # KtoeV
+    EV_TO_K = 11604.50520    # eVtoK
+
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
@@ -1052,7 +1053,7 @@ class Rhoeetab:
         if out in ['opa eps temp'.split()] and not self.radload:
             raise ValueError("(EEE) tab_interp: rad table not loaded!")
         quant = getattr(self, qdict[out])
-        if out in ['opa','eps','temp']:
+        if out in ['opa', 'eps', 'temp']:
             if bin is None:
                 print("(WWW) tab_interp: radiation bin not set, using first.")
                 bin = 0
