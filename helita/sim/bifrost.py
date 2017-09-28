@@ -916,7 +916,7 @@ class bifrost_units():
     E_RYDBERG = 2.1798741E-11  # Ion. pot. Hydrogen [erg]
     EH2DISS = 4.478          # H2 dissociation energy [eV]
     pie2_mec = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
-    stefboltz = const.sigma_sb.to('erg/(cm2 s K4)') # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
+    stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)') # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
     MION = m_H            # Ion mass [g]
     R_EI = 1.44E-7        # Classical distance of closest approach e^2 / kT = 1.44x10^-7 T^-1 cm
 
