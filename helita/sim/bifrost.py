@@ -290,11 +290,11 @@ class BifrostData(object):
             setattr(self, var, self.variables[var])
             return self.variables[var]
         else:
-            raise ValueError(
+            '''raise ValueError(
                 ("get_var: could not read variable %s. Must be "
                  "one of %s" %
-                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))
-            #return self.get_quantity(var, *args, **kwargs)
+                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
+            return self.get_quantity(var, *args, **kwargs)
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
