@@ -439,6 +439,7 @@ class BifrostData(object):
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
         EOSTAB_QUANT = ['ne','tg','pg','kr', 'eps', 'opa', 'temt']
+        PROJ_QUANT = ['par', 'per']
 
         if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
@@ -539,7 +540,32 @@ class BifrostData(object):
                 radtab = False
             eostab = Rhoeetab(fdir=self.fdir,radtab=radtab)
             return eostab.tab_interp(rho, ee, order=1,out=quant) * 1.e6  # cm^-3 to m^-3
+        elif quant[1:4] in PROJ_QUANT:
+            v1 = quant[0]
+            v2 = quant[4]
 
+            x1 = self.get_quantity(v1 + 'xc', self.snap)
+            y1 = self.get_quantity(v1 + 'yc', self.snap)
+            z1 = self.get_quantity(v1 + 'zc', self.snap)
+            x2 = self.get_quantity(v2 + 'xc', self.snap)
+            y2 = self.get_quantity(v2 + 'yc', self.snap)
+            z2 = self.get_quantity(v2 + 'zc', self.snap)
+
+            v1Mag = np.sqrt(x1**2 + y1**2 + z1**2)
+            v1x, v1y, v1z = x1 / v1Mag, y1 / v1Mag, z1 / v1Mag
+            v2Mag = x2 * v1x + y2 * v1y + z2 * v1z
+            result = v2Mag
+
+
+            if quant[1:4] == 'per':
+                perX = x2 - v1x
+                perY = y2 - v1y
+                perZ = z2 - v1z
+                # print(np.min(x2*x2 + y2*y2 + z2*z2 - result**2))
+                # result1 = np.sqrt(x2*x2 + y2*y2 + z2*z2 - result**2)
+                v1Mag = np.sqrt(perX**2 + perY**2 + perZ**2)
+                result = v1Mag
+            return result
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
@@ -866,10 +892,11 @@ class bifrost_units():
     usi_e  = usi_r*usi_ee
     usi_te = usi_e/u_t*usi_l            # Box therm. em. [J/(s ster m2)]
     ksi_B  = 1.380650e-23               # Boltzman's cst. [J/K]
-    msi_H  = 1.67e-27
+    msi_H  = 1.6726219e-27
     msi_He = 6.65e-27
     msi_p  = mu*msi_H
     usi_tg = (msi_H/ksi_B)*usi_ee
+    msi_e  = 9.1093897e-31
 
     # Solar gravity
     gsun   = 27400.0     #(cgs)
