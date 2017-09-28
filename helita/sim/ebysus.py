@@ -4,7 +4,7 @@ Set of programs to read and interact with output from Multifluid/multispecies
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph, bifrost_units
 from . import cstagger
 
 
@@ -702,7 +702,7 @@ def get_atomZ(atom='',params=[],filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC
 
     if Chianti:
         import ChiantiPy.core as ch
-
+        if len(''.join(x for x in atom if x.isdigit())) == 0: atom = atom+'_2'
         ion = ch.ion(atom.lower())
         return ion.Z
     else:
@@ -885,6 +885,45 @@ def get_excidE(atom='',lvl=1,params=[],Chianti=True,cm1=False):
     else:
         print('No Elvlc in the Chianti Data base')
 
+def rrec(Te,atom='h'):
+    ''' gives the recombination rate per particle McWhirter (1965) '''
+    units=bifrost_units()
+    vfac=2.6e-19
+    Z=get_atomZ(atom)
+    TeV=Te*units.K_TO_EV
+    return vfac*np.sqrt(1.0/TeV)*Z**2
+
+def vrec(nel,Te,atom='h'):
+    ''' gives the recombination frequency McWhirter (1965) '''
+    return nel*rrec(Te,atom=atom)
+
+def rion(Te,atom='h'):
+    ''' gives the ionization rate per particle using Voronov 1997 fitting formula'''
+    units=bifrost_units()
+    A=get_atomA(atom)*1.0e6# converted to SI 2.91e-14
+    X=get_atomX(atom)# 0.232
+    K=get_atomK(atom)#0.39
+    P=get_atomP(atom)# 1
+    phion=get_atomde(atom,Chianti=False)# 13.6
+    TeV=Te*units.K_TO_EV
+    return A*(1+np.sqrt(phion/TeV)*P)/(X+phion/TeV)*(phion/TeV)**K*np.exp(-phion/TeV)
+
+def vion(nel,Te,atom='h'):
+    ''' gives the ionization frequency using Voronov 1997 fitting formula'''
+    return nel*rion(Te,atom=atom)
+
+def ionfraction(Te,atom='h'):
+    ''' gives the ionization fraction using vrec and vion'''
+    return rion(Te,atom=atom)/(rrec(Te,atom=atom) + 2.0 * rion(Te,atom=atom))
+
+def ionse(ntot,Te,atom='h'):
+    ''' gives electron or ion number density using vrec and vion'''
+    units=bifrost_units()
+    return ntot * ionfraction(Te,atom=atom)
+
+def neuse(ntot,Te,atom='h'):
+    ''' gives neutral number density using vrec and vion'''
+    return  ntot - 2.0 * ionse(ntot,Te,atom=atom)
 
 def add_voro_atom(inputfile,outputfile,atom='',vorofile='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',nk='100'):
     '''
