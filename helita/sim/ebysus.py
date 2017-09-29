@@ -1162,7 +1162,7 @@ def vionr3body(nel,Te, atom='h',lowlevel = 0,atomfile='H_2.atom'):
     param = read_atom_ascii(atomfile)
     gst_hi=float(param['lvl'][lowlevel,1]) #2.0
     gst_lo=float(param['lvl'][lowlevel+1,1]) #1.0
-    if lowlevel = 0:
+    if lowlevel == 0:
         ionlevel = atom
     else:
         ionlevel = atom + '_' str(lowlevel+1)
