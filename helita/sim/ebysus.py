@@ -1155,65 +1155,6 @@ def vrec(nel, Te, atom='h'):
     ''' gives the recombination frequency McWhirter (1965) '''
     return nel * rrec(Te, atom=atom)
 
-
-def vionr3body(nel,Te, atom='h',lowlevel = 0,atomfile='H_2.atom'):
-    ''' three body recombination '''
-    units = bifrost_units()
-    param = read_atom_ascii(atomfile)
-    gst_hi=float(param['lvl'][lowlevel,1]) #2.0
-    gst_lo=float(param['lvl'][lowlevel+1,1]) #1.0
-    if lowlevel == 0:
-        ionlevel = atom
-    else:
-        ionlevel = atom + '_' str(lowlevel+1)
-    phion = get_atomde(ionlevel, Chianti=False)
-    dekt=phion/units.K_TO_EV/Te
-    saha=2.07e-16*nel*gst_lo/gst_hi*Te**(-1.5)*np.exp(dekt)  # Assuming nel in cgs. (For SI units would be 2.07e-22)
-    return saha*vion(nel,Te) # vion is collisional ionization rate
-
-def inv_pop(ntot,Te,atom='h',nlevels=2,niter=100,nel=None):
-    # nel starting guess is:
-    if nel is None: nel=ntot*1.0
-    shape=np.shape(ntot)
-    nelf=np.ravel(nel)
-    ntotf=np.ravel(ntot)
-    tef=np.ravel(Te)
-    npoints=len(tef)
-    n_isp=np.zeros((npoints,nlevels))
-    for ipoint in range(0,npoints):
-        for iel in range(1,niter):
-            B=np.zeros((nlevels))
-            A=np.zeros((nlevels,nlevels))
-            for ilev in range(0,nlevels-1):
-                if ilev > 0:
-                    ionm=atom+'_'+str(ilev+1)
-                else:
-                    ionm=atom
-                Rip=vrec(nelf[ipoint],tef[ipoint],atom=ionm)
-                Cip=vion(nelf[ipoint],tef[ipoint],atom=ionm)
-                A[ilev,ilev] += - Cip
-                A[ilev,ilev+1] = Rip
-                if ilev < nlevels-2:
-                    A[ilev+1,ilev+1] = - Rip
-                    A[ilev+1,ilev] = Cip
-            A[ilev+1,:] = 1.0
-            B[ilev+1] = ntotf[ipoint]
-            n_isp[ipoint,:] = np.linalg.solve(A,B)
-            nelpos = 0.0
-            for ilev in range(1,nlevels):
-                nelpos += n_isp[ipoint,ilev]*ilev
-            if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) < 1e-4:
-                print("Jump iter with iter = ",iel)
-                nelf[ipoint] =nelpos
-                break
-            if (iel == niter-1):
-                if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) > 1e-4:
-                    print("Warning, No stationary solution was found",(nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos),nelpos,nelf[ipoint])
-            nelf[ipoint] =nelpos
-
-    n_isp=n_isp.reshape(np.append(shape,nlevels))
-    return n_isp
-
 def rion(Te, atom='h'):
     ''' gives the ionization rate per particle using Voronov 1997 fitting formula'''
     units = bifrost_units()
@@ -1225,7 +1166,6 @@ def rion(Te, atom='h'):
     TeV = Te * units.K_TO_EV
     return A * (1 + np.sqrt(phion / TeV) * P) / (X + phion /
                                                  TeV) * (phion / TeV)**K * np.exp(-phion / TeV)
-
 
 def vion(nel, Te, atom='h'):
     ''' gives the ionization frequency using Voronov 1997 fitting formula'''
@@ -1247,6 +1187,86 @@ def neuse(ntot, Te, atom='h'):
     ''' gives neutral number density using vrec and vion'''
     return ntot - 2.0 * ionse(ntot, Te, atom=atom)
 
+def vionr3body(nel,Te, atom='h',lowlevel = 0,atomfile='H_2.atom'):
+    ''' three body recombination '''
+    units = bifrost_units()
+    param = read_atom_ascii(atomfile)
+    gst_hi=float(param['lvl'][lowlevel,1]) #2.0
+    gst_lo=float(param['lvl'][lowlevel+1,1]) #1.0
+    if lowlevel == 0:
+        ionlevel = atom
+    else:
+        ionlevel = atom + '_' + str(lowlevel+1)
+    phion = get_atomde(ionlevel, Chianti=False)
+    dekt=phion/units.K_TO_EV/Te
+    saha=2.07e-16*nel*gst_lo/gst_hi*Te**(-1.5)*np.exp(dekt)  # Assuming nel in cgs. (For SI units would be 2.07e-22)
+    return saha*vion(nel,Te) # vion is collisional ionization rate
+
+def inv_pop(ntot,Te,atom='h',nlevels=2,niter=100,nel=None,atomfile='H_2.atom',threebody=True):
+    ''' Inverts the Matrix for Statistical Equilibrum'''
+    # nel starting guess is:
+    if nel is None: nel=ntot*1.0
+    shape=np.shape(ntot)
+    nelf=np.ravel(nel)
+    ntotf=np.ravel(ntot)
+    tef=np.ravel(Te)
+    npoints=len(tef)
+    n_isp=np.zeros((npoints,nlevels))
+    for ipoint in range(0,npoints):
+        for iel in range(1,niter):
+            B=np.zeros((nlevels))
+            A=np.zeros((nlevels,nlevels))
+            for ilev in range(0,nlevels-1):
+                if ilev > 0:
+                    ionm=atom+'_'+str(ilev+1)
+                else:
+                    ionm=atom
+                Rip=vrec(nelf[ipoint],tef[ipoint],atom=ionm)
+                if (threebody):
+                    Ri3d=vionr3body(nelf[ipoint],tef[ipoint],atom=atom,lowlevel=ilev,atomfile=atomfile)
+                else:
+                    Ri3d = 0.0
+                Cip=vion(nelf[ipoint],tef[ipoint],atom=ionm)
+                A[ilev,ilev] += - Cip
+                A[ilev,ilev+1] = Rip + Ri3d
+                if ilev < nlevels-2:
+                    A[ilev+1,ilev+1] = - Rip - Ri3d
+                    A[ilev+1,ilev] = Cip
+            A[ilev+1,:] = 1.0
+            B[ilev+1] = ntotf[ipoint]
+            n_isp[ipoint,:] = np.linalg.solve(A,B)
+            nelpos = 0.0
+            for ilev in range(1,nlevels):
+                nelpos += n_isp[ipoint,ilev]*ilev
+            if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) < 1e-4:
+                print("Jump iter with iter = ",iel)
+                nelf[ipoint] =nelpos
+                break
+            if (iel == niter-1):
+                if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) > 1e-4:
+                    print("Warning, No stationary solution was found",(nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos),nelpos,nelf[ipoint])
+            nelf[ipoint] =nelpos
+
+    n_isp=n_isp.reshape(np.append(shape,nlevels))
+    return n_isp
+
+def pop_overs_pecies(ntot,Te,atom=['h','he'],nlevels=[2,3],atomfile=['H_2.atom','He_3.atom'],threebody=True):
+    ''' this will do the SE for many species taking into account their abundances'''
+    units = bifrost_units()
+    totabund = 0.0
+    for isp in range(0,len(atom)): totabund += 10.0**get_abund(atom[isp])
+
+    all_pop_species={}
+    for isp in range(0,len(atom)):
+        abund = np.array(10.0**get_abund(atom[isp]))
+        atomweight = get_atomweight(atom[isp])*units.AMU
+        n_species = np.zeros((np.shape(ntot)))
+        n_species = ntot*(np.array(abund/totabund))
+        pop_species = inv_pop(n_species,Te,atom=atom[isp],nlevels=nlevels[isp],niter=100,atomfile=atomfile[isp],threebody=threebody)
+
+        all_pop_species[atom[isp]] = pop_species
+
+    return all_pop_species
 
 def add_voro_atom(
         inputfile,
