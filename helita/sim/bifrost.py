@@ -541,6 +541,7 @@ class BifrostData(object):
             return eostab.tab_interp(
                 rho, ee, order=1, out=quant) * 1.e6  # cm^-3 to m^-3
         elif quant[1:4] in PROJ_QUANT:
+            # projects v1 onto v2
             v1 = quant[0]
             v2 = quant[4]
 
@@ -551,18 +552,25 @@ class BifrostData(object):
             y2 = self.get_quantity(v2 + 'yc', self.snap)
             z2 = self.get_quantity(v2 + 'zc', self.snap)
 
-            v1Mag = np.sqrt(x1**2 + y1**2 + z1**2)
-            v1x, v1y, v1z = x1 / v1Mag, y1 / v1Mag, z1 / v1Mag
-            v2Mag = x2 * v1x + y2 * v1y + z2 * v1z
-            result = v2Mag
+            v2Mag = np.sqrt(x2**2 + y2**2 + z2**2)
+            v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
+            # parX, parY, parZ = x1 * v2x, y1 * v2x, z1 * v2x
+            parScal = x1 * v2x + y1 * v2y + z1 * v2z
+            parX, parY, parZ = parScal * v2x, parScal * v2y, parScal * v2z
+            result = np.abs(parScal)
+
 
             if quant[1:4] == 'per':
-                perX = x2 - v1x
-                perY = y2 - v1y
-                perZ = z2 - v1z
+                perX = x1 - parX
+                perY = y1 - parY
+                perZ = z1 - parZ
+                # print(np.min(x1*x1 + y1*y1 + z1*z1 - result**2))
+                # result1 = np.sqrt(x1*x1 + y1*y1 + z1*z1 - result**2)
                 v1Mag = np.sqrt(perX**2 + perY**2 + perZ**2)
                 result = v1Mag
+                # print(np.nanmax(np.abs(result - result1)))
             return result
+
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
@@ -760,7 +768,7 @@ class BifrostData(object):
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
-class create_new_Br_files():
+class create_new_br_files():
     def write_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
                 dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
         """
@@ -851,7 +859,7 @@ class create_new_Br_files():
             f.write(" ".join(map("{:.5f}".format, xmdn)) + "\n")
             f.write(" ".join(map("{:.5f}".format, dxidxup)) + "\n")
             f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
-            f.close()
+        f.close()
 
 class bifrost_units():
     import scipy.constants as const
