@@ -1250,7 +1250,7 @@ def inv_pop(ntot,Te,atom='h',nlevels=2,niter=100,nel=None,atomfile='H_2.atom',th
     n_isp=n_isp.reshape(np.append(shape,nlevels))
     return n_isp
 
-def pop_overs_pecies(ntot,Te,atom=['h','he'],nlevels=[2,3],atomfile=['H_2.atom','He_3.atom'],threebody=True):
+def pop_over_species(ntot,Te,atom=['h','he'],nlevels=[2,3],atomfile=['H_2.atom','He_3.atom'],threebody=True):
     ''' this will do the SE for many species taking into account their abundances'''
     units = bifrost_units()
     totabund = 0.0
@@ -1361,6 +1361,7 @@ def read_atom_ascii(atomfile):
     ncon = 0
     nlin = 0
     nk = 0
+    #nl = sum(1 for line in open(atomfile))
     f = open(atomfile)
     start = True
     key = ''
@@ -1596,12 +1597,9 @@ def read_atom_ascii(atomfile):
                     if iterar == 0:
                         temp = [float(line[v].strip()) for v in range(0, 5)]
                     else:
-                        temp = np.vstack(
-                            temp, [
-                                float(
-                                    line[v].strip()) for v in range(
-                                    0, 5)])
-                temp = [[temp0], niter, [temp]]
+                        temp = [temp, [
+                                float(line[v].strip()) for v in range(0, 5)]]
+                temp = [temp0, niter, temp]
                 if key in params:
                     params[key] = np.vstack((params[key], [temp]))
                 else:
@@ -1612,7 +1610,7 @@ def read_atom_ascii(atomfile):
                 line, lp = readnextline(f, lp)
                 temp0 = [int(line[0].strip()), int(line[1].strip())]
                 line, lp = readnextline(f, lp)
-                temp = float(line[v].strip())
+                temp = float(line[0].strip())
                 temp = [[temp0], temp]
                 if key in params:
                     params[key] = np.vstack((params[key], [temp]))
@@ -1991,7 +1989,6 @@ def diper2eb_atom_ascii(atomfile, output):
         line[2] = line[2].replace("'", "")
         strlvl = [" ".join(line[v].strip()
                            for v in range(2, np.size(line) - 1))]
-        print(strlvl[0], line[0], line[1])
         data[iv] = ('    {0:13.3f}'.format(float(line[0])) + '  {0:5.2f}'.format(float(line[1])) + " ' {0:2}".format(atom.upper()) + ' {0:5}'.format(num2roman(
             int(line[-1]))) + ' {0:26}'.format(strlvl[0]) + "'  {0:3d}".format(int(line[-1])) + '   {0:3d}'.format(iv - 7) + '\n')  # the two iv are wrong at the end...
 
