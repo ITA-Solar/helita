@@ -692,7 +692,7 @@ def write_mftab_ascii(filename,
 
 
 def read_voro_ascii(
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
     ''' Reads the miscelaneous Vofonov & abundances table formatted (command style) ascii file into dictionary '''
     li = 0
     params = {}
@@ -775,7 +775,7 @@ def read_voro_ascii(
 def get_abund(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',
+        filename=os.environ.get('BIFROST')+'/INPUT/MISC/voronov.dat',
         Chianti=False):
     '''
         Returns abundances from the voronov.dat file.
@@ -822,7 +822,7 @@ def get_abund(
 def get_atomweight(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('BIFROST')+'/INPUT/MISC/voronov.dat'):
     '''
         Returns atomic weights from the voronov.dat file.
 
@@ -856,7 +856,7 @@ def get_atomweight(
 def get_atomde(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',
+        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat',
         Chianti=True,
         cm1=False):
     '''
@@ -904,7 +904,7 @@ def get_atomde(
 def get_atomZ(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',
+        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat',
         Chianti=True):
     '''
         Returns atomic number Z from the voronov.dat file.
@@ -948,7 +948,7 @@ def get_atomZ(
 def get_atomP(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
     '''
         Returns P parameter for Voronov rate fitting term from the voronov.dat file.
             The parameter P was included to better fit the particular cross-section
@@ -984,7 +984,7 @@ def get_atomP(
 def get_atomA(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
     '''
         Returns A parameter for Voronov rate fitting term  from the voronov.dat file.
 
@@ -1018,7 +1018,7 @@ def get_atomA(
 def get_atomX(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
     '''
         Returns X parameter for Voronov rate fitting term from the voronov.dat file.
 
@@ -1052,7 +1052,7 @@ def get_atomX(
 def get_atomK(
         atom='',
         params=[],
-        filename='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
     '''
         Returns K parameter for Voronov rate fitting term  from the voronov.dat file.
 
@@ -1272,7 +1272,7 @@ def add_voro_atom(
         inputfile,
         outputfile,
         atom='',
-        vorofile='/Users/juanms/mpi3d/Bifrost/INPUT/MISC/voronov.dat',
+        vorofile=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat',
         nk='100'):
     '''
         Add voronov information at the end of the atom file.
@@ -1553,7 +1553,11 @@ def read_atom_ascii(atomfile):
         # JMS default from HION, however, this should be check from HION.
         params['bin_euv'] = [
             6, [911.7, 753.143, 504.0, 227.800, 193.919, 147.540, 20.0]]
-    nl = len(f.readlines())
+    #nl = len(f.readlines())
+    '''nl = 1
+    while True:
+        if f.readline() == "": break
+        nl +=1
     f.close()
     f = open(atomfile)
     jj = 0
@@ -1563,10 +1567,15 @@ def read_atom_ascii(atomfile):
     lp = jj
 
     for lp in range(li, nl):
-
+    '''
+    lp=li
+    while True:
         line, lp = readnextline(f, lp)
         if(line[0].strip().lower() == 'end'):
             break
+        if line == "":
+            break
+
         if line[0].strip().lower() in headerslow:
             if(line[0].strip().lower() == 'gencol'):
                 key = 'gencol'
@@ -1674,7 +1683,10 @@ def read_atom_ascii(atomfile):
                     vorpar[iterv,4] = float(line[4].strip())
                     vorpar[iterv,5] = float(line[5].strip())
                     vorpar[iterv,6] = float(line[6].strip())
-                continue
+                if key in params:
+                    params[key] = np.vstack((params[key], [vorpar]))
+                else:
+                    params[key] = [vorpar]
 
             elif(line[0].strip().lower() == 'temp'):
                 key = 'temp'
@@ -1692,7 +1704,6 @@ def read_atom_ascii(atomfile):
                     params[key] = np.vstack((params[key], [temp]))
                 else:
                     params[key] = [temp]
-                continue
 
             elif(line[0].strip().lower() in ['reco', 'ci', 'ohm', 'ce', 'cp']):
                 key = line[0].strip().lower()
@@ -1714,7 +1725,6 @@ def read_atom_ascii(atomfile):
                     params[key] = np.vstack((params[key], [reco]))
                 else:
                     params[key] = [reco]
-                continue
 
     return params
 
