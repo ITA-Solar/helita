@@ -692,7 +692,7 @@ def write_mftab_ascii(filename,
 
 
 def read_voro_ascii(
-        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat'):
     ''' Reads the miscelaneous Vofonov & abundances table formatted (command style) ascii file into dictionary '''
     li = 0
     params = {}
@@ -775,7 +775,7 @@ def read_voro_ascii(
 def get_abund(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'/INPUT/MISC/voronov.dat',
+        filename=os.environ.get('EBYSUS')+'/INPUT/MISC/voronov.dat',
         Chianti=False):
     '''
         Returns abundances from the voronov.dat file.
@@ -822,7 +822,7 @@ def get_abund(
 def get_atomweight(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'/INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('EBYSUS')+'/INPUT/MISC/voronov.dat'):
     '''
         Returns atomic weights from the voronov.dat file.
 
@@ -856,7 +856,7 @@ def get_atomweight(
 def get_atomde(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat',
+        filename=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat',
         Chianti=True,
         cm1=False):
     '''
@@ -904,7 +904,7 @@ def get_atomde(
 def get_atomZ(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat',
+        filename=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat',
         Chianti=True):
     '''
         Returns atomic number Z from the voronov.dat file.
@@ -948,7 +948,7 @@ def get_atomZ(
 def get_atomP(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat'):
     '''
         Returns P parameter for Voronov rate fitting term from the voronov.dat file.
             The parameter P was included to better fit the particular cross-section
@@ -984,7 +984,7 @@ def get_atomP(
 def get_atomA(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat'):
     '''
         Returns A parameter for Voronov rate fitting term  from the voronov.dat file.
 
@@ -1018,7 +1018,7 @@ def get_atomA(
 def get_atomX(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat'):
     '''
         Returns X parameter for Voronov rate fitting term from the voronov.dat file.
 
@@ -1052,7 +1052,7 @@ def get_atomX(
 def get_atomK(
         atom='',
         params=[],
-        filename=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat'):
+        filename=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat'):
     '''
         Returns K parameter for Voronov rate fitting term  from the voronov.dat file.
 
@@ -1272,7 +1272,7 @@ def add_voro_atom(
         inputfile,
         outputfile,
         atom='',
-        vorofile=os.environ.get('BIFROST')+'INPUT/MISC/voronov.dat',
+        vorofile=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat',
         nk='100'):
     '''
         Add voronov information at the end of the atom file.
