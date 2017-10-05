@@ -1213,6 +1213,7 @@ def inv_pop(ntot,Te,atom='h',nlevels=2,niter=100,nel=None,atomfile='H_2.atom',th
     npoints=len(tef)
     n_isp=np.zeros((npoints,nlevels))
     for ipoint in range(0,npoints):
+        if (ipoint*100/(1.0*npoints) in np.linspace(0,99,100)): print('Done %s grid points of %s' %(str(ipoint),str(npoints)))
         for iel in range(1,niter):
             B=np.zeros((nlevels))
             A=np.zeros((nlevels,nlevels))
@@ -1239,7 +1240,7 @@ def inv_pop(ntot,Te,atom='h',nlevels=2,niter=100,nel=None,atomfile='H_2.atom',th
             for ilev in range(1,nlevels):
                 nelpos += n_isp[ipoint,ilev]*ilev
             if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) < 1e-4:
-                print("Jump iter with iter = ",iel)
+                #print("Jump iter with iter = ",iel)
                 nelf[ipoint] =nelpos
                 break
             if (iel == niter-1):
@@ -1265,7 +1266,7 @@ def pop_over_species(ntot,Te,atom=['h','he'],nlevels=[2,3],atomfile=['H_2.atom',
         pop_species = inv_pop(n_species,Te,atom=atom[isp],nlevels=nlevels[isp],niter=100,atomfile=atomfile[isp],threebody=threebody)
 
         all_pop_species[atom[isp]] = pop_species
-
+        print('Done with atom', atom[isp])
     return all_pop_species
 
 def add_voro_atom(
@@ -1345,9 +1346,12 @@ def read_atom_ascii(atomfile):
     ''' Reads the atom (command style) ascii file into dictionary '''
     def readnextline(lines, lp):
         line = lines[lp]
-        while len(line) < 1 or line[0] == '#' or line[0] == '*':
-            line=lines[lp]
+        while line == '\n':
             lp += 1
+            line = lines[lp]
+        while len(line) < 1 or line[0] == '#' or line[0] == '*':
+            lp += 1
+            line=lines[lp]
         line = line.split(';')[0].split(' ')
         while '\n' in line:
             line.remove('\n')
@@ -1558,14 +1562,14 @@ def read_atom_ascii(atomfile):
         # JMS default from HION, however, this should be check from HION.
         params['bin_euv'] = [
             6, [911.7, 753.143, 504.0, 227.800, 193.919, 147.540, 20.0]]
-        
+
     lp=li
     while True:
-        line, lp = readnextline(lines, lp) 
+        line, lp = readnextline(lines, lp)
         if(line[0].strip().lower() == 'end'):
             break
-        if line == "":
-            break
+        #if line == "":
+        #    break
 
         if line[0].strip().lower() in headerslow:
             if(line[0].strip().lower() == 'gencol'):
