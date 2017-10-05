@@ -1343,12 +1343,14 @@ def add_voro_atom(
 
 def read_atom_ascii(atomfile):
     ''' Reads the atom (command style) ascii file into dictionary '''
-    def readnextline(f, lp):
-        line = f.readline()
+    def readnextline(lines, lp):
+        line = lines[lp]
         while len(line) < 1 or line[0] == '#' or line[0] == '*':
-            line = f.readline()
+            line=lines[lp]
             lp += 1
         line = line.split(';')[0].split(' ')
+        while '\n' in line:
+            line.remove('\n')
         while '' in line:
             line.remove('')
         return line, lp + 1
@@ -1401,8 +1403,11 @@ def read_atom_ascii(atomfile):
         'reco',
         'voronov',
         'emask']
-    for line in iter(f):
+    lines=f.readlines()
+    f.close()
+    for il in range(0,len(lines)): # for line in iter(f):
         # ignore empty lines and comments
+        line=lines[il]
         line = line.strip()
         if len(line) < 1:
             li += 1
@@ -1553,24 +1558,10 @@ def read_atom_ascii(atomfile):
         # JMS default from HION, however, this should be check from HION.
         params['bin_euv'] = [
             6, [911.7, 753.143, 504.0, 227.800, 193.919, 147.540, 20.0]]
-    #nl = len(f.readlines())
-    '''nl = 1
-    while True:
-        if f.readline() == "": break
-        nl +=1
-    f.close()
-    f = open(atomfile)
-    jj = 0
-    while (jj < li):
-        line, jj = readnextline(f, jj)
-
-    lp = jj
-
-    for lp in range(li, nl):
-    '''
+        
     lp=li
     while True:
-        line, lp = readnextline(f, lp)
+        line, lp = readnextline(lines, lp) 
         if(line[0].strip().lower() == 'end'):
             break
         if line == "":
@@ -1584,10 +1575,10 @@ def read_atom_ascii(atomfile):
             elif(line[0].strip().lower() == 'cexc'):
                 key = 'cexc'
                 niter = 0
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 niter = int(line[0].strip())
                 for itercexc in range(0, niter):
-                    line, lp = readnextline(f, lp)
+                    line, lp = readnextline(lines, lp)
                     lp += 1
                     if (itercexc == 0):
                         params['cexc'] = float(line[0].strip())
@@ -1597,12 +1588,12 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() == 'ar85-cdi'):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp0 = [int(line[0].strip()), int(line[1].strip())]
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 niter = int(line[0].strip())
                 for iterar in range(0, niter):
-                    line, lp = readnextline(f, lp)
+                    line, lp = readnextline(lines, lp)
                     if iterar == 0:
                         temp = [float(line[v].strip()) for v in range(0, 5)]
                     else:
@@ -1616,9 +1607,9 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() == 'ar85-cea' or line[0].strip().lower() == 'burgess'):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp0 = [int(line[0].strip()), int(line[1].strip())]
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp = float(line[0].strip())
                 temp = [[temp0], temp]
                 if key in params:
@@ -1628,9 +1619,9 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() == 'ar85-ch') or (line[0].strip().lower() == 'ar85-che'):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp0 = [int(line[0].strip()), int(line[1].strip())]
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp = [float(line[v].strip()) for v in range(0, 6)]
                 temp = [[temp0], [temp]]
                 if key in params:
@@ -1640,7 +1631,7 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() == 'splups9'):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp = [[int(line[v].strip()) for v in range(0, 3)], [
                     float(line[v].strip()) for v in range(3, 15)]]
                 if key in params:
@@ -1649,7 +1640,7 @@ def read_atom_ascii(atomfile):
                     params[key] = [temp]
             elif(line[0].strip().lower() == 'splups'):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp = [[int(line[v].strip()) for v in range(0, 3)], [
                     float(line[v].strip()) for v in range(3, 11)]]
                 if key in params:
@@ -1659,10 +1650,10 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() == 'shull82'):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp = [[int(line[v].strip()) for v in range(0, 2)], [
                     float(line[v].strip()) for v in range(2, 9)]]
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 temp = [temp, [float(line[0].strip())]]
                 if key in params:
                     params[key] = np.vstack((params[key], [temp]))
@@ -1671,9 +1662,9 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() == 'voronov'):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 z = int(line[0].strip())
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 vorpar = np.zeros((z, 7))
                 for iterv in range(0,z):
                     vorpar[iterv,0] = int(line[0].strip())
@@ -1690,12 +1681,12 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() == 'temp'):
                 key = 'temp'
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 nitert = int(line[0].strip())
                 temp = np.zeros((nitert))
                 itertemp = 0
                 while itertemp < nitert:
-                    line, lp = readnextline(f, lp)
+                    line, lp = readnextline(lines, lp)
                     for v in range(0, np.size(line)):
                         temp[itertemp] = float(line[v].strip())
                         itertemp += 1
@@ -1707,7 +1698,7 @@ def read_atom_ascii(atomfile):
 
             elif(line[0].strip().lower() in ['reco', 'ci', 'ohm', 'ce', 'cp']):
                 key = line[0].strip().lower()
-                line, lp = readnextline(f, lp)
+                line, lp = readnextline(lines, lp)
                 params['temp'][-1][0] = key
                 ij = [int(line[0].strip()), int(line[1].strip())]
                 itertemp = 0
@@ -1716,7 +1707,7 @@ def read_atom_ascii(atomfile):
                     reco[itertemp] = float(line[v].strip())
                     itertemp += 1
                 while itertemp < nitert:
-                    line, lp = readnextline(f, lp)
+                    line, lp = readnextline(lines, lp)
                     for v in range(0, np.size(line)):
                         reco[itertemp] = float(line[v].strip())
                         itertemp += 1
