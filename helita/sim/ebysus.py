@@ -346,6 +346,8 @@ def read_mftab_ascii(filename):
             if line[0] == '#':
                 li += 1
                 continue
+            line, sep, tail = line.partition('#')
+            line=line.strip()
             line = line.split(';')[0].split('\t')
             # if (len(line) > 2):
             #    print(('(WWW) read_params: line %i is invalid, skipping' % li))
@@ -469,7 +471,8 @@ def write_mftab_ascii(filename,
         'COLISIONS_MAP_N',
         'COLISIONS_TABLES_I',
         'CROSS_SECTIONS_TABLES_I',
-        'COLISIONS_MAP_I']
+        'COLISIONS_MAP_I',
+        'EMASK']
     coll_vars_i = [
         'p',
         'hei',
@@ -563,6 +566,8 @@ def write_mftab_ascii(filename,
     COLISIONS_MAP = np.zeros((NSPECIES_MAX, NSPECIES_MAX))
     COLISIONS_MAP_I = np.zeros((NSPECIES_MAX, NSPECIES_MAX))
     COLISIONS_MAP_N = np.zeros((NSPECIES_MAX, NSPECIES_MAX))
+    EMASK_MAP = np.zeros((NSPECIES_MAX))
+
     for j in range(1, NSPECIES_MAX + 1):
         for i in range(1, j + 1):
             COLISIONS_MAP_I[j - 1, i - 1] = -1
@@ -574,6 +579,9 @@ def write_mftab_ascii(filename,
                 if (i < j):
                     COLISIONS_MAP_I[i - 1, j - 1] = (i - 1) * NSPECIES_MAX + j
                     COLISIONS_MAP_N[i - 1, j - 1] = (i - 1) * NSPECIES_MAX + j
+
+    for j in range(0, NSPECIES_MAX ):
+        EMASK_MAP[j] = 99
 
     for symb in SPECIES:
         symb = symb.split('_')[0]
@@ -674,19 +682,31 @@ def write_mftab_ascii(filename,
                         "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP':
+            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
+                                      for v in range(0, NSPECIES_MAX)]) + "\n")
             for crs in range(0, NSPECIES_MAX):
                 f.write("\t" + "\t".join([str(int(COLISIONS_MAP[crs][v])).zfill(2)
                                           for v in range(0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP_I':
+            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
+                                      for v in range(0, NSPECIES_MAX)]) + "\n")
             for crs in range(0, NSPECIES_MAX):
                 f.write("\t" + "\t".join([str(int(COLISIONS_MAP_I[crs][v])).zfill(2)
                                           for v in range(0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP_N':
+            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
+                                      for v in range(0, NSPECIES_MAX)]) + "\n")
             for crs in range(0, NSPECIES_MAX):
-                f.write("\t" + "\t".join([str(int(COLISIONS_MAP_I[crs][v])).zfill(2)
+                f.write("\t" + "\t".join([str(int(COLISIONS_MAP_N[crs][v])).zfill(2)
                                           for v in range(0, NSPECIES_MAX)]) + "\n")
+            f.write("\n")
+        if head == 'EMASK':
+            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
+                                      for v in range(0, NSPECIES_MAX)]) + "\n")
+            f.write("\t" + "\t".join([str(int(EMASK_MAP[v])).zfill(2)
+                                      for v in range(0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
     f.close()
 
@@ -770,7 +790,6 @@ def read_voro_ascii(
 
         params['SPECIES'] = np.array(params['SPECIES'])
     return params
-
 
 def get_abund(
         atom='',
@@ -1699,8 +1718,7 @@ def read_atom_ascii(atomfile):
                     params[key] = np.vstack((params[key], [temp]))
                 else:
                     params[key] = [temp]
-
-            elif(line[0].strip().lower() in ['reco', 'ci', 'ohm', 'ce', 'cp']):
+            elif(line[0].strip().lower() in [ 'ci', 'ohm', 'ce', 'cp']):
                 key = line[0].strip().lower()
                 line, lp = readnextline(lines, lp)
                 params['temp'][-1][0] = key
@@ -1720,6 +1738,26 @@ def read_atom_ascii(atomfile):
                     params[key] = np.vstack((params[key], [reco]))
                 else:
                     params[key] = [reco]
+            elif(line[0].strip().lower() in ['reco']):
+                key = line[0].strip().lower()
+                line, lp = readnextline(lines, lp)
+                params['temp'][-1][0] = key
+                ntran=int(line[0].strip())
+                for nt in range(0,ntran):
+                    line, lp = readnextline(lines, lp)
+                    ij = [int(line[0].strip()), int(line[1].strip())]
+                    itertemp = 0
+                    reco = np.zeros((nitert))
+                    while itertemp < nitert:
+                        line, lp = readnextline(lines, lp)
+                        for v in range(0, np.size(line)):
+                            reco[itertemp] = float(line[v].strip())
+                            itertemp += 1
+                    reco = [ij, reco]
+                    if key in params:
+                        params[key] = np.vstack((params[key], [reco]))
+                    else:
+                        params[key] = [reco]
 
     return params
 
