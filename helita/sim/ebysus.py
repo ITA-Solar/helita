@@ -26,27 +26,35 @@ class EbysusData(BifrostData):
             self.mhdvars = ['bx', 'by', 'bz']
         self.auxvars = self.params['aux'].split()
 
+        self.varsmfc = [v for v in self.auxvars if v.startswith('mfc_')]
+        self.varsmf = [v for v in self.auxvars if v.startswith('mf_')]
+        self.varsmm = [v for v in self.auxvars if v.startswith('mm_')]
+
         if (self.mf_epf):
             # add internal energy to basic snaps
             self.snapvars.append('e')
             # make distiction between different aux variable
             self.varsmfe = [v for v in self.auxvars if v.startswith('mfe_')]
-            self.varsmfc = [v for v in self.auxvars if v.startswith('mfc_')]
-            self.varsmf = [v for v in self.auxvars if v.startswith('mf_')]
-            self.varsmm = [v for v in self.auxvars if v.startswith('mm_')]
             for var in (
                     self.varsmfe +
                     self.varsmfc +
                     self.varsmf +
                     self.varsmm):
                 self.auxvars.remove(var)
+            self.mf_e_file = self.file_root + '_mf_e'
         else:  # one energy for all fluid
-            self.mhdvars = 'e' + self.mhdvars
+            if hasattr(self, 'with_electrons'):
+                if self.with_electrons:
+                    self.mf_e_file = self.file_root + '_mf_e'
             if self.with_electrons:
                 self.snapevars.remove('ee')
-        if hasattr(self, 'with_electrons'):
-            if self.with_electrons:
-                self.mf_e_file = self.file_root + '_mf_e'
+                self.snapvars.append('e')
+            for var in (
+                    self.varsmfc +
+                    self.varsmf +
+                    self.varsmm):
+                self.auxvars.remove(var)
+
 
         self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + \
             self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
@@ -180,6 +188,14 @@ class EbysusData(BifrostData):
             return self.y
         elif var == 'z':
             return self.z
+
+        if var in self.varsmfc:
+            if mf_ilevel == None and self.mf_ilevel == 1:
+                mf_ilevel = 2
+                print("Warning: mfc is only for ionized species, Level changed to 2")
+            if mf_ilevel == 1:
+                mf_ilevel = 2
+                print("Warning: mfc is only for ionized species. Level changed to 2")
 
         if (((snap is not None) and (snap != self.snap)) or
             ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
