@@ -114,7 +114,11 @@ class BifrostData(object):
                 tmp = sorted(glob("%s*idl" % self.file_root))[0]
                 snap = int(tmp.split(self.file_root + '_')[1].split(".idl")[0])
             except IndexError:
-                raise ValueError(("(EEE) set_snap: snapshot not defined and no"
+                try:
+                    tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
+                    snap = -1
+                except IndexError:
+                    raise ValueError(("(EEE) set_snap: snapshot not defined and no"
                                   " .idl files found"))
         self.snap = snap
         self.snap_str = '_%03i' % snap
