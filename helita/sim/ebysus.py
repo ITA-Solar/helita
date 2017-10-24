@@ -47,8 +47,8 @@ class EbysusData(BifrostData):
                 if self.with_electrons:
                     self.mf_e_file = self.file_root + '_mf_e'
             if self.with_electrons:
-                self.snapevars.remove('ee')
-                self.snapvars.append('e')
+                self.snapevars.remove('ee') # JMS This must be properly done whenever is implemented
+                self.snapvars.append('e') # JMS This must be properly done whenever is implemented
             for var in (
                     self.varsmfc +
                     self.varsmf +
@@ -128,7 +128,8 @@ class EbysusData(BifrostData):
                 setattr(self, var, self.variables[var])
             except BaseException:
                 if self.verbose:
-                    print(('(WWW) init_vars: could not read variable %s' % var))
+                    if not (self.mf_ilevel == 1 and var in self.varsmfc):
+                        print(('(WWW) init_vars: could not read variable %s' % var))
 
         rdt = self.r.dtype
         cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
@@ -196,6 +197,16 @@ class EbysusData(BifrostData):
             if mf_ilevel == 1:
                 mf_ilevel = 2
                 print("Warning: mfc is only for ionized species. Level changed to 2")
+
+        if var not in self.snapevars:
+            if (mf_ispecies is None):
+                if self.mf_ispecies < 1:
+                    mf_ispecies = 1
+                    print("Warning: variable is only for electrons, iSpecie changed to 1")
+            elif (mf_ispecies < 1):
+                mf_ispecies = 1
+                print("Warning: variable is only for electrons, iSpecie changed to 1")
+
 
         if (((snap is not None) and (snap != self.snap)) or
             ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
