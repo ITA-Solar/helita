@@ -283,6 +283,8 @@ class BifrostData(object):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
+        if var in ['x','y','z']:
+            return getattr(self,var)
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
         if var in self.simple_vars:  # is variable already loaded?
@@ -298,7 +300,7 @@ class BifrostData(object):
                 ("get_var: could not read variable %s. Must be "
                  "one of %s" %
                  (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
-            return self.get_quantity(var, *args, **kwargs)
+            return self._get_quantity(var, *args, **kwargs)
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -402,7 +404,7 @@ class BifrostData(object):
             raise ValueError(('_get_composite_var: do not know (yet) how to'
                               'get composite variable %s.' % var))'''
 
-    def get_quantity(self, quant, *args, **kwargs):
+    def _get_quantity(self, quant, *args, **kwargs):
         """
         Calculates a quantity from the simulation quantiables.
 
@@ -446,22 +448,25 @@ class BifrostData(object):
 
         if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
-            q = quant[3:]
+            if (quant[:3] in MODULE_QUANT):
+                q = quant[3:]
+            else:
+                q = quant[:-1]
             if q == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             if getattr(self, 'nx') < 5:  # 2D or close
                 result = getattr(self, q + 'x') ** 2
             else:
-                result = self.get_quantity(q + 'xc') ** 2
+                result = self._get_quantity(q + 'xc') ** 2
             if getattr(self, 'ny') < 5:  # 2D or close
                 result += getattr(self, q + 'y') ** 2
             else:
-                result += self.get_quantity(q + 'yc') ** 2
+                result += self._get_quantity(q + 'yc') ** 2
             if getattr(self, 'nz') < 5:  # 2D or close
                 result += getattr(self, q + 'z') ** 2
             else:
-                result += self.get_quantity(q + 'zc') ** 2
+                result += self._get_quantity(q + 'zc') ** 2
             if quant[:3] in MODULE_QUANT:
                 return np.sqrt(result)
             elif quant[-1] in SQUARE_QUANT:
@@ -549,12 +554,12 @@ class BifrostData(object):
             v1 = quant[0]
             v2 = quant[4]
 
-            x1 = self.get_quantity(v1 + 'xc', self.snap)
-            y1 = self.get_quantity(v1 + 'yc', self.snap)
-            z1 = self.get_quantity(v1 + 'zc', self.snap)
-            x2 = self.get_quantity(v2 + 'xc', self.snap)
-            y2 = self.get_quantity(v2 + 'yc', self.snap)
-            z2 = self.get_quantity(v2 + 'zc', self.snap)
+            x1 = self._get_quantity(v1 + 'xc', self.snap)
+            y1 = self._get_quantity(v1 + 'yc', self.snap)
+            z1 = self._get_quantity(v1 + 'zc', self.snap)
+            x2 = self._get_quantity(v2 + 'xc', self.snap)
+            y2 = self._get_quantity(v2 + 'yc', self.snap)
+            z2 = self._get_quantity(v2 + 'zc', self.snap)
 
             v2Mag = np.sqrt(x2**2 + y2**2 + z2**2)
             v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
@@ -580,7 +585,7 @@ class BifrostData(object):
                               'calculate quantity %s. Note that simple_var '
                               'available variables are: %s.\nIn addition, '
                               'get_quantity can read others computed variables'
-                              ' see e.g. self.get_quantity? for guidance'
+                              ' see e.g. self._get_quantity? for guidance'
                               '.' % (quant, repr(self.simple_vars))))
 
     def write_rh15d(self, outfile, desc=None, append=True,
