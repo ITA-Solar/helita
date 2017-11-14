@@ -26,35 +26,36 @@ class EbysusData(BifrostData):
             self.mhdvars = ['bx', 'by', 'bz']
         self.auxvars = self.params['aux'].split()
 
+        self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
+
         self.varsmfc = [v for v in self.auxvars if v.startswith('mfc_')]
         self.varsmf = [v for v in self.auxvars if v.startswith('mf_')]
         self.varsmm = [v for v in self.auxvars if v.startswith('mm_')]
+        self.varsmfe = [v for v in self.auxvars if v.startswith('mfe_')]
 
         if (self.mf_epf):
             # add internal energy to basic snaps
             self.snapvars.append('e')
             # make distiction between different aux variable
-            self.varsmfe = [v for v in self.auxvars if v.startswith('mfe_')]
-            for var in (
-                    self.varsmfe +
-                    self.varsmfc +
-                    self.varsmf +
-                    self.varsmm):
-                self.auxvars.remove(var)
             self.mf_e_file = self.file_root + '_mf_e'
         else:  # one energy for all fluid
             if hasattr(self, 'with_electrons'):
                 if self.with_electrons:
                     self.mf_e_file = self.file_root + '_mf_e'
-            if self.with_electrons:
-                self.snapevars.remove('ee') # JMS This must be properly done whenever is implemented
-                self.snapvars.append('e') # JMS This must be properly done whenever is implemented
-            for var in (
-                    self.varsmfc +
-                    self.varsmf +
-                    self.varsmm):
-                self.auxvars.remove(var)
+                    self.snapevars.remove('ee') # JMS This must be properly done whenever is implemented
+                    self.snapvars.append('e') # JMS This must be properly done whenever is implemented
+            self.mhdvars.append('e')
 
+        for var in (
+                self.varsmfe +
+                self.varsmfc +
+                self.varsmf +
+                self.varsmm):
+            self.auxvars.remove(var)
+
+        if hasattr(self, 'mf_total_nlevel'):
+            if self.mf_total_nlevel == 1:
+                self.snapvars.append('e')
 
         self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + \
             self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
@@ -84,7 +85,6 @@ class EbysusData(BifrostData):
 
         self.nspecies_max = 28
         self.nlevels_max = 28
-
         try:
             self.mf_epf = self.params['mf_epf']
         except KeyError:
@@ -183,12 +183,8 @@ class EbysusData(BifrostData):
             by running self.set_snap(snap).
         """
         '''assert (mf_ispecies > 0 and mf_ispecies <= 28)'''
-        if var == 'x':
-            return self.x
-        elif var == 'y':
-            return self.y
-        elif var == 'z':
-            return self.z
+        if var in ['x','y','z']:
+            return getattr(self,var)
 
         if var in self.varsmfc:
             if mf_ilevel == None and self.mf_ilevel == 1:
@@ -219,7 +215,6 @@ class EbysusData(BifrostData):
         # # check if already in memmory
         # if var in self.variables:
         #     return self.variables[var]
-
         if var in self.simple_vars:  # is variable already loaded?
             return self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel)
         elif var in self.auxxyvars:
@@ -351,9 +346,10 @@ class EbysusData(BifrostData):
                         order=order,
                         mode=mode)
             return r
-        else:
+        elif var in self.compvars:
             return super(EbysusData, self)._get_composite_var(var)
-
+        else:
+            return super(EbysusData, self)._get_quantity(var)
 
 ###########
 #  TOOLS  #
@@ -446,10 +442,10 @@ def read_mftab_ascii(filename):
 def write_mftab_ascii(filename,
                       NSPECIES_MAX=28,
                       SPECIES=['H_2.atom',
-                               'He_3.atom'],
-                      EOS_TABLES=['default.dat'],
-                      REC_TABLES=['hrec.dat'],
-                      ION_TABLES=['hion.dat'],
+                               'He_2.atom'],
+                      EOS_TABLES=['H_EOS.dat','He_EOS.dat'],
+                      REC_TABLES=['h_rec.dat','he_rec.dat'],
+                      ION_TABLES=['h_ion.dat','he_ion.dat'],
                       CROSS_SECTIONS_TABLES=[[1,
                                               1,
                                               'p-H-elast.txt'],
