@@ -351,6 +351,84 @@ class EbysusData(BifrostData):
         else:
             return super(EbysusData, self)._get_quantity(var)
 
+    def get_varTime(self, var, snap = None, iix = None, iiy = None, iiz = None,
+                    mf_ispecies=None,  mf_ilevel=None, order='F', mode='r', *args, **kwargs):
+
+        self.iix = iix
+        self.iiy = iiy
+        self.iiz = iiz
+
+        if var in self.varsmfc:
+            if mf_ilevel == None and self.mf_ilevel == 1:
+                mf_ilevel = 2
+                print("Warning: mfc is only for ionized species, Level changed to 2")
+            if mf_ilevel == 1:
+                mf_ilevel = 2
+                print("Warning: mfc is only for ionized species. Level changed to 2")
+
+        if var not in self.snapevars:
+            if (mf_ispecies is None):
+                if self.mf_ispecies < 1:
+                    mf_ispecies = 1
+                    print("Warning: variable is only for electrons, iSpecie changed to 1")
+            elif (mf_ispecies < 1):
+                mf_ispecies = 1
+                print("Warning: variable is only for electrons, iSpecie changed to 1")
+
+
+        if (((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
+                ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
+            self.set_mfi(mf_ispecies, mf_ilevel)
+
+        def helper(var, snap, *args, **kwargs):
+
+            if var in ['x', 'y', 'z']:
+                return getattr(self, var)
+
+            if (snap is not None) and (snap != self.snap):
+                self.set_snap(snap)
+            if var in self.simple_vars:  # is variable already loaded?
+                return self._get_simple_var(var, *args, **kwargs)
+            elif var in self.auxxyvars:
+                return self._get_simple_var_xy(var, *args, **kwargs)
+            elif var in self.compvars:  # add to variable list
+                self.variables[var] = self._get_composite_var(var, *args, **kwargs)
+                setattr(self, var, self.variables[var])
+                return self.variables[var]
+            else:
+                '''raise ValueError(
+                    ("get_var: could not read variable %s. Must be "
+                     "one of %s" %
+                     (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
+                return self._get_quantity(var, *args, **kwargs)
+
+        # lengths for size of return array
+        self.xLength = 0
+        self.yLength = 0
+        self.zLength = 0
+
+        # indices for filling in the 4D return array
+        self.xInd = 0
+        self.yInd = 0
+        self.zInd = 0
+
+        for dim in ('iix', 'iiy', 'iiz'):
+            if getattr(self, dim) is None:
+                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                setattr(self, dim[2] + 'Ind', slice(None))
+                setattr(self, dim, slice(None))
+            else:
+                setattr(self, dim[2] + 'Length', 1)
+
+        value = np.empty([self.xLength, self.yLength, self.zLength, snap.size])
+
+        for index, num in enumerate(snap):
+
+            helperCall = helper(var, num)[self.iix, self.iiy, self.iiz]
+            value[self.xInd, self.yInd, self.zInd, index] = helperCall
+
+        return value
+
 ###########
 #  TOOLS  #
 ###########
