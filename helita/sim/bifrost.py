@@ -270,6 +270,62 @@ class BifrostData(object):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
+    def get_varTime(self, var, snap = None, iix = None, iiy = None, iiz = None):
+
+        self.iix = iix
+        self.iiy = iiy
+        self.iiz = iiz
+
+        def helper(var, snap, *args, **kwargs):
+            print(snap)
+
+            if var in ['x', 'y', 'z']:
+                return getattr(self, var)
+
+            if (snap is not None) and (snap != self.snap):
+                self.set_snap(snap)
+            if var in self.simple_vars:  # is variable already loaded?
+                return self._get_simple_var(var, *args, **kwargs)
+            elif var in self.auxxyvars:
+                return self._get_simple_var_xy(var, *args, **kwargs)
+            elif var in self.compvars:  # add to variable list
+                self.variables[var] = self._get_composite_var(var, *args, **kwargs)
+                setattr(self, var, self.variables[var])
+                return self.variables[var]
+            else:
+                '''raise ValueError(
+                    ("get_var: could not read variable %s. Must be "
+                     "one of %s" %
+                     (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
+                return self._get_quantity(var, *args, **kwargs)
+
+        # lengths for size of return array
+        self.xLength = 0
+        self.yLength = 0
+        self.zLength = 0
+
+        # indices for filling in the 4D return array
+        self.xInd = 0
+        self.yInd = 0
+        self.zInd = 0
+
+        for dim in ('iix', 'iiy', 'iiz'):
+            if getattr(self, dim) is None:
+                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                setattr(self, dim[2] + 'Ind', slice(None))
+                setattr(self, dim, slice(None))
+            else:
+                setattr(self, dim[2] + 'Length', 1)
+
+        value = np.empty([self.xLength, self.yLength, self.zLength, snap.size])
+
+        for index, num in enumerate(snap):
+
+            helperCall = helper(var, num)[self.iix, self.iiy, self.iiz]
+            value[self.xInd, self.yInd, self.zInd, index] = helperCall
+
+        return value
+
     def get_var(self, var, snap=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
@@ -445,6 +501,7 @@ class BifrostData(object):
         SQUARE_QUANT = ['2']
         EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt']
         PROJ_QUANT = ['par', 'per']
+        TOPO_QUANT = ['qfac', 'alt', 'integrate', 'conn']
 
         if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
@@ -580,6 +637,108 @@ class BifrostData(object):
                 # print(np.nanmax(np.abs(result - result1)))
             return result
 
+        elif quant in TOPO_QUANT:
+
+            import imp
+            try:
+                imp.find_module('pycuda')
+                found = True
+            except ImportError:
+                found = False
+
+            if found:
+
+                if os.environ.get('CUDA_LIB','null') == 'null':
+                    os.environ['CUDA_LIB'] = os.environ['BIFROST'] + '/CUDA/q_factor/'
+
+                p = OptionParser()
+                p.add_option('-l', '--slice',   dest = 'slice', default = '25', action = 'store_true', help = 'Maps whole snapshot')
+                p.add_option('-r', '--rcalc',   dest = 'rcalc', default = False, action = 'store_true', help = 'Forces rcalculation and overwrites cache')
+                p.add_option('-n', '--save',    dest = 'save',  default = False, action = 'store_true', help = 'Saves to current working directory')
+
+                p.add_option('-f', '--file',    dest = 'file',  default = None,     help = 'Path to simulation')
+                p.add_option('-d', '--dir',     dest = 'dir',   default = self.fdir, help = 'Simulation directory')
+                p.add_option('-t', '--temp',    dest = 'temp',  default = self.file_root,                   help = 'Snapshot prefix')
+                p.add_option('-s', '--snap',    dest = 'snap',  default = self.snap,    help = 'Initial snap')
+                p.add_option('-p', '--plane',   dest = 'plane', default = 25,     help = 'Initial plane')
+
+                #Calculation settings
+                qdef = False
+                adef = False
+                intdef = False
+                cdef = False
+
+                if quant == 'qfac':
+                    qdef = True
+                elif quant == 'alt':
+                    adef = True
+                elif quant == 'integrate':
+                    intdef = True
+                else:
+                    cdef = True
+
+                p.add_option('-q', '--qfactor',      dest = 'q',            default = qdef,  action = 'store_true', help = 'Calculates Q')
+                p.add_option('-a', '--alt',          dest = 'alt',          default = adef,  action = 'store_true', help = 'Alternate formula for Q')
+                p.add_option('-i', '--integrate',    dest = 'integrate',    default = intdef,  action = 'store_true', help = 'Integrates along field')
+                p.add_option('-c', '--connectivity', dest = 'connectivity', default = cdef,  action = 'store_true', help = 'Maps connectivity')
+                (opts, args) = p.parse_args()
+
+
+                #parse_file(d, opts.file if opts.file else opts.dir + opts.temp + opts.snap)
+
+
+
+                from q import qCalculatornopars
+                print('before opts')
+                print(opts)
+                print('afeter opts')
+                q=qCalculatornopars(opts)
+                q.trace_snapshot()
+                q.init_q()
+
+                # class Mysomethingelse:
+                #     def __init__(self):
+                #         self.slice = False
+                #         self.rcalc = False
+                #         self.save = False
+                #         self.file = None
+                #         self.dir =  ''
+                #         self.temp = ''
+                #         self.snap = 1
+                #         self.plane = 0
+                #         self.q=False
+                #         self.alt=False
+                #         self.integrate=False
+                #         self.connectivity=False
+
+                # somethingelse = Mysomethingelse()
+                # somethingelse.temp = self.file_root
+                # somethingelse.snap = self.snap
+                # somethingelse.q = qdef
+                # somethingelse.alt = adef
+                # somethingelse.integrate = intdef
+                # somethingelse.connectivity = cdef
+                # somethingelse = somethingelse.__dict__
+
+                # # parse_file(d, opts.file if opts.file else opts.dir + opts.temp + opts.snap)
+                # print('before somethingelse')
+                # print(somethingelse)
+                # print('after somethingelse')
+                # from q import qCalculatornopars
+
+                # q=qCalculatornopars(somethingelse)
+                # q.trace_snapshot()
+                # q.init_q()
+
+                var = np.empty([self.nx, self.ny, self.nz])
+                for iz in range(0, self.nz):
+                    var[:,:,iz]=q.calculate_q(iz)
+                return var
+
+
+            else:
+                raise ValueError(('This machine does not have cuda.'))
+
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
@@ -587,6 +746,34 @@ class BifrostData(object):
                               'get_quantity can read others computed variables'
                               ' see e.g. self._get_quantity? for guidance'
                               '.' % (quant, repr(self.simple_vars))))
+
+    def fftTimeCube(self, quantity, t1, t2, axis3, plane):
+
+        axis1 = self.nx if axis3 != 'x' else self.ny
+        axis2 = self.nz if axis3 != 'z' else self.ny
+
+        preTransform = np.empty([axis1, axis2, (t2 - t1)])
+
+        for i in range(t1, t2):
+            print(i)
+            self.set_snap(i)
+            preCube = self.get_var(quantity)
+
+            if axis3 == 'x':
+                preTransform[:, :, i - t1] = preCube[plane, :, :]
+            elif axis3 == 'y':
+                preTransform[:, :, i - t1] = preCube[:, plane, :]
+            else:
+                preTransform[:, :, i - t1] = preCube[:, :, plane]
+
+        Transform = np.empty([axis1, axis2, preTransform.shape[2]])
+
+        for x in range(0, axis1):
+            for y in range(0, axis2):
+                Transform[x, y] = np.fft.fft(preTransform[x,y])
+
+        return Transform
+        # frequency?
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
