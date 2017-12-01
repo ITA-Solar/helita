@@ -6,6 +6,9 @@ import numpy as np
 import os
 from glob import glob
 from . import cstagger
+import parse as parse
+from optparse import OptionParser
+import matplotlib.pyplot as plt
 
 
 class BifrostData(object):
@@ -106,7 +109,7 @@ class BifrostData(object):
 
         Parameters
         ----------
-        snap - integer
+        snap - integer or array
             Number of simulation snapshot to load.
         """
         if snap is None:
@@ -121,7 +124,15 @@ class BifrostData(object):
                     raise ValueError(("(EEE) set_snap: snapshot not defined and no"
                                   " .idl files found"))
         self.snap = snap
-        self.snap_str = '_%03i' % snap
+
+        # if not (isinstance(snap, np.int64) or isinstance(snap, int)):
+        if np.size(snap)>1:
+            self.snap_str = []
+            for num in snap:
+                self.snap_str.append('_%03i'% int(num))
+        else:
+            self.snap_str = '_%03i' % snap
+        self.snapInd = 0
 
         self._read_params()
         # Read mesh for all snaps because meshfiles could differ
@@ -134,41 +145,60 @@ class BifrostData(object):
         """
         Reads parameter file (.idl)
         """
-        if (self.snap < 0):
-            filename = self.file_root + '.idl.scr'
-        elif (self.snap == 0):
-            filename = self.file_root + '.idl'
+        if type(self.snap) is int:
+            snap = [self.snap]
+            snap_str = [self.snap_str]
         else:
-            filename = self.file_root + self.snap_str + '.idl'
-        self.params = read_idl_ascii(filename)
-        # assign some parameters as attributes
-        for p in ['x', 'y', 'z', 'b']:
-            try:
-                setattr(self, 'n' + p, self.params['m' + p])
-            except KeyError:
-                raise KeyError(('read_params: could not find '
-                                'm%s in idl file!' % p))
-        for p in ['dx', 'dy', 'dz', 'do_mhd']:
-            try:
-                setattr(self, p, self.params[p])
-            except KeyError:
-                raise KeyError(('read_params: could not find '
-                                '%s in idl file!' % p))
-        try:
-            if self.params['boundarychk'] == 1:
-                self.nzb = self.nz + 2 * self.nb
+            snap = self.snap
+            snap_str = self.snap_str
+
+        filename = []
+        self.paramList = []
+
+        for i, num in enumerate(snap):
+            if (num < 0):
+                filename.append(self.file_root + '.idl.scr')
+            elif (num == 0):
+                filename.append(self.file_root + '.idl')
             else:
+                filename.append(self.file_root + snap_str[i] + '.idl')
+
+        for file in filename:
+            self.paramList.append(read_idl_ascii(file))
+
+        #self.params = read_idl_ascii(filename)
+        # assign some parameters as attributes
+
+        for params in self.paramList:
+            for p in ['x', 'y', 'z', 'b']:
+                try:
+                    setattr(self, 'n' + p, params['m' + p])
+                except KeyError:
+                    raise KeyError(('read_params: could not find '
+                                    'm%s in idl file!' % p))
+            for p in ['dx', 'dy', 'dz', 'do_mhd']:
+                try:
+                    setattr(self, p, params[p])
+                except KeyError:
+                    raise KeyError(('read_params: could not find '
+                                    '%s in idl file!' % p))
+            try:
+                if params['boundarychk'] == 1:
+                    self.nzb = self.nz + 2 * self.nb
+                else:
+                    self.nzb = self.nz
+            except KeyError:
                 self.nzb = self.nz
-        except KeyError:
-            self.nzb = self.nz
-        # check if units are there, if not use defaults and print warning
-        unit_def = {'u_l': 1.e8, 'u_t': 1.e2, 'u_r': 1.e-7,
-                    'u_b': 1.121e3, 'u_ee': 1.e12}
-        for unit in unit_def:
-            if unit not in self.params:
-                print(("(WWW) read_params:"" %s not found, using "
-                       "default of %.3e" % (unit, unit_def[unit])))
-                self.params[unit] = unit_def[unit]
+            # check if units are there, if not use defaults and print warning
+            unit_def = {'u_l': 1.e8, 'u_t': 1.e2, 'u_r': 1.e-7,
+                        'u_b': 1.121e3, 'u_ee': 1.e12}
+            for unit in unit_def:
+                if unit not in params:
+                    print(("(WWW) read_params:"" %s not found, using "
+                           "default of %.3e" % (unit, unit_def[unit])))
+                    params[unit] = unit_def[unit]
+
+        self.params = self.paramList[0]
 
     def __read_mesh(self, meshfile):
         """
@@ -270,20 +300,23 @@ class BifrostData(object):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
-    def get_varTime(self, var, snap = None, iix = None, iiy = None, iiz = None):
+    def get_varTime(self, var, snap = None, iix = None, iiy = None, iiz = None,
+                    order='F', mode='r', *args, **kwargs):
 
         self.iix = iix
         self.iiy = iiy
         self.iiz = iiz
 
-        def helper(var, snap, *args, **kwargs):
-            print(snap)
+        if ((snap is not None) and (snap != self.snap)):
+            self.set_snap(snap)
+
+        def helper(var, *args, **kwargs):
+
+            self.params = self.paramList[self.snapInd]
 
             if var in ['x', 'y', 'z']:
                 return getattr(self, var)
 
-            if (snap is not None) and (snap != self.snap):
-                self.set_snap(snap)
             if var in self.simple_vars:  # is variable already loaded?
                 return self._get_simple_var(var, *args, **kwargs)
             elif var in self.auxxyvars:
@@ -315,14 +348,19 @@ class BifrostData(object):
                 setattr(self, dim[2] + 'Ind', slice(None))
                 setattr(self, dim, slice(None))
             else:
-                setattr(self, dim[2] + 'Length', 1)
+                setattr(self, dim[2] + 'Length', np.size(getattr(self,dim)))
 
-        value = np.empty([self.xLength, self.yLength, self.zLength, snap.size])
+        if type(self.snap) is int:
+            snapLen = 1
+        else:
+            snapLen = len(self.snap)
 
-        for index, num in enumerate(snap):
+        value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-            helperCall = helper(var, num)[self.iix, self.iiy, self.iiz]
-            value[self.xInd, self.yInd, self.zInd, index] = helperCall
+        for i in range(0, snapLen):
+            self.snapInd = i
+            helperCall = helper(var)[self.iix, self.iiy, self.iiz]
+            value[self.xInd, self.yInd, self.zInd, i] = helperCall
 
         return value
 
@@ -377,14 +415,20 @@ class BifrostData(object):
         result - numpy.memmap array
             Requested variable.
         """
-        if self.snap < 0:
+        if (np.size(self.snap) > 1):
+            currSnap = self.snap[self.snapInd]
+            currStr = self.snap_str[self.snapInd]
+        else:
+            currSnap = self.snap
+            currStr = self.snap_str
+        if currSnap < 0:
             filename = self.file_root
             fsuffix_b = '.scr'
-        elif self.snap == 0:
+        elif currSnap == 0:
             filename = self.file_root
             fsuffix_b = ''
         else:
-            filename = self.file_root + self.snap_str
+            filename = self.file_root + currStr
             fsuffix_b = ''
 
         if var in (self.snapvars):
