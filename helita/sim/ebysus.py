@@ -57,8 +57,8 @@ class EbysusData(BifrostData):
             if self.mf_total_nlevel == 1:
                 self.snapvars.append('e')
 
-        self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + \
-            self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
+        self.simple_vars = self.snapvars + self.mhdvars # + self.auxvars + \
+            #self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
 
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
@@ -254,14 +254,22 @@ class EbysusData(BifrostData):
         result - numpy.memmap array
             Requested variable.
         """
-        if self.snap < 0:
-            snapstr = ''
-            fsuffix_b = '.scr'
-        elif self.snap == 0:
-            snapstr = ''
-            fsuffix_b = ''
+        if (np.size(self.snap) > 1):
+            currSnap = self.snap[self.snapInd]
+            currStr = self.snap_str[self.snapInd]
         else:
-            snapstr = self.snap_str
+            currSnap = self.snap
+            currStr = self.snap_str
+        if currSnap < 0:
+            filename = self.file_root
+            fsuffix_b = '.scr'
+            currStr = ''
+        elif currSnap == 0:
+            filename = self.file_root
+            fsuffix_b = ''
+            currStr= ''
+        else:
+            filename = self.file_root
             fsuffix_b = ''
 
         mf_arr_size = 1
@@ -300,7 +308,7 @@ class EbysusData(BifrostData):
             fsuffix_a = '.aux'
             filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
 
-        filename = filename + snapstr + fsuffix_a + fsuffix_b
+        filename = filename + currStr + fsuffix_a + fsuffix_b
 
         '''if var not in self.mhdvars and not (var in self.snapevars and self.mf_ispecies < 0) and var not in self.auxvars :
             filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
@@ -358,6 +366,9 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
+        if ((snap is not None) and (snap != self.snap)):
+                self.set_snap(snap)
+
         if var in self.varsmfc:
             if mf_ilevel == None and self.mf_ilevel == 1:
                 mf_ilevel = 2
@@ -380,13 +391,13 @@ class EbysusData(BifrostData):
                 ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
-        def helper(var, snap, *args, **kwargs):
+        def helper(var, *args, **kwargs):
+
+            self.params = self.paramList[self.snapInd]
 
             if var in ['x', 'y', 'z']:
                 return getattr(self, var)
 
-            if (snap is not None) and (snap != self.snap):
-                self.set_snap(snap)
             if var in self.simple_vars:  # is variable already loaded?
                 return self._get_simple_var(var, *args, **kwargs)
             elif var in self.auxxyvars:
@@ -418,14 +429,19 @@ class EbysusData(BifrostData):
                 setattr(self, dim[2] + 'Ind', slice(None))
                 setattr(self, dim, slice(None))
             else:
-                setattr(self, dim[2] + 'Length', 1)
+                setattr(self, dim[2] + 'Length', np.size(getattr(self,dim)))
 
-        value = np.empty([self.xLength, self.yLength, self.zLength, snap.size])
+        if type(self.snap) is int:
+            snapLen = 1
+        else:
+            snapLen = len(self.snap)
 
-        for index, num in enumerate(snap):
+        value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-            helperCall = helper(var, num)[self.iix, self.iiy, self.iiz]
-            value[self.xInd, self.yInd, self.zInd, index] = helperCall
+        for i in range(0, snapLen):
+            self.snapInd = i
+            helperCall = helper(var)[self.iix, self.iiy, self.iiz]
+            value[self.xInd, self.yInd, self.zInd, i] = helperCall
 
         return value
 
@@ -1044,6 +1060,7 @@ def get_atomZ(
         ion = ch.ion(atom.lower())
         return ion.Z
     else:
+        atom = atom.replace(".atom", "")
         atom = atom.replace("_", "")
         if len(''.join(x for x in atom if x.isdigit())) == 1:
             atom = atom.replace("1", "")
@@ -1081,6 +1098,7 @@ def get_atomP(
             If atom is not defined then it returns a list of all P parameter in the file.
             In this case, one will access to it by, e.g., var['he2']
     '''
+    atom = atom.replace(".atom", "")
     atom = atom.replace("_", "")
     if len(''.join(x for x in atom if x.isdigit())) == 1:
         atom = atom.replace("1", "")
@@ -1115,6 +1133,7 @@ def get_atomA(
             If atom is not defined then it returns a list of all A parameter in the file.
             In this case, one will access to it by, e.g., var['he2']
      '''
+    atom = atom.replace(".atom", "")
     atom = atom.replace("_", "")
     if len(''.join(x for x in atom if x.isdigit())) == 1:
         atom = atom.replace("1", "")
@@ -1149,6 +1168,7 @@ def get_atomX(
             If atom is not defined then it returns a list of all X parameter in the file.
             In this case, one will access to it by, e.g., var['he2']
     '''
+    atom = atom.replace(".atom", "")
     atom = atom.replace("_", "")
     if len(''.join(x for x in atom if x.isdigit())) == 1:
         atom = atom.replace("1", "")
@@ -1183,6 +1203,7 @@ def get_atomK(
             If atom is not defined then it returns a list of all K parameter in the file.
             In this case, one will access to it by, e.g., var['he2']
     '''
+    atom = atom.replace(".atom", "")
     atom = atom.replace("_", "")
     if len(''.join(x for x in atom if x.isdigit())) == 1:
         atom = atom.replace("1", "")
@@ -1275,17 +1296,115 @@ def vrec(nel, Te, atom='h'):
     ''' gives the recombination frequency McWhirter (1965) '''
     return nel * rrec(Te, atom=atom)
 
-def rion(Te, atom='h'):
+def rion(Te, atomfile='h_2.atom',low_tr=1, GENCOL_KEY = 'voronov'):
     ''' gives the ionization rate per particle using Voronov 1997 fitting formula'''
     units = bifrost_units()
-    A = get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
-    X = get_atomX(atom)  # 0.232
-    K = get_atomK(atom)  # 0.39
-    P = get_atomP(atom)  # 1
-    phion = get_atomde(atom, Chianti=False)  # 13.6
+    param = read_atom_ascii(atomfile)
+    atom = param['atom']
+    atom = atom.lower()
     TeV = Te * units.K_TO_EV
-    return A * (1 + np.sqrt(phion / TeV) * P) / (X + phion /
-                                                 TeV) * (phion / TeV)**K * np.exp(-phion / TeV)
+
+    if GENCOL_KEY.lower() == 'voronov':
+        tr_line=np.where(param['voronov'][0][:,0] == low_tr)
+        phion = param['voronov'][0][tr_line[0],2] # get_atomde(atom, Chianti=False)  # 13.6
+        A = param['voronov'][0][tr_line[0],3] # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
+        X = param['voronov'][0][tr_line[0],4] # get_atomX(atom)  # 0.232
+        K = param['voronov'][0][tr_line[0],5] # get_atomK(atom)  # 0.39
+        P = param['voronov'][0][tr_line[0],6] # get_atomP(atom)  # 1
+
+        return A * (1 + np.sqrt(phion / TeV) * P) / (X + phion /
+                 TeV) * (phion / TeV)**K * np.exp(-phion / TeV)
+    elif GENCOL_KEY.lower() == 'ar85-cdi':
+        '''  Data for electron impact ionization Arnaud and Rothenflug (1985)
+           1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) + D ln(u)/u) (cm^2)
+                #   i   j
+                # Numbers of shells
+            # dE(eV)  A   B   C   D
+        '''
+        tr_list=param['ar85-cdi'][:,0][:]
+        tr_line = [v for v in tr_list[:][0] if tr_list[v][0] == low_tr]
+        nshells = var['ar85-cdi'][tr_line][1]
+        phion = np.zeros(nshells)
+        phion[0] = param['ar85-cdi'][tr_line][2][0][0]
+        phion[1] = param['ar85-cdi'][tr_line][2][1][0]
+        A = np.zeros(nshells)
+        B = np.zeros(nshells)
+        C = np.zeros(nshells)
+        D = np.zeros(nshells)
+        for ishell in range(0,nshells):
+            A[ishell] = param['ar85-cdi'][tr_line][2][ishell][1]
+            B[ishell] = param['ar85-cdi'][tr_line][2][ishell][2]
+            C[ishell] = param['ar85-cdi'][tr_line][2][ishell][3]
+            D[ishell] = param['ar85-cdi'][tr_line][2][ishell][2]
+        #return 1/(u * I**2) * (A * (1 - 1/u) + B * (1 - 1/u)**2) + C * np.ln(u) + D * np.ln(u)/u
+
+    elif GENCOL_KEY.lower() == 'ar85-cea':
+        '''
+        '''
+        tr_list=param['ar85-cea'][:,0][:]
+        tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == low_tr]
+        coeff = param['ar85-cea'][low_tr][1]
+
+    elif GENCOL_KEY.lower() == 'burgess':
+        '''
+        '''
+        tr_list=param['burgess'][:,0][:]
+        tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == low_tr]
+        coeff = param['burgess'][low_tr][1]
+
+    elif GENCOL_KEY.lower() == 'shull82':
+        '''
+            Recombination rate coefficients Shull and Steenberg (1982)
+            provides direct collisional ionization with the following fitting:
+            Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T), with Ai ~ 0.1
+            for the recombination rate combines the sum of radiative and dielectronic recombination rate
+            alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2) exp(-T0/T) (1+Bdi exp(-T1/T))
+            i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi       T0       T1
+        '''
+        tr_line =  [v for v in range(0,len(param['shull82'])) if  param['shull82'][v,0][0] == low_tr]
+        Acol = param['shull82'][low_tr][1][0]
+        Tcol = param['shull82'][low_tr][1][2]
+        Arad = param['shull82'][low_tr][1][3]
+        Xrad = param['shull82'][low_tr][1][4]
+        Adi = param['shull82'][low_tr][1][5]
+        Bdi = param['shull82'][low_tr][1][6]
+        T0 = param['shull82'][low_tr][1][7]
+        T1 = param['shull82'][low_tr][2][0]
+        if (T_4 < T0) or (T_4 > T1):
+            print('Warning[ar85-che]: Temperature out of bounds')
+        return Arad * (T_4)**(-Xrad),  Adi * T**(-3/2) * np.exp(-T0/T) * (1+Bdi * np.exp(-T1/T))
+
+    elif GENCOL_KEY.lower() == 'ar85-ch':
+        '''
+            charge transfer recombination with neutral hydrogen Arnaud and Rothenflug (1985)
+            updated for Fe ions by Arnaud and Rothenflug (1992)
+            alpha = a (T_4)^b (1 + c exp(d T_4))
+            i   j
+            Temperature range (K)   a(1e-9cm3/s)    b      c    d
+        '''
+        tr_line = [v for v in range(0,len(param['ar85-ch'])) if  param['ar85-ch'][v][0][1] == low_tr]
+        T0 = param['ar85-ch'][low_tr][1][0]
+        T1 = param['ar85-ch'][low_tr][1][1]
+        a = param['ar85-ch'][low_tr][1][2]
+        b = param['ar85-ch'][low_tr][1][3]
+        c = param['ar85-ch'][low_tr][1][4]
+        d = param['ar85-ch'][low_tr][1][5]
+        if (T_4 < T0) or (T_4 > T1):
+            print('Warning[ar85-che]: Temperature out of bounds')
+        #return a (T_4)**b * (1 + c * np.exp(d * T_4))
+
+    elif GENCOL_KEY.lower() == 'ar85-che':
+        ''' same as above '''
+        tr_line = [v for v in range(0,len(param['ar85-che'])) if  param['ar85-che'][v][0][1] == low_tr]
+        T0 = param['ar85-che'][low_tr][1][0]
+        T1 = param['ar85-che'][low_tr][1][1]
+        a = param['ar85-che'][low_tr][1][2]
+        b = param['ar85-che'][low_tr][1][3]
+        c = param['ar85-che'][low_tr][1][4]
+        d = param['ar85-che'][low_tr][1][5]
+        if (T_4 < T0) or (T_4 > T1):
+            print('Warning[ar85-che]: Temperature out of bounds')
+        #return a (T_4)**b * (1 + c * np.exp(d * T_4))
 
 def vion(nel, Te, atom='h'):
     ''' gives the ionization frequency using Voronov 1997 fitting formula'''
@@ -1307,10 +1426,12 @@ def neuse(ntot, Te, atom='h'):
     ''' gives neutral number density using vrec and vion'''
     return ntot - 2.0 * ionse(ntot, Te, atom=atom)
 
-def vionr3body(nel,Te, atom='h',lowlevel = 0,atomfile='H_2.atom'):
+def vionr3body(nel,Te,lowlevel = 0,atomfile='H_2.atom'):
     ''' three body recombination '''
     units = bifrost_units()
     param = read_atom_ascii(atomfile)
+    atom = param['atom']
+    atom = atom.lower()
     gst_hi=float(param['lvl'][lowlevel,1]) #2.0
     gst_lo=float(param['lvl'][lowlevel+1,1]) #1.0
     if lowlevel == 0:
@@ -1747,7 +1868,7 @@ def read_atom_ascii(atomfile):
                 temp0 = [int(line[0].strip()), int(line[1].strip())]
                 line, lp = readnextline(lines, lp)
                 temp = [float(line[v].strip()) for v in range(0, 6)]
-                temp = [[temp0], [temp]]
+                temp = [temp0, temp]
                 if key in params:
                     params[key] = np.vstack((params[key], [temp]))
                 else:
@@ -1775,10 +1896,10 @@ def read_atom_ascii(atomfile):
             elif(line[0].strip().lower() == 'shull82'):
                 key = line[0].strip().lower()
                 line, lp = readnextline(lines, lp)
-                temp = [[int(line[v].strip()) for v in range(0, 2)], [
-                    float(line[v].strip()) for v in range(2, 9)]]
+                trans= [int(line[v].strip()) for v in range(0, 2)]
+                temp = [float(line[v].strip()) for v in range(2, 9)]
                 line, lp = readnextline(lines, lp)
-                temp = [temp, [float(line[0].strip())]]
+                temp = [trans,temp, [float(line[0].strip())]]
                 if key in params:
                     params[key] = np.vstack((params[key], [temp]))
                 else:
@@ -1788,9 +1909,9 @@ def read_atom_ascii(atomfile):
                 key = line[0].strip().lower()
                 line, lp = readnextline(lines, lp)
                 z = int(line[0].strip())
-                line, lp = readnextline(lines, lp)
                 vorpar = np.zeros((z, 7))
                 for iterv in range(0,z):
+                    line, lp = readnextline(lines, lp)
                     vorpar[iterv,0] = int(line[0].strip())
                     vorpar[iterv,1] = int(line[1].strip())
                     vorpar[iterv,2] = float(line[2].strip())
@@ -1861,179 +1982,6 @@ def read_atom_ascii(atomfile):
                         params[key] = [reco]
 
     return params
-
-
-def write_atom_ascii(atomfile, atom):
-    ''' Writes the atom (command style) ascii file into dictionary '''
-    num_map = [(1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'), (90, 'XC'),
-               (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')]
-
-    def num2roman(num):
-        ''' converts integer to roman number '''
-        roman = ''
-        while num > 0:
-            for i, r in num_map:
-                while num >= i:
-                    roman += r
-                    num -= i
-        return roman
-
-    import datetime
-    datelist = []
-    today = datetime.date.today()
-    datelist.append(today)
-    text = ['# Created on ' + str(datelist[0]) + ' \n' +
-            '## ADD HERE NECESSARY INFORMATION \n' +
-            '# \n ']
-    z = get_atomZ(atom=atom + '_1')
-    abund = get_abund(atom=atom)
-    awgt = get_atomweight(atom=atom)
-    nk = z + 1
-    ncont = z
-    nlin = 0  # Numero de lineas?
-    nfix = 0
-    neuv_bins = 6
-    euv_bound = [911.7, 753.143, 504.0, 227.800, 193.919, 147.540, 20.0]
-    enerlvl = np.zeros(nk)
-    for iv in range(1, nk):
-        alvl = str(iv)
-        # JMS eventually we could use get_excidE
-        enerlvl[iv] = get_atomde(atom=atom + '_' + alvl, cm1=True)
-    g = np.zeros(nk)  # No clue where to get those...
-    levelname = ['noclue' for v in range(0, nk)]
-    # No clue where to get those.
-    phcross = [
-        0.00000000000,
-        0.00000000000,
-        4.9089501e-18,
-        1.6242972e-18,
-        1.1120017e-18,
-        9.3738273e-19]
-    nbin = len(phcross)
-    f = open(atomfile, "w")
-    f.write(str(text[0]))
-    f.write(atom.upper() + "\n")
-    text = ['# nk is number of levels, continuum included \n' +
-            '# nlin is number of spectral lines in detail \n' +
-            '# ncont is number of continua in detail \n' +
-            '# nfix is number of fixed transitions \n' +
-            '#   ABUND     AWGT \n']
-    f.write(str(text[0]))
-    f.write(
-        '    {0:5.2f}'.format(
-            float(abund)) +
-        '   {0:5.2f}'.format(
-            float(awgt)) +
-        '\n')
-    f.write('#  NK NLIN NCNT NFIX \n')
-    f.write(
-        '    {0:3d}'.format(nk) +
-        '  {0:3d}'.format(nlin) +
-        '  {0:3d}'.format(ncont) +
-        '  {0:3d}'.format(nfix) +
-        '\n')
-
-    text = [
-        "# E[cm-1]    g                  label[20]         stage   levelNo \n" +
-        "#                     '----|----|----|----|----'\n"]
-    f.write(str(text[0]))
-    for iv in range(0, nk):
-        f.write(
-            '    {0:10.3f}'.format(
-                enerlvl[iv]) +
-            '  {0:4.2}'.format(
-                g[iv]) +
-            ' {:2}'.format(
-                atom.upper()))
-        f.write(' {:5}'.format(num2roman(iv + 1)))
-        f.write(
-            ' {:12}'.format(
-                levelname[iv]) +
-            '  {0:3d}'.format(
-                iv +
-                1) +
-            '  {0:3d}'.format(
-                iv +
-                1) +
-            '\n')  # the two iv are wrong at the end...
-
-    text = ['# \n' +
-            '# photoionization cross sections for continua  \n' +
-            '# number of neuv_bins, \n']
-    f.write(str(text[0]))
-    f.write('  ' + str(neuv_bins) + ' \n')
-    f.write('# bin boundaries\n')
-    for iv in range(0, 7):
-        f.write('   {0:7.3f}'.format(euv_bound[iv]) + '\n')
-    for iv in range(0, nk - 1):
-        f.write('# i j \n')
-        f.write('  {0:2d}'.format(iv + 1) + '  {0:2d}'.format(iv + 2) + ' \n')
-        f.write('# bin       sigma \n')
-        for it in range(0, nbin):
-            f.write(
-                '  {0:2d}'.format(it) +
-                '    {0:9.7e}'.format(
-                    phcross[it]) +
-                ' \n')
-    f.write(' GENCOL \n')
-    text = [
-        '# Collisional excitation 304  \n' +
-        '# data from Chianti. Maximum error about 3%. \n' +
-        '# upsilon as function of (natural) logarithmic temp. \n' +
-        '# rate coefficient: c = ne * upsilon * 8.63e-6 / sqrt(T) * exp(-E/kt) \n']
-    f.write(str(text[0]))
-    f.write(' CEXC \n')
-    ncexc = nbin  # No clue how to get this.
-    cexc = [5.9381e+00, -2.8455e+00, 5.4103e-01, -
-            4.9805e-02, 2.1959e-03, -3.6167e-05]
-    f.write('   ' + str(ncexc) + '\n')
-    for iv in range(0, ncexc):
-        f.write('   {0:10.4e}'.format(cexc[iv]) + '\n')
-    f.write('# \n')
-    AR85 = [24.60, 17.80, -11.00, 7.00, -23.20]  # No clue how to get this.
-    for iv in range(0, nk - 1):
-        f.write(' AR85-CDI \n')
-        f.write('  {0:2d}'.format(iv + 1) + '  {0:2d}'.format(iv + 2) + ' \n')
-        f.write('  {0:2d}'.format(1) + ' \n')  # No clue how to get this.
-        for it in range(0, 5):
-            f.write('   {0:6.2f}'.format(AR85[it]))
-        f.write('\n')
-    f.write(' TEMP \n')
-    temp = [1000.0000, 1063.7600, 1131.6000, 1203.7500, 128000.50]
-    f.write('   {0:2d}'.format(len(temp)) + '\n')
-    it = 0
-    while it < len(temp):
-        for iv in range(0, 5):
-            f.write('  {0:10g}'.format(temp[it]))
-            it += 1
-            if it == len(temp):
-                continue
-        f.write('\n')
-    reco = [
-        1.2960009e-13,
-        1.2917243e-13,
-        1.2871904e-13,
-        1.2823854e-13,
-        1.2772931e-13]
-    for iv in range(0, nk - 1):
-        f.write(' RECO \n')
-        f.write('  ' + str(iv + 1) + '  ' + str(iv + 2) + ' \n')
-        it = 0
-        while it < len(reco):
-            for iv in range(0, 5):
-                f.write('  {0:9.7e}'.format(reco[it]))
-                it += 1
-                if it == len(reco):
-                    continue
-            f.write('\n')
-    f.write('END')
-    f.close()
-
-    import shutil
-    shutil.copy(atomfile, 'temp.atom')
-
-    add_voro_atom('temp.atom', atomfile, atom=atom)
-
 
 def diper2eb_atom_ascii(atomfile, output):
     ''' Writes the atom (command style) ascii file into dictionary '''
@@ -2236,67 +2184,6 @@ def diper2eb_atom_ascii(atomfile, output):
             data = data[0:iloc + 1] + textar85cea + data[iloc + 1:]
     except BaseException:
         print('no key')
-
-    '''
-    text=['# \n' +
-        '# photoionization cross sections for continua  \n' +
-        '# number of neuv_bins, \n']
-    f.write(str(text[0]))
-    f.write('  ' + str(neuv_bins) + ' \n')
-    f.write('# bin boundaries\n')
-    for iv in range(0,7):
-        f.write('   {0:7.3f}'.format(euv_bound[iv]) + '\n')
-    for iv in range(0,nk-1):
-        f.write('# i j \n')
-        f.write('  {0:2d}'.format(iv+1) + '  {0:2d}'.format(iv + 2) + ' \n')
-        f.write('# bin       sigma \n')
-        for it in range(0,nbin):
-            f.write('  {0:2d}'.format(it) + '    {0:9.7e}'.format(phcross[it]) + ' \n')
-    f.write(' GENCOL \n')
-    text = ['# Collisional excitation 304  \n' +
-        '# data from Chianti. Maximum error about 3%. \n' +
-        '# upsilon as function of (natural) logarithmic temp. \n' +
-        '# rate coefficient: c = ne * upsilon * 8.63e-6 / sqrt(T) * exp(-E/kt) \n']
-    f.write(str(text[0]))
-    f.write(' CEXC \n')
-    ncexc=nbin # No clue how to get this.
-    cexc=[5.9381e+00, -2.8455e+00,5.4103e-01,-4.9805e-02,2.1959e-03,-3.6167e-05]
-    f.write('   ' + str(ncexc) + '\n')
-    for iv in range(0,ncexc):
-        f.write('   {0:10.4e}'.format(cexc[iv]) + '\n')
-    f.write('# \n')
-    AR85 = [24.60, 17.80, -11.00, 7.00, -23.20] # No clue how to get this.
-    for iv in range(0,nk-1):
-        f.write(' AR85-CDI \n')
-        f.write('  {0:2d}'.format(iv+1) + '  {0:2d}'.format(iv + 2) + ' \n')
-        f.write('  {0:2d}'.format(1) + ' \n') # No clue how to get this.
-        for it in range(0,5):
-            f.write('   {0:6.2f}'.format(AR85[it]))
-        f.write('\n')
-    f.write(' TEMP \n')
-    temp=[1000.0000,1063.7600,1131.6000,1203.7500, 128000.50]
-    f.write('   {0:2d}'.format(len(temp)) + '\n')
-    it=0
-    while it < len(temp):
-        for iv in range(0,5):
-            f.write('  {0:10g}'.format(temp[it]))
-            it += 1
-            if it == len(temp): continue
-        f.write('\n')
-    reco=[1.2960009e-13,1.2917243e-13,1.2871904e-13,1.2823854e-13,1.2772931e-13]
-    for iv in range(0,nk-1):
-        f.write(' RECO \n')
-        f.write('  ' + str(iv+1) + '  ' + str(iv + 2) + ' \n')
-        it=0
-        while it < len(reco):
-            for iv in range(0,5):
-                f.write('  {0:9.7e}'.format(reco[it]))
-                it += 1
-                if it == len(reco): continue
-            f.write('\n')
-    f.write('END')
-    f.close()
-    '''
 
     f = open('temp.atom', "w")
     for i in range(0, len(data)):
