@@ -1,3 +1,6 @@
+"""
+Set of programs to read and interact with atom files focus.
+"""
 
 import numpy as np
 import os
@@ -6,24 +9,44 @@ from .ebysus import EbysusData
 from . import cstagger
 
 class atom_tools(object):
-
-
+    """
+    Reads data from atom files in Ebysus format.
+    """
     def __init__(self, atom_name = '', stage='', atom_file='', voronov_file=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat'):
         '''
             Init file
 
-            Parameters
+            Parameters (INPUT)
+            ----------
+            atom_file - atom file of interest (in this case, atom_name and stage will be ignore).
+            atom_name - lower case letter if the atom of interest. This is mostly just for using some CHIANTI read out.
+                If atom is not defined then it returns a list of all abundances in the file.
+                In this case, one will access to it by, e.g., var['h'],
+            stage - This is for the CHIANTI read out options.
+            voronov_file - path of the Ebysus file that contains all the information about Voronov. For CHIANTI stuff, it is the
+                abundance file, default is voronov.dat without Chianti data base or sun_photospheric_1998_grevesse for
+                Chianti data base.
+
+            Parameters (DATA IN OBJECT)
             ----------
             params - list containing the information of voronov.dat (following the format of read_voro_file)
-            atom - lower case letter if the atom of interest.
-                If atom is not defined then it returns a list of all abundances in the file.
-                In this case, one will access to it by, e.g., var['h']
-            filename - is the abundance file, default is voronov.dat without Chianti data base or sun_photospheric_1998_grevesse for
-                Chianti data base.
+
         '''
         self.voronov_file = voronov_file
         self.read_voro_file()
-
+        self.keyword_atomic = [
+                    'ar85-cdi',
+                    'ar85-cea',
+                    'ar85-ch',
+                    'ar85-che',
+                    'ci',
+                    'ce',
+                    'cp',
+                    'ohm',
+                    'burgess',
+                    'slups',
+                    'shull82',
+                    'reco']
         if (atom_file != ''):
             self.atom_file = atom_file
             self.read_atom_file()
@@ -443,17 +466,23 @@ class atom_tools(object):
         else:
             cdn = 0
 
-        if GENCOL_KEY.lower() == 'shull82':
-            summrs=1.0
-            sqrtte = np.sqrt(Te)
-            arrec = Arad * (Te/1.e4)**(-Xrad)
-            adrec = Adi / Te / sqrtte * exp(-T0/Te)*(1.e0+Bdi * np.exp(-T1/Te))
-            cdn = arrec + summrs * adrec + cdn
+        if (GENCOL_KEY.lower() == 'atomic'):
+            keylist = self.keyword_atomic
+        else:
+            keylist = GENCOL_KEY.lower()
 
-        elif GENCOL_KEY.lower() == 'voronov': # mcwhirter65
-           vfac = 2.6e-19
-           Z = get_atomZ(self.vor_param['atom'])
-           cdn = vfac * np.sqrt(1.0 / TeV) * Z**2
+        for keyword in keylist:
+            if keyword == 'shull82':
+                summrs=1.0
+                sqrtte = np.sqrt(Te)
+                arrec = Arad * (Te/1.e4)**(-Xrad)
+                adrec = Adi / Te / sqrtte * exp(-T0/Te)*(1.e0+Bdi * np.exp(-T1/Te))
+                cdn = arrec + summrs * adrec + cdn
+
+            elif keyword == 'voronov': # mcwhirter65
+                vfac = 2.6e-19
+                Z = get_atomZ(self.vor_param['atom'])
+                cdn = vfac * np.sqrt(1.0 / TeV) * Z**2
 
         self.cdn = cdn
 
@@ -468,131 +497,138 @@ class atom_tools(object):
         units = bifrost_units()
         TeV = Te * units.K_TO_EV
 
-        if GENCOL_KEY.lower() == 'voronov':
-            tr_line=np.where(self.params['voronov'][0][:,0] == lo_lvl)
-            phion = self.params['voronov'][0][tr_line[0],2] # get_atomde(atom, Chianti=False)  # 13.6
-            A = self.params['voronov'][0][tr_line[0],3] # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
-            X = self.params['voronov'][0][tr_line[0],4] # get_atomX(atom)  # 0.232
-            K = self.params['voronov'][0][tr_line[0],5] # get_atomK(atom)  # 0.39
-            P = self.params['voronov'][0][tr_line[0],6] # get_atomP(atom)  # 1
+        if (GENCOL_KEY.lower() == 'atomic'):
+            keylist = self.keyword_atomic
+        else:
+            keylist = GENCOL_KEY.lower()
 
-            self.cup = A * (1 + np.sqrt(phion / TeV) * P) / (X + phion /
-                     TeV) * (phion / TeV)**K * np.exp(-phion / TeV)
-        elif GENCOL_KEY.lower() == 'ar85-cdi':
-            '''  Data for electron impact ionization Arnaud and Rothenflug (1985)
-               1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) + D ln(u)/u) (cm^2)
-                    #   i   j
-                    # Numbers of shells
-                # dE(eV)  A   B   C   D
-            '''
-            tr_list=self.params['ar85-cdi'][:,0][:]
-            tr_line = [v for v in tr_list[:][0] if tr_list[v][0] == lo_lvl]
-            nshells = var['ar85-cdi'][tr_line][1]
-            phion = np.zeros(nshells)
-            A = np.zeros(nshells)
-            B = np.zeros(nshells)
-            C = np.zeros(nshells)
-            D = np.zeros(nshells)
-            for ishell in range(0,nshells):
-                phion[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][0]
-                A[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][1]
-                B[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][2]
-                C[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][3]
-                D[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][2]
+        for keyword in keylist:
+            if keyword ==  'voronov':
+                tr_line=np.where(self.params['voronov'][0][:,0] == lo_lvl)
+                phion = self.params['voronov'][0][tr_line[0],2] # get_atomde(atom, Chianti=False)  # 13.6
+                A = self.params['voronov'][0][tr_line[0],3] # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
+                X = self.params['voronov'][0][tr_line[0],4] # get_atomX(atom)  # 0.232
+                K = self.params['voronov'][0][tr_line[0],5] # get_atomK(atom)  # 0.39
+                P = self.params['voronov'][0][tr_line[0],6] # get_atomP(atom)  # 1
 
-            g_ilv=float(self.params['lvl'][lo_lvl][1])
-            g_jlv=float(self.params['lvl'][hi_lvl][1])
+                self.cup = A * (1 + np.sqrt(phion / TeV) * P) / (X + phion /
+                             TeV) * (phion / TeV)**K * np.exp(-phion / TeV)
 
-            for ishell in range(0,nshells):
-                xj = phion[ishell] * units.EV_TO_ERG / units.KBOLTZMANN / Te
-                fac = np.exp(-xj) * sqrt(xj)
-                fxj = fac * (A[ishell] + B[ishell] * (1. + xj) + (C[ishell] - xj *
-                        (A[ishell] + B[ishell] * (2. + xj))) * fone(xj,0) + D[ishell] * xj * ftwo(xj,0) )
-                fac = 6.69e-07 / TeV / np.sqrt(TeV)
-                cup = cup + fac * fxj
+            elif keyword == 'ar85-cdi':
+                '''  Data for electron impact ionization Arnaud and Rothenflug (1985)
+                   1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) + D ln(u)/u) (cm^2)
+                        #   i   j
+                        # Numbers of shells
+                    # dE(eV)  A   B   C   D
+                '''
+                tr_list=self.params['ar85-cdi'][:,0][:]
+                tr_line = [v for v in tr_list[:][0] if tr_list[v][0] == lo_lvl]
+                nshells = var['ar85-cdi'][tr_line][1]
+                phion = np.zeros(nshells)
+                A = np.zeros(nshells)
+                B = np.zeros(nshells)
+                C = np.zeros(nshells)
+                D = np.zeros(nshells)
+                for ishell in range(0,nshells):
+                    phion[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][0]
+                    A[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][1]
+                    B[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][2]
+                    C[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][3]
+                    D[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][2]
 
-            self.cup = cup
+                g_ilv=float(self.params['lvl'][lo_lvl][1])
+                g_jlv=float(self.params['lvl'][hi_lvl][1])
 
-        elif GENCOL_KEY.lower() == 'ar85-cea':
-            '''
-            '''
-            tr_list=self.params['ar85-cea'][:,0][:]
-            tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == lo_lvl]
-            coeff = self.params['ar85-cea'][lo_lvl][1]
+                for ishell in range(0,nshells):
+                    xj = phion[ishell] * units.EV_TO_ERG / units.KBOLTZMANN / Te
+                    fac = np.exp(-xj) * sqrt(xj)
+                    fxj = fac * (A[ishell] + B[ishell] * (1. + xj) + (C[ishell] - xj *
+                            (A[ishell] + B[ishell] * (2. + xj))) * fone(xj,0) + D[ishell] * xj * ftwo(xj,0) )
+                    fac = 6.69e-07 / TeV / np.sqrt(TeV)
+                    cup = cup + fac * fxj
 
-        elif GENCOL_KEY.lower() == 'burgess':
-            '''
-            '''
-            tr_list=self.params['burgess'][:,0][:]
-            tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == lo_lvl]
-            coeff = self.params['burgess'][lo_lvl][1]
+                self.cup = cup
 
-        elif GENCOL_KEY.lower() == 'shull82':
-            '''
-                Recombination rate coefficients Shull and Steenberg (1982)
-                provides direct collisional ionization with the following fitting:
-                Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T), with Ai ~ 0.1
-                for the recombination rate combines the sum of radiative and dielectronic recombination rate
-                alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2) exp(-T0/T) (1+Bdi exp(-T1/T))
-                i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi       T0       T1
-            '''
-            tr_line =  [v for v in range(0,len(self.params['shull82'])) if  self.params['shull82'][v,0][0] == lo_lvl]
-            Acol = self.params['shull82'][lo_lvl][1][0]
-            Tcol = self.params['shull82'][lo_lvl][1][2]
-            Arad = self.params['shull82'][lo_lvl][1][3]
-            Xrad = self.params['shull82'][lo_lvl][1][4]
-            Adi = self.params['shull82'][lo_lvl][1][5]
-            Bdi = self.params['shull82'][lo_lvl][1][6]
-            T0 = self.params['shull82'][lo_lvl][1][7]
-            T1 = self.params['shull82'][lo_lvl][2][0]
-            if (T_4 < T0) or (T_4 > T1):
-                print('Warning[ar85-che]: Temperature out of bounds')
+            elif keyword == 'ar85-cea':
+                '''
+                '''
+                tr_list=self.params['ar85-cea'][:,0][:]
+                tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == lo_lvl]
+                coeff = self.params['ar85-cea'][lo_lvl][1]
 
-            g_ilv=float(self.params['lvl'][lo_lvl][1])
-            g_jlv=float(self.params['lvl'][hi_lvl][1])
+            elif keyword == 'burgess':
+                '''
+                '''
+                tr_list=self.params['burgess'][:,0][:]
+                tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == lo_lvl]
+                coeff = self.params['burgess'][lo_lvl][1]
 
-            dE= float(self.params['lvl'][hi_lvl][1]) - float(self.params['lvl'][lo_lvl][1])
-            dE = dE * units.CLIGHT * units.HPLANCK
-            scr1 =  dE / Te / units.KBOLTZMANN
+            elif keyword == 'shull82':
+                '''
+                    Recombination rate coefficients Shull and Steenberg (1982)
+                    provides direct collisional ionization with the following fitting:
+                    Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T), with Ai ~ 0.1
+                    for the recombination rate combines the sum of radiative and dielectronic recombination rate
+                    alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2) exp(-T0/T) (1+Bdi exp(-T1/T))
+                    i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi       T0       T1
+                '''
+                tr_line =  [v for v in range(0,len(self.params['shull82'])) if  self.params['shull82'][v,0][0] == lo_lvl]
+                Acol = self.params['shull82'][lo_lvl][1][0]
+                Tcol = self.params['shull82'][lo_lvl][1][2]
+                Arad = self.params['shull82'][lo_lvl][1][3]
+                Xrad = self.params['shull82'][lo_lvl][1][4]
+                Adi = self.params['shull82'][lo_lvl][1][5]
+                Bdi = self.params['shull82'][lo_lvl][1][6]
+                T0 = self.params['shull82'][lo_lvl][1][7]
+                T1 = self.params['shull82'][lo_lvl][2][0]
+                if (T_4 < T0) or (T_4 > T1):
+                    print('Warning[ar85-che]: Temperature out of bounds')
 
-            sqrtte = np.sqrt(Te)
-            cup=0.
-            if (Acol != 0.):
-                cup = Acol * sqrtte * np.exp( -Tcol / Te) / (1.e0 + 0.1 * Te / Tcol)
+                g_ilv=float(self.params['lvl'][lo_lvl][1])
+                g_jlv=float(self.params['lvl'][hi_lvl][1])
 
-            self.cup =  cup
+                dE= float(self.params['lvl'][hi_lvl][1]) - float(self.params['lvl'][lo_lvl][1])
+                dE = dE * units.CLIGHT * units.HPLANCK
+                scr1 =  dE / Te / units.KBOLTZMANN
 
-        elif GENCOL_KEY.lower() == 'ar85-ch':
-            '''
-                charge transfer recombination with neutral hydrogen Arnaud and Rothenflug (1985)
-                updated for Fe ions by Arnaud and Rothenflug (1992)
-                alpha = a (T_4)^b (1 + c exp(d T_4))
-                i   j
-                Temperature range (K)   a(1e-9cm3/s)    b      c    d
-            '''
-            tr_line = [v for v in range(0,len(self.params['ar85-ch'])) if  self.params['ar85-ch'][v][0][1] == lo_lvl]
-            T0 = self.params['ar85-ch'][lo_lvl][1][0]
-            T1 = self.params['ar85-ch'][lo_lvl][1][1]
-            a = self.params['ar85-ch'][lo_lvl][1][2]
-            b = self.params['ar85-ch'][lo_lvl][1][3]
-            c = self.params['ar85-ch'][lo_lvl][1][4]
-            d = self.params['ar85-ch'][lo_lvl][1][5]
-            if (T_4 < T0) or (T_4 > T1):
-                print('Warning[ar85-che]: Temperature out of bounds')
-            #self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
+                sqrtte = np.sqrt(Te)
+                cup=0.
+                if (Acol != 0.):
+                    cup = Acol * sqrtte * np.exp( -Tcol / Te) / (1.e0 + 0.1 * Te / Tcol)
 
-        elif GENCOL_KEY.lower() == 'ar85-che':
-            ''' same as above '''
-            tr_line = [v for v in range(0,len(self.params['ar85-che'])) if  self.params['ar85-che'][v][0][1] == lo_lvl]
-            T0 = self.params['ar85-che'][lo_lvl][1][0]
-            T1 = self.params['ar85-che'][lo_lvl][1][1]
-            a = self.params['ar85-che'][lo_lvl][1][2]
-            b = self.params['ar85-che'][lo_lvl][1][3]
-            c = self.params['ar85-che'][lo_lvl][1][4]
-            d = self.params['ar85-che'][lo_lvl][1][5]
-            if (T_4 < T0) or (T_4 > T1):
-                print('Warning[ar85-che]: Temperature out of bounds')
-            #self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
+                self.cup =  cup
+
+            elif keyword == 'ar85-ch':
+                '''
+                    charge transfer recombination with neutral hydrogen Arnaud and Rothenflug (1985)
+                    updated for Fe ions by Arnaud and Rothenflug (1992)
+                    alpha = a (T_4)^b (1 + c exp(d T_4))
+                    i   j
+                    Temperature range (K)   a(1e-9cm3/s)    b      c    d
+                '''
+                tr_line = [v for v in range(0,len(self.params['ar85-ch'])) if  self.params['ar85-ch'][v][0][1] == lo_lvl]
+                T0 = self.params['ar85-ch'][lo_lvl][1][0]
+                T1 = self.params['ar85-ch'][lo_lvl][1][1]
+                a = self.params['ar85-ch'][lo_lvl][1][2]
+                b = self.params['ar85-ch'][lo_lvl][1][3]
+                c = self.params['ar85-ch'][lo_lvl][1][4]
+                d = self.params['ar85-ch'][lo_lvl][1][5]
+                if (T_4 < T0) or (T_4 > T1):
+                    print('Warning[ar85-che]: Temperature out of bounds')
+                #self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
+
+            elif keyword == 'ar85-che':
+                ''' same as above '''
+                tr_line = [v for v in range(0,len(self.params['ar85-che'])) if  self.params['ar85-che'][v][0][1] == lo_lvl]
+                T0 = self.params['ar85-che'][lo_lvl][1][0]
+                T1 = self.params['ar85-che'][lo_lvl][1][1]
+                a = self.params['ar85-che'][lo_lvl][1][2]
+                b = self.params['ar85-che'][lo_lvl][1][3]
+                c = self.params['ar85-che'][lo_lvl][1][4]
+                d = self.params['ar85-che'][lo_lvl][1][5]
+                if (T_4 < T0) or (T_4 > T1):
+                    print('Warning[ar85-che]: Temperature out of bounds')
+                #self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
 
     def vion(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
         ''' gives the ionization frequency using Voronov 1997 fitting formula'''
@@ -656,15 +692,13 @@ class atom_tools(object):
                 B=np.zeros((nlevels))
                 A=np.zeros((nlevels,nlevels))
                 for ilev in range(0,nlevels-1):
-                    Cip = 0.0
-                    for igen in range(0,len(GENCOL_KEY)):
-                        self.vrec(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,atomfile=atomfile,threebody=threebody,GENCOL_KEY=GENCOL_KEY[igen])
-                        self.vion(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,atomfile=atomfile,GENCOL_KEY=GENCOL_KEY[igen])
-                        if igen == 0:
-                            Rip = self.frec
-                        else:
-                            Rip += self.frec
-                        Cip += self.fion
+                    self.vrec(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,atomfile=atomfile,threebody=threebody,GENCOL_KEY=GENCOL_KEY)
+                    self.vion(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,atomfile=atomfile,GENCOL_KEY=GENCOL_KEY)
+                    if igen == 0:
+                        Rip = self.frec
+                    else:
+                        Rip += self.frec
+                    Cip = self.fion
                     A[ilev,ilev] += - Cip
                     A[ilev,ilev+1] = Rip #+ Ri3d #Ri3d!?
                     if ilev < nlevels-2:
@@ -1056,15 +1090,12 @@ class atom_tools(object):
                     reco = np.zeros((nitert))
                     for v in range(2, np.size(line)):
                         reco[itertemp] = float(line[v].strip())
-                        print(itertemp,reco[itertemp])
                         itertemp += 1
                     while itertemp < nitert:
                         line, lp = readnextline(lines, lp)
                         for v in range(0, np.size(line)):
                             reco[itertemp] = float(line[v].strip())
-                            print(itertemp,reco[itertemp])
                             itertemp += 1
-                    print(np.shape(reco))
                     params[key][ij]['cros'] = reco
 
         self.params = params
