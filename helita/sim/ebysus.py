@@ -366,7 +366,12 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
-        if ((snap is not None) and (snap != self.snap)):
+        try:
+            if ((snap is not None) and (snap != self.snap)):
+                self.set_snap(snap)
+
+        except ValueError:
+            if ((snap is not None) and any(snap != self.snap)):
                 self.set_snap(snap)
 
         if var in self.varsmfc:
@@ -429,17 +434,18 @@ class EbysusData(BifrostData):
                 setattr(self, dim[2] + 'Ind', slice(None))
                 setattr(self, dim, slice(None))
             else:
-                setattr(self, dim[2] + 'Length', np.size(getattr(self,dim)))
+                indSize = np.size(getattr(self, dim))
+                setattr(self, dim[2] + 'Length', indSize)
+                if indSize == 1:
+                    setattr(self, dim[2] + 'Ind', 0)
 
-        if type(self.snap) is int:
-            snapLen = 1
-        else:
-            snapLen = len(self.snap)
-
+        snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
         for i in range(0, snapLen):
             self.snapInd = i
+            self._set_snapvars()
+            self._init_vars()
             helperCall = helper(var)[self.iix, self.iiy, self.iiz]
             value[self.xInd, self.yInd, self.zInd, i] = helperCall
 
