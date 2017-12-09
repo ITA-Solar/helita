@@ -6,10 +6,6 @@ import numpy as np
 import os
 from glob import glob
 from . import cstagger
-import parse as parse
-from optparse import OptionParser
-import matplotlib.pyplot as plt
-
 
 class BifrostData(object):
     """
@@ -307,12 +303,15 @@ class BifrostData(object):
         self.iiy = iiy
         self.iiz = iiz
 
-        if ((snap is not None) and (snap != self.snap)):
-            self.set_snap(snap)
+        try:
+            if ((snap is not None) and (snap != self.snap)):
+                self.set_snap(snap)
+
+        except ValueError:
+            if ((snap is not None) and any(snap != self.snap)):
+                self.set_snap(snap)
 
         def helper(var, *args, **kwargs):
-
-            self.params = self.paramList[self.snapInd]
 
             if var in ['x', 'y', 'z']:
                 return getattr(self, var)
@@ -348,20 +347,21 @@ class BifrostData(object):
                 setattr(self, dim[2] + 'Ind', slice(None))
                 setattr(self, dim, slice(None))
             else:
-                setattr(self, dim[2] + 'Length', np.size(getattr(self,dim)))
+                indSize = np.size(getattr(self, dim))
+                setattr(self, dim[2] + 'Length', indSize)
+                if indSize == 1:
+                    setattr(self, dim[2] + 'Ind', 0)
 
-        if type(self.snap) is int:
-            snapLen = 1
-        else:
-            snapLen = len(self.snap)
-
+        snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
         for i in range(0, snapLen):
             self.snapInd = i
+            self._set_snapvars()
+            self._init_vars()
             helperCall = helper(var)[self.iix, self.iiy, self.iiz]
             value[self.xInd, self.yInd, self.zInd, i] = helperCall
-
+        #self.params = self.paramList
         return value
 
     def get_var(self, var, snap=None, *args, **kwargs):
@@ -695,17 +695,6 @@ class BifrostData(object):
                 if os.environ.get('CUDA_LIB','null') == 'null':
                     os.environ['CUDA_LIB'] = os.environ['BIFROST'] + '/CUDA/q_factor/'
 
-                p = OptionParser()
-                p.add_option('-l', '--slice',   dest = 'slice', default = '25', action = 'store_true', help = 'Maps whole snapshot')
-                p.add_option('-r', '--rcalc',   dest = 'rcalc', default = False, action = 'store_true', help = 'Forces rcalculation and overwrites cache')
-                p.add_option('-n', '--save',    dest = 'save',  default = False, action = 'store_true', help = 'Saves to current working directory')
-
-                p.add_option('-f', '--file',    dest = 'file',  default = None,     help = 'Path to simulation')
-                p.add_option('-d', '--dir',     dest = 'dir',   default = self.fdir, help = 'Simulation directory')
-                p.add_option('-t', '--temp',    dest = 'temp',  default = self.file_root,                   help = 'Snapshot prefix')
-                p.add_option('-s', '--snap',    dest = 'snap',  default = self.snap,    help = 'Initial snap')
-                p.add_option('-p', '--plane',   dest = 'plane', default = 25,     help = 'Initial plane')
-
                 #Calculation settings
                 qdef = False
                 adef = False
@@ -721,64 +710,45 @@ class BifrostData(object):
                 else:
                     cdef = True
 
-                p.add_option('-q', '--qfactor',      dest = 'q',            default = qdef,  action = 'store_true', help = 'Calculates Q')
-                p.add_option('-a', '--alt',          dest = 'alt',          default = adef,  action = 'store_true', help = 'Alternate formula for Q')
-                p.add_option('-i', '--integrate',    dest = 'integrate',    default = intdef,  action = 'store_true', help = 'Integrates along field')
-                p.add_option('-c', '--connectivity', dest = 'connectivity', default = cdef,  action = 'store_true', help = 'Maps connectivity')
-                (opts, args) = p.parse_args()
-
-
-                #parse_file(d, opts.file if opts.file else opts.dir + opts.temp + opts.snap)
-
-
-
                 from q import qCalculatornopars
-                print('before opts')
-                print(opts)
-                print('afeter opts')
-                q=qCalculatornopars(opts)
-                q.trace_snapshot()
-                q.init_q()
 
-                # class Mysomethingelse:
-                #     def __init__(self):
-                #         self.slice = False
-                #         self.rcalc = False
-                #         self.save = False
-                #         self.file = None
-                #         self.dir =  ''
-                #         self.temp = ''
-                #         self.snap = 1
-                #         self.plane = 0
-                #         self.q=False
-                #         self.alt=False
-                #         self.integrate=False
-                #         self.connectivity=False
+                class q_options:
+                     def __init__(self):
+                         self.slice = False
+                         self.rcalc = False
+                         self.save = False
+                         self.file = None
+                         self.dir =  ''
+                         self.temp = ''
+                         self.snap = 1
+                         self.plane = 0
+                         self.q=False
+                         self.alt=False
+                         self.integrate=False
+                         self.connectivity=False
 
-                # somethingelse = Mysomethingelse()
-                # somethingelse.temp = self.file_root
-                # somethingelse.snap = self.snap
-                # somethingelse.q = qdef
-                # somethingelse.alt = adef
-                # somethingelse.integrate = intdef
-                # somethingelse.connectivity = cdef
-                # somethingelse = somethingelse.__dict__
-
-                # # parse_file(d, opts.file if opts.file else opts.dir + opts.temp + opts.snap)
-                # print('before somethingelse')
-                # print(somethingelse)
-                # print('after somethingelse')
-                # from q import qCalculatornopars
-
-                # q=qCalculatornopars(somethingelse)
-                # q.trace_snapshot()
-                # q.init_q()
+                opts = q_options()
+                opts.temp = self.file_root
+                opts.snap = self.snap
+                opts.q = qdef
+                opts.alt = adef
+                opts.integrate = intdef
+                opts.connectivity = cdef
+                opts.dir = self.fdir
 
                 var = np.empty([self.nx, self.ny, self.nz])
+                q=qCalculatornopars(opts)
                 for iz in range(0, self.nz):
+                    print('iz=',iz)
+                    opts.plane = iz
+                    opts.slice = str(iz)
+                    opts.rcalc = True
+                    q.opts = opts
+                    q.plane = iz
+                    q.trace_snapshot()
+                    q.init_q()
                     var[:,:,iz]=q.calculate_q(iz)
                 return var
-
 
             else:
                 raise ValueError(('This machine does not have cuda.'))
