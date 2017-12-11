@@ -76,12 +76,12 @@ class BifrostData(object):
             Sets list of avaible variables
         """
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
-        self.auxvars = self.params['aux'].split()
+        self.auxvars = self.params['aux'][self.snapInd].split()
         if (self.do_mhd):
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
         if 'do_hion' in self.params:
-            if self.params['do_hion'] > 0:
+            if self.params['do_hion'][self.snapInd] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
                                  'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
         self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
@@ -194,14 +194,16 @@ class BifrostData(object):
                            "default of %.3e" % (unit, unit_def[unit])))
                     params[unit] = unit_def[unit]
 
-        self.params = self.paramList[0]
+        self.params = {}
+        for key in self.paramList[0]:
+            self.params[key] = [self.paramList[i][key] for i in range(0, len(self.paramList))]
 
     def __read_mesh(self, meshfile):
         """
         Reads mesh file
         """
         if meshfile is None:
-            meshfile = os.path.join(self.fdir, self.params['meshfile'].strip())
+            meshfile = os.path.join(self.fdir, self.params['meshfile'][self.snapInd].strip())
         if os.path.isfile(meshfile):
             f = open(meshfile, 'r')
             for p in ['x', 'y', 'z']:
@@ -441,7 +443,7 @@ class BifrostData(object):
             filename += fsuffix_a + fsuffix_b
         elif var in self.hionvars:
             idx = self.hionvars.index(var)
-            isnap = self.params['isnap']
+            isnap = self.params['isnap'][self.snapInd]
             if isnap <= -1:
                 filename = filename + '.hion.snap.scr'
             elif isnap == 0:
@@ -499,7 +501,7 @@ class BifrostData(object):
         elif var == 'ee':   # internal energy
             return self.e / self.r
         elif var == 's':   # entropy?
-            return np.log(self.p) - self.params['gamma'] * np.log(self.r)
+            return np.log(self.p) - self.params['gamma'][self.snapInd] * np.log(self.r)
         '''else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
                               'get composite variable %s.' % var))'''
@@ -546,6 +548,11 @@ class BifrostData(object):
         EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt']
         PROJ_QUANT = ['par', 'per']
         TOPO_QUANT = ['qfac', 'alt', 'integrate', 'conn']
+
+        if (np.size(self.snap) > 1):
+            currSnap = self.snap[self.snapInd]
+        else:
+            currSnap = self.snap
 
         if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
@@ -631,10 +638,10 @@ class BifrostData(object):
             return result
         elif quant in EOSTAB_QUANT:
             # unit conversion to SI
-            ur = self.params['u_r']         # to g/cm^3  (for ne_rt_table)
-            ue = self.params['u_ee']        # to erg/g
+            ur = self.params['u_r'][self.snapInd]         # to g/cm^3  (for ne_rt_table)
+            ue = self.params['u_ee'][self.snapInd]        # to erg/g
             if 'do_hion' in self.params and quant == 'ne':
-                if self.params['do_hion'] > 0:
+                if self.params['do_hion'][self.snapInd] > 0:
                     return self.get_var('hionne')
                     pass
             rho = self.r
@@ -814,15 +821,15 @@ class BifrostData(object):
         """
         from . import rh15d
         # unit conversion to SI
-        ul = self.params['u_l'] / 1.e2  # to metres
-        ur = self.params['u_r']         # to g/cm^3  (for ne_rt_table)
-        ut = self.params['u_t']         # to seconds
+        ul = self.params['u_l'][self.snapInd] / 1.e2  # to metres
+        ur = self.params['u_r'][self.snapInd]         # to g/cm^3  (for ne_rt_table)
+        ut = self.params['u_t'][self.snapInd]         # to seconds
         uv = ul / ut
-        ub = self.params['u_b'] * 1e-4  # to Tesla
-        ue = self.params['u_ee']        # to erg/g
+        ub = self.params['u_b'][self.snapInd] * 1e-4  # to Tesla
+        ue = self.params['u_ee'][self.snapInd]        # to erg/g
         hion = False
         if 'do_hion' in self.params:
-            if self.params['do_hion'] > 0:
+            if self.params['do_hion'][self.snapInd] > 0:
                 hion = True
         if self.verbose:
             print('Slicing and unit conversion...')
@@ -911,15 +918,15 @@ class BifrostData(object):
         """
         from .multi3dn import Multi3dAtmos
         # unit conversion to cgs and km/s
-        ul = self.params['u_l']   # to cm
-        ur = self.params['u_r']   # to g/cm^3  (for ne_rt_table)
-        ut = self.params['u_t']   # to seconds
+        ul = self.params['u_l'][self.snapInd]   # to cm
+        ur = self.params['u_r'][self.snapInd]   # to g/cm^3  (for ne_rt_table)
+        ut = self.params['u_t'][self.snapInd]   # to seconds
         uv = ul / ut / 1e5        # to km/s
-        ue = self.params['u_ee']  # to erg/g
+        ue = self.params['u_ee'][self.snapInd]  # to erg/g
         nh = None
         hion = False
         if 'do_hion' in self.params:
-            if self.params['do_hion'] > 0:
+            if self.params['do_hion'][self.snapInd] > 0:
                 hion = True
         if self.verbose:
             print('Slicing and unit conversion...')
