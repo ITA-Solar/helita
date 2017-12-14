@@ -24,7 +24,7 @@ class EbysusData(BifrostData):
         self.mhdvars = []
         if (self.do_mhd):
             self.mhdvars = ['bx', 'by', 'bz']
-        self.auxvars = self.params['aux'].split()
+        self.auxvars = self.params['aux'][self.snapInd].split()
 
         self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
 
@@ -86,21 +86,21 @@ class EbysusData(BifrostData):
         self.nspecies_max = 28
         self.nlevels_max = 28
         try:
-            self.mf_epf = self.params['mf_epf']
+            self.mf_epf = self.params['mf_epf'][self.snapInd]
         except KeyError:
             raise KeyError('read_params: could not find mf_epf in idl file!')
         try:
-            self.with_electrons = self.params['mf_electrons']
+            self.with_electrons = self.params['mf_electrons'][self.snapInd]
         except KeyError:
             raise KeyError(
                 'read_params: could not find with_electrons in idl file!')
         try:
-            self.mf_total_nlevel = self.params['mf_total_nlevel']
+            self.mf_total_nlevel = self.params['mf_total_nlevel'][self.snapInd]
         except KeyError:
             print('warning, this idl file does not include mf_total_nlevel')
         try:
             filename = os.path.join(
-                self.fdir, self.params['mf_param_file'].strip())
+                self.fdir, self.params['mf_param_file'][self.snapInd].strip())
             self.mf_tabparam = read_mftab_ascii(filename)
         except KeyError:
             print('warning, this idl file does not include mf_param_file')
@@ -397,8 +397,6 @@ class EbysusData(BifrostData):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
         def helper(var, *args, **kwargs):
-
-            self.params = self.paramList[self.snapInd]
 
             if var in ['x', 'y', 'z']:
                 return getattr(self, var)
