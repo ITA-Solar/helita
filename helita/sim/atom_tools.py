@@ -7,6 +7,7 @@ import os
 from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph, bifrost_units
 from .ebysus import EbysusData
 from . import cstagger
+import re
 
 class atom_tools(object):
     """
@@ -157,7 +158,7 @@ class atom_tools(object):
 
         else:
 
-            if ((self.atom_file=='') > 0) and (len(self.atom)>0):
+            if (hasattr(self,atom_file) and (len(self.atom)>0)):
                 self.abund_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
                     0]], 8].astype(np.float)[0][0]
             else:
@@ -180,9 +181,9 @@ class atom_tools(object):
             ----------
         '''
 
-        if ((self.atom_file=='') > 0) and (len(self.atom)>0):
-            self.weight_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                0]], 2].astype(np.float)[0][0]
+        if (hasattr(self,'atom_file') and len(self.atom)>0):
+                    self.weight_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
+                                    0]], 2].astype(np.float)[0][0]
         else:
             for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
                 if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
@@ -448,8 +449,13 @@ class atom_tools(object):
             print('No Elvlc in the Chianti Data base')
 
 
-    def rrec(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov', threebody=True):
-        ''' gives the recombination rate per particle '''
+    def rrec(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov', threebody=False):
+        '''
+        gives the recombination rate per particle
+        Parameters:
+        ------
+        threebody  - False or the gencol_key for ionization.
+        '''
 
         units = bifrost_units()
         TeV = Te * units.K_TO_EV
@@ -460,9 +466,10 @@ class atom_tools(object):
         dE = dE * units.CLIGHT * units.HPLANCK
         scr1 =  dE / Te / units.KBOLTZMANN
 
-        if (threebody):
-            saha = 2.07e-16 * nel * g_ilv / g_jlv * Te**(-1.5) * np.exp(scr1(i,j,k))
-            cdn = saha * rion(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY = GENCOL_KEY)
+        if ((threebody) != False):
+            if not hasattr(self,frec3bd):
+                self.r3body(nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY =threebody)
+            cdn = self.frec3bd
         else:
             cdn = 0
 
@@ -482,14 +489,14 @@ class atom_tools(object):
             elif keyword == 'voronov': # mcwhirter65
                 vfac = 2.6e-19
                 Z = get_atomZ(self.vor_param['atom'])
-                cdn = vfac * np.sqrt(1.0 / TeV) * Z**2
+                cdn = vfac * np.sqrt(1.0 / TeV) * Z**2 + cdn
 
         self.cdn = cdn
 
-    def vrec(self, nel, Te,lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
+    def vrec(self, nel, Te,lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov',threebody=False):
         ''' gives the recombination frequency '''
         if not hasattr(self,cdn):
-            self.rrec(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY = GENCOL_KEY)
+            self.rrec(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY = GENCOL_KEY,threebody=threebody)
         self.frec = nel * self.cdn
 
     def rion(self, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
@@ -657,13 +664,13 @@ class atom_tools(object):
             self.ionse(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
         self.neu_ndens = ntot - 2.0 * self.ion_ndens
 
-    def vionr3body(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
+    def r3body(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
         ''' three body recombination '''
         units = bifrost_units()
         gst_hi=float(self.params['lvl'][lo_lvl,1]) #2.0
         gst_lo=float(self.params['lvl'][hi_lvl,1]) #1.0
 
-        if not hasattr(self,fion):
+        if not hasattr(self,cup):
             self.vion(nel, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
 
         if (self.stage == ''): # JMS this may need improvements depending on keywords
@@ -672,7 +679,7 @@ class atom_tools(object):
             dekt = self.get_atomde(self.atom + '_' + self.stage , Chianti=False) / units.K_TO_EV / Te
 
         saha=2.07e-16*nel*gst_lo/gst_hi*Te**(-1.5)*np.exp(dekt)  # Assuming nel in cgs. (For SI units would be 2.07e-22)
-        self.frec3bd = saha*self.fio # vion is collisional ionization rate
+        self.frec3bd = saha*self.cup # vion is collisional ionization rate
 
 
     def inv_pop_atomf(self, ntot,Te,niter=100,nel=None, threebody=True, GENCOL_KEY = ['voronov']):
@@ -1403,3 +1410,28 @@ def add_voro_atom(
             jj += 1
     f.write("END")
     f.close()
+
+def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_1998_grevesse'):
+    '''
+    This allows to calculate GOFT tables in a similar fashion as we do in IDL.
+    '''
+    import ChiantiPy.core as ch
+    import pickle
+    ntemp = 501
+    neden = 71
+    temp = 10.**(4. + 0.01*np.arange(ntemp))
+    edens = 10**(np.arange(ntemp) * 0.1 + 12)
+    gofnt=np.zeros((ntemp,neden))
+    for iden in range(0,neden):
+        ion = ch.ion(ionstr, temperature=temp,  eDensity=edens[iden],abundance=abundance)
+        ion.populate()
+        ion.intensity()
+        ion.gofnt(wvlRange=wvlr,top=20,plot=False)
+        if iden == 0: print('Doing wvl=', ion.Gofnt['wvl'])
+        gofnt[:,iden] = ion.Gofnt['gofnt']
+
+    ion.Gofnt['gofnt'] = gofnt
+    path=os.environ['BIFROST']+'/PYTHON/br_int/br_ioni/data/'
+    name=getattr(ion,'IonStr') + '_' + str(ion.Gofnt['wvl'])+'.opy'
+    filehandler = open(path+name, 'wb')
+    pickle.dump(ion, filehandler)
