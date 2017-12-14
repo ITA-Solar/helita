@@ -196,7 +196,7 @@ class BifrostData(object):
 
         self.params = {}
         for key in self.paramList[0]:
-            self.params[key] = [self.paramList[i][key] for i in range(0, len(self.paramList))]
+            self.params[key] = np.array([self.paramList[i][key] for i in range(0, len(self.paramList))])
 
     def __read_mesh(self, meshfile):
         """
@@ -757,6 +757,7 @@ class BifrostData(object):
                     var[:,:,iz]=q.calculate_q(iz)
                 return var
 
+
             else:
                 raise ValueError(('This machine does not have cuda.'))
 
@@ -768,33 +769,133 @@ class BifrostData(object):
                               ' see e.g. self._get_quantity? for guidance'
                               '.' % (quant, repr(self.simple_vars))))
 
+    def get_intny(self, spline, *args, **kwargs):
+        """
+        Calculates intensity profiles from the simulation quantiables.
+
+        Parameters
+        ----------
+        spline - string
+            Name of the spectral line to calculate.
+
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the 2D spatial from the simulation and spectra.
+
+        Notes
+        -----
+            uses cuda
+        """
+        import imp
+        try:
+            imp.find_module('pycuda')
+            found = True
+        except ImportError:
+            found = False
+
+        if found:
+
+            if os.environ.get('CUDA_LIB','null') == 'null':
+                os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
+
+            #Calculation settings
+            choice = 'sastatic'
+
+            class int_options:
+                 def __init__(self):
+                     self.rendtype = 'sastatic'
+                     self.tdiparam = False
+                     self.simdir =  ''
+                     self.snap = 1
+                     self.infile = ''
+
+            opts = int_options()
+            opts.infile = self.file_root
+            opts.snap = self.snap
+            opts.choice = choice
+            opts.simdir = self.fdir
+            data_dir = (opts.simdir if opts.simdir else askdirectory(title='Simulation Directory')).rstrip('/')
+
+            acont_filenames = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/*.npy')]
+            snap_range=(self.snap,self.snap)
+
+            template = opts.infile #+ '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
+
+            from br_ioni import RenderGUI
+
+            if opts.rendtype == 'tdi':
+                from br_ioni import TDIEmRenderer
+                tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
+                             askopenfilename(title='Time-dependent Ionization Paramfile'))
+                tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
+                s = TDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
+            else:
+                if opts.rendtype == 'sastatic': # JMS needs to be tested for visualization
+                    from br_ioni import SAStaticEmRenderer
+                    s = SAStaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
+                else:
+                    if opts.rendtype == 'satdi': # JMS needs to be tested for visualization
+                        from br_ioni import SATDIEmRenderer
+                        tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
+                        askopenfilename(title='Time-dependent Ionization Paramfile'))
+                        tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
+
+                        s = SATDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
+                    else:
+                        from br_ioni import StaticEmRenderer
+                        s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
+            channel = 0
+            azimuth = 90.0
+            altitude = 0.0
+            axis =2
+            rend_reverse = False
+            gridsplit = 20
+            rend_opacity = False
+            nlamb = 141
+            return s.il_render(channel, azimuth, -altitude, axis, rend_reverse,gridsplit=gridsplit, nlamb=nlamb,
+                                  opacity=rend_opacity, verbose=False)
+
     def fftTimeCube(self, quantity, t1, t2, axis3, plane):
 
-        axis1 = self.nx if axis3 != 'x' else self.ny
-        axis2 = self.nz if axis3 != 'z' else self.ny
+        preTransform = self.get_varTime(quantity, snap, iix, iiy, iiz)
+        arrShape = preTransform.shape
+        indexes = []
 
-        preTransform = np.empty([axis1, axis2, (t2 - t1)])
+        uneven = False
+        for i in range(1, np.size(snap) - 1):
+            if abs((self.params['t'][i] - self.params['t'][i -1]) - (self.params['t'][i+1] - self.params['t'][i])) > 0.02:
+                # print('uneven')
+                uneven = True
+                break
 
-        for i in range(t1, t2):
-            print(i)
-            self.set_snap(i)
-            preCube = self.get_var(quantity)
-
-            if axis3 == 'x':
-                preTransform[:, :, i - t1] = preCube[plane, :, :]
-            elif axis3 == 'y':
-                preTransform[:, :, i - t1] = preCube[:, plane, :]
+        for num in arrShape:
+            if num == 1:
+                indexes.append(0)
             else:
-                preTransform[:, :, i - t1] = preCube[:, :, plane]
+                indexes.append(slice(None))
 
-        Transform = np.empty([axis1, axis2, preTransform.shape[2]])
+        preTransform = preTransform[indexes[0], indexes[1], indexes[2], indexes[3]]
+        transformed = np.empty((preTransform.shape))
+        # vectb = np.sin(np.linspace(0,10,10)*3.14159/2)
 
-        for x in range(0, axis1):
-            for y in range(0, axis2):
-                Transform[x, y] = np.fft.fft(preTransform[x,y])
+        for i in range(0, preTransform.shape[0]):
+            for j in range(0, preTransform.shape[1]):
+                vect = preTransform[i, j]
+                if uneven:
+                    evenTimes = np.linspace(self.params['t'][0], self.params['t'][-1], np.size(snap))
+                    vect = np.interp(evenTimes, self.params['t'], vect)
+                    evenDtsnap = evenTimes[1] - evenTimes[0]
+                else:
+                    evenDtsnap = self.params['dt'][0]
+                partTransformed = np.abs(np.fft.fftshift(np.fft.fft(vect)))
+                transformed[i, j] = partTransformed
 
-        return Transform
-        # frequency?
+        freq = np.fft.fftshift(np.fft.fftfreq(np.size(snap), evenDtsnap * 100))
+
+        output = {'freq': freq, 'ftCube': transformed}
+
+        return output
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
