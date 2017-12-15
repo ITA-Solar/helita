@@ -1417,10 +1417,12 @@ def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_
     '''
     import ChiantiPy.core as ch
     import pickle
+    import  periodictable as pt
+
     ntemp = 501
     neden = 71
     temp = 10.**(4. + 0.01*np.arange(ntemp))
-    edens = 10**(np.arange(ntemp) * 0.1 + 12)
+    edens = 10**(np.arange(neden) * 0.1 + 12)
     gofnt=np.zeros((ntemp,neden))
     for iden in range(0,neden):
         ion = ch.ion(ionstr, temperature=temp,  eDensity=edens[iden],abundance=abundance)
@@ -1431,6 +1433,11 @@ def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_
         gofnt[:,iden] = ion.Gofnt['gofnt']
 
     ion.Gofnt['gofnt'] = gofnt
+    ion.Gofnt['eDensity'] = edens
+    try:
+        ion.mass =  pt.elements[ion.Z].ion[ion.Ion].mass
+    except:
+        ion.mass =  pt.elements[ion.Z].mass
     path=os.environ['BIFROST']+'/PYTHON/br_int/br_ioni/data/'
     name=getattr(ion,'IonStr') + '_' + str(ion.Gofnt['wvl'])+'.opy'
     filehandler = open(path+name, 'wb')
