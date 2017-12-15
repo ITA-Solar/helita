@@ -817,9 +817,8 @@ class BifrostData(object):
             opts.simdir = self.fdir
             data_dir = (opts.simdir if opts.simdir else askdirectory(title='Simulation Directory')).rstrip('/')
 
-            acont_filenames = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/*.npy')]
+            acont_filenames = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline+'.opy')]
             snap_range=(self.snap,self.snap)
-
             template = opts.infile #+ '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
 
             from br_ioni import RenderGUI
