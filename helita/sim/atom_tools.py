@@ -1422,10 +1422,10 @@ def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_
     ntemp = 501
     neden = 71
     temp = 10.**(4. + 0.01*np.arange(ntemp))
-    edens = 10**(np.arange(neden) * 0.1 + 12)
+    press = 10**(np.arange(neden) * 0.1 + 12)
     gofnt=np.zeros((ntemp,neden))
     for iden in range(0,neden):
-        ion = ch.ion(ionstr, temperature=temp,  eDensity=edens[iden],abundance=abundance)
+        ion = ch.ion(ionstr, temperature=temp,  eDensity=press[iden]/temp,abundance=abundance)
         ion.populate()
         ion.intensity()
         ion.gofnt(wvlRange=wvlr,top=20,plot=False)
@@ -1433,7 +1433,7 @@ def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_
         gofnt[:,iden] = ion.Gofnt['gofnt']
 
     ion.Gofnt['gofnt'] = gofnt
-    ion.Gofnt['eDensity'] = edens
+    ion.Gofnt['press'] = press
     try:
         ion.mass =  pt.elements[ion.Z].ion[ion.Ion].mass
     except:
