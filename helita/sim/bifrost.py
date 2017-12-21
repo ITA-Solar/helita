@@ -769,14 +769,23 @@ class BifrostData(object):
                               ' see e.g. self._get_quantity? for guidance'
                               '.' % (quant, repr(self.simple_vars))))
 
-    def get_intny(self, spline, *args, **kwargs):
+    def get_intny(self, spline, nlamb = 141, axis =2, rend_opacity = False, dopp_width_range=5e1, *args, **kwargs):
         """
         Calculates intensity profiles from the simulation quantiables.
 
         Parameters
         ----------
         spline - string
-            Name of the spectral line to calculate.
+            Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
+            contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
+        nlamb - integer
+            Number of points along the wavelenght axis.
+        dopp_width_range - float number
+            It selects the wavelength range. The value means.
+        axis - integer number: 0 = x, 1 = y, 2 = z
+            It allows to chose the LOS integration axis
+        rend_opacity - allows to calcuate opacities.
+            Right now uses a very obsolete table; so I suggest to wait until further improvements.
 
         Returns
         -------
@@ -823,18 +832,18 @@ class BifrostData(object):
 
             from br_ioni import RenderGUI
 
-            if opts.rendtype == 'tdi':
+            if opts.rendtype == 'tdi':# OOE along any angle
                 from br_ioni import TDIEmRenderer
                 tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
                              askopenfilename(title='Time-dependent Ionization Paramfile'))
                 tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
                 s = TDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
             else:
-                if opts.rendtype == 'sastatic': # JMS needs to be tested for visualization
+                if opts.rendtype == 'sastatic': # Statistical Equibilibrium along specific axis, i.e., x, y or z
                     from br_ioni import SAStaticEmRenderer
                     s = SAStaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
                 else:
-                    if opts.rendtype == 'satdi': # JMS needs to be tested for visualization
+                    if opts.rendtype == 'satdi': # OOE along specific axis, i.e., x, y or z
                         from br_ioni import SATDIEmRenderer
                         tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
                         askopenfilename(title='Time-dependent Ionization Paramfile'))
@@ -847,13 +856,107 @@ class BifrostData(object):
             channel = 0
             azimuth = 90.0
             altitude = 0.0
-            axis =2
             rend_reverse = False
             gridsplit = 20
-            rend_opacity = False
-            nlamb = 141
             return s.il_render(channel, azimuth, -altitude, axis, rend_reverse,gridsplit=gridsplit, nlamb=nlamb,
-                                  opacity=rend_opacity, verbose=False)
+                            dopp_width_range=dopp_width_range, opacity=rend_opacity, verbose=False)
+        else:
+            print('I am so sorry... but you need pycuda:')
+            print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
+            print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
+
+    def get_int(self, spline, axis =2, rend_opacity = False, *args, **kwargs):
+        """
+        Calculates intensity from the simulation quantiables.
+
+        Parameters
+        ----------
+        spline - string
+            Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
+            contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
+        axis - integer number: 0 = x, 1 = y, 2 = z
+            allows to chose the LOS integration axis
+        rend_opacity - allows to calcuate opacities.
+            Right now uses a very obsolete table; so I suggest to wait until further improvements.
+
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the 2D spatial from the simulation and spectra.
+
+        Notes
+        -----
+            uses cuda
+        """
+        import imp
+        try:
+            imp.find_module('pycuda')
+            found = True
+        except ImportError:
+            found = False
+
+        if found:
+
+            if os.environ.get('CUDA_LIB','null') == 'null':
+                os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
+
+            #Calculation settings
+            choice = 'sastatic'
+
+            class int_options:
+                 def __init__(self):
+                     self.rendtype = 'sastatic'
+                     self.tdiparam = False
+                     self.simdir =  ''
+                     self.snap = 1
+                     self.infile = ''
+
+            opts = int_options()
+            opts.infile = self.file_root
+            opts.snap = self.snap
+            opts.choice = choice
+            opts.simdir = self.fdir
+            data_dir = (opts.simdir if opts.simdir else askdirectory(title='Simulation Directory')).rstrip('/')
+
+            acont_filenames = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline+'.opy')]
+            snap_range=(self.snap,self.snap)
+            template = opts.infile #+ '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
+
+            from br_ioni import RenderGUI
+
+            if opts.rendtype == 'tdi': # OOE along any angle
+                from br_ioni import TDIEmRenderer
+                tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
+                             askopenfilename(title='Time-dependent Ionization Paramfile'))
+                tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
+                s = TDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
+            else:
+                if opts.rendtype == 'sastatic': # Statistical Equibilibrium along specific axis, i.e., x, y or z
+                    from br_ioni import SAStaticEmRenderer
+                    s = SAStaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
+                else:
+                    if opts.rendtype == 'satdi': # OOE along specific axis, i.e., x, y or z
+                        from br_ioni import SATDIEmRenderer
+                        tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
+                        askopenfilename(title='Time-dependent Ionization Paramfile'))
+                        tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
+
+                        s = SATDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
+                    else: # Statistical Equibilibrium for any angle
+                        from br_ioni import StaticEmRenderer
+                        s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
+            channel = 0
+            azimuth = 90.0
+            altitude = 0.0
+            rend_reverse = False
+            gridsplit = 20
+
+            return s.i_render(channel, azimuth, -altitude, axis, reverse = rend_reverse, gridsplit=gridsplit,
+                                tau=None, opacity=rend_opacity, verbose=False, fw=None)
+        else:
+            print('I am so sorry... but you need pycuda:')
+            print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
+            print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
 
     def fftTimeCube(self, quantity, t1, t2, axis3, plane):
 
@@ -1260,7 +1363,7 @@ class bifrost_units():
     DYNE_CM2_TO_PASCAL = 0.1
     K_TO_EV = 8.621738E-5    # KtoeV
     EV_TO_K = 11604.50520    # eVtoK
-
+    ergd2wd = 0.1
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
