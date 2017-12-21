@@ -1417,7 +1417,7 @@ def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_
     '''
     import ChiantiPy.core as ch
     import pickle
-    import  periodictable as pt
+    import periodictable as pt
 
     ntemp = 501
     neden = 71
