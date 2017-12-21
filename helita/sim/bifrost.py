@@ -778,6 +778,7 @@ class BifrostData(object):
         spline - string
             Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
             contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
+            If you dont have any, rung form helita.sim.atom_tools create_goftne_tab (very simple to run). 
         nlamb - integer
             Number of points along the wavelenght axis.
         dopp_width_range - float number
