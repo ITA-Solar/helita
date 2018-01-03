@@ -3,6 +3,7 @@ Set of programs to read and interact with output from Bifrost
 """
 
 import numpy as np
+import xarray as xr
 import os
 from glob import glob
 from . import cstagger
@@ -47,7 +48,7 @@ class BifrostData(object):
         This reads snapshot 383 from simulation "cb24bih", whose file
         root is "cb24bih_", and is found at directory /data/cb24bih:
 
-        >>> a = Bifrost.Data("cb24bih_", snap=383, fdir=""/data/cb24bih")
+        >>> a = Bifrost.Data("cb24bih_", snap=383, fdir="/data/cb24bih")
 
         Scalar variables do not need de-staggering and are available as
         memory map (only loaded to memory when needed), e.g.:
@@ -236,6 +237,9 @@ class BifrostData(object):
             self.zdn = self.z - 0.5 * self.dz
             self.dzidzup = np.zeros(self.nz) + 1. / self.dz
             self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
+        self.x = xr.DataArray(self.x, dims=['x'], attrs={'units': 'Mm'})
+        self.y = xr.DataArray(self.x, dims=['x'], attrs={'units': 'Mm'})
+        self.z = xr.DataArray(self.x, dims=['x'], attrs={'units': 'Mm'})
 
     def _init_vars(self, *args, **kwargs):
         """
@@ -245,8 +249,8 @@ class BifrostData(object):
         self.variables = {}
         for var in self.simple_vars:
             try:
-                self.variables[var] = self._get_simple_var(
-                    var, *args, **kwargs)
+                self.variables[var] = self._get_simple_var(var, *args,
+                                                           **kwargs)
                 setattr(self, var, self.variables[var])
             except Exception:
                 if self.verbose:
@@ -314,6 +318,8 @@ class BifrostData(object):
         result - numpy.memmap array
             Requested variable.
         """
+        COORDS = [self.x, self.y, self.z]
+        DIMS = ['x', 'y', 'z']
         if self.snap < 0:
             filename = self.file_root
             fsuffix_b = '.scr'
@@ -353,13 +359,16 @@ class BifrostData(object):
             offset = (self.nx * self.ny *
                       (self.nzb + (self.nzb - self.nz) // 2) * idx * dsize)
             ss = (self.nx, self.ny, self.nz)
-        return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
-                         offset=offset, shape=ss)
+        tmp = np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
+                        offset=offset, shape=ss)
+        return xr.DataArray(tmp, coords=COORDS, dims=DIMS)
 
     def _get_simple_var_xy(self, var, order='F', mode='r'):
         """
         Reads a given 2D variable from the _XY.aux file
         """
+        COORDS = [self.x, self.y]
+        DIMS = ['x', 'y']
         if var in self.auxxyvars:
             fsuffix = '_XY.aux'
             idx = self.auxxyvars.index(var)
@@ -376,26 +385,30 @@ class BifrostData(object):
         # size of the data type
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
-                         offset=offset, shape=(self.nx, self.ny))
+        tmp = np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
+                        offset=offset, shape=(self.nx, self.ny))
+        return xr.DataArray(tmp, coords=COORDS, dims=DIMS)
 
     def _get_composite_var(self, var, *args, **kwargs):
         """
         Gets composite variables (will load into memory).
         """
+        COORDS = [self.x, self.y, self.z]
+        DIMS = ['x', 'y', 'z']
         if var in ['ux', 'uy', 'uz']:  # velocities
             p = self._get_simple_var('p' + var[1], order='F')
             if getattr(self, 'n' + var[1]) < 5:
-                return p / self.r   # do not recentre for 2D cases (or close)
+                tmp = p / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / cstagger.do(self.r, var[1] + 'dn')
+                tmp = p / cstagger.do(self.r, var[1] + 'dn')
         elif var == 'ee':   # internal energy
-            return self.e / self.r
+            tmp = self.e / self.r
         elif var == 's':   # entropy?
-            return np.log(self.p) - self.params['gamma'] * np.log(self.r)
+            tmp = np.log(self.p) - self.params['gamma'] * np.log(self.r)
         else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
                               'get composite variable %s.' % var))
+        return xr.DataArray(tmp, coords=COORDS, dims=DIMS)
 
     def get_quantity(self, quant, *args, **kwargs):
         """
