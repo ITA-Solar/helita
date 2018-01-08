@@ -769,7 +769,8 @@ class BifrostData(object):
                               ' see e.g. self._get_quantity? for guidance'
                               '.' % (quant, repr(self.simple_vars))))
 
-    def get_intny(self, spline, nlamb = 141, axis =2, rend_opacity = False, dopp_width_range=5e1, *args, **kwargs):
+    def get_intny(self, spline, nlamb = 141, axis =2, rend_opacity = False, dopp_width_range=5e1, azimuth=None,
+                    altitude=None, ooe = False, *args, **kwargs):
         """
         Calculates intensity profiles from the simulation quantiables.
 
@@ -778,7 +779,7 @@ class BifrostData(object):
         spline - string
             Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
             contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
-            If you dont have any, rung form helita.sim.atom_tools create_goftne_tab (very simple to run). 
+            If you dont have any, rung form helita.sim.atom_tools create_goftne_tab (very simple to run).
         nlamb - integer
             Number of points along the wavelenght axis.
         dopp_width_range - float number
@@ -787,7 +788,12 @@ class BifrostData(object):
             It allows to chose the LOS integration axis
         rend_opacity - allows to calcuate opacities.
             Right now uses a very obsolete table; so I suggest to wait until further improvements.
-
+        azimuth -  This allows to trace rays for any angle. In this cases uses none sa modules.
+            In this case, axis parameter is not need to be used.
+        altitude -  This allows to trace rays for any angle. In this cases uses none sa modules.
+            In this case, axis parameter is not need to be used.
+        ooe -  True or False. Default is False.
+            If true, uses Olluri out of equilibrium ionization output
         Returns
         -------
         array - ndarray
@@ -810,7 +816,6 @@ class BifrostData(object):
                 os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
 
             #Calculation settings
-            choice = 'sastatic'
 
             class int_options:
                  def __init__(self):
@@ -819,6 +824,24 @@ class BifrostData(object):
                      self.simdir =  ''
                      self.snap = 1
                      self.infile = ''
+
+
+            if  azimuth != None or altitude != None: # For any angle
+                if ooe:
+                    choice = 'tdi'
+                else:
+                    choice = 'static'
+                if azimuth != None:
+                    azimuth = 90.0
+                if altitude != None:
+                    altitude = 0.0
+            else: # For a specific axis, this is setup with axis =[0,1,2]
+                if ooe:
+                    choice = 'satdi'
+                else:
+                    choice = 'sastatic'
+                azimuth = 90.0
+                altitude = 0.0
 
             opts = int_options()
             opts.infile = self.file_root
@@ -833,7 +856,7 @@ class BifrostData(object):
 
             from br_ioni import RenderGUI
 
-            if opts.rendtype == 'tdi':# OOE along any angle
+            if opts.rendtype == 'tdi': # OOE along any angle
                 from br_ioni import TDIEmRenderer
                 tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
                              askopenfilename(title='Time-dependent Ionization Paramfile'))
@@ -851,12 +874,10 @@ class BifrostData(object):
                         tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
 
                         s = SATDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
-                    else:
+                    else: # Statistical Equibilibrium along any direction
                         from br_ioni import StaticEmRenderer
                         s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
             channel = 0
-            azimuth = 90.0
-            altitude = 0.0
             rend_reverse = False
             gridsplit = 20
             return s.il_render(channel, azimuth, -altitude, axis, rend_reverse,gridsplit=gridsplit, nlamb=nlamb,
@@ -866,7 +887,8 @@ class BifrostData(object):
             print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
             print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
 
-    def get_int(self, spline, axis =2, rend_opacity = False, *args, **kwargs):
+    def get_int(self, spline, axis =2, rend_opacity = False, azimuth=None,
+                    altitude=None, ooe = False, *args, **kwargs):
         """
         Calculates intensity from the simulation quantiables.
 
@@ -876,10 +898,15 @@ class BifrostData(object):
             Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
             contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
         axis - integer number: 0 = x, 1 = y, 2 = z
-            allows to chose the LOS integration axis
+            allows to chose the LOS integration axis (see azimuth and altitude)
         rend_opacity - allows to calcuate opacities.
             Right now uses a very obsolete table; so I suggest to wait until further improvements.
-
+        azimuth -  This allows to trace rays for any angle. In this cases uses none sa modules.
+            In this case, axis parameter is not need to be used.
+        altitude -  This allows to trace rays for any angle. In this cases uses none sa modules.
+            In this case, axis parameter is not need to be used.
+        ooe -  True or False. Default is False.
+            If true, uses Olluri out of equilibrium ionization output
         Returns
         -------
         array - ndarray
@@ -901,9 +928,6 @@ class BifrostData(object):
             if os.environ.get('CUDA_LIB','null') == 'null':
                 os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
 
-            #Calculation settings
-            choice = 'sastatic'
-
             class int_options:
                  def __init__(self):
                      self.rendtype = 'sastatic'
@@ -911,6 +935,24 @@ class BifrostData(object):
                      self.simdir =  ''
                      self.snap = 1
                      self.infile = ''
+
+            #Calculation settings
+            if  azimuth != None or altitude != None: # For any angle
+                if ooe:
+                    choice = 'tdi'
+                else:
+                    choice = 'static'
+                if azimuth != None:
+                    azimuth = 90.0
+                if altitude != None:
+                    altitude = 0.0
+            else: # For a specific axis, this is setup with axis =[0,1,2]
+                if ooe:
+                    choice = 'satdi'
+                else:
+                    choice = 'sastatic'
+                azimuth = 90.0
+                altitude = 0.0
 
             opts = int_options()
             opts.infile = self.file_root
@@ -947,8 +989,6 @@ class BifrostData(object):
                         from br_ioni import StaticEmRenderer
                         s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
             channel = 0
-            azimuth = 90.0
-            altitude = 0.0
             rend_reverse = False
             gridsplit = 20
 
