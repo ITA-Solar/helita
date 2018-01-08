@@ -142,7 +142,7 @@ class atom_tools(object):
             self.vor_params['SPECIES'] = np.array(self.vor_params['SPECIES'])
 
     def get_abund(self,
-            Chianti=False):
+            Chianti=False,abundance = 'sun_photospheric_1998_grevesse'):
         '''
             Returns abundances from the voronov.dat file.
 
@@ -150,28 +150,39 @@ class atom_tools(object):
             ----------
             Chianti - if true uses chianti data base, otherwise uses atom files information
         '''
-        if Chianti:
-            import ChiantiPy.core as ch
-            if ('.dat' in abundance):
-                abundance = 'sun_photospheric_1998_grevesse'
-            self.ion = ch.ion(atom+ '_' + str(self.stage), abundance)
 
-        else:
+        try:
+            return self.params['abund']
 
-            if (hasattr(self,atom_file) and (len(self.atom)>0)):
-                self.abund_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                    0]], 8].astype(np.float)[0][0]
+        except:
+            if not hasattr(self,'stage'):
+                stage = 1
             else:
-                for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
-                    if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
-                        try:
-                            abund_dic[self.vor_params['SPECIES'][ii, 1]
-                                      ] = self.vor_params['SPECIES'][ii, 8].astype(np.float)
-                        except BaseException:
-                            abund_dic = {
-                                self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 8].astype(np.float)}
+                stage = self.stage
 
-                self.abund_dic=abund_dic
+            if Chianti:
+                import ChiantiPy.core as ch
+                if ('.dat' in abundance):
+                    abundance = 'sun_photospheric_1998_grevesse'
+                self.ion = ch.ion(self.atom+ '_' + str(stage), 1e5, abundance=abundance)
+                return self.ion.Abundance
+            else:
+
+                if (hasattr(self,'atom_file') and (len(self.atom)>0)):
+                    self.abund_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(stage))[
+                        0]], 8].astype(np.float)[0][0]
+                else:
+                    for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
+                        if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
+                            try:
+                                abund_dic[self.vor_params['SPECIES'][ii, 1]
+                                          ] = self.vor_params['SPECIES'][ii, 8].astype(np.float)
+                            except BaseException:
+                                abund_dic = {
+                                    self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 8].astype(np.float)}
+
+                    self.abund_dic=abund_dic
+                return self.abund_dic
 
     def get_atomweight(self):
         '''
@@ -180,21 +191,23 @@ class atom_tools(object):
             Parameters
             ----------
         '''
+        try:
+            return self.params['weight']
+        except:
+            if (hasattr(self,'atom_file') and len(self.atom)>0):
+                        self.weight_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
+                                        0]], 2].astype(np.float)[0][0]
+            else:
+                for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
+                    if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
+                        try:
+                            weight_dic[self.vor_params['SPECIES'][ii, 1]
+                                       ] = self.vor_params['SPECIES'][ii, 2].astype(np.float)
+                        except BaseException:
+                            weight_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 2].astype(np.float)}
 
-        if (hasattr(self,'atom_file') and len(self.atom)>0):
-                    self.weight_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                                    0]], 2].astype(np.float)[0][0]
-        else:
-            for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
-                if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
-                    try:
-                        weight_dic[self.vor_params['SPECIES'][ii, 1]
-                                   ] = self.vor_params['SPECIES'][ii, 2].astype(np.float)
-                    except BaseException:
-                        weight_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 2].astype(np.float)}
-
-            self.weight_dic = weight_dic
-
+                self.weight_dic = weight_dic
+            return self.weight_dic
 
     def get_atomde(self,
             Chianti=True,
@@ -207,13 +220,13 @@ class atom_tools(object):
             Chianti - if true uses chianti data base, otherwise uses atom files information
             cm1 - boolean and if it is true converts from eV to cm-1
         '''
-        if not hasattr(self,cm1):
+        if not hasattr(self,'cm1'):
             self.cm1 = cm1
         else:
             if self.cm1 != cm1:
                 self.cm1 = cm1
 
-        if not hasattr(self,Chianti):
+        if not hasattr(self,'Chianti'):
             self.Chianti = Chianti
         else:
             if self.Chianti != Chianti:
@@ -228,11 +241,14 @@ class atom_tools(object):
             import ChiantiPy.core as ch
             ion = ch.ion(self.atom+ '_' + str(self.stage))
             self.de = ion.Ip * units
+            return self.de
         else:
 
-            if ((self.atom_file=='') > 0) and (len(self.atom)>0):
+            if (self.atom_file != '') or (len(self.atom)>0):
+                print('get_De',self.atom+str(self.stage))
                 self.de = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
                     0]], 3].astype(np.float)[0][0] * units
+                return self.de
             else:
                 for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
                     try:
@@ -244,7 +260,7 @@ class atom_tools(object):
                                                                           3].astype(np.float) * units}
 
                 self.de_dic = de_dic
-
+                return self.de_dic
 
     def get_atomZ(self,
             Chianti=True):
@@ -449,7 +465,7 @@ class atom_tools(object):
             print('No Elvlc in the Chianti Data base')
 
 
-    def rrec(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov', threebody=False):
+    def rrec(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov', threebody=False):
         '''
         gives the recombination rate per particle
         Parameters:
@@ -460,15 +476,15 @@ class atom_tools(object):
         units = bifrost_units()
         TeV = Te * units.K_TO_EV
 
-        g_ilv=float(param['lvl'][lo_lvl][1])
-        g_jlv=float(param['lvl'][hi_lvl][1])
-        dE= float(param['lvl'][hi_lvl][1]) - float(param['lvl'][lo_lvl][1])
-        dE = dE * units.CLIGHT * units.HPLANCK
-        scr1 =  dE / Te / units.KBOLTZMANN
+        g_ilv=float(self.params['lvl'][lo_lvl][1])
+        g_jlv=float(self.params['lvl'][hi_lvl][1])
+        dE= float(self.params['lvl'][hi_lvl][0]) - float(self.params['lvl'][lo_lvl][0])
+        dE = dE * units.CLIGHT.value * units.HPLANCK.value
+        scr1 =  dE / Te / units.KBOLTZMANN.value
 
         if ((threebody) != False):
-            if not hasattr(self,frec3bd):
-                self.r3body(nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY =threebody)
+            if not hasattr(self,'frec3bd'):
+                self.r3body(ntot, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
             cdn = self.frec3bd
         else:
             cdn = 0
@@ -495,8 +511,8 @@ class atom_tools(object):
 
     def vrec(self, nel, Te,lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov',threebody=False):
         ''' gives the recombination frequency '''
-        if not hasattr(self,cdn):
-            self.rrec(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY = GENCOL_KEY,threebody=threebody)
+        if not hasattr(self,'cdn'):
+            self.rrec(nel, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY = GENCOL_KEY,threebody=threebody)
         self.frec = nel * self.cdn
 
     def rion(self, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
@@ -507,16 +523,16 @@ class atom_tools(object):
         if (GENCOL_KEY.lower() == 'atomic'):
             keylist = self.keyword_atomic
         else:
-            keylist = GENCOL_KEY.lower()
+            keylist = [GENCOL_KEY.lower()]
 
         for keyword in keylist:
             if keyword ==  'voronov':
-                tr_line=np.where(self.params['voronov'][0][:,0] == lo_lvl)
+                tr_line=np.where(self.params['voronov'][0][:,0] == lo_lvl+1)
                 phion = self.params['voronov'][0][tr_line[0],2] # get_atomde(atom, Chianti=False)  # 13.6
-                A = self.params['voronov'][0][tr_line[0],3] # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
-                X = self.params['voronov'][0][tr_line[0],4] # get_atomX(atom)  # 0.232
-                K = self.params['voronov'][0][tr_line[0],5] # get_atomK(atom)  # 0.39
-                P = self.params['voronov'][0][tr_line[0],6] # get_atomP(atom)  # 1
+                A = self.params['voronov'][0][tr_line[0],4] * 1e6 # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
+                X = self.params['voronov'][0][tr_line[0],5] # get_atomX(atom)  # 0.232
+                K = self.params['voronov'][0][tr_line[0],6] # get_atomK(atom)  # 0.39
+                P = self.params['voronov'][0][tr_line[0],3] # get_atomP(atom)  # 0
 
                 self.cup = A * (1 + np.sqrt(phion / TeV) * P) / (X + phion /
                              TeV) * (phion / TeV)**K * np.exp(-phion / TeV)
@@ -547,7 +563,7 @@ class atom_tools(object):
                 g_jlv=float(self.params['lvl'][hi_lvl][1])
 
                 for ishell in range(0,nshells):
-                    xj = phion[ishell] * units.EV_TO_ERG / units.KBOLTZMANN / Te
+                    xj = phion[ishell] * units.EV_TO_ERG / units.KBOLTZMANN.value / Te
                     fac = np.exp(-xj) * sqrt(xj)
                     fxj = fac * (A[ishell] + B[ishell] * (1. + xj) + (C[ishell] - xj *
                             (A[ishell] + B[ishell] * (2. + xj))) * fone(xj,0) + D[ishell] * xj * ftwo(xj,0) )
@@ -594,9 +610,9 @@ class atom_tools(object):
                 g_ilv=float(self.params['lvl'][lo_lvl][1])
                 g_jlv=float(self.params['lvl'][hi_lvl][1])
 
-                dE= float(self.params['lvl'][hi_lvl][1]) - float(self.params['lvl'][lo_lvl][1])
+                dE= float(self.params['lvl'][hi_lvl][0]) - float(self.params['lvl'][lo_lvl][0])
                 dE = dE * units.CLIGHT * units.HPLANCK
-                scr1 =  dE / Te / units.KBOLTZMANN
+                scr1 =  dE / Te / units.KBOLTZMANN.value
 
                 sqrtte = np.sqrt(Te)
                 cup=0.
@@ -639,23 +655,23 @@ class atom_tools(object):
 
     def vion(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
         ''' gives the ionization frequency using Voronov 1997 fitting formula'''
-        if not hasattr(self,cup):
+        if not hasattr(self,'cup'):
             self.rion(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
         self.fion = nel * self.cup
 
-    def ionfraction(self, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
+    def ionfraction(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
         ''' gives the ionization fraction using vrec and vion'''
-        if not hasattr(self,cup):
+        if not hasattr(self,'cup'):
             self.rion(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
-        if not hasattr(self,cdn):
-            self.rrec(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
+        if not hasattr(self,'cdn'):
+            self.rrec(ntot, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
 
         self.ionfrac = self.fion / (self.rec + 2.0 * self.fion)
 
     def ionse(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
         ''' gives electron or ion number density using vrec and vion'''
         if not hasattr(self,ionfrac):
-            self.ionfraction(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
+            self.ionfraction(ntot, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
         self.ion_ndens  = ntot * self.ionfrac
 
     def neuse(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
@@ -667,22 +683,27 @@ class atom_tools(object):
     def r3body(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
         ''' three body recombination '''
         units = bifrost_units()
-        gst_hi=float(self.params['lvl'][lo_lvl,1]) #2.0
-        gst_lo=float(self.params['lvl'][hi_lvl,1]) #1.0
+        gst_hi=float(self.params['lvl'][lo_lvl][1]) #2.0
+        gst_lo=float(self.params['lvl'][hi_lvl][1]) #1.0
 
-        if not hasattr(self,cup):
+        if not hasattr(self,'cup'):
             self.vion(nel, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
-
-        if (self.stage == ''): # JMS this may need improvements depending on keywords
-            dekt = self.get_atomde(self.atom , Chianti=False) / units.K_TO_EV / Te
+        '''
+        if lo_lvl > 0:
+            self.stage = lo_lvl + 1
         else:
-            dekt = self.get_atomde(self.atom + '_' + self.stage , Chianti=False) / units.K_TO_EV / Te
+            self.stage = ''
+        dekt = self.get_atomde(Chianti=False)
+        dekt = float(self.get_atomde(Chianti=False))/ units.K_TO_EV / Te
+        '''
+        dekt= float(self.params['lvl'][hi_lvl][0]) - float(self.params['lvl'][lo_lvl][0])
+        dekt = dekt * units.CLIGHT.value * units.HPLANCK.value / Te / units.KBOLTZMANN.value
 
         saha=2.07e-16*nel*gst_lo/gst_hi*Te**(-1.5)*np.exp(dekt)  # Assuming nel in cgs. (For SI units would be 2.07e-22)
         self.frec3bd = saha*self.cup # vion is collisional ionization rate
 
 
-    def inv_pop_atomf(self, ntot,Te,niter=100,nel=None, threebody=True, GENCOL_KEY = ['voronov']):
+    def inv_pop_atomf(self, ntot,Te,niter=100,nel=None, threebody=True, GENCOL_KEY = 'voronov'):
         ''' Inverts the Matrix for Statistical Equilibrum'''
         # nel starting guess is:
         if nel is None: nel=ntot*1.0
@@ -698,10 +719,11 @@ class atom_tools(object):
             for iel in range(1,niter):
                 B=np.zeros((nlevels))
                 A=np.zeros((nlevels,nlevels))
+                igen = 0
                 for ilev in range(0,nlevels-1):
-                    self.vrec(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,atomfile=atomfile,threebody=threebody,GENCOL_KEY=GENCOL_KEY)
-                    self.vion(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,atomfile=atomfile,GENCOL_KEY=GENCOL_KEY)
-                    if igen == 0:
+                    self.vrec(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,threebody=threebody,GENCOL_KEY=GENCOL_KEY)
+                    self.vion(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,GENCOL_KEY=GENCOL_KEY)
+                    if igen == 0: ## JMS Not sure what is that for....
                         Rip = self.frec
                     else:
                         Rip += self.frec
@@ -711,6 +733,7 @@ class atom_tools(object):
                     if ilev < nlevels-2:
                         A[ilev+1,ilev+1] = - Rip# - Ri3d
                         A[ilev+1,ilev] = Cip
+                    igen = 1
                 A[ilev+1,:] = 1.0
                 B[ilev+1] = ntotf[ipoint]
                 n_isp[ipoint,:] = np.linalg.solve(A,B)
@@ -726,8 +749,8 @@ class atom_tools(object):
                         print("Warning, No stationary solution was found",(nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos),nelpos,nelf[ipoint])
                 nelf[ipoint] =nelpos
 
-        n_isp=n_isp.reshape(np.append(shape,nlevels))
-        self.n_isp = n_isp
+        self.n_el=nelf.reshape(np.append(shape,npoints))
+        self.n_isp=n_isp.reshape(np.append(shape,(npoints,nlevels)))
 
     def read_atom_file(self):
         ''' Reads the atom (command style) ascii file into dictionary '''
@@ -1108,22 +1131,28 @@ class atom_tools(object):
         self.params = params
 
 ### TOOLS ####
-def pop_over_species_atomf(ntot,Te,atomfiles=['H_2.atom','He_3.atom'],threebody=True, GENCOL_KEY = ['voronov']):
+def pop_over_species_atomf(ntot,Te,atomfiles=['H_2.atom','He_3.atom'],threebody=True, GENCOL_KEY = 'voronov'):
     ''' this will do the SE for many species taking into account their abundances'''
     units = bifrost_units()
     totabund = 0.0
-    for isp in range(0,len(atom)): totabund += 10.0**get_abund(atom[isp])
+    for isp in range(0,len(atomfiles)):
+        atominfo=atom_tools(atom_file=atomfiles[isp])
+        totabund += 10.0**atominfo.get_abund(Chianti=True)
 
     all_pop_species={}
-    for isp in range(0,len(atom)):
-        abund = np.array(10.0**get_abund(atom[isp]))
-        atomweight = get_atomweight(atom[isp])*units.AMU
+    nel = 0
+    for isp in range(0,len(atomfiles)):
+        print('Starting with atom', atomfiles[isp])
+        atominfo=atom_tools(atom_file=atomfiles[isp])
+        abund = np.array(10.0**atominfo.get_abund(Chianti=True))
+        atomweight = atominfo.get_atomweight()*units.AMU
         n_species = np.zeros((np.shape(ntot)))
         n_species = ntot*(np.array(abund/totabund))
-        pop_species = inv_pop(n_species,Te,niter=100,atomfile=atomfile[isp],threebody=threebody, GENCOL_KEY=GENCOL_KEY)
-
-        all_pop_species[atom[isp]] = pop_species
-        print('Done with atom', atom[isp])
+        atominfo.inv_pop_atomf(n_species,Te,niter=100,threebody=threebody, GENCOL_KEY=GENCOL_KEY)
+        all_pop_species[atominfo.atom] = atominfo.n_isp
+        nel += atominfo.n_el
+        print('Done with atom', atomfiles[isp])
+    all_pop_species['nel'] = nel
     return all_pop_species
 
 def diper2eb_atom_ascii(atomfile, output):
