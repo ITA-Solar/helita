@@ -3,6 +3,8 @@ Set of programs and tools to read the outputs from RH, 1.5D version
 """
 import os
 import numpy as np
+import xarray as xr
+import h5py
 
 
 class Rh15dout:
@@ -11,48 +13,25 @@ class Rh15dout:
         self.params = {}
         self.verbose = verbose
         self.fdir = fdir
-        OUTFILE_FUNC = {"output_aux": self.read_aux,
-                        "output_indata": self.read_indata,
-                        "output_ray": self.read_ray,
-                        "output_spectrum": self.read_spectrum}
-        for outfile, func in OUTFILE_FUNC.items():
-            if (os.path.isfile("%s/%s.ncdf" % (self.fdir, outfile)) or
-                os.path.isfile("%s/%s.hdf5" % (self.fdir, outfile))):
-                func()
+        for outfile in ["output_aux", "output_indata"]:
+            OUTFILE = os.path.join(self.fdir, "%s.hdf5" % (outfile))
+            self.read_groups(OUTFILE)
+        RAYFILE = os.path.join(self.fdir, "output_ray.hdf5")
+        self.read_ray(RAYFILE)
 
-    def read_aux(self, infile=None):
-        ''' Reads Aux file. '''
-        if infile is None:
-            infile = '%s/output_aux.hdf5' % self.fdir
-            if not os.path.isfile(infile):  # See if netCDF file exists
-                infile = os.path.splitext(infile)[0] + '.ncdf'
+    def read_groups(self, infile):
+        ''' Reads indata file, group by group. '''
+        if not os.path.isfile(infile):   # See if netCDF file exists
+            infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
             if self.verbose:
                 print('File %s not found, skipping.' % infile)
-            return
-        self.files.append(read_hdf5(self, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_indata(self, infile=None):
-        ''' Reads indata file. '''
-        if infile is None:
-            infile = '%s/output_indata.hdf5' % self.fdir
-            if not os.path.isfile(infile):  # See if netCDF file exists
-                infile = os.path.splitext(infile)[0] + '.ncdf'
-        if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
-        self.files.append(read_hdf5(self, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_spectrum(self, infile=None):
-        ''' Reads spectrum file. '''
-        if infile is None:
-            infile = '%s/output_spectrum.ncdf' % self.fdir
-        self.spectrum = DataHolder()
-        self.files.append(read_hdf5(self.spectrum, infile))
+        f = h5py.File(infile, "r")
+        GROUPS = [g for g in f.keys() if type(f[g]) == h5py._hl.group.Group]
+        f.close()
+        for g in GROUPS:
+            setattr(self, g, xr.open_dataset(infile, group=g))
+            self.files.append(getattr(self, g))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
@@ -65,19 +44,13 @@ class Rh15dout:
         if not os.path.isfile(infile):
             if self.verbose:
                 print('File %s not found, skipping.' % infile)
-        self.ray = DataHolder()
-        self.files.append(read_hdf5(self.ray, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_J(self, infile='scratch/J.dat.hdf5'):
-        ''' Reads angle averaged intensity file '''
-        self.files.append(read_hdf5(self, infile))
+        self.ray = xr.open_dataset(infile)
+        self.files.append(self.ray)
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
     def close(self):
-        ''' Closes the open NetCDF files '''
+        ''' Closes the open files '''
         for f in self.files:
             f.close()
 
