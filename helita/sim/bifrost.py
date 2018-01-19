@@ -6,6 +6,8 @@ import numpy as np
 import os
 from glob import glob
 from . import cstagger
+# import numba
+import scipy as sp
 
 class BifrostData(object):
     """
@@ -816,7 +818,6 @@ class BifrostData(object):
                 os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
 
             #Calculation settings
-
             class int_options:
                  def __init__(self):
                      self.rendtype = 'sastatic'
@@ -824,7 +825,6 @@ class BifrostData(object):
                      self.simdir =  ''
                      self.snap = 1
                      self.infile = ''
-
 
             if  azimuth != None or altitude != None: # For any angle
                 if ooe:
@@ -851,6 +851,10 @@ class BifrostData(object):
             data_dir = (opts.simdir if opts.simdir else askdirectory(title='Simulation Directory')).rstrip('/')
 
             acont_filenames = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline+'.opy')]
+            channel = 0
+
+            if len(acont_filenames) == 0:
+                raise ValueError("(EEE) get_intny: The GOFT file for this line does not exist",spline)
             snap_range=(self.snap,self.snap)
             template = opts.infile #+ '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
 
@@ -877,15 +881,35 @@ class BifrostData(object):
                     else: # Statistical Equibilibrium along any direction
                         from br_ioni import StaticEmRenderer
                         s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
-            channel = 0
+
             rend_reverse = False
             gridsplit = 20
+
             return s.il_render(channel, azimuth, -altitude, axis, rend_reverse,gridsplit=gridsplit, nlamb=nlamb,
                             dopp_width_range=dopp_width_range, opacity=rend_opacity, verbose=False)
         else:
             print('I am so sorry... but you need pycuda:')
             print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
             print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
+
+    def save_intny(self, spline, nlamb = 141, axis =2, rend_opacity = False, dopp_width_range=5e1, azimuth=None,
+                    altitude=None, ooe = False, *args, **kwargs):
+        """
+        Calculate and dave profiles in a binary file.
+        """
+        intny = self.get_intny(spline, nlamb = nlamb, axis =axis, rend_opacity = rend_opacity, dopp_width_range=dopp_width_range, azimuth=azimuth,
+                        altitude=altitude, ooe = ooe)
+
+        # make file
+        savedFile = open(spline+"it"+str(self.snap)+".bin", "wb")
+        # write to file
+        nx=np.shape(intny[0])[0]
+        ny=np.shape(intny[0])[1]
+        nwvl=np.shape(intny[0])[2]
+        savedFile.write(np.array((nwvl,nx,ny)))
+        savedFile.write(intny[1])
+        savedFile.write(intny[0])
+        savedFile.close()
 
     def get_int(self, spline, axis =2, rend_opacity = False, azimuth=None,
                     altitude=None, ooe = False, *args, **kwargs):
@@ -962,6 +986,10 @@ class BifrostData(object):
             data_dir = (opts.simdir if opts.simdir else askdirectory(title='Simulation Directory')).rstrip('/')
 
             acont_filenames = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline+'.opy')]
+            channel = 0
+            if len(acont_filenames) == 0:
+                raise ValueError("(EEE) get_int: The GOFT file for this line does not exist",spline)
+
             snap_range=(self.snap,self.snap)
             template = opts.infile #+ '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
 
@@ -988,7 +1016,7 @@ class BifrostData(object):
                     else: # Statistical Equibilibrium for any angle
                         from br_ioni import StaticEmRenderer
                         s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
-            channel = 0
+
             rend_reverse = False
             gridsplit = 20
 
@@ -999,18 +1027,179 @@ class BifrostData(object):
             print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
             print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
 
-    def fftTimeCube(self, quantity, t1, t2, axis3, plane):
+
+    def get_vdem(self, spline, order=1, axis=2, vel_axis = np.linspace(- 40,40,100), tg_axis = np.linspace(4,9,25)):
+        """
+        Calculates emissivity (EM) as a funtion of temparature and velocity, i.e., VDEM.
+
+        Parameters
+        ----------
+        spline - string
+            Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
+            contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the 3D spatial from the simulation
+
+        Notes
+        -----
+            Uses cuda
+        """
+        ems=self.get_emiss(spline,axis=axis,order=order)
+        tg=self.get_var('tg')
+        if axis == 0:
+            vel=self.get_var('ux')
+            nx=self.ny
+            ny=self.nz
+            ems=np.transpose(ems,(1, 2, 0))
+            tg=np.transpose(tg,(1, 2, 0))
+            vel=np.transpose(vel,(1, 2, 0))
+        elif axis == 1:
+            vel=self.get_var('uy')
+            nx=self.nx
+            ny=self.nz
+            ems=np.transpose(ems,(0, 2, 1))
+            tg=np.transpose(tg,(0, 2, 1))
+            vel=np.transpose(vel,(0, 2, 1))
+        else:
+            vel=self.get_var('uz')
+            nx=self.nx
+            ny=self.ny
+
+        nvel = len(vel_axis)
+        ntg = len(tg_axis)
+
+        vdem = np.zeros((ntg,nvel,nx,ny))
+        from datetime import datetime
+        print(str(datetime.now()))
+        for itg in range(0,ntg-1):
+            ems_temp = ems
+            loc = np.where(np.log(tg) < tg_axis[itg])
+            ems_temp[loc] = 0.0
+            loc = np.where(np.log(tg) > tg_axis[itg+1])
+            ems_temp[loc] = 0.0
+            for ivel in range(0,nvel-1):
+                ems_temp_v = ems_temp
+                ems_temp_v[loc] = 0.0
+                loc = np.where(vel < vel_axis[ivel])
+                ems_temp_v[loc] = 0.0
+                loc = np.where(vel > vel_axis[ivel+1])
+                ems_temp_v[loc] = 0.0
+                for ix in range(0,nx):
+                    for iy in range(0,ny):
+                        vdem[itg,ivel,ix,iy]= np.sum(ems_temp_v[ix,iy,:])
+
+        print(str(datetime.now()))
+        return vdem
+
+    def get_emiss(self, spline, axis=2, order=1, *args, **kwargs):
+        """
+        Calculates emissivity (EM).
+
+        Parameters
+        ----------
+        spline - string
+            Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
+            contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the 3D spatial from the simulation
+
+        Notes
+        -----
+            Uses cuda
+        """
+        #mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
+        import pickle
+        units = bifrost_units()
+        CC = units.CLIGHT.value* units.CM_TO_M # 2.99792458e8 m/s
+        CCA = CC * 1e10 # AA/s
+        GRPH = 2.27e-24
+
+        acont_filename = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline+'.opy')]
+
+        filehandler = open(acont_filename[0], 'rb')
+        ion=pickle.load(filehandler)
+        filehandler.close()
+
+        ntgbin = len(ion.Gofnt['temperature'])
+        nedbin = len(ion.Gofnt['press'])
+        tgmin = np.min(np.log10(ion.Gofnt['temperature']))
+        tgrange = np.max(np.log10(ion.Gofnt['temperature'])) - tgmin
+        enmin = np.min(ion.Gofnt['press'])
+        enrange = np.max(ion.Gofnt['press']) - enmin
+
+        tg_axis= np.linspace(tgmin,tgmin+tgrange,ntgbin)
+        press_axis= np.linspace(enmin,enmin+enrange,nedbin)
+        self.ny0 = (CCA / ion.Gofnt['wvl'])
+        self.awgt = ion.mass
+
+        self.acont_table = np.transpose(ion.Gofnt['gofnt'])
+        self.acont_table = np.array(self.acont_table)
+        for itab in range(1,len(acont_filename)):
+            if (itab == 1):
+                print(('(WWW) get_emiss: is summing G(T,ne) tables'))
+            filehandler = open(acont_filename[itab], 'rb')
+            ion=pickle.load(filehandler)
+            filehandler.close()
+            acont_tab_temp = np.transpose(ion.Gofnt['gofnt'])
+            acont_tab_temp = np.array(self.acont_table)
+            self.acont_table += acont_tab_temp
+
+        import scipy.ndimage as ndimage
+
+        tg=self.get_var('tg')
+        en=self.get_var('ne')
+
+        # warnings for values outside of table
+        enminv = np.min(tg*en)
+        enmaxv = np.max(tg*en)
+        tgminv = np.min(np.log10(tg))
+        tgmaxv = np.max(np.log10(tg))
+        if enminv < enmin:
+            print('(WWW) tab_interp: electron density outside table bounds.' +
+                  'Table ne min=%.3e, requested ne min=%.3e' %
+                  (enmin, enminv))
+        if enmaxv > enmin + enrange:
+            print('(WWW) tab_interp: electron density outside table bounds. ' +
+                  'Table ne max=%.1f, requested ne max=%.1f' %
+                  (enmin + enrange, enmaxv))
+        if tgminv < tgmin:
+            print('(WWW) tab_interp: tg outside of table bounds. ' +
+                  'Table tg min=%.2f, requested tg min=%.2f' %
+                  (tgmin, tgminv))
+        if tgmaxv > tgmin + tgrange:
+            print('(WWW) tab_interp: tg outside of table bounds. ' +
+                  'Table tg max=%.2f, requested tg max=%.2f' %
+                  (tgmin + tgrange, tgmaxv))
+
+        # translate to table coordinates
+        y = (np.log10(tg) - tg_axis[0]) / (tg_axis[1]-tg_axis[0])
+        x = (en*tg - press_axis[0]) / (press_axis[1]-press_axis[0])
+        g = ndimage.map_coordinates(self.acont_table, [x, y], order=order, mode='nearest')
+
+        rho=self.get_var('r')
+        if axis == 0:
+            ds=self.dx * units.u_l
+        elif axis == 1:
+            ds=self.dy * units.u_l
+        else:
+            ds=self.dzidzdn * units.u_l
+        nh = rho * units.u_r / GRPH
+
+        for ix in range(0,self.nx):
+            for iy in range(0,self.ny):
+                g[ix,iy,:] *= ds*nh[ix,iy,:]
+
+        return en * g
+
+    def fftTimeCube(self, quantity, snap, iix = None, iiy = None, iiz = None):
 
         preTransform = self.get_varTime(quantity, snap, iix, iiy, iiz)
         arrShape = preTransform.shape
         indexes = []
-
-        uneven = False
-        for i in range(1, np.size(snap) - 1):
-            if abs((self.params['t'][i] - self.params['t'][i -1]) - (self.params['t'][i+1] - self.params['t'][i])) > 0.02:
-                # print('uneven')
-                uneven = True
-                break
 
         for num in arrShape:
             if num == 1:
@@ -1020,25 +1209,34 @@ class BifrostData(object):
 
         preTransform = preTransform[indexes[0], indexes[1], indexes[2], indexes[3]]
         transformed = np.empty((preTransform.shape))
-        # vectb = np.sin(np.linspace(0,10,10)*3.14159/2)
+        dt = self.params['dt']
+        t = self.params['t']
 
-        for i in range(0, preTransform.shape[0]):
-            for j in range(0, preTransform.shape[1]):
-                vect = preTransform[i, j]
-                if uneven:
-                    evenTimes = np.linspace(self.params['t'][0], self.params['t'][-1], np.size(snap))
-                    vect = np.interp(evenTimes, self.params['t'], vect)
-                    evenDtsnap = evenTimes[1] - evenTimes[0]
-                else:
-                    evenDtsnap = self.params['dt'][0]
-                partTransformed = np.abs(np.fft.fftshift(np.fft.fft(vect)))
-                transformed[i, j] = partTransformed
+        # @numba.jit(['float64[:, :, ::1](float64[:, :, ::1], float64[:, :, ::1], float64[::1], float64[::1])'])
+        def fftHelper(preTransform, transformed, dt, t):
 
-        freq = np.fft.fftshift(np.fft.fftfreq(np.size(snap), evenDtsnap * 100))
+            uneven = False
+            for i in range(1, np.size(dt) - 1):
+                if abs((t[i] - t[i -1]) - (t[i+1] - t[i])) > 0.02:
+                    uneven = True
+                    break
 
-        output = {'freq': freq, 'ftCube': transformed}
+            if uneven:
+                print('uneven dt')
+                evenTimes = np.linspace(t[0], t[-1], np.size(dt))
+                interp = sp.interpolate.interp1d(t, preTransform)
+                preTransform = interp(evenTimes)
+                evenDt = evenTimes[1] - evenTimes[0]
+            else:
+                evenDt = dt[0]
 
-        return output
+            freq = np.fft.fftshift(np.fft.fftfreq(np.size(dt), evenDt * 100))
+            transformed = np.abs(np.fft.fftshift((np.fft.fft(preTransform)), axes = -1))
+            output = {'freq': freq, 'ftCube': transformed}
+
+            return output
+
+        return fftHelper(preTransform, transformed, dt, t)
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
