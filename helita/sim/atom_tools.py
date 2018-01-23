@@ -748,9 +748,8 @@ class atom_tools(object):
                     if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) > 1e-4:
                         print("Warning, No stationary solution was found",(nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos),nelpos,nelf[ipoint])
                 nelf[ipoint] =nelpos
-
-        self.n_el=nelf.reshape(np.append(shape,npoints))
-        self.n_isp=n_isp.reshape(np.append(shape,(npoints,nlevels)))
+        self.n_el=np.reshape(nelf,(shape))
+        self.n_isp=np.reshape(n_isp,(np.append(shape,nlevels)))
 
     def read_atom_file(self):
         ''' Reads the atom (command style) ascii file into dictionary '''
