@@ -855,8 +855,10 @@ def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
     result = [nheight, ntemp, nne, nvz, nrho]
     if nh is not None:
         for k in range(nh.shape[0]):
-            nh[k] = np.exp(interp.splev(nheight, interp.splrep(height[::-1],
-                                                               np.log(nh[k, ::-1]), k=3, s=0), der=0))
+            nh[k] = np.exp(interp.splev(nheight,
+                                        interp.splrep(height[::-1],
+                                                      np.log(nh[k, ::-1]), k=3,
+                                                      s=0), der=0))
         result += [nh]
     if bx is not None:
         nbx = interp.splev(nheight, interp.splrep(
