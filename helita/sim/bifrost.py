@@ -1028,7 +1028,7 @@ class BifrostData(object):
             print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
 
 
-    def get_vdem(self, spline, order=1, axis=2, vel_axis = np.linspace(- 40,40,100), tg_axis = np.linspace(4,9,25)):
+    def get_vdem(self, spline, order=1, axis=2, vel_axis = np.linspace(- 20,20,5), tg_axis = np.linspace(4,9,5)):
         """
         Calculates emissivity (EM) as a funtion of temparature and velocity, i.e., VDEM.
 
@@ -1069,23 +1069,24 @@ class BifrostData(object):
 
         nvel = len(vel_axis)
         ntg = len(tg_axis)
-
         vdem = np.zeros((ntg,nvel,nx,ny))
         from datetime import datetime
         print(str(datetime.now()))
         for itg in range(0,ntg-1):
-            ems_temp = ems
-            loc = np.where(np.log(tg) < tg_axis[itg])
+            ems_temp = ems*1.0
+            print('itg =',itg)
+            loc = np.where(np.log10(tg) < tg_axis[itg])
             ems_temp[loc] = 0.0
-            loc = np.where(np.log(tg) > tg_axis[itg+1])
+            loc = np.where(np.log10(tg) > tg_axis[itg+1])
             ems_temp[loc] = 0.0
             for ivel in range(0,nvel-1):
-                ems_temp_v = ems_temp
+                ems_temp_v = ems_temp*1.0
                 ems_temp_v[loc] = 0.0
                 loc = np.where(vel < vel_axis[ivel])
                 ems_temp_v[loc] = 0.0
                 loc = np.where(vel > vel_axis[ivel+1])
                 ems_temp_v[loc] = 0.0
+                print(np.max(ems_temp_v),np.shape(ems_temp_v),tg_axis[itg],tg_axis[itg+1],vel_axis[ivel],vel_axis[ivel+1])
                 for ix in range(0,nx):
                     for iy in range(0,ny):
                         vdem[itg,ivel,ix,iy]= np.sum(ems_temp_v[ix,iy,:])
@@ -1198,6 +1199,7 @@ class BifrostData(object):
     def fftTimeCube(self, quantity, snap, iix = None, iiy = None, iiz = None):
 
         preTransform = self.get_varTime(quantity, snap, iix, iiy, iiz)
+        print(np.shape(preTransform))
         arrShape = preTransform.shape
         indexes = []
 
@@ -1549,6 +1551,7 @@ class bifrost_units():
     u_tg = (m_H / k_B) * u_ee
     u_tge = (m_e / k_B) * u_ee
     pi = const.pi
+    u_b = u_u*np.sqrt(4.*pi*u_r)
 
     usi_l = u_l * const.centi # 1e6
     usi_r = u_r * const.gram # 1e-4
