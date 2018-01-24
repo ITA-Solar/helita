@@ -800,6 +800,144 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     return
 
 
+def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
+                      Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
+                      desc=None, snap=None, boundary=[1, 0], comp=None,
+                      complev=None, append=False):
+    """
+    Creates HDF5 input file for RH 1.5D using xarray.
+
+    Parameters
+    ----------
+    outfile : string
+        Name of destination. If file exists it will be wiped.
+    T : n-D array
+        Temperature in K. Its shape will determine the output
+        dimensions (can be 1D, 2D, or 3D).
+    vz : n-D array
+        Line of sight velocity in m/s. Same shape as T.
+    nH : n-D array
+        Hydrogen populations in m^-3. Shape is [nhydr, shape.T] where
+        nydr can be 1 (total number of protons) or more (level populations).
+    z : n-D array
+        Height in m. Can have same shape as T (different height scale
+        for each column) or be only 1D (same height for all columns).
+    ne : n-D array, optional
+        Electron density in m^-3. Same shape as T.
+    rho : n-D array, optional
+        Density in kg m^-3. Same shape as T.
+    vx : n-D array, optional
+        x velocity in m/s. Same shape as T. Not in use by RH 1.5D.
+    vy : n-D array, optional
+        y velocity in m/s. Same shape as T. Not in use by RH 1.5D.
+    vturb : n-D array, optional
+        Turbulent velocity (Microturbulence) in km/s. Not usually needed
+        for MHD models, and should only be used when a depth dependent
+        microturbulence is needed (constant microturbulence can be added
+        in RH).
+    Bx : n-D array, optional
+        Magnetic field in x dimension, in Tesla. Same shape as T.
+    By : n-D array, optional
+        Magnetic field in y dimension, in Tesla. Same shape as T.
+    Bz : n-D array, optional
+        Magnetic field in z dimension, in Tesla. Same shape as T.
+    x : 1-D array, optional
+        Grid distances in m. Same shape as first index of T.
+    y : 1-D array, optional
+        Grid distances in m. Same shape as second index of T.
+    x : 1-D array, optional
+        Grid distances in m. Same shape as first index of T.
+    snap : array-like, optional
+        Snapshot number(s).
+    desc : string, optional
+        Description of file
+    boundary : Tuple, optional
+        Tuple with [bottom, top] boundary conditions. Options are:
+        0: Zero, 1: Thermalised, 2: Reflective.
+    append : boolean, optional
+        If True, will append to existing file (if any).
+    """
+    import os
+    import datetime
+    data = {'temperature': [T, 'K'],
+            'velocity_z': [vz, 'm s^-1'],
+            'velocity_y': [vy, 'm s^-1'],
+            'velocity_x': [vx,  'm s^-1'],
+            'electron_density': [ne, 'm^-3'],
+            'hydrogen_populations': [nH, 'm^-3'],
+            'density': [rho, 'kg m^-3'],
+            'B_x': [Bx, 'T'],
+            'B_y': [By, 'T'],
+            'B_z': [Bz, 'T'],
+            'velocity_turbulent': [vturb, 'm s^-1'],
+            'x': [x, 'm'],
+            'y': [y, 'm'],
+            'z': [z, 'm']}
+    VARS4D = ['temperature', 'B_x', 'B_y', 'B_z', 'density', 'velocity_x',
+              'velocity_y', 'velocity_z', 'velocity_turbulent', 'density',
+              'electron_density']
+    # Remove variables not given
+    data = {key: data[key] for key in data if data[key][0] is not None}
+
+    mode = ['w', 'a']
+    if (append and not os.path.isfile(outfile)):
+        append = False
+    if nH.shape == T.shape:
+        nhydr = 1
+    else:
+        nhydr = nH.shape[0]
+    idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
+    for var in data:
+        data[var][0] = data[var][0][idx]
+
+    if len(data['temperature'][0].shape) != 4:
+        raise ValueError('Invalid shape for T')
+    nt, nx, ny, nz = data['temperature'][0].shape
+    if boundary is None:
+        boundary = [1, 0]
+    if snap is None:
+        data['snapshot_number'] = [np.arange(nt, dtype='i4'), '']
+    else:
+        data['snapshot_number'] = [np.array([snap], dtype='i4'), '']
+    if not append:
+        variables = {}
+        coordinates = {}
+        for v in data:
+            if v in VARS4D:
+                variables[v] = (('snapshot_number', 'x', 'y', 'depth'),
+                                data[v][0], {'units': data[v][1]})
+            elif v == 'hydrogen_populations':
+                variables[v] = (('snapshot_number', 'nhydr', 'x', 'y', 'depth'),
+                                data[v][0], {'units': data[v][1]})
+            elif v == 'z':
+                dims = ('snapshot_number', 'depth')
+                if data[v][0].shape == 1:  # extra dim for nt dependency
+                    data[v][0] = data[v][0][None, :]
+                elif data[v][0].shape == 4:
+                    dims = ('snapshot_number', 'x', 'y', 'depth')
+                coordinates[v] = (dims, data[v][0], {'units': data[v][1]})
+            elif v in ['x', 'y', 'snapshot_number']:
+                coordinates[v] = ((v), data[v][0], {'units': data[v][1]})
+
+        attrs = {"comment": ("Created with make_xarray_atmos "
+                                 "on %s" % datetime.datetime.now()),
+                 "boundary_top": boundary[1], "boundary_bottom": boundary[0],
+                 "has_B": int(Bz is not None), "description": str(desc),
+                 "nx": nx, "ny": ny, "nz": nz, "nt": nt}
+        data = xr.Dataset(variables, coordinates, attrs)
+        data.to_netcdf(outfile, mode='w', format='NETCDF4',
+                       unlimited_dims=('snapshot_number'))
+    else:  # use h5py to append existing file
+        rootgrp = h5py.File(outfile, mode='a')
+        nti = int(rootgrp.attrs['nt'])
+        #rootgrp.attrs['nt'] = nti + nt  # add appended number of snapshots
+        for var in data:
+          if var in VARS4D + ['hydrogen_populations', 'z', 'snapshot_number']:
+              rootgrp[var].resize(nti + nt, axis=0)
+              rootgrp[var][nti:nti + nt] = data[var][0][:]
+        rootgrp.close()
+
+
 def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
                 tmax=5e4):
     """
