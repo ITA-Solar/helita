@@ -24,8 +24,7 @@ class Rh15dout:
         if not os.path.isfile(infile):   # See if netCDF file exists
             infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
+            return
         f = h5py.File(infile, "r")
         GROUPS = [g for g in f.keys() if type(f[g]) == h5py._hl.group.Group]
         f.close()
@@ -42,8 +41,7 @@ class Rh15dout:
             if not os.path.isfile(infile):  # See if netCDF file exists
                 infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
+            return
         self.ray = xr.open_dataset(infile)
         self.files.append(self.ray)
         if self.verbose:
