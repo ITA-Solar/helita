@@ -1,6 +1,7 @@
 """
 Set of programs and tools visualise the output from RH, 1.5D version
 """
+import os
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
@@ -165,3 +166,91 @@ class SourceFunction:
                 ax.set_yscale("log")
             else:
                 ax.set_yscale("linear")
+
+
+class InputAtmosphere:
+    def __init__(self, filename):
+        self.atmos = xr.open_dataset(filename)
+        self.filename = filename
+        self.display()
+
+    def display(self):
+        """
+        Displays a graphical widget to explore the input (HDF5) atmosphere.
+        """
+        NT, NX, NY, NZ = self.atmos.temperature.shape
+        if NT == 1:
+            tslider = fixed(0)
+        else:
+            tslider = (0, NT - 1)
+        if NX == 1:
+            xslider = fixed(0)
+        else:
+            xslider = (0, NX - 1)
+        if NY == 1:
+            yslider = fixed(0)
+        else:
+            yslider = (0, NY - 1)
+
+        def _atmos_plot():
+            """Starts source function plot"""
+            EXCLUDES = ['x', 'y', 'z', 'snapshot_number']
+            self.variables = [v for v in self.atmos.variables
+                              if v not in EXCLUDES]
+            nrows = int(np.ceil(len(self.variables) / 2.))
+            fig, ax = plt.subplots(nrows, 2, sharex=True,
+                                   figsize=(7, 2. * nrows))
+            for i, v in enumerate(self.variables):
+                var = self.atmos.variables[v]
+                if v[:8].lower() == 'velocity':  # to km/s
+                    ax.flat[i].plot(self.atmos.z[0] / 1e6, var[0, 0, 0] / 1.e3)
+                    ax.flat[i].set_ylabel("%s (km/s)" % v.title())
+                elif v.lower() == "hydrogen_populations":
+                    ax.flat[i].plot(self.atmos.z[0] / 1e6,
+                                    var[0, :, 0, 0].sum(axis=0))
+                    ax.flat[i].set_ylabel("Htot (m^-3)")
+                    ax.flat[i].set_yscale("log")
+                else:
+                    ax.flat[i].plot(self.atmos.z[0] / 1e6, var[0, 0, 0])
+                    units = ''
+                    if 'units' in var.attrs:
+                        units = var.attrs['units']
+                    ax.flat[i].set_ylabel("%s (%s)" % (v.title(), units))
+                ax.flat[i].set_xlabel("Height (Mm)")
+                if i == 0:
+                    ax.flat[i].set_title(os.path.split(self.filename)[1])
+                if i == 1:
+                    ax.flat[i].set_title("snapshot=%i, x=%i, y=%i" % (0, 0, 0))
+            fig.tight_layout()
+            return ax
+
+        ax = _atmos_plot()
+
+        @interact(snapshot=tslider, x=xslider, y=xslider, y_log=True)
+        def _atmos_update(snapshot=0, x=0, y=0, y_log=True):
+            for i, v in enumerate(self.variables):
+                var = self.atmos.variables[v]
+                if v[:8].lower() == 'velocity':  # to km/s
+                    ydata = var[snapshot, x, y] / 1.e3
+                elif v.lower() == "hydrogen_populations":
+                    ydata = var[snapshot, :, x, y].sum(axis=0)
+                else:
+                    ydata = var[snapshot, x, y]
+                ax.flat[i].lines[0].set_ydata(ydata)
+                if len(self.atmos.z.shape) == 2:
+                    zdata = self.atmos.z[snapshot] / 1e6
+                elif len(self.atmos.z.shape) == 4:
+                    zdata = self.atmos.z[snapshot, x, y] / 1e6
+                else:
+                    raise ValueError("Invalid shape of z array")
+                ax.flat[i].lines[0].set_xdata(zdata)
+                ax.flat[i].relim()
+                ax.flat[i].autoscale_view(True, True, True)
+                if i == 1:
+                    tmp = "snapshot=%i, x=%i, y=%i" % (snapshot, x, y)
+                    ax.flat[i].set_title(tmp)
+                if v[:2].lower() not in ['ve', 'b_']:  # no log in v and B
+                    if y_log:
+                        ax.flat[i].set_yscale("log")
+                    else:
+                        ax.flat[i].set_yscale("linear")
