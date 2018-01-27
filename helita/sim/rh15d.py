@@ -8,16 +8,17 @@ import h5py
 
 
 class Rh15dout:
-    def __init__(self, fdir='.', verbose=True):
+    def __init__(self, fdir='.', verbose=True, autoread=True):
         self.files = []
         self.params = {}
         self.verbose = verbose
         self.fdir = fdir
-        for outfile in ["output_aux", "output_indata"]:
-            OUTFILE = os.path.join(self.fdir, "%s.hdf5" % (outfile))
-            self.read_groups(OUTFILE)
-        RAYFILE = os.path.join(self.fdir, "output_ray.hdf5")
-        self.read_ray(RAYFILE)
+        if autoread:
+            for outfile in ["output_aux", "output_indata"]:
+                OUTFILE = os.path.join(self.fdir, "%s.hdf5" % (outfile))
+                self.read_groups(OUTFILE)
+            RAYFILE = os.path.join(self.fdir, "output_ray.hdf5")
+            self.read_ray(RAYFILE)
 
     def read_groups(self, infile):
         ''' Reads indata file, group by group. '''
@@ -344,7 +345,10 @@ def read_hdf5(inclass, infile):
     # add attributes
     attrs = [a for a in f.attrs]
     for att in f.attrs:
-        inclass.params[att] = f.attrs[att]
+        try:
+            inclass.params[att] = f.attrs[att]
+        except OSError:  # catch errors where h5py cannot read UTF-8 strings
+            pass
     # add variables and groups
     for element in f:
         name = element.replace(' ', '_')    # sanitise string for spaces
