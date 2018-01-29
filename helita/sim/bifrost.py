@@ -15,7 +15,7 @@ class BifrostData(object):
     """
 
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
-                 verbose=True, dtype='f4', big_endian=False,
+                 verbose=True, cstagop=True, dtype='f4', big_endian=False,
                  ghost_analyse=False):
         """
         Loads metadata and initialises variables.
@@ -62,6 +62,7 @@ class BifrostData(object):
         """
         self.fdir = fdir
         self.verbose = verbose
+        self.cstagop = cstagop
         self.file_root = os.path.join(self.fdir, file_root)
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
@@ -353,8 +354,8 @@ class BifrostData(object):
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
-                if indSize == 1:
-                    setattr(self, dim[2] + 'Ind', 0)
+                if indSize > 1:
+                    setattr(self, dim[2] + 'Ind', slice(None))
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
@@ -363,7 +364,17 @@ class BifrostData(object):
             self.snapInd = i
             self._set_snapvars()
             self._init_vars()
-            helperCall = helper(var)[self.iix, self.iiy, self.iiz]
+
+            if np.size(self.iix) > 1 or np.size(self.iiy) > 1 or np.size(self.iiz) > 1:
+                axes = [0, -2, -1]
+                helperCall = helper(var)
+
+                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
+                    if getattr(self, dim) != slice(None):
+                        helperCall = helperCall.take(getattr(self, dim), axis = axes[counter])
+            else:
+                helperCall = helper(var)[self.iix, self.iiy, self.iiz]
+
             value[self.xInd, self.yInd, self.zInd, i] = helperCall
         #self.params = self.paramList
         return value
@@ -381,6 +392,8 @@ class BifrostData(object):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
+        if self.verbose:
+            print('(get_var): reading ',var)
         if var in ['x','y','z']:
             return getattr(self,var)
         if (snap is not None) and (snap != self.snap):
@@ -496,7 +509,7 @@ class BifrostData(object):
         """
         if var in ['ux', 'uy', 'uz']:  # velocities
             p = self._get_simple_var('p' + var[1], order='F')
-            if getattr(self, 'n' + var[1]) < 5:
+            if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
                 return p / self.r   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
                 return p / cstagger.do(self.r, var[1] + 'dn')
@@ -861,29 +874,33 @@ class BifrostData(object):
             from br_ioni import RenderGUI
 
             if opts.rendtype == 'tdi': # OOE along any angle
-                from br_ioni import TDIEmRenderer
+                from br_ioni_noeos import TDIEmRenderer
+                #from br_ioni import TDIEmRenderer
                 tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
                              askopenfilename(title='Time-dependent Ionization Paramfile'))
                 tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
-                s = TDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
+                s = TDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap, cstagop=self.cstagop)
             else:
                 if opts.rendtype == 'sastatic': # Statistical Equibilibrium along specific axis, i.e., x, y or z
-                    from br_ioni import SAStaticEmRenderer
-                    s = SAStaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
+                    from br_ioni_noeos import SAStaticEmRenderer
+                    #from br_ioni import SAStaticEmRenderer
+                    s = SAStaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap,cstagop=self.cstagop)
                 else:
                     if opts.rendtype == 'satdi': # OOE along specific axis, i.e., x, y or z
-                        from br_ioni import SATDIEmRenderer
+                        from br_ioni_noeos import SATDIEmRenderer
+                        #from br_ioni import SATDIEmRenderer
                         tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
                         askopenfilename(title='Time-dependent Ionization Paramfile'))
                         tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
 
-                        s = SATDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap)
+                        s = SATDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap,cstagop=self.cstagop)
                     else: # Statistical Equibilibrium along any direction
-                        from br_ioni import StaticEmRenderer
-                        s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
+                        from br_ioni_noeos import StaticEmRenderer
+                        #from br_ioni import StaticEmRenderer
+                        s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap,cstagop=self.cstagop)
 
             rend_reverse = False
-            gridsplit = 20
+            gridsplit = 64
 
             return s.il_render(channel, azimuth, -altitude, axis, rend_reverse,gridsplit=gridsplit, nlamb=nlamb,
                             dopp_width_range=dopp_width_range, opacity=rend_opacity, verbose=False)
@@ -1028,7 +1045,7 @@ class BifrostData(object):
             print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
 
 
-    def get_vdem(self, spline, order=1, axis=2, vel_axis = np.linspace(- 20,20,5), tg_axis = np.linspace(4,9,5)):
+    def get_emstgu(self, spline, order=1, axis=2, vel_axis = np.linspace(- 20,20,20), tg_axis = np.linspace(4,9,25)):
         """
         Calculates emissivity (EM) as a funtion of temparature and velocity, i.e., VDEM.
 
@@ -1081,18 +1098,132 @@ class BifrostData(object):
             ems_temp[loc] = 0.0
             for ivel in range(0,nvel-1):
                 ems_temp_v = ems_temp*1.0
-                ems_temp_v[loc] = 0.0
                 loc = np.where(vel < vel_axis[ivel])
                 ems_temp_v[loc] = 0.0
                 loc = np.where(vel > vel_axis[ivel+1])
                 ems_temp_v[loc] = 0.0
-                print(np.max(ems_temp_v),np.shape(ems_temp_v),tg_axis[itg],tg_axis[itg+1],vel_axis[ivel],vel_axis[ivel+1])
                 for ix in range(0,nx):
                     for iy in range(0,ny):
                         vdem[itg,ivel,ix,iy]= np.sum(ems_temp_v[ix,iy,:])
 
         print(str(datetime.now()))
         return vdem
+
+
+    def get_vdem(self, order=1, axis=2, vel_axis = np.linspace(- 20,20,20), tg_axis = np.linspace(4,9,25)):
+        """
+        Calculates emissivity (EM) as a funtion of temparature and velocity, i.e., VDEM.
+
+        Parameters
+        ----------
+        spline - string
+            Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
+            contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the 3D spatial from the simulation
+
+        Notes
+        -----
+            Uses cuda
+        """
+        ems=self.get_dem(axis=axis,order=order)
+        tg=self.get_var('tg')
+        if axis == 0:
+            vel=self.get_var('ux')
+            nx=self.ny
+            ny=self.nz
+            ems=np.transpose(ems,(1, 2, 0))
+            tg=np.transpose(tg,(1, 2, 0))
+            vel=np.transpose(vel,(1, 2, 0))
+        elif axis == 1:
+            vel=self.get_var('uy')
+            nx=self.nx
+            ny=self.nz
+            ems=np.transpose(ems,(0, 2, 1))
+            tg=np.transpose(tg,(0, 2, 1))
+            vel=np.transpose(vel,(0, 2, 1))
+        else:
+            vel=self.get_var('uz')
+            nx=self.nx
+            ny=self.ny
+
+        nvel = len(vel_axis)
+        ntg = len(tg_axis)
+        vdem = np.zeros((ntg,nvel,nx,ny))
+        from datetime import datetime
+        print(str(datetime.now()))
+        for itg in range(0,ntg-1):
+            ems_temp = ems*1.0
+            print('itg =',itg)
+            loc = np.where(np.log10(tg) < tg_axis[itg])
+            ems_temp[loc] = 0.0
+            loc = np.where(np.log10(tg) > tg_axis[itg+1])
+            ems_temp[loc] = 0.0
+            for ivel in range(0,nvel-1):
+                ems_temp_v = ems_temp*1.0
+                loc = np.where(vel < vel_axis[ivel])
+                ems_temp_v[loc] = 0.0
+                loc = np.where(vel > vel_axis[ivel+1])
+                ems_temp_v[loc] = 0.0
+                for ix in range(0,nx):
+                    for iy in range(0,ny):
+                        vdem[itg,ivel,ix,iy]= np.sum(ems_temp_v[ix,iy,:])
+
+        print(str(datetime.now()))
+        return vdem
+
+    def get_dem(self,  axis=2, order=1, zcut=None, *args, **kwargs):
+        """
+        Calculates emissivity (EM).
+
+        Parameters
+        ----------
+        spline - string
+            Name of the spectral line to calculate. In order to know the format, $BIFROST/PYTHON/br_int/br_ioni/data
+            contains files with the G(T,ne), usually name.opy. spline must be name, e.g., 'fe_8_108.073'.
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the 3D spatial from the simulation
+
+        Notes
+        -----
+            Uses cuda
+        """
+        #mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
+        import pickle
+        units = bifrost_units()
+        CC = units.CLIGHT.value* units.CM_TO_M # 2.99792458e8 m/s
+        CCA = CC * 1e10 # AA/s
+        GRPH = 2.27e-24
+
+        import scipy.ndimage as ndimage
+
+        tg=self.get_var('tg')
+        en=self.get_var('ne')
+        rho=self.get_var('r')
+        if axis == 0:
+            ds=self.dx * units.u_l
+        elif axis == 1:
+            ds=self.dy * units.u_l
+        else:
+            ds=self.dzidzdn * units.u_l
+
+        nh = rho * units.u_r / GRPH
+        dem=nh*0.0
+
+        for ix in range(0,self.nx):
+            for iy in range(0,self.ny):
+                dem[ix,iy,:] = ds*nh[ix,iy,:]
+
+        if (zcut != None):
+            for iz in range(0,self.nz):
+                if self.z[iz] > zcut:
+                    izcut = i
+            dem[:,:,:izcut]
+        return en * dem
 
     def get_emiss(self, spline, axis=2, order=1, *args, **kwargs):
         """
@@ -1118,9 +1249,13 @@ class BifrostData(object):
         CC = units.CLIGHT.value* units.CM_TO_M # 2.99792458e8 m/s
         CCA = CC * 1e10 # AA/s
         GRPH = 2.27e-24
-
-        acont_filename = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline+'.opy')]
-
+        nspline = np.size(spline)
+        if nspline > 1:
+            acont_filename = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline[0]+'.opy')]
+            for ispline in range(1,nspline):
+                acont_filename += [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline[ispline]+'.opy')]
+        else:
+            acont_filename = [os.path.relpath(i, os.path.dirname('')) for i in glob(os.environ['BIFROST'] + 'PYTHON/br_int/br_ioni/data/'+spline+'.opy')]
         filehandler = open(acont_filename[0], 'rb')
         ion=pickle.load(filehandler)
         filehandler.close()
@@ -1140,8 +1275,10 @@ class BifrostData(object):
         self.acont_table = np.transpose(ion.Gofnt['gofnt'])
         self.acont_table = np.array(self.acont_table)
         for itab in range(1,len(acont_filename)):
-            if (itab == 1):
-                print(('(WWW) get_emiss: is summing G(T,ne) tables'))
+            if self.verbose:
+                if (itab == 1):
+                    print(('(WWW) get_emiss: is summing G(T,ne) tables'))
+                print(('(WWW) get_emiss: Adding ...%s G(T,ne) table' % acont_filename[itab][-19:-5]))
             filehandler = open(acont_filename[itab], 'rb')
             ion=pickle.load(filehandler)
             filehandler.close()
@@ -1214,6 +1351,8 @@ class BifrostData(object):
         dt = self.params['dt']
         t = self.params['t']
 
+        import time
+        t0 = time.time()
         # @numba.jit(['float64[:, :, ::1](float64[:, :, ::1], float64[:, :, ::1], float64[::1], float64[::1])'])
         def fftHelper(preTransform, transformed, dt, t):
 
@@ -1235,7 +1374,8 @@ class BifrostData(object):
             freq = np.fft.fftshift(np.fft.fftfreq(np.size(dt), evenDt * 100))
             transformed = np.abs(np.fft.fftshift((np.fft.fft(preTransform)), axes = -1))
             output = {'freq': freq, 'ftCube': transformed}
-
+            t1 = time.time()
+            print(t1-t0)
             return output
 
         return fftHelper(preTransform, transformed, dt, t)
