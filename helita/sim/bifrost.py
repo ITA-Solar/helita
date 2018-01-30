@@ -785,7 +785,7 @@ class BifrostData(object):
                               '.' % (quant, repr(self.simple_vars))))
 
     def get_intny(self, spline, nlamb = 141, axis =2, rend_opacity = False, dopp_width_range=5e1, azimuth=None,
-                    altitude=None, ooe = False, *args, **kwargs):
+                    altitude=None, ooe = False, stepsize = 0.01, *args, **kwargs):
         """
         Calculates intensity profiles from the simulation quantiables.
 
@@ -900,10 +900,10 @@ class BifrostData(object):
                         s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap,cstagop=self.cstagop)
 
             rend_reverse = False
-            gridsplit = 64
+            gridsplit = 128
 
             return s.il_render(channel, azimuth, -altitude, axis, rend_reverse,gridsplit=gridsplit, nlamb=nlamb,
-                            dopp_width_range=dopp_width_range, opacity=rend_opacity, verbose=False)
+                            dopp_width_range=dopp_width_range, opacity=rend_opacity,verbose=self.verbose,stepsize=stepsize)
         else:
             print('I am so sorry... but you need pycuda:')
             print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
@@ -1035,10 +1035,10 @@ class BifrostData(object):
                         s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap)
 
             rend_reverse = False
-            gridsplit = 20
+            gridsplit = 64
 
             return s.i_render(channel, azimuth, -altitude, axis, reverse = rend_reverse, gridsplit=gridsplit,
-                                tau=None, opacity=rend_opacity, verbose=False, fw=None)
+                                tau=None, opacity=rend_opacity, verbose=self.verbose, fw=None,stepsize=stepsize)
         else:
             print('I am so sorry... but you need pycuda:')
             print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
