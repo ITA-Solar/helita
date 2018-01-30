@@ -1220,9 +1220,10 @@ class BifrostData(object):
 
         if (zcut != None):
             for iz in range(0,self.nz):
-                if self.z[iz] > zcut:
-                    izcut = i
-            dem[:,:,:izcut]
+                if self.z[iz] < zcut:
+                    izcut = iz
+            dem[:,:,izcut:] = 0.0
+        print(np.max(dem[:,:,0:izcut]),np.max(dem[:,:,izcut:]),self.z[0],self.z[izcut])
         return en * dem
 
     def get_emiss(self, spline, axis=2, order=1, *args, **kwargs):
