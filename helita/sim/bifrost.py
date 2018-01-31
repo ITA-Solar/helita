@@ -6,14 +6,14 @@ import numpy as np
 import os
 from glob import glob
 from . import cstagger
-# import numba
+import numba
 import scipy as sp
 
 class BifrostData(object):
     """
     Reads data from Bifrost simulations in native format.
     """
-
+    snap=None
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
                  verbose=True, cstagop=True, dtype='f4', big_endian=False,
                  ghost_analyse=False):
@@ -379,7 +379,7 @@ class BifrostData(object):
         #self.params = self.paramList
         return value
 
-    def get_var(self, var, snap=None, *args, **kwargs):
+    def get_var(self, var, snap=None, iix = slice(None), iiy = slice(None), iiz = slice(None), *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -394,24 +394,70 @@ class BifrostData(object):
         """
         if self.verbose:
             print('(get_var): reading ',var)
+
+        self.iix = iix
+        self.iiy = iiy
+        self.iiz = iiz
+
+        self.xLength = np.size(self.iix)
+        self.yLength = np.size(self.iiy)
+        self.zLength = np.size(self.iiz)
+
+        self.xInd = 0
+        self.yInd = 0
+        self.zInd = 0
+
+        for dim in ('iix', 'iiy', 'iiz'):
+            if getattr(self, dim) == slice(None):
+                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                setattr(self, dim[2] + 'Ind', slice(None))
+            else:
+                indSize = np.size(getattr(self, dim))
+                setattr(self, dim[2] + 'Length', indSize)
+                if indSize > 1:
+                    setattr(self, dim[2] + 'Ind', slice(None))
+                elif indSize == 1:
+                    temp = np.asarray(getattr(self, dim))
+                    setattr(self, dim, temp.item())
+
         if var in ['x','y','z']:
             return getattr(self,var)
+
+        if (snap is not None) and (snap != self.snap):
+            self.set_snap(snap)
+
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
         if var in self.simple_vars:  # is variable already loaded?
-            return self._get_simple_var(var, *args, **kwargs)
+            val = self._get_simple_var(var, *args, **kwargs)
         elif var in self.auxxyvars:
-            return self._get_simple_var_xy(var, *args, **kwargs)
+            val = self._get_simple_var_xy(var, *args, **kwargs)
         elif var in self.compvars:  # add to variable list
             self.variables[var] = self._get_composite_var(var, *args, **kwargs)
             setattr(self, var, self.variables[var])
-            return self.variables[var]
+            val = self.variables[var]
         else:
             '''raise ValueError(
                 ("get_var: could not read variable %s. Must be "
                  "one of %s" %
                  (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
-            return self._get_quantity(var, *args, **kwargs)
+            val = self._get_quantity(var, *args, **kwargs)
+
+        value = np.empty([self.xLength, self.yLength, self.zLength])
+
+        if np.size(self.iix) > 1 or np.size(self.iiy) > 1 or np.size(self.iiz) > 1:
+            axes = [0, -2, -1]
+            temp = val
+
+            for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
+                if getattr(self, dim) != slice(None):
+                    temp = temp.take(getattr(self, dim), axis = axes[counter])
+                    print(temp.shape)
+            value[self.xInd, self.yInd, self.zInd] = temp
+        else:
+            value[self.xInd, self.yInd, self.zInd] = val[self.iix, self.iiy, self.iiz]
+
+        return value
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -909,24 +955,55 @@ class BifrostData(object):
             print('1, install latest CUDA at https://developer.nvidia.com/cuda-downloads')
             print('2, pycuda: https://wiki.tiker.net/PyCuda/Installation no warranty that this will work on non-NVIDIA')
 
-    def save_intny(self, spline, nlamb = 141, axis =2, rend_opacity = False, dopp_width_range=5e1, azimuth=None,
-                    altitude=None, ooe = False, *args, **kwargs):
+    def save_intny(self, spline, snap=None, nlamb = 141, axis =2, rend_opacity = False, dopp_width_range=5e1, azimuth=None,
+                    altitude=None, ooe = False, stepsize = 0.01, *args, **kwargs):
         """
         Calculate and dave profiles in a binary file.
         """
-        intny = self.get_intny(spline, nlamb = nlamb, axis =axis, rend_opacity = rend_opacity, dopp_width_range=dopp_width_range, azimuth=azimuth,
-                        altitude=altitude, ooe = ooe)
+        import time
+        nlines=np.size(spline)
+        if (snap is None):
+            snap=self.snap
 
-        # make file
-        savedFile = open(spline+"it"+str(self.snap)+".bin", "wb")
-        # write to file
-        nx=np.shape(intny[0])[0]
-        ny=np.shape(intny[0])[1]
-        nwvl=np.shape(intny[0])[2]
-        savedFile.write(np.array((nwvl,nx,ny)))
-        savedFile.write(intny[1])
-        savedFile.write(intny[0])
-        savedFile.close()
+        nt=np.size(self.snap)
+        t0 = time.time()
+        for it in range(0,nt):
+            self.set_snap(snap[it])
+            t1 = time.time()
+            if (nlines == 1):
+                intny = self.get_intny(spline, nlamb = nlamb, axis =axis, rend_opacity = rend_opacity, dopp_width_range=dopp_width_range, azimuth=azimuth,
+                        altitude=altitude, ooe = ooe, stepsize = stepsize)
+
+                # make file
+                savedFile = open(spline+"it"+str(self.snap)+".bin", "wb")
+                # write to file
+                nx=np.shape(intny[0])[0]
+                ny=np.shape(intny[0])[1]
+                nwvl=np.shape(intny[0])[2]
+                savedFile.write(np.array((nwvl,nx,ny)))
+                savedFile.write(intny[1])
+                savedFile.write(intny[0])
+                savedFile.close()
+            else:
+                for iline in range(0,nlines):
+                    t2 = time.time()
+                    intny = self.get_intny(spline[iline], nlamb = nlamb, axis =axis, rend_opacity = rend_opacity, dopp_width_range=dopp_width_range, azimuth=azimuth,
+                            altitude=altitude, ooe = ooe, stepsize = stepsize)
+
+                    # make file
+                    savedFile = open(spline[iline]+"it"+str(self.snap)+".bin", "wb")
+                    # write to file
+                    nx=np.shape(intny[0])[0]
+                    ny=np.shape(intny[0])[1]
+                    nwvl=np.shape(intny[0])[2]
+                    savedFile.write(np.array((nwvl,nx,ny)))
+                    savedFile.write(intny[1])
+                    savedFile.write(intny[0])
+                    savedFile.close()
+                    print(it,spline[iline],time.time()-t2)
+            print(it,time.time()-t1)
+        print('done,',spline[iline],time.time()-t0)
+
 
     def get_int(self, spline, axis =2, rend_opacity = False, azimuth=None,
                     altitude=None, ooe = False, *args, **kwargs):
@@ -1087,8 +1164,7 @@ class BifrostData(object):
         nvel = len(vel_axis)
         ntg = len(tg_axis)
         vdem = np.zeros((ntg,nvel,nx,ny))
-        from datetime import datetime
-        print(str(datetime.now()))
+
         for itg in range(0,ntg-1):
             ems_temp = ems*1.0
             print('itg =',itg)
@@ -1106,11 +1182,10 @@ class BifrostData(object):
                     for iy in range(0,ny):
                         vdem[itg,ivel,ix,iy]= np.sum(ems_temp_v[ix,iy,:])
 
-        print(str(datetime.now()))
         return vdem
 
-
-    def get_vdem(self, order=1, axis=2, vel_axis = np.linspace(- 20,20,20), tg_axis = np.linspace(4,9,25)):
+    @numba.jit(nopython=True, parallel=True)
+    def get_vdem(self, order=1, axis=2, vel_axis = np.linspace(- 20,20,20), tg_axis = np.linspace(4,9,25),zcut=None):
         """
         Calculates emissivity (EM) as a funtion of temparature and velocity, i.e., VDEM.
 
@@ -1128,7 +1203,8 @@ class BifrostData(object):
         -----
             Uses cuda
         """
-        ems=self.get_dem(axis=axis,order=order)
+        t0=time.time()
+        ems=self.get_dem(axis=axis,order=order,zcut=zcut)
         tg=self.get_var('tg')
         if axis == 0:
             vel=self.get_var('ux')
@@ -1152,8 +1228,7 @@ class BifrostData(object):
         nvel = len(vel_axis)
         ntg = len(tg_axis)
         vdem = np.zeros((ntg,nvel,nx,ny))
-        from datetime import datetime
-        print(str(datetime.now()))
+
         for itg in range(0,ntg-1):
             ems_temp = ems*1.0
             print('itg =',itg)
@@ -1170,8 +1245,7 @@ class BifrostData(object):
                 for ix in range(0,nx):
                     for iy in range(0,ny):
                         vdem[itg,ivel,ix,iy]= np.sum(ems_temp_v[ix,iy,:])
-
-        print(str(datetime.now()))
+        print(time.time()-t0)
         return vdem
 
     def get_dem(self,  axis=2, order=1, zcut=None, *args, **kwargs):
@@ -1223,7 +1297,7 @@ class BifrostData(object):
                 if self.z[iz] < zcut:
                     izcut = iz
             dem[:,:,izcut:] = 0.0
-        print(np.max(dem[:,:,0:izcut]),np.max(dem[:,:,izcut:]),self.z[0],self.z[izcut])
+
         return en * dem
 
     def get_emiss(self, spline, axis=2, order=1, *args, **kwargs):
@@ -2151,3 +2225,106 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
     result = ndimage.map_coordinates(
         tt['ne_rt_table'], [x, y], order=order, mode='nearest')
     return 10**result * rho / tt['grph']
+
+def VDEMSInversionCode(w171='/sanhome/juanms/Bifrost/PYTHON/MUSE/muse_vdem_basis_171.genx',
+                        w108='/sanhome/juanms/Bifrost/PYTHON/MUSE/muse_vdem_basis_108.genx',
+                        w284='/sanhome/juanms/Bifrost/PYTHON/MUSE/muse_vdem_basis_284.genx',
+                        vdemfile='/Volumes/Amnesia/mpi3drun/Viggo_en024031_emer3.0/vdems_640_Vel_200_21_Temp55-75_21.npz'):
+
+    import imp
+    from sunpy.io.special import read_genx
+    import matplotlib.pyplot as plt
+    from sklearn import linear_model
+    import time
+
+    try:
+        imp.find_module('numba')
+        found = True
+    except ImportError:
+        found = False
+
+    if found:
+        import numba
+
+    # VDEMs Inversion code
+    # the matrix of all basis vectors, one for each combination of lgT, vDop and slitnum position
+    def AMatrix(A,x,resp_shape):
+        # The detector signal y = Ax
+        y = np.matmul(A,x)
+
+        # Solve VDEMS using LASSO
+        clf = linear_model.LassoLars(alpha=0.0001,positive=True)
+        #clf = linear_model.LassoLars(fit_intercept=False,positive=True)
+        clf.fit(A, y)
+        xsol = clf.coef_
+        return  xsol.reshape(resp_shape[1:])
+
+    @numba.jit#(['float64[:, :, :, ::1](float64[:, :, :, ::1], float64[:, :, :, ::1], float64[::1])'])
+    def Invertarray(B, vdemsim, resp_shape):
+        nx=np.size(vdemsim[0,0,:,0])
+        ny=np.size(vdemsim[0,0,0,:])
+        nlogT = np.size(vdemsim[:,0,0,0])
+        nDop = np.size(vdemsim[0,:,0,0])
+        nvects = (resp_shape[1:]).prod()
+        vdem = np.zeros(resp_shape[1:],dtype=float) # [lgT, doppler v, slit]
+        vdemsol  = np.zeros((nlogT,nDop,35,ny))
+        for iy in range(0,ny):
+            for islit in range(0,resp_shape[1:][2]):
+                vdem[:,:,islit]=vdemsim[:,:,1+islit*5,iy] # [lgT, doppler v, slit]
+            #vdem[3,10,7] = 10 # [lgT, doppler v, slit]
+            #vdem[6,10,7] = 5 # [lgT, doppler v, slit]
+            # Reform VDEM into 1D vector
+            x = vdem.reshape(nvects)
+            # All three filters
+            vdemsol_pix = AMatrix(B,x,resp_shape)
+            print('pix',np.shape(vdemsol_pix),np.shape(vdemsol))
+            vdemsol[:,:,:,iy] = vdemsol_pix
+        return vdemsol
+
+    t0 = time.time()
+    sg171 = read_genx(w171) # First, we look at the 171 band
+
+    # response function shape (wvl, T, v, s).
+    resp_shape171 = np.array((np.array(sg171['RESP'])).shape)
+    ndet = resp_shape171[0]
+    nvects = (resp_shape171[1:]).prod()
+    lgtaxis = np.array(sg171['LGTAXIS'])
+    dopaxis = np.array(sg171['DOPAXIS'])
+    slitaxis= np.array(sg171['SLITAXIS'])
+
+    # Read in precomputed response functions for 108 and 284, from muse_resp.pro in IDL
+    sg108 = read_genx(w108) # Latter, we will add into the Matrix 108 band
+    sg284 = read_genx(w284) # and 284 band
+    #JMS: I need to add check that size and
+    resp_shape108 = np.array((np.array(sg108['RESP'])).shape)
+    resp_shape284 = np.array((np.array(sg284['RESP'])).shape)
+    #if (resp_shape108 != resp_shape171) or (resp_shape108 != resp_shape171):
+        #print('(WWW) VDEMSInversionCode: The reponse functions have different format')
+    print('reading response functions',time.time()-t0)
+
+    t0 = time.time()
+    # B is the matrix of all basis vectors, one for each combination of lgT, vDop and slitnum position combining all three windows.
+    B=np.array((sg171['RESP'].reshape((ndet,(resp_shape171[1:]).prod() ))),dtype=float)
+    B=np.append(B,np.array((sg108['RESP'].reshape((ndet,(resp_shape108[1:]).prod() ))),dtype=float),axis=0)
+    B=np.append(B,np.array((sg284['RESP'].reshape((ndet,(resp_shape284[1:]).prod() ))),dtype=float),axis=0)
+    print('Building matrix',time.time()-t0)
+
+    t0 = time.time()
+    # precalculated VDEMs from Bifrost snapshot.
+    # In LMSAL we can access to the full domain vdem:
+    # /net/opal/Volumes/Amnesia/mpi3drun/Viggo_en024031_emer3.0/vdems_640_Vel_200_21_Temp55-75_21.npz
+    # Otherwise, the muse_science online file has 2 grid points in the y direction (not contiguos) and all along x.
+    vdem_str=np.load(vdemfile)
+    vdemsim=vdem_str['vdem.npy']/1e20
+    vel_axis=vdem_str['vel_axis.npy']*10 # 10 is the conversion from Bifrost units to km/s
+    tg_axis=vdem_str['tg_axis.npy']
+    ndop = np.size(vel_axis)
+    nlnt = np.size(tg_axis)
+    print('Loading VDEM took',time.time()-t0)
+
+    t0 = time.time()
+    # Inverting
+    print(np.shape(B), np.shape(vdemsim), np.shape(resp_shape171))
+    vdemsol = Invertarray(B, vdemsim, resp_shape171)
+    print('inversion took',time.time()-t0)
+    return vdemsol, vdemsim
