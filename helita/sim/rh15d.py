@@ -30,7 +30,7 @@ class Rh15dout:
         GROUPS = [g for g in f.keys() if type(f[g]) == h5py._hl.group.Group]
         f.close()
         for g in GROUPS:
-            setattr(self, g, xr.open_dataset(infile, group=g))
+            setattr(self, g, xr.open_dataset(infile, group=g, autoclose=True))
             self.files.append(getattr(self, g))
         if self.verbose:
             print(('--- Read %s file.' % infile))
