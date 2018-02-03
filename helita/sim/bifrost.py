@@ -603,12 +603,16 @@ class BifrostData(object):
         quant = quant.lower()
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
         CENTRE_QUANT = ['xc', 'yc', 'zc']
-        MODULE_QUANT = ['mod']
+        MODULE_QUANT = ['mod','h']
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
         EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt']
         PROJ_QUANT = ['par', 'per']
         TOPO_QUANT = ['qfac', 'alt', 'integrate', 'conn']
+        CURRENT_QUANT = ['ix','iy','iz','wx','wy','wz']
+        FLUX_QUANT = ['pfx','pfy','pfz','pfex','pfey','pfez','pfwx','pfwy','pfwz',
+                     'hx','hy','hz','kx','ky','kz']
+        PLASMA_QUANT = ['beta','va','cs','s','mn','man','hp','vax','vay','vaz']
 
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
@@ -821,6 +825,78 @@ class BifrostData(object):
 
             else:
                 raise ValueError(('This machine does not have cuda.'))
+        elif quant in CURRENT_QUANT:
+            # Calculate derivative of quantity
+            axis = quant[-1]
+            if quant[0] == 'i':
+                q='b'
+            else:
+                q='u'
+            try:
+                var = getattr(self, quant)
+            except AttributeError:
+                if axis == 'x':
+                    varsn= ['z','y']
+                    derv = ['ddydn','ddzdn']
+                elif axis == 'y':
+                    varsn= ['x','z']
+                    derv = ['ddzdn','ddxdn']
+                elif axis == 'z':
+                    varsn= ['y','x']
+                    derv = ['ddxdn','ddydn']
+                var = self.get_var(q+varsn[0])
+                if (getattr(self, 'n' + varsn[0]) < 5) or (getattr(self, 'n' + varsn[1]) < 5):  # 2D or close
+                    return np.zeros_like(var)
+                else:
+                    return cstagger.do(var, derv[0]) - cstagger.do(self.get_var(q+varsn[1]), derv[1])
+        elif quant in FLUX_QUANT:
+            axis=quant[1]
+            if axis == 'x':
+                varsn= ['z','y']
+            elif axis == 'y':
+                varsn= ['x','z']
+            elif axis == 'z':
+                varsn= ['y','x']
+            if 'pfw' in quant or len(quant) == 3:
+                var = self.get_var('b'+axis+'c')*(self.get_var('u'+varsn[0]+'c') * self.get_var('b'+varsn[0]+'c')+
+                                                  self.get_var('u'+varsn[1]+'c') * self.get_var('b'+varsn[1]+'c'))
+
+            elif 'pfe' in quant or len(quant) == 3:
+                var += self.get_var('u'+axis+'c')*(self.get_var('b'+varsn[0]+'c')**2+self.get_var('b'+varsn[1]+'c')**2)
+        elif quant in PLASMA_QUANT:
+            if quant in ['hp','s','cs','beta']:
+                var = self.get_var('p')
+                if quant == 'hp':
+                    if (getattr(self, 'nx') < 5):
+                        return np.zeros_like(var)
+                    else:
+                        return 1./(cstagger.do(var,'ddzup')+1e-12)
+                elif quant == 'cs':
+                    return np.sqrt(self.params['gamma'][0]*var/self.get_var('r'))
+                elif quant == 's':
+                    return np.log(var) - self.params['gamma'][0]*np.log(self.get_var('r'))
+                elif quant == 'beta':
+                    return 2*var/self.get_var('b2')
+            if quant in ['mn','man']:
+                var = self.get_var('modu')
+                if quant == 'mn':
+                    return var/(self.get_var('cs')+1e-12)
+                else:
+                    return var/(self.get_var('va')+1e-12)
+            if quant in ['va','vax','vay','vaz']:
+                var = self.get_var('r')
+                if len(quant) == 2:
+                    return self.get_var('modb')/np.sqrt(var)
+                else:
+                    axis = quant[-1]
+                    return np.sqrt(self.get_var('b'+axis+'c')**2/var)
+            if quant in ['hx','hy','hz','kx','ky','kz']:
+                axis=quant[-1]
+                var=self.get_var('p'+axis+'c')
+                if quant[0] == 'h':
+                    return (self.get_var('e')+self.get_var('p'))/self.get_var('r')*var
+                else:
+                    return self.get_var('u2')*var*0.5
 
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
@@ -1002,7 +1078,8 @@ class BifrostData(object):
                     savedFile.close()
                     print(it,spline[iline],time.time()-t2)
             print(it,time.time()-t1)
-        print('done,',spline[iline],time.time()-t0)
+        if (self.verbose):
+            print('done,',spline[iline],time.time()-t0)
 
 
     def get_int(self, spline, axis =2, rend_opacity = False, azimuth=None,
@@ -1184,7 +1261,6 @@ class BifrostData(object):
 
         return vdem
 
-    @numba.jit(nopython=True, parallel=True)
     def get_vdem(self, order=1, axis=2, vel_axis = np.linspace(- 20,20,20), tg_axis = np.linspace(4,9,25),zcut=None):
         """
         Calculates emissivity (EM) as a funtion of temparature and velocity, i.e., VDEM.
@@ -1203,7 +1279,6 @@ class BifrostData(object):
         -----
             Uses cuda
         """
-        t0=time.time()
         ems=self.get_dem(axis=axis,order=order,zcut=zcut)
         tg=self.get_var('tg')
         if axis == 0:
@@ -1245,7 +1320,7 @@ class BifrostData(object):
                 for ix in range(0,nx):
                     for iy in range(0,ny):
                         vdem[itg,ivel,ix,iy]= np.sum(ems_temp_v[ix,iy,:])
-        print(time.time()-t0)
+
         return vdem
 
     def get_dem(self,  axis=2, order=1, zcut=None, *args, **kwargs):
@@ -1269,8 +1344,6 @@ class BifrostData(object):
         #mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
         import pickle
         units = bifrost_units()
-        CC = units.CLIGHT.value* units.CM_TO_M # 2.99792458e8 m/s
-        CCA = CC * 1e10 # AA/s
         GRPH = 2.27e-24
 
         import scipy.ndimage as ndimage
@@ -1290,14 +1363,14 @@ class BifrostData(object):
 
         for ix in range(0,self.nx):
             for iy in range(0,self.ny):
-                dem[ix,iy,:] = ds*nh[ix,iy,:]
+                dem[ix,iy,:] = ds*nh[ix,iy,:]/1e40
 
         if (zcut != None):
             for iz in range(0,self.nz):
                 if self.z[iz] < zcut:
                     izcut = iz
             dem[:,:,izcut:] = 0.0
-
+        print(np.max(en),np.max(dem))
         return en * dem
 
     def get_emiss(self, spline, axis=2, order=1, *args, **kwargs):
@@ -2226,9 +2299,9 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
         tt['ne_rt_table'], [x, y], order=order, mode='nearest')
     return 10**result * rho / tt['grph']
 
-def VDEMSInversionCode(w171='/sanhome/juanms/Bifrost/PYTHON/MUSE/muse_vdem_basis_171.genx',
-                        w108='/sanhome/juanms/Bifrost/PYTHON/MUSE/muse_vdem_basis_108.genx',
-                        w284='/sanhome/juanms/Bifrost/PYTHON/MUSE/muse_vdem_basis_284.genx',
+def VDEMSInversionCode(w171='/Users/juanms/mpi3d/Bifrost/IDL/MUSE/muse_vdem_basis_171_ndop21_dop0_-250.000_ntg21_tg_4.00000_8.00000.genx',
+                        w108='/Users/juanms/mpi3d/Bifrost/IDL/MUSE/muse_vdem_basis_108_ndop21_dop0_-250.000_ntg21_tg_4.00000_8.00000.genx',
+                        w284='/Users/juanms/mpi3d/Bifrost/IDL/MUSE/muse_vdem_basis_284_ndop21_dop0_-250.000_ntg21_tg_4.00000_8.00000.genx',
                         vdemfile='/Volumes/Amnesia/mpi3drun/Viggo_en024031_emer3.0/vdems_640_Vel_200_21_Temp55-75_21.npz'):
 
     import imp
@@ -2259,7 +2332,7 @@ def VDEMSInversionCode(w171='/sanhome/juanms/Bifrost/PYTHON/MUSE/muse_vdem_basis
         xsol = clf.coef_
         return  xsol.reshape(resp_shape[1:])
 
-    @numba.jit#(['float64[:, :, :, ::1](float64[:, :, :, ::1], float64[:, :, :, ::1], float64[::1])'])
+    #@numba.jit#(['float64[:, :, :, ::1](float64[:, :, :, ::1], float64[:, :, :, ::1], float64[::1])'])
     def Invertarray(B, vdemsim, resp_shape):
         nx=np.size(vdemsim[0,0,:,0])
         ny=np.size(vdemsim[0,0,0,:])
