@@ -408,9 +408,18 @@ class BifrostData(object):
         self.zInd = 0
 
         for dim in ('iix', 'iiy', 'iiz'):
-            if getattr(self, dim) == slice(None):
-                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                setattr(self, dim[2] + 'Ind', slice(None))
+            if np.size(getattr(self, dim)) == 1:
+                if getattr(self, dim) == slice(None):
+                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                    setattr(self, dim[2] + 'Ind', slice(None))
+                else:
+                    indSize = np.size(getattr(self, dim))
+                    setattr(self, dim[2] + 'Length', indSize)
+                    if indSize > 1:
+                        setattr(self, dim[2] + 'Ind', slice(None))
+                    elif indSize == 1:
+                        temp = np.asarray(getattr(self, dim))
+                        setattr(self, dim, temp.item())
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
