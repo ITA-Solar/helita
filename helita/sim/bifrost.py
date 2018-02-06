@@ -1005,7 +1005,7 @@ class BifrostData(object):
             from br_ioni import RenderGUI
 
             if opts.rendtype == 'tdi': # OOE along any angle
-                from br_ioni_noeos import TDIEmRenderer
+                from br_ioni import TDIEmRenderer
                 #from br_ioni import TDIEmRenderer
                 tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
                              askopenfilename(title='Time-dependent Ionization Paramfile'))
@@ -1013,12 +1013,12 @@ class BifrostData(object):
                 s = TDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap, cstagop=self.cstagop)
             else:
                 if opts.rendtype == 'sastatic': # Statistical Equibilibrium along specific axis, i.e., x, y or z
-                    from br_ioni_noeos import SAStaticEmRenderer
+                    from br_ioni import SAStaticEmRenderer
                     #from br_ioni import SAStaticEmRenderer
                     s = SAStaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap,cstagop=self.cstagop)
                 else:
                     if opts.rendtype == 'satdi': # OOE along specific axis, i.e., x, y or z
-                        from br_ioni_noeos import SATDIEmRenderer
+                        from br_ioni import SATDIEmRenderer
                         #from br_ioni import SATDIEmRenderer
                         tdi_paramfile_abs = (opts.tdiparam if opts.tdiparam else
                         askopenfilename(title='Time-dependent Ionization Paramfile'))
@@ -1026,7 +1026,7 @@ class BifrostData(object):
 
                         s = SATDIEmRenderer(data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap,cstagop=self.cstagop)
                     else: # Statistical Equibilibrium along any direction
-                        from br_ioni_noeos import StaticEmRenderer
+                        from br_ioni import StaticEmRenderer
                         #from br_ioni import StaticEmRenderer
                         s = StaticEmRenderer(snap_range, acont_filenames, template, data_dir=data_dir, snap=opts.snap,cstagop=self.cstagop)
 
