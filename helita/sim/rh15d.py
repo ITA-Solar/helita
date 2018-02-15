@@ -43,7 +43,7 @@ class Rh15dout:
                 infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
             return
-        self.ray = xr.open_dataset(infile)
+        self.ray = xr.open_dataset(infile, autoclose=True)
         self.files.append(self.ray)
         if self.verbose:
             print(('--- Read %s file.' % infile))
@@ -52,6 +52,9 @@ class Rh15dout:
         ''' Closes the open files '''
         for f in self.files:
             f.close()
+
+    def __del__(self):
+        self.close()
 
 
 class HDF5Atmos:
