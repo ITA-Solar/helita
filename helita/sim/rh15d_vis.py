@@ -107,28 +107,31 @@ class SourceFunction:
             wavelength index.
             Returns height in Mm and closest indices of height array.
             """
-            h = self.rhobj.atmos.height_scale[x, y]
-            tau = cumtrapz(self.rhobj.ray.chi[x, y, :, wave], x=-h)
+            h = self.rhobj.atmos.height_scale[x, y].dropna('height')
+            tau = cumtrapz(self.rhobj.ray.chi[x, y, :, wave].dropna('height'),
+                           x=-h)
             tau = interp1d(tau, h[1:])(TAU_LEVELS)
             idx = np.around(interp1d(h, np.arange(h.shape[0]))(tau)).astype('i')
             return (tau / 1e6, idx)  # in Mm
 
         def _sf_plot():
             """Starts source function plot"""
-            sf = self.rhobj.ray.source_function[0, 0, :, 0]
-            height = self.rhobj.atmos.height_scale[0, 0] / 1e6  # in Mm
-            bplanck = planck(self.rhobj.ray.wavelength_selected[0],
-                             self.rhobj.atmos.temperature[0, 0], units='Hz')
+            obj = self.rhobj
+            sf = obj.ray.source_function[0, 0, :, 0].dropna('height')
+            height = obj.atmos.height_scale[0, 0].dropna('height') / 1e6  # in Mm
+            bplanck = planck(obj.ray.wavelength_selected[0],
+                             obj.atmos.temperature[0, 0].dropna('height'),
+                             units='Hz')
             fig, ax = plt.subplots()
             ax.plot(height, sf, 'b-', label=r'S$_\mathrm{total}$', lw=1)
             ax.set_yscale('log')
-            ax.plot(height, self.rhobj.ray.Jlambda[0, 0, :, 0], 'y-',
-                    label='J', lw=1)
+            ax.plot(height, obj.ray.Jlambda[0, 0, :, 0].dropna('height'),
+                    'y-', label='J', lw=1)
             ax.plot(height, bplanck, 'r--', label=r'B$_\mathrm{Planck}$',
                     lw=1)
             ax.set_xlabel("Height (Mm)")
             ax.set_ylabel(r"W m$^{-2}$ Hz$^{-1}$ sr$^{-1}$")
-            ax.set_title("%.3f nm" % self.rhobj.ray.wavelength_selected[0])
+            ax.set_title("%.3f nm" % obj.ray.wavelength_selected[0])
             lg = ax.legend(loc='upper center')
             lg.draw_frame(0)
             # tau annotations
@@ -144,23 +147,27 @@ class SourceFunction:
 
         ax = _sf_plot()
 
-        @interact(wavelength=(0, NWAVE, 1), y_log=True,
+        @interact(wavelength=(0, NWAVE - 1, 1), y_log=True,
                   x=xslider, y=xslider)
         def _sf_update(wavelength=0, y_log=True, x=0, y=0):
-            bplanck = planck(self.rhobj.ray.wavelength_selected[wavelength],
-                             self.rhobj.atmos.temperature[x, y], units='Hz')
-            quants = [self.rhobj.ray.source_function[x, y, :, wavelength],
-                      self.rhobj.ray.Jlambda[x, y, :, wavelength], bplanck]
+            obj = self.rhobj
+            bplanck = planck(obj.ray.wavelength_selected[wavelength],
+                             obj.atmos.temperature[x, y].dropna('height'),
+                             units='Hz')
+            quants = [obj.ray.source_function[x, y, :,
+                                              wavelength].dropna('height'),
+                      obj.ray.Jlambda[x, y, :, wavelength].dropna('height'),
+                      bplanck]
             for i, q in enumerate(quants):
                 ax.lines[i].set_ydata(q)
             ax.relim()
             ax.autoscale_view(True, True, True)
-            ax.set_title("%.3f nm" % self.rhobj.ray.wavelength_selected[wavelength])
+            ax.set_title("%.3f nm" % obj.ray.wavelength_selected[wavelength])
             # tau annotations:
             tau_v, h_idx = __get_tau_levels(x, y, wavelength)
             for i in range(len(TAU_LEVELS)):
                 xval = tau_v[i]
-                yval = self.rhobj.ray.source_function[x, y, h_idx[i], wavelength]
+                yval = quants[0][h_idx[i]]
                 ax.texts[i].xy = (xval, yval)
                 ax.texts[i].set_position((xval, yval / (0.2 - 0.03 * i)))
             if y_log:
