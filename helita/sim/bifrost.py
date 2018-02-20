@@ -379,7 +379,37 @@ class BifrostData(object):
         #self.params = self.paramList
         return value
 
-    def get_var(self, var, snap=None, iix = slice(None), iiy = slice(None), iiz = slice(None), *args, **kwargs):
+    def set_domain_iiaxis(self, iinum = slice(None), iiaxis='x'):
+
+        if iinum == None: iinum = slice(None)
+
+        dim='ii'+iiaxis
+        setattr(self,dim,iinum)
+        setattr(self,iiaxis+'Length',np.size(iinum))
+        setattr(self,iiaxis+'Ind',0)
+
+        if np.size(getattr(self, dim)) == 1:
+            if getattr(self, dim) == slice(None):
+                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                setattr(self, dim[2] + 'Ind', slice(None))
+            else:
+                indSize = np.size(getattr(self, dim))
+                setattr(self, dim[2] + 'Length', indSize)
+                if indSize > 1:
+                    setattr(self, dim[2] + 'Ind', slice(None))
+                elif indSize == 1:
+                    temp = np.asarray(getattr(self, dim))
+                    setattr(self, dim, temp.item())
+        else:
+            indSize = np.size(getattr(self, dim))
+            setattr(self, dim[2] + 'Length', indSize)
+            if indSize > 1:
+                setattr(self, dim[2] + 'Ind', slice(None))
+            elif indSize == 1:
+                temp = np.asarray(getattr(self, dim))
+                setattr(self, dim, temp.item())
+
+    def get_var(self, var, snap=None, iix = None, iiy = None, iiz = None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -395,39 +425,18 @@ class BifrostData(object):
         if self.verbose:
             print('(get_var): reading ',var)
 
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
+        if not hasattr(self,'iix'):
+            self.set_domain_iiaxis(iinum = iix, iiaxis='x')
+            self.set_domain_iiaxis(iinum = iiy, iiaxis='y')
+            self.set_domain_iiaxis(iinum = iiz, iiaxis='z')
 
-        self.xLength = np.size(self.iix)
-        self.yLength = np.size(self.iiy)
-        self.zLength = np.size(self.iiz)
-
-        self.xInd = 0
-        self.yInd = 0
-        self.zInd = 0
-
-        for dim in ('iix', 'iiy', 'iiz'):
-            if np.size(getattr(self, dim)) == 1:
-                if getattr(self, dim) == slice(None):
-                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                    setattr(self, dim[2] + 'Ind', slice(None))
-                else:
-                    indSize = np.size(getattr(self, dim))
-                    setattr(self, dim[2] + 'Length', indSize)
-                    if indSize > 1:
-                        setattr(self, dim[2] + 'Ind', slice(None))
-                    elif indSize == 1:
-                        temp = np.asarray(getattr(self, dim))
-                        setattr(self, dim, temp.item())
-            else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
-                if indSize > 1:
-                    setattr(self, dim[2] + 'Ind', slice(None))
-                elif indSize == 1:
-                    temp = np.asarray(getattr(self, dim))
-                    setattr(self, dim, temp.item())
+        else:
+            if (iix is not None) and (iix != self.iix):
+                self.set_domain_iiaxis(iinum = iix, iiaxis='x')
+            if (iiy is not None) and (iiy != self.iiy):
+                self.set_domain_iiaxis(iinum = iiy, iiaxis='y')
+            if (iiz is not None) and (iiz != self.iiz):
+                self.set_domain_iiaxis(iinum = iiz, iiaxis='z')
 
         if var in ['x','y','z']:
             return getattr(self,var)
@@ -435,8 +444,6 @@ class BifrostData(object):
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
 
-        if (snap is not None) and (snap != self.snap):
-            self.set_snap(snap)
         if var in self.simple_vars:  # is variable already loaded?
             val = self._get_simple_var(var, *args, **kwargs)
         elif var in self.auxxyvars:
@@ -452,21 +459,11 @@ class BifrostData(object):
                  (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
             val = self._get_quantity(var, *args, **kwargs)
 
-        value = np.empty([self.xLength, self.yLength, self.zLength])
-
-        if np.size(self.iix) > 1 or np.size(self.iiy) > 1 or np.size(self.iiz) > 1:
-            axes = [0, -2, -1]
-            temp = val
-
-            for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                if getattr(self, dim) != slice(None):
-                    temp = temp.take(getattr(self, dim), axis = axes[counter])
-                    print(temp.shape)
-            value[self.xInd, self.yInd, self.zInd] = temp
+        if np.shape(val) != (self.xLength,self.yLength,self.zLength):
+            return np.reshape(val[self.iix, self.iiy, self.iiz],(self.xLength,self.yLength,self.zLength))
         else:
-            value[self.xInd, self.yInd, self.zInd] = val[self.iix, self.iiy, self.iiz]
+            return val
 
-        return value
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -563,15 +560,15 @@ class BifrostData(object):
         Gets composite variables (will load into memory).
         """
         if var in ['ux', 'uy', 'uz']:  # velocities
-            p = self._get_simple_var('p' + var[1], order='F')
+            p = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
-                return p / self.r   # do not recentre for 2D cases (or close)
+                return p / self.get_var('r')   # do not recentre for 2D cases (or close)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / cstagger.do(self.r, var[1] + 'dn')
+                return p / cstagger.do(self.get_var('r'), var[1] + 'dn')
         elif var == 'ee':   # internal energy
-            return self.e / self.r
+            return self.get_var('e') / self.get_var('r')
         elif var == 's':   # entropy?
-            return np.log(self.p) - self.params['gamma'][self.snapInd] * np.log(self.r)
+            return np.log(self.get_var('p')) - self.params['gamma'] * np.log(self.get_var('r'))
         '''else:
             raise ValueError(('_get_composite_var: do not know (yet) how to'
                               'get composite variable %s.' % var))'''
@@ -637,34 +634,28 @@ class BifrostData(object):
             if q == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            if getattr(self, 'nx') < 5:  # 2D or close
-                result = getattr(self, q + 'x') ** 2
-            else:
-                result = self._get_quantity(q + 'xc') ** 2
-            if getattr(self, 'ny') < 5:  # 2D or close
-                result += getattr(self, q + 'y') ** 2
-            else:
-                result += self._get_quantity(q + 'yc') ** 2
-            if getattr(self, 'nz') < 5:  # 2D or close
-                result += getattr(self, q + 'z') ** 2
-            else:
-                result += self._get_quantity(q + 'zc') ** 2
+            result = self.get_var(q + 'xc') ** 2
+            result += self.get_var(q + 'yc') ** 2
+            result += self.get_var(q + 'zc') ** 2
+
             if quant[:3] in MODULE_QUANT:
                 return np.sqrt(result)
             elif quant[-1] in SQUARE_QUANT:
                 return result
+
         elif quant[0] == 'd' and quant[-4:] in DERIV_QUANT:
             # Calculate derivative of quantity
             axis = quant[-3]
             q = quant[1:-4]  # base variable
-            try:
-                var = getattr(self, q)
-            except AttributeError:
-                var = self.get_var(q)
+
+            var = self.get_var(q)
+
             if getattr(self, 'n' + axis) < 5:  # 2D or close
+                print(('(WWW) get_quantity:DERIV_QUANT: n%s < 5, derivative set to 0.0' % axis))
                 return np.zeros_like(var)
             else:
                 return cstagger.do(var, 'd' + quant[-4:])
+
         elif quant[-2:] in CENTRE_QUANT:
             # This brings a given vector quantity to cell centres
             axis = quant[-2]
@@ -678,11 +669,10 @@ class BifrostData(object):
                                   'y': ['yup'],
                                   'z': ['zup']}
             transf = AXIS_TRANSFORM[axis]
-            try:
-                var = getattr(self, q)
-            except AttributeError:
-                var = self.get_var(q)
-            if getattr(self, 'n' + axis) < 5:  # 2D or close
+
+            var = self.get_var(q)
+
+            if getattr(self, 'n' + axis) < 5 or self.cstagop == False :  # 2D or close
                 return var
             else:
                 if len(transf) == 2:
@@ -690,17 +680,14 @@ class BifrostData(object):
                     return cstagger.do(tmp, transf[1])
                 else:
                     return cstagger.do(var, transf[0])
+
         elif quant[:3] in DIV_QUANT:
             # Calculates divergence of vector quantity
             q = quant[3:]  # base variable
-            try:
-                varx = getattr(self, q + 'x')
-                vary = getattr(self, q + 'y')
-                varz = getattr(self, q + 'z')
-            except AttributeError:
-                varx = self.get_var(q + 'x')
-                vary = self.get_var(q + 'y')
-                varz = self.get_var(q + 'z')
+            varx = self.get_var(q + 'x')
+            vary = self.get_var(q + 'y')
+            varz = self.get_var(q + 'z')
+
             if getattr(self, 'nx') < 5:  # 2D or close
                 result = np.zeros_like(varx)
             else:
@@ -710,6 +697,7 @@ class BifrostData(object):
             if getattr(self, 'nz') > 5:
                 result += cstagger.ddzup(varz)
             return result
+
         elif quant in EOSTAB_QUANT:
             # unit conversion to SI
             ur = self.params['u_r'][self.snapInd]         # to g/cm^3  (for ne_rt_table)
@@ -731,17 +719,18 @@ class BifrostData(object):
             eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
             return eostab.tab_interp(
                 rho, ee, order=1, out=quant) * 1.e6  # cm^-3 to m^-3
+
         elif quant[1:4] in PROJ_QUANT:
             # projects v1 onto v2
             v1 = quant[0]
             v2 = quant[4]
 
-            x1 = self._get_quantity(v1 + 'xc', self.snap)
-            y1 = self._get_quantity(v1 + 'yc', self.snap)
-            z1 = self._get_quantity(v1 + 'zc', self.snap)
-            x2 = self._get_quantity(v2 + 'xc', self.snap)
-            y2 = self._get_quantity(v2 + 'yc', self.snap)
-            z2 = self._get_quantity(v2 + 'zc', self.snap)
+            x1 = self.get_var(v1 + 'xc', self.snap)
+            y1 = self.get_var(v1 + 'yc', self.snap)
+            z1 = self.get_var(v1 + 'zc', self.snap)
+            x2 = self.get_var(v2 + 'xc', self.snap)
+            y2 = self.get_var(v2 + 'yc', self.snap)
+            z2 = self.get_var(v2 + 'zc', self.snap)
 
             v2Mag = np.sqrt(x2**2 + y2**2 + z2**2)
             v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
@@ -830,10 +819,9 @@ class BifrostData(object):
                     q.init_q()
                     var[:,:,iz]=q.calculate_q(iz)
                 return var
-
-
             else:
                 raise ValueError(('This machine does not have cuda.'))
+
         elif quant in CURRENT_QUANT:
             # Calculate derivative of quantity
             axis = quant[-1]
@@ -858,8 +846,9 @@ class BifrostData(object):
                     return np.zeros_like(var)
                 else:
                     return cstagger.do(var, derv[0]) - cstagger.do(self.get_var(q+varsn[1]), derv[1])
+
         elif quant in FLUX_QUANT:
-            axis=quant[1]
+            axis=quant[-1]
             if axis == 'x':
                 varsn= ['z','y']
             elif axis == 'y':
@@ -872,6 +861,8 @@ class BifrostData(object):
 
             elif 'pfe' in quant or len(quant) == 3:
                 var += self.get_var('u'+axis+'c')*(self.get_var('b'+varsn[0]+'c')**2+self.get_var('b'+varsn[1]+'c')**2)
+            return var
+
         elif quant in PLASMA_QUANT:
             if quant in ['hp','s','cs','beta']:
                 var = self.get_var('p')
@@ -886,12 +877,14 @@ class BifrostData(object):
                     return np.log(var) - self.params['gamma'][0]*np.log(self.get_var('r'))
                 elif quant == 'beta':
                     return 2*var/self.get_var('b2')
+
             if quant in ['mn','man']:
                 var = self.get_var('modu')
                 if quant == 'mn':
                     return var/(self.get_var('cs')+1e-12)
                 else:
                     return var/(self.get_var('va')+1e-12)
+
             if quant in ['va','vax','vay','vaz']:
                 var = self.get_var('r')
                 if len(quant) == 2:
@@ -899,6 +892,7 @@ class BifrostData(object):
                 else:
                     axis = quant[-1]
                     return np.sqrt(self.get_var('b'+axis+'c')**2/var)
+
             if quant in ['hx','hy','hz','kx','ky','kz']:
                 axis=quant[-1]
                 var=self.get_var('p'+axis+'c')
