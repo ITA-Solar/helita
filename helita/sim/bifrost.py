@@ -1063,6 +1063,8 @@ class BifrostData(object):
                 savedFile.write(intny[1])
                 savedFile.write(intny[0])
                 savedFile.close()
+                if (self.verbose):
+                    print('done ',spline,' it=',it,',time used:',time.time()-t0)                
             else:
                 for iline in range(0,nlines):
                     t2 = time.time()
@@ -1080,9 +1082,10 @@ class BifrostData(object):
                     savedFile.write(intny[0])
                     savedFile.close()
                     print(it,spline[iline],time.time()-t2)
-            print(it,time.time()-t1)
-        if (self.verbose):
-            print('done,',spline[iline],time.time()-t0)
+                    if (self.verbose):
+                        print('done ',spline[iline],' it=',it,',time used:',time.time()-t0)
+        print(it,time.time()-t1)
+ 
 
 
     def get_int(self, spline, axis =2, rend_opacity = False, azimuth=None,
