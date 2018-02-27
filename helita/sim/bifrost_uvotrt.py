@@ -4,7 +4,7 @@ Set of programs to read and interact with output from BifrostData simulations fo
 
 import numpy as np
 import os
-from .sim/bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph, bifrost_units
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph, bifrost_units
 from . import cstagger
 from glob import glob
 import scipy as sp
