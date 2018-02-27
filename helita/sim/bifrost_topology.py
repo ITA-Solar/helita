@@ -100,8 +100,8 @@ class TopologyData(BifrostData):
         else:
             raise ValueError(('get_topology: do not know (yet) how to '
                               'calculate quantity %s. Note that get_topology '
-                              'available variables are: %s.\n
-                              ' see e.g. self.get_topology? for guidance'
+                              'available variables are: %s.\n'
+                              'see e.g. self.get_topology? for guidance'
                               '.' % (quant, repr(TOPO_QUANT))))
 
 class q_options:
