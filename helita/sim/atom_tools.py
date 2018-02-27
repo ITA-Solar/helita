@@ -275,7 +275,7 @@ class atom_tools(object):
             import ChiantiPy.core as ch
             ion = ch.ion(self.atom + '_' + str(self.stage))
             self.ion=ion
-            self.z = ion.Z
+            self.Z = ion.Z
         else:
 
             if ((self.atom_file=='') > 0) and (len(self.atom)>0):
@@ -493,6 +493,7 @@ class atom_tools(object):
             keylist = self.keyword_atomic
         else:
             keylist = GENCOL_KEY.lower()
+        if np.size(keylist) == 1: keylist = [keylist]
 
         for keyword in keylist:
             if keyword == 'shull82':
@@ -504,8 +505,9 @@ class atom_tools(object):
 
             elif keyword == 'voronov': # mcwhirter65
                 vfac = 2.6e-19
-                Z = get_atomZ(self.vor_param['atom'])
-                cdn = vfac * np.sqrt(1.0 / TeV) * Z**2 + cdn
+                self.stage = 1
+                self.get_atomZ()
+                cdn = vfac * np.sqrt(1.0 / TeV) * self.Z**2 + cdn
 
         self.cdn = cdn
 
@@ -721,8 +723,13 @@ class atom_tools(object):
                 A=np.zeros((nlevels,nlevels))
                 igen = 0
                 for ilev in range(0,nlevels-1):
+                    if hasattr(self,'cdn'):
+                        delattr(self,'cdn')
+                    if hasattr(self,'cup'):
+                        delattr(self,'cup')
                     self.vrec(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,threebody=threebody,GENCOL_KEY=GENCOL_KEY)
                     self.vion(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,GENCOL_KEY=GENCOL_KEY)
+                    #print(nelf[ipoint],tef[ipoint],self.cdn,self.cup)
                     if igen == 0: ## JMS Not sure what is that for....
                         Rip = self.frec
                     else:
@@ -1075,9 +1082,7 @@ class atom_tools(object):
                 elif(line[0].strip().lower() == 'voronov'):
                     key = line[0].strip().lower()
                     line, lp = readnextline(lines, lp)
-                    print(line,lp)
                     z = int(line[0].strip())
-                    print('z',z)
                     vorpar = np.zeros((z, 7))
                     for iterv in range(0,z):
                         line, lp = readnextline(lines, lp)
@@ -1416,13 +1421,20 @@ def add_voro_atom(
 
     # where I need to add a check if atom is the same as the one in the atom
     # file or even better use directly the atom file info for this.
-    Z = get_atomZ(atom=atom + strat)
+    atominfo=atom_tools(atom_file=inputfile)
+    atominfo.get_atomZ(atom=atom + strat)
+                #tr_line=np.where(atominfo.params['voronov'][0][:,0] == lo_lvl+1)
+                #phion = self.params['voronov'][0][tr_line[0],2] # get_atomde(atom, Chianti=False)  # 13.6
+                #A = self.params['voronov'][0][tr_line[0],4] * 1e6 # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
+                #X = self.params['voronov'][0][tr_line[0],5] # get_atomX(atom)  # 0.232
+                #K = self.params['voronov'][0][tr_line[0],6] # get_atomK(atom)  # 0.39
+                #P = self.params['voronov'][0][tr_line[0],3] # get_atomP(atom)  # 0
 
-    f.write(str(Z) + "\n")
+    f.write(str(atominfo.Z) + "\n")
     jj = 1
     f.write('#   i    j    dE(eV)     P  A(cm3/s)   X      K  \n')
     for ii in range(0, params['NLVLS_MAX'][0]):
-        if (Z == int(params['SPECIES'][ii, 0])) and jj < nk:
+        if (atominfo.Z == int(params['SPECIES'][ii, 0])) and jj < nk:
             strat = ''
             if len(
                     ''.join(x for x in params['SPECIES'][ii, 1] if x.isdigit())) == 0:
