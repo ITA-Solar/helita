@@ -1075,7 +1075,9 @@ class atom_tools(object):
                 elif(line[0].strip().lower() == 'voronov'):
                     key = line[0].strip().lower()
                     line, lp = readnextline(lines, lp)
+                    print(line,lp)
                     z = int(line[0].strip())
+                    print('z',z)
                     vorpar = np.zeros((z, 7))
                     for iterv in range(0,z):
                         line, lp = readnextline(lines, lp)
