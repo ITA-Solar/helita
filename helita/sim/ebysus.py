@@ -57,8 +57,8 @@ class EbysusData(BifrostData):
             if self.mf_total_nlevel == 1:
                 self.snapvars.append('e')
 
-        self.simple_vars = self.snapvars + self.mhdvars # + self.auxvars + \
-            #self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
+        self.simple_vars = self.snapvars + self.mhdvars  + self.auxvars + \
+            self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
 
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
