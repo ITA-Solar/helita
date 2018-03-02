@@ -1470,7 +1470,7 @@ def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_
         ion = ch.ion(ionstr, temperature=temp,  eDensity=press[iden]/temp,abundance=abundance)
         ion.populate()
         ion.intensity()
-        ion.gofnt(wvlRange=wvlr,top=20,plot=False)
+        ion.gofnt(wvlRange=wvlr,top=1,plot=False)
         if iden == 0: print('Doing wvl=', ion.Gofnt['wvl'])
         gofnt[:,iden] = ion.Gofnt['gofnt']
 
@@ -1484,3 +1484,90 @@ def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_
     name=getattr(ion,'IonStr') + '_' + str(ion.Gofnt['wvl'])+'.opy'
     filehandler = open(path+name, 'wb')
     pickle.dump(ion, filehandler)
+
+def add_goftab(filenames=None):
+    import pickle
+    nf=np.size(filenames)
+    for ifile in range(0,nf):
+        fileh=open(filenames[ifile],'rb')
+        table=pickle.load(fileh)
+        if ifile == 0:
+            goftab = table.Gofnt['gofnt']
+        else:
+            goftab += table.Gofnt['gofnt']
+    return goftab
+
+
+def norm_ne_goftab(table=None):
+
+    nne=np.shape(table)[1]
+    tablenorm=table*1.0
+    for i in range(0,nne):
+        tablenorm[:,i] = (table[:,i]+1e-40)/(table[:,30]+1e-40)
+
+    return tablenorm
+
+def fig_norm_ne_goftab_all():
+
+    import pickle
+    import glob
+    import matplotlib.pyplot as plt
+
+    files=glob.glob("./*.opy")
+
+    nfiles=np.size(files)
+    for ifile in range(0,nfiles):
+        fileh=open(files[ifile],'rb')
+        print(files[ifile])
+        table=pickle.load(fileh)
+        goftab=table.Gofnt['gofnt']
+        tabnorm=norm_ne_goftab(goftab)
+        fig = plt.figure()
+        extent = np.log10((np.min(table.Gofnt['press']),np.max(table.Gofnt['press']),np.min(table.Gofnt['temperature']),np.max(table.Gofnt['temperature'])))
+        im=plt.imshow(tabnorm, extent=extent,aspect='auto')
+        plt.colorbar(im)
+        plt.title(files[ifile][2:-4])
+        plt.ylabel("Temperature")
+        plt.xlabel("Pressure")
+        fig.savefig('pressure_dependence_%s.png'% files[ifile][2:-4] ,bbox_inches="tight", format="png", dpi=650)
+
+
+
+
+def print_all_max():
+
+    import pickle
+    import glob
+    import matplotlib.pyplot as plt
+
+    files=glob.glob("./*.opy")
+
+    nfiles=np.size(files)
+    for ifile in range(0,nfiles):
+        fileh=open(files[ifile],'rb')
+        table=pickle.load(fileh)
+        print(files[ifile],np.max(table.Gofnt['gofnt']))
+
+def fig_norm_ne_goftab_comb(namelist="./*_10?.*.opy"):
+
+    import pickle
+    import glob
+    import matplotlib.pyplot as plt
+
+    files=glob.glob(namelist)
+    goftab = add_goftab(files)
+    nfiles=np.size(files)
+    tabnorm=norm_ne_goftab(goftab)
+
+    fileh=open(files[0],'rb')
+    print(files[0])
+    table=pickle.load(fileh)
+
+    fig = plt.figure()
+    extent = np.log10((np.min(table.Gofnt['press']),np.max(table.Gofnt['press']),np.min(table.Gofnt['temperature']),np.max(table.Gofnt['temperature'])))
+    im=plt.imshow(tabnorm, extent=extent,aspect='auto')
+    plt.colorbar(im)
+    plt.title(namelist[4:-7])
+    plt.ylabel("Temperature")
+    plt.xlabel("Pressure")
+    fig.savefig('All_pressure_dependence_%s.png'% namelist[3:-5] ,bbox_inches="tight", format="png", dpi=650)
