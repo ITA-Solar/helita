@@ -710,14 +710,17 @@ class BifrostData(object):
             ee = self.get_var('ee')
             ee = ee * ue
             if self.verbose:
-                print('ne interpolation...')
+                print(quant+' interpolation...')
+
+            fac=1.0
+            if quant == 'ne': fac=1.e6 # cm^-3 to m^-3
             if quant in ['eps', 'opa', 'temt']:
                 radtab = True
             else:
                 radtab = False
             eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
             return eostab.tab_interp(
-                rho, ee, order=1, out=quant) * 1.e6  # cm^-3 to m^-3
+                rho, ee, order=1, out=quant) * fac  
 
         elif quant[1:4] in PROJ_QUANT:
             # projects v1 onto v2
