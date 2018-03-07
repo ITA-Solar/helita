@@ -612,6 +612,7 @@ class BifrostData(object):
         MODULE_QUANT = ['mod','h']
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
+        RATIO_QUANT = 'rat'
         EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt']
         PROJ_QUANT = ['par', 'per']
         CURRENT_QUANT = ['ix','iy','iz','wx','wy','wz']
@@ -624,7 +625,20 @@ class BifrostData(object):
         else:
             currSnap = self.snap
 
-        if (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
+        if (RATIO_QUANT in quant):
+            # Calculate module of vector quantity
+            q = quant[:quant.find(RATIO_QUANT)]
+            if q[0] == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            result = self.get_var(q)
+            q = quant[quant.find(RATIO_QUANT)+3:]
+            if q[0] == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            return result/self.get_var(q)
+
+        elif (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
             if (quant[:3] in MODULE_QUANT):
                 q = quant[3:]
