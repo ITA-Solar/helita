@@ -9,11 +9,13 @@ from . import cstagger
 import numba
 import scipy as sp
 
+
 class BifrostData(object):
     """
     Reads data from Bifrost simulations in native format.
     """
-    snap=None
+    snap = None
+
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
                  verbose=True, cstagop=True, dtype='f4', big_endian=False,
                  ghost_analyse=False):
@@ -120,15 +122,15 @@ class BifrostData(object):
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
                     snap = -1
                 except IndexError:
-                    raise ValueError(("(EEE) set_snap: snapshot not defined and no"
-                                  " .idl files found"))
+                    raise ValueError(("(EEE) set_snap: snapshot not defined "
+                                      "and no .idl files found"))
         self.snap = snap
 
         # if not (isinstance(snap, np.int64) or isinstance(snap, int)):
-        if np.size(snap)>1:
+        if np.size(snap) > 1:
             self.snap_str = []
             for num in snap:
-                self.snap_str.append('_%03i'% int(num))
+                self.snap_str.append('_%03i' % int(num))
         else:
             self.snap_str = '_%03i' % snap
         self.snapInd = 0
@@ -165,9 +167,8 @@ class BifrostData(object):
         for file in filename:
             self.paramList.append(read_idl_ascii(file))
 
-        #self.params = read_idl_ascii(filename)
+        # self.params = read_idl_ascii(filename)
         # assign some parameters as attributes
-
         for params in self.paramList:
             for p in ['x', 'y', 'z', 'b']:
                 try:
@@ -199,14 +200,16 @@ class BifrostData(object):
 
         self.params = {}
         for key in self.paramList[0]:
-            self.params[key] = np.array([self.paramList[i][key] for i in range(0, len(self.paramList))])
+            self.params[key] = np.array(
+               [self.paramList[i][key] for i in range(0, len(self.paramList))])
 
     def __read_mesh(self, meshfile):
         """
         Reads mesh file
         """
         if meshfile is None:
-            meshfile = os.path.join(self.fdir, self.params['meshfile'][self.snapInd].strip())
+            meshfile = os.path.join(
+                self.fdir, self.params['meshfile'][self.snapInd].strip())
         if os.path.isfile(meshfile):
             f = open(meshfile, 'r')
             for p in ['x', 'y', 'z']:
@@ -227,14 +230,14 @@ class BifrostData(object):
             f.close()
             if self.ghost_analyse:
                 # extend mesh to cover ghost zones
-                self.z = np.concatenate((
-                    self.z[0] - np.linspace(self.dz * self.nb, self.dz, self.nb),
-                    self.z,
-                    self.z[-1] + np.linspace(self.dz, self.dz * self.nb, self.nb)))
-                self.zdn = np.concatenate((
-                    self.zdn[0] - np.linspace(self.dz * self.nb, self.dz, self.nb),
-                    self.zdn, (self.zdn[-1] +
-                               np.linspace(self.dz, self.dz * self.nb, self.nb))))
+                self.z = np.concatenate((self.z[0] - np.linspace(
+                                self.dz * self.nb, self.dz, self.nb),
+                                self.z, self.z[-1] + np.linspace(
+                                self.dz, self.dz * self.nb, self.nb)))
+                self.zdn = np.concatenate((self.zdn[0] - np.linspace(
+                                self.dz * self.nb, self.dz, self.nb),
+                                self.zdn, (self.zdn[-1] + np.linspace(
+                                self.dz, self.dz * self.nb, self.nb))))
                 self.dzidzup = np.concatenate((
                     np.repeat(self.dzidzup[0], self.nb),
                     self.dzidzup,
@@ -301,7 +304,7 @@ class BifrostData(object):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
-    def get_varTime(self, var, snap = None, iix = None, iiy = None, iiz = None,
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     order='F', mode='r', *args, **kwargs):
 
         self.iix = iix
@@ -326,14 +329,15 @@ class BifrostData(object):
             elif var in self.auxxyvars:
                 return self._get_simple_var_xy(var, *args, **kwargs)
             elif var in self.compvars:  # add to variable list
-                self.variables[var] = self._get_composite_var(var, *args, **kwargs)
+                self.variables[var] = self._get_composite_var(
+                    var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
                 return self.variables[var]
             else:
-                '''raise ValueError(
-                    ("get_var: could not read variable %s. Must be "
-                     "one of %s" %
-                     (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
+                # raise ValueError(
+                    # ("get_var: could not read variable %s. Must be "
+                    # "one of %s" (var, (self.simple_vars +
+                    # self.compvars + self.auxxyvars))))
                 return self._get_quantity(var, *args, **kwargs)
 
         # lengths for size of return array
@@ -365,28 +369,31 @@ class BifrostData(object):
             self._set_snapvars()
             self._init_vars()
 
-            if np.size(self.iix) > 1 or np.size(self.iiy) > 1 or np.size(self.iiz) > 1:
+            if (np.size(self.iix) > 1 or np.size(self.iiy) > 1 or
+                    np.size(self.iiz) > 1):
                 axes = [0, -2, -1]
                 helperCall = helper(var)
 
                 for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
                     if getattr(self, dim) != slice(None):
-                        helperCall = helperCall.take(getattr(self, dim), axis = axes[counter])
+                        helperCall = helperCall.take(
+                            getattr(self, dim), axis=axes[counter])
             else:
                 helperCall = helper(var)[self.iix, self.iiy, self.iiz]
 
             value[self.xInd, self.yInd, self.zInd, i] = helperCall
-        #self.params = self.paramList
+        # self.params = self.paramList
         return value
 
-    def set_domain_iiaxis(self, iinum = slice(None), iiaxis='x'):
+    def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
 
-        if iinum == None: iinum = slice(None)
+        if iinum is None:
+            iinum = slice(None)
 
-        dim='ii'+iiaxis
-        setattr(self,dim,iinum)
-        setattr(self,iiaxis+'Length',np.size(iinum))
-        setattr(self,iiaxis+'Ind',0)
+        dim = 'ii' + iiaxis
+        setattr(self, dim, iinum)
+        setattr(self, iiaxis + 'Length', np.size(iinum))
+        setattr(self, iiaxis + 'Ind', 0)
 
         if np.size(getattr(self, dim)) == 1:
             if getattr(self, dim) == slice(None):
@@ -409,7 +416,8 @@ class BifrostData(object):
                 temp = np.asarray(getattr(self, dim))
                 setattr(self, dim, temp.item())
 
-    def get_var(self, var, snap=None, iix = None, iiy = None, iiz = None, *args, **kwargs):
+    def get_var(self, var, snap=None, iix=None, iiy=None,
+                iiz=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -423,23 +431,23 @@ class BifrostData(object):
             by running self.set_snap(snap).
         """
         if self.verbose:
-            print('(get_var): reading ',var)
+            print('(get_var): reading ', var)
 
-        if not hasattr(self,'iix'):
-            self.set_domain_iiaxis(iinum = iix, iiaxis='x')
-            self.set_domain_iiaxis(iinum = iiy, iiaxis='y')
-            self.set_domain_iiaxis(iinum = iiz, iiaxis='z')
+        if not hasattr(self, 'iix'):
+            self.set_domain_iiaxis(iinum=iix, iiaxis='x')
+            self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
+            self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
         else:
             if (iix is not None) and (iix != self.iix):
-                self.set_domain_iiaxis(iinum = iix, iiaxis='x')
+                self.set_domain_iiaxis(iinum=iix, iiaxis='x')
             if (iiy is not None) and (iiy != self.iiy):
-                self.set_domain_iiaxis(iinum = iiy, iiaxis='y')
+                self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             if (iiz is not None) and (iiz != self.iiz):
-                self.set_domain_iiaxis(iinum = iiz, iiaxis='z')
+                self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
-        if var in ['x','y','z']:
-            return getattr(self,var)
+        if var in ['x', 'y', 'z']:
+            return getattr(self, var)
 
         if (snap is not None) and (snap != self.snap):
             self.set_snap(snap)
@@ -453,17 +461,16 @@ class BifrostData(object):
             setattr(self, var, self.variables[var])
             val = self.variables[var]
         else:
-            '''raise ValueError(
-                ("get_var: could not read variable %s. Must be "
-                 "one of %s" %
-                 (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
+            # raise ValueError(
+                # ("get_var: could not read variable %s. Must be "
+                # "one of %s" % (var,
+                # (self.simple_vars + self.compvars + self.auxxyvars))))
             val = self._get_quantity(var, *args, **kwargs)
 
-        if np.shape(val) != (self.xLength,self.yLength,self.zLength):
-            return np.reshape(val[self.iix, self.iiy, self.iiz],(self.xLength,self.yLength,self.zLength))
+        if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+            return np.reshape(val[self.iix, self.iiy, self.iiz], (self.xLength, self.yLength, self.zLength))
         else:
             return val
-
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -562,16 +569,17 @@ class BifrostData(object):
         if var in ['ux', 'uy', 'uz']:  # velocities
             p = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
-                return p / self.get_var('r')   # do not recentre for 2D cases (or close)
+                # do not recentre for 2D cases (or close)
+                return p / self.get_var('r')
             else:  # will call xdn, ydn, or zdn to get r at cell faces
                 return p / cstagger.do(self.get_var('r'), var[1] + 'dn')
         elif var == 'ee':   # internal energy
             return self.get_var('e') / self.get_var('r')
         elif var == 's':   # entropy?
             return np.log(self.get_var('p')) - self.params['gamma'] * np.log(self.get_var('r'))
-        '''else:
-            raise ValueError(('_get_composite_var: do not know (yet) how to'
-                              'get composite variable %s.' % var))'''
+        # else:
+            # raise ValueError(('_get_composite_var: do not know (yet) how to'
+            # 'get composite variable %s.' % var))
 
     def _get_quantity(self, quant, *args, **kwargs):
         """
@@ -609,16 +617,17 @@ class BifrostData(object):
         quant = quant.lower()
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
         CENTRE_QUANT = ['xc', 'yc', 'zc']
-        MODULE_QUANT = ['mod','h']
+        MODULE_QUANT = ['mod', 'h']
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
         RATIO_QUANT = 'rat'
         EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt']
         PROJ_QUANT = ['par', 'per']
-        CURRENT_QUANT = ['ix','iy','iz','wx','wy','wz']
-        FLUX_QUANT = ['pfx','pfy','pfz','pfex','pfey','pfez','pfwx','pfwy','pfwz',
-                     'hx','hy','hz','kx','ky','kz']
-        PLASMA_QUANT = ['beta','va','cs','s','mn','man','hp','vax','vay','vaz']
+        CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
+        FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
+                      'pfwy', 'pfwz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
+        PLASMA_QUANT = ['beta', 'va', 'cs', 's',
+                        'mn', 'man', 'hp', 'vax', 'vay', 'vaz']
 
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
@@ -632,11 +641,11 @@ class BifrostData(object):
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             result = self.get_var(q)
-            q = quant[quant.find(RATIO_QUANT)+3:]
+            q = quant[quant.find(RATIO_QUANT) + 3:]
             if q[0] == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            return result/self.get_var(q)
+            return result / self.get_var(q)
 
         elif (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
@@ -665,7 +674,8 @@ class BifrostData(object):
             var = self.get_var(q)
 
             if getattr(self, 'n' + axis) < 5:  # 2D or close
-                print(('(WWW) get_quantity:DERIV_QUANT: n%s < 5, derivative set to 0.0' % axis))
+                print('(WWW) get_quantity: DERIV_QUANT: '
+                      'n%s < 5, derivative set to 0.0' % axis)
                 return np.zeros_like(var)
             else:
                 return cstagger.do(var, 'd' + quant[-4:])
@@ -685,8 +695,8 @@ class BifrostData(object):
             transf = AXIS_TRANSFORM[axis]
 
             var = self.get_var(q)
-
-            if getattr(self, 'n' + axis) < 5 or self.cstagop == False :  # 2D or close
+            # 2D
+            if getattr(self, 'n' + axis) < 5 or self.cstagop is False:
                 return var
             else:
                 if len(transf) == 2:
@@ -714,7 +724,8 @@ class BifrostData(object):
 
         elif quant in EOSTAB_QUANT:
             # unit conversion to SI
-            ur = self.params['u_r'][self.snapInd]         # to g/cm^3  (for ne_rt_table)
+            # to g/cm^3  (for ne_rt_table)
+            ur = self.params['u_r'][self.snapInd]
             ue = self.params['u_ee'][self.snapInd]        # to erg/g
             if 'do_hion' in self.params and quant == 'ne':
                 if self.params['do_hion'][self.snapInd] > 0:
@@ -725,10 +736,11 @@ class BifrostData(object):
             ee = self.get_var('ee')
             ee = ee * ue
             if self.verbose:
-                print(quant+' interpolation...')
+                print(quant + ' interpolation...')
 
-            fac=1.0
-            if quant == 'ne': fac=1.e6 # cm^-3 to m^-3
+            fac = 1.0
+            if quant == 'ne':
+                fac = 1.e6  # cm^-3 to m^-3
             if quant in ['eps', 'opa', 'temt']:
                 radtab = True
             else:
@@ -756,7 +768,6 @@ class BifrostData(object):
             parX, parY, parZ = parScal * v2x, parScal * v2y, parScal * v2z
             result = np.abs(parScal)
 
-
             if quant[1:4] == 'per':
                 perX = x1 - parX
                 perY = y1 - parY
@@ -772,80 +783,86 @@ class BifrostData(object):
             # Calculate derivative of quantity
             axis = quant[-1]
             if quant[0] == 'i':
-                q='b'
+                q = 'b'
             else:
-                q='u'
+                q = 'u'
             try:
                 var = getattr(self, quant)
             except AttributeError:
                 if axis == 'x':
-                    varsn= ['z','y']
-                    derv = ['ddydn','ddzdn']
+                    varsn = ['z', 'y']
+                    derv = ['ddydn', 'ddzdn']
                 elif axis == 'y':
-                    varsn= ['x','z']
-                    derv = ['ddzdn','ddxdn']
+                    varsn = ['x', 'z']
+                    derv = ['ddzdn', 'ddxdn']
                 elif axis == 'z':
-                    varsn= ['y','x']
-                    derv = ['ddxdn','ddydn']
-                var = self.get_var(q+varsn[0])
-                if (getattr(self, 'n' + varsn[0]) < 5) or (getattr(self, 'n' + varsn[1]) < 5):  # 2D or close
+                    varsn = ['y', 'x']
+                    derv = ['ddxdn', 'ddydn']
+                var = self.get_var(q + varsn[0])
+                # 2D or close
+                if (getattr(self, 'n' + varsn[0]) < 5) or (getattr(self, 'n' + varsn[1]) < 5):
                     return np.zeros_like(var)
                 else:
-                    return cstagger.do(var, derv[0]) - cstagger.do(self.get_var(q+varsn[1]), derv[1])
+                    return cstagger.do(var, derv[0]) - cstagger.do(self.get_var(q + varsn[1]), derv[1])
 
         elif quant in FLUX_QUANT:
-            axis=quant[-1]
+            axis = quant[-1]
             if axis == 'x':
-                varsn= ['z','y']
+                varsn = ['z', 'y']
             elif axis == 'y':
-                varsn= ['x','z']
+                varsn = ['x', 'z']
             elif axis == 'z':
-                varsn= ['y','x']
+                varsn = ['y', 'x']
             if 'pfw' in quant or len(quant) == 3:
-                var = self.get_var('b'+axis+'c')*(self.get_var('u'+varsn[0]+'c') * self.get_var('b'+varsn[0]+'c')+
-                                                  self.get_var('u'+varsn[1]+'c') * self.get_var('b'+varsn[1]+'c'))
+                var = self.get_var('b' + axis + 'c') * (
+                        self.get_var('u' + varsn[0] + 'c') *
+                        self.get_var('b' + varsn[0] + 'c') +
+                        self.get_var('u' + varsn[1] + 'c') *
+                        self.get_var('b' + varsn[1] + 'c'))
 
             elif 'pfe' in quant or len(quant) == 3:
-                var += self.get_var('u'+axis+'c')*(self.get_var('b'+varsn[0]+'c')**2+self.get_var('b'+varsn[1]+'c')**2)
+                var += self.get_var('u' + axis + 'c') * (
+                       self.get_var('b' + varsn[0] + 'c')**2 +
+                       self.get_var('b' + varsn[1] + 'c')**2)
             return var
 
         elif quant in PLASMA_QUANT:
-            if quant in ['hp','s','cs','beta']:
+            if quant in ['hp', 's', 'cs', 'beta']:
                 var = self.get_var('p')
                 if quant == 'hp':
                     if (getattr(self, 'nx') < 5):
                         return np.zeros_like(var)
                     else:
-                        return 1./(cstagger.do(var,'ddzup')+1e-12)
+                        return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
                 elif quant == 'cs':
-                    return np.sqrt(self.params['gamma'][0]*var/self.get_var('r'))
+                    return np.sqrt(self.params['gamma'][0] * var / self.get_var('r'))
                 elif quant == 's':
-                    return np.log(var) - self.params['gamma'][0]*np.log(self.get_var('r'))
+                    return np.log(var) - self.params['gamma'][0] * np.log(self.get_var('r'))
                 elif quant == 'beta':
-                    return 2*var/self.get_var('b2')
+                    return 2 * var / self.get_var('b2')
 
-            if quant in ['mn','man']:
+            if quant in ['mn', 'man']:
                 var = self.get_var('modu')
                 if quant == 'mn':
-                    return var/(self.get_var('cs')+1e-12)
+                    return var / (self.get_var('cs') + 1e-12)
                 else:
-                    return var/(self.get_var('va')+1e-12)
+                    return var / (self.get_var('va') + 1e-12)
 
-            if quant in ['va','vax','vay','vaz']:
+            if quant in ['va', 'vax', 'vay', 'vaz']:
                 var = self.get_var('r')
                 if len(quant) == 2:
-                    return self.get_var('modb')/np.sqrt(var)
+                    return self.get_var('modb') / np.sqrt(var)
                 else:
                     axis = quant[-1]
-                    return np.sqrt(self.get_var('b'+axis+'c')**2/var)
+                    return np.sqrt(self.get_var('b' + axis + 'c')**2 / var)
 
-            if quant in ['hx','hy','hz','kx','ky','kz']:
-                axis=quant[-1]
-                var=self.get_var('p'+axis+'c')
+            if quant in ['hx', 'hy', 'hz', 'kx', 'ky', 'kz']:
+                axis = quant[-1]
+                var = self.get_var('p' + axis + 'c')
                 if quant[0] == 'h':
-                    return (self.get_var('e')+self.get_var('p'))/self.get_var('r')*var
+                    return (self.get_var('e') + self.get_var('p')) / self.get_var('r') * var
                 else:
-                    return self.get_var('u2')*var*0.5
+                    return self.get_var('u2') * var * 0.5
 
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
@@ -881,7 +898,8 @@ class BifrostData(object):
         from . import rh15d
         # unit conversion to SI
         ul = self.params['u_l'][self.snapInd] / 1.e2  # to metres
-        ur = self.params['u_r'][self.snapInd]         # to g/cm^3  (for ne_rt_table)
+        # to g/cm^3  (for ne_rt_table)
+        ur = self.params['u_r'][self.snapInd]
         ut = self.params['u_t'][self.snapInd]         # to seconds
         uv = ul / ut
         ub = self.params['u_b'][self.snapInd] * 1e-4  # to Tesla
@@ -1044,9 +1062,10 @@ class BifrostData(object):
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
+
 class create_new_br_files():
     def write_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
-                dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
+                   dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
         """
         Writes mesh to ascii file.
         """
@@ -1060,9 +1079,9 @@ class create_new_br_files():
             b = -245. / 2048
             a = .5 - b - c - d
             x = (a * (f + np.roll(f, 1)) +
-                b * (np.roll(f, -1) + np.roll(f, 2)) +
-                c * (np.roll(f, -2) + np.roll(f, 3)) +
-                d * (np.roll(f, -3) + np.roll(f, 4)))
+                 b * (np.roll(f, -1) + np.roll(f, 2)) +
+                 c * (np.roll(f, -2) + np.roll(f, 3)) +
+                 d * (np.roll(f, -3) + np.roll(f, 4)))
             for i in range(0, 4):
                 x[i] = x[4] - (4 - i) * (x[5] - x[4])
             for i in range(1, 4):
@@ -1081,9 +1100,9 @@ class create_new_br_files():
             b = -8575 / 107520. / dx
             a = 1. / dx - 3 * b - 5 * c - 7 * d
             x = (a * (np.roll(f, -1) - f) +
-                b * (np.roll(f, -2) - np.roll(f, 1)) +
-                c * (np.roll(f, -3) - np.roll(f, 2)) +
-                d * (np.roll(f, -4) - np.roll(f, 3)))
+                 b * (np.roll(f, -2) - np.roll(f, 1)) +
+                 c * (np.roll(f, -3) - np.roll(f, 2)) +
+                 d * (np.roll(f, -4) - np.roll(f, 3)))
             x[:3] = x[3]
             for i in range(1, 5):
                 x[nx - i] = x[nx - 5]
@@ -1101,9 +1120,9 @@ class create_new_br_files():
             b = -8575 / 107520. / dx
             a = 1. / dx - 3 * b - 5 * c - 7 * d
             x = (a * (f - np.roll(f, 1)) +
-                b * (np.roll(f, -1) - np.roll(f, 2)) +
-                c * (np.roll(f, -2) - np.roll(f, 3)) +
-                d * (np.roll(f, -3) - np.roll(f, 4)))
+                 b * (np.roll(f, -1) - np.roll(f, 2)) +
+                 c * (np.roll(f, -2) - np.roll(f, 3)) +
+                 d * (np.roll(f, -3) - np.roll(f, 4)))
             x[:4] = x[4]
             for i in range(1, 4):
                 x[nx - i] = x[nx - 4]
@@ -1117,9 +1136,9 @@ class create_new_br_files():
                 setattr(self, 'n' + p, locals()['n' + p])
                 setattr(self, 'd' + p, locals()['d' + p])
                 setattr(self, p, np.linspace(0,
-                                            getattr(self, 'n' + p) *
-                                            getattr(self, 'd' + p),
-                                            getattr(self, 'n' + p)))
+                                             getattr(self, 'n' + p) *
+                                             getattr(self, 'd' + p),
+                                             getattr(self, 'n' + p)))
             else:
                 setattr(self, 'n' + p, len(locals()[p]))
             if getattr(self, 'n' + p) > 1:
@@ -1136,6 +1155,7 @@ class create_new_br_files():
             f.write(" ".join(map("{:.5f}".format, dxidxup)) + "\n")
             f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
         f.close()
+
 
 class bifrost_units():
     import scipy.constants as const
@@ -1159,17 +1179,17 @@ class bifrost_units():
     mu = 0.8
     u_n = 3.00e+10                  # Denisty number n_0 * 1/cm^3
     k_B = aconst.k_B.to('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
-    m_H = const.m_n / const.gram # 1.674927471e-24
+    m_H = const.m_n / const.gram  # 1.674927471e-24
     m_He = 6.65e-24
     m_p = mu * m_H   # Mass per particle
-    m_e = const.m_e / const.gram # 9.1093897E-28
+    m_e = const.m_e / const.gram  # 9.1093897E-28
     u_tg = (m_H / k_B) * u_ee
     u_tge = (m_e / k_B) * u_ee
     pi = const.pi
-    u_b = u_u*np.sqrt(4.*pi*u_r)
+    u_b = u_u * np.sqrt(4. * pi * u_r)
 
-    usi_l = u_l * const.centi # 1e6
-    usi_r = u_r * const.gram # 1e-4
+    usi_l = u_l * const.centi  # 1e6
+    usi_r = u_r * const.gram  # 1e-4
     usi_u = usi_l / u_t
     usi_p = usi_r * (usi_l / u_t)**2       # Pressure [N/m2]
     usi_kr = 1 / (usi_r * usi_l)            # Rosseland opacity [m2/kg]
@@ -1177,11 +1197,11 @@ class bifrost_units():
     usi_e = usi_r * usi_ee
     usi_te = usi_e / u_t * usi_l            # Box therm. em. [J/(s ster m2)]
     ksi_B = aconst.k_B.to('J/K')  # 1.380658E-23 Boltzman's cst. [J/K]
-    msi_H = const.m_n # 1.674927471e-27
+    msi_H = const.m_n  # 1.674927471e-27
     msi_He = 6.65e-27
-    msi_p = mu * msi_H # Mass per particle
+    msi_p = mu * msi_H  # Mass per particle
     usi_tg = (msi_H / ksi_B) * usi_ee
-    msi_e = const.m_e # 9.1093897e-31
+    msi_e = const.m_e  # 9.1093897e-31
 
     # Solar gravity
     gsun = 27400.0  # (cgs)
@@ -1202,25 +1222,27 @@ class bifrost_units():
     E_RYDBERG = 2.1798741E-11  # Ion. pot. Hydrogen [erg]
     EH2DISS = 4.478          # H2 dissociation energy [eV]
     pie2_mec = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
-    stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)') # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
+    # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
+    stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)')
     MION = m_H            # Ion mass [g]
-    R_EI = 1.44E-7        # Classical distance of closest approach e^2 / kT = 1.44x10^-7 T^-1 cm
+    R_EI = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
 
     # --- Unit conversions
-    EV_TO_ERG = const.eV/const.erg # 1.60217733E-12 One electronVolt [erg]
-    EV_TO_J =  const.eV # 1.60217733E-19 One electronVolt [J]
-    NM_TO_M = const.nano # 1.0E-09
-    CM_TO_M = const.centi # 1.0E-02
-    KM_TO_M = const.kilo # 1.0E+03
-    ERG_TO_JOULE = const.erg # 1.0E-07
-    G_TO_KG = const.gram # 1.0E-03
+    EV_TO_ERG = const.eV / const.erg  # 1.60217733E-12 One electronVolt [erg]
+    EV_TO_J = const.eV  # 1.60217733E-19 One electronVolt [J]
+    NM_TO_M = const.nano  # 1.0E-09
+    CM_TO_M = const.centi  # 1.0E-02
+    KM_TO_M = const.kilo  # 1.0E+03
+    ERG_TO_JOULE = const.erg  # 1.0E-07
+    G_TO_KG = const.gram  # 1.0E-03
     MICRON_TO_NM = 1.0E+03
     MEGABARN_TO_M2 = 1.0E-22
-    ATM_TO_PA = const.atm # 1.0135E+05 Atm to Pascal (N/m^2)
+    ATM_TO_PA = const.atm  # 1.0135E+05 Atm to Pascal (N/m^2)
     DYNE_CM2_TO_PASCAL = 0.1
     K_TO_EV = 8.621738E-5    # KtoeV
     EV_TO_K = 11604.50520    # eVtoK
     ergd2wd = 0.1
+
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
