@@ -624,7 +624,7 @@ class BifrostData(object):
         else:
             currSnap = self.snap
 
-        if (quant[:3] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
+        if (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
             if (quant[:3] in MODULE_QUANT):
                 q = quant[3:]
@@ -720,7 +720,7 @@ class BifrostData(object):
                 radtab = False
             eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
             return eostab.tab_interp(
-                rho, ee, order=1, out=quant) * fac  
+                rho, ee, order=1, out=quant) * fac
 
         elif quant[1:4] in PROJ_QUANT:
             # projects v1 onto v2
