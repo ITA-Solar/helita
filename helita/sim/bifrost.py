@@ -635,9 +635,10 @@ class BifrostData(object):
                     raise ValueError("No magnetic field available.")
             result = self.get_var(q + 'xc') ** 2
             result += self.get_var(q + 'yc') ** 2
-            result += self.get_var(q + 'zc') ** 2
+            if not(quant[-1] in MODULE_QUANT):
+                result += self.get_var(q + 'zc') ** 2
 
-            if quant[:3] in MODULE_QUANT:
+            if (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT):
                 return np.sqrt(result)
             elif quant[-1] in SQUARE_QUANT:
                 return result
