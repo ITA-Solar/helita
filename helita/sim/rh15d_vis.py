@@ -9,10 +9,13 @@ from pkg_resources import resource_filename
 from ipywidgets import interact, fixed, Dropdown, IntSlider, FloatSlider
 from scipy.integrate.quadrature import cumtrapz
 from scipy.interpolate import interp1d
-from ..utils.utilsmath import planck, int2bt, voigt
+from ..utils.utilsmath import planck, voigt
 
 
 class Populations:
+    """
+    Class to visualise the populations from an RH 1.5D object.
+    """
     def __init__(self, rh_object):
         self.rhobj = rh_object
         self.atoms = [a for a in dir(self.rhobj) if a[:5] == 'atom_']
@@ -23,24 +26,24 @@ class Populations:
         Displays a graphical widget to explore the level populations.
         Works in jupyter only.
         """
-        ATOMS = {a.split('_')[1].title(): a for a in self.atoms}
-        QUANTS = ['Populations', 'LTE Populations', 'Departure coefficients']
-        NLEVEL = getattr(self.rhobj, self.atoms[0]).nlevel
-        NX, NY, NZ = self.rhobj.atmos.temperature.shape
-        if NX == 1:
-            xslider = fixed(0)
+        atoms = {a.split('_')[1].title(): a for a in self.atoms}
+        quants = ['Populations', 'LTE Populations', 'Departure coefficients']
+        #nlevel = getattr(self.rhobj, self.atoms[0]).nlevel
+        nx, ny, nz = self.rhobj.atmos.temperature.shape
+        if nx == 1:
+            x_slider = fixed(0)
         else:
-            xslider = (0, NX - 1)
-        if NY == 1:
-            yslider = fixed(0)
+            x_slider = (0, nx - 1)
+        if ny == 1:
+            y_slider = fixed(0)
         else:
-            yslider = (0, NY - 1)
+            y_slider = (0, ny - 1)
 
         def _pop_plot(atom):
             """Starts population plot"""
             pop = getattr(self.rhobj, atom).populations
             height = self.rhobj.atmos.height_scale[0, 0] / 1e6  # in Mm
-            fig, ax = plt.subplots()
+            _, ax = plt.subplots()
             pop_plot, = ax.plot(height, pop[0, 0, 0])
             ax.set_xlabel("Height (Mm)")
             ax.set_ylabel("Populations")
@@ -49,16 +52,17 @@ class Populations:
 
         ax, p_plot = _pop_plot(self.atoms[0])
 
-        @interact(atom=ATOMS, quantity=QUANTS, y_log=False,
-                  x=xslider, y=xslider)
+        @interact(atom=atoms, quantity=quants, y_log=False,
+                  x=x_slider, y=y_slider)
         def _pop_update(atom, quantity, y_log=False, x=0, y=0):
-            NLEVEL = getattr(self.rhobj, atom).nlevel
+            nlevel = getattr(self.rhobj, atom).nlevel
 
-            # Atomic level singled out because NLEVEL depends on the atom
-            @interact(level=(1, NLEVEL))
+            # Atomic level singled out because nlevel depends on the atom
+            @interact(level=(1, nlevel))
             def _pop_update_level(level=1):
                 n = getattr(self.rhobj, atom).populations[level - 1, x, y]
-                nstar = getattr(self.rhobj, atom).populations_LTE[level - 1, x, y]
+                nstar = getattr(
+                    self.rhobj, atom).populations_LTE[level - 1, x, y]
                 if quantity == 'Departure coefficients':
                     tmp = n / nstar
                     ax.set_ylabel(quantity + ' (n / n*)')
@@ -79,6 +83,9 @@ class Populations:
 
 
 class SourceFunction:
+    """
+    Class to visualise the source function and opacity from an RH 1.5D object.
+    """
     def __init__(self, rh_object):
         self.rhobj = rh_object
         self.display()
@@ -88,18 +95,18 @@ class SourceFunction:
         Displays a graphical widget to explore the source function.
         Works in jupyter only.
         """
-        NX, NY, NZ, NWAVE = self.rhobj.ray.source_function.shape
-        if NX == 1:
-            xslider = fixed(0)
+        nx, ny, nz, nwave = self.rhobj.ray.source_function.shape
+        if nx == 1:
+            x_slider = fixed(0)
         else:
-            xslider = (0, NX - 1)
-        if NY == 1:
-            yslider = fixed(0)
+            x_slider = (0, nx - 1)
+        if ny == 1:
+            y_slider = fixed(0)
         else:
-            yslider = (0, NY - 1)
-        TAU_LEVELS = [0.3, 1., 3.]
+            y_slider = (0, ny - 1)
+        tau_levels = [0.3, 1., 3.]
         ARROW = dict(facecolor='black', width=1., headwidth=5, headlength=6)
-        SCALES = ['Height', 'Optical depth']
+        #SCALES = ['Height', 'Optical depth']
 
         def __get_tau_levels(x, y, wave):
             """
@@ -110,15 +117,17 @@ class SourceFunction:
             h = self.rhobj.atmos.height_scale[x, y].dropna('height')
             tau = cumtrapz(self.rhobj.ray.chi[x, y, :, wave].dropna('height'),
                            x=-h)
-            tau = interp1d(tau, h[1:])(TAU_LEVELS)
-            idx = np.around(interp1d(h, np.arange(h.shape[0]))(tau)).astype('i')
+            tau = interp1d(tau, h[1:])(tau_levels)
+            idx = np.around(interp1d(h,
+                                     np.arange(h.shape[0]))(tau)).astype('i')
             return (tau / 1e6, idx)  # in Mm
 
         def _sf_plot():
             """Starts source function plot"""
             obj = self.rhobj
             sf = obj.ray.source_function[0, 0, :, 0].dropna('height')
-            height = obj.atmos.height_scale[0, 0].dropna('height') / 1e6  # in Mm
+            height = obj.atmos.height_scale[0, 0].dropna(
+                'height') / 1e6  # in Mm
             bplanck = planck(obj.ray.wavelength_selected[0],
                              obj.atmos.temperature[0, 0].dropna('height'),
                              units='Hz')
@@ -136,7 +145,7 @@ class SourceFunction:
             lg.draw_frame(0)
             # tau annotations
             tau_v, h_idx = __get_tau_levels(0, 0, 0)
-            for i, level in enumerate(TAU_LEVELS):
+            for i, level in enumerate(tau_levels):
                 xval = tau_v[i]
                 yval = sf[h_idx[i]]
                 ax.annotate(r'$\tau$=%s' % level,
@@ -147,8 +156,8 @@ class SourceFunction:
 
         ax = _sf_plot()
 
-        @interact(wavelength=(0, NWAVE - 1, 1), y_log=True,
-                  x=xslider, y=xslider)
+        @interact(wavelength=(0, nwave - 1, 1), y_log=True,
+                  x=x_slider, y=y_slider)
         def _sf_update(wavelength=0, y_log=True, x=0, y=0):
             obj = self.rhobj
             bplanck = planck(obj.ray.wavelength_selected[wavelength],
@@ -165,7 +174,7 @@ class SourceFunction:
             ax.set_title("%.3f nm" % obj.ray.wavelength_selected[wavelength])
             # tau annotations:
             tau_v, h_idx = __get_tau_levels(x, y, wavelength)
-            for i in range(len(TAU_LEVELS)):
+            for i in range(len(tau_levels)):
                 xval = tau_v[i]
                 yval = quants[0][h_idx[i]]
                 ax.texts[i].xy = (xval, yval)
@@ -186,19 +195,19 @@ class InputAtmosphere:
         """
         Displays a graphical widget to explore the input (HDF5) atmosphere.
         """
-        NT, NX, NY, NZ = self.atmos.temperature.shape
-        if NT == 1:
+        ntsteps, nx, ny, nz = self.atmos.temperature.shape
+        if ntsteps == 1:
             tslider = fixed(0)
         else:
-            tslider = (0, NT - 1)
-        if NX == 1:
-            xslider = fixed(0)
+            tslider = (0, ntsteps - 1)
+        if nx == 1:
+            x_slider = fixed(0)
         else:
-            xslider = (0, NX - 1)
-        if NY == 1:
-            yslider = fixed(0)
+            x_slider = (0, nx - 1)
+        if ny == 1:
+            y_slider = fixed(0)
         else:
-            yslider = (0, NY - 1)
+            y_slider = (0, ny - 1)
 
         def _atmos_plot():
             """Starts source function plot"""
@@ -234,7 +243,7 @@ class InputAtmosphere:
 
         ax = _atmos_plot()
 
-        @interact(snapshot=tslider, x=xslider, y=xslider, y_log=True)
+        @interact(snapshot=tslider, x=x_slider, y=y_slider, y_log=True)
         def _atmos_update(snapshot=0, x=0, y=0, y_log=True):
             for i, v in enumerate(self.variables):
                 var = self.atmos.variables[v]
@@ -262,6 +271,7 @@ class InputAtmosphere:
                         ax.flat[i].set_yscale("log")
                     else:
                         ax.flat[i].set_yscale("linear")
+
 
 def slab():
     """
@@ -293,11 +303,12 @@ def slab():
     style = {'description_width': 'initial'}
     i0s = IntSlider(value=10, min=0, max=100, step=1, description='I$_0$')
     sfs = IntSlider(value=65, min=0, max=100, step=1,
-                   description='Source Function', style=style)
+                    description='Source Function', style=style)
     tau_cs = FloatSlider(value=0.5, min=0., max=1., step=0.01,
-                        description=r'$\tau_{\mathrm{cont}}$')
+                         description=r'$\tau_{\mathrm{cont}}$')
     tau_ls = FloatSlider(value=0.9, min=0., max=10., step=0.1,
-                        description=r'$\tau_{\mathrm{line}}$')
+                         description=r'$\tau_{\mathrm{line}}$')
+
     @interact(i0=i0s, sf=sfs, tau_c=tau_cs, tau_l=tau_ls)
     def _slab_update(i0=10, sf=65, tau_c=0.5, tau_l=0.9):
         x, intensity = _get_slab_intensity(i0, sf, tau_c, tau_l)
@@ -334,7 +345,7 @@ def transp():
         tmp = _get_profile(tau500, source_function, -2.5, 1., 0., 6.44, 50)
         v, h, xq, prof, tau500_cont, tau500_line, sf_cont, sf_line = tmp
 
-        fig = plt.figure(figsize=(7,5))
+        fig = plt.figure(figsize=(7, 5))
         ax = []
         # Voigt profile plot
         ax.append(fig.add_subplot(2, 2, 1))
@@ -343,13 +354,13 @@ def transp():
         ax[0].set_title("Voigt profile")
         ax[0].set_xlabel(r"$\Delta\nu/\Delta\nu_0$")
         # Opacity plot
-        ax.append(fig.add_subplot(2, 2, 2, sharex = ax[0]))
+        ax.append(fig.add_subplot(2, 2, 2, sharex=ax[0]))
         ax[1].plot(v, xq, lw=1)
         ax[1].set_yscale("log")
         ax[1].set_title(r"($\alpha_c$ + $\alpha_l$) / $\alpha_{500}$")
         ax[1].set_xlabel(r"$\Delta\nu/\Delta\nu_0$")
         # Intensity plot
-        ax.append(fig.add_subplot(2, 2, 3, sharex = ax[0]))
+        ax.append(fig.add_subplot(2, 2, 3, sharex=ax[0]))
         ax[2].plot(v, prof, lw=1)
         ax[2].set_ylabel(r"I$_\nu$")
         ax[2].set_xlabel(r"$\Delta\nu/\Delta\nu_0$")
@@ -364,9 +375,9 @@ def transp():
         for tau, sf, label in zip([tau500_cont, tau500_line],
                                   [sf_cont, sf_line], ['_c', '_l']):
             ax[3].annotate(r'$\tau%s$=1' % label,
-                        xy=(np.log10(tau), sf),
-                        xytext=(np.log10(tau), sf / 0.19),
-                        arrowprops=ARROW, ha='center', va='top')
+                           xy=(np.log10(tau), sf),
+                           xytext=(np.log10(tau), sf / 0.19),
+                           arrowprops=ARROW, ha='center', va='top')
         plt.tight_layout()
         return ax
 
@@ -376,15 +387,16 @@ def transp():
 
     SOURCE_FUNCS = ['VAL3C Ca', 'VAL3C Mg', 'VAL3C LTE']
     style = {'description_width': 'initial'}
-    sfs = Dropdown(value='VAL3C Mg',options=SOURCE_FUNCS,
+    sfs = Dropdown(value='VAL3C Mg', options=SOURCE_FUNCS,
                    description='Source Function', style=style)
     opa_cs = FloatSlider(value=0.5, min=0., max=6., step=0.05,
-                        description=r'$\chi_{\mathrm{cont}}$')
+                         description=r'$\chi_{\mathrm{cont}}$')
     opa_ls = FloatSlider(value=6.44, min=0., max=7., step=0.05,
-                        description=r'$\chi_{\mathrm{line}}$')
+                         description=r'$\chi_{\mathrm{line}}$')
     mus = FloatSlider(value=1.00, min=0.001, max=1.001, step=0.05,
-                        description=r'$\mu$')
-    @interact(source=sfs, a=(-5., 0., 0.05), mu=mus,opa_cont=opa_cs,
+                      description=r'$\mu$')
+
+    @interact(source=sfs, a=(-5., 0., 0.05), mu=mus, opa_cont=opa_cs,
               opa_line=opa_ls, xmax=(1, 100, 1), continuous_update=False)
     def _transp_update(source='VAL3C Mg', a=-2.5, mu=1., opa_cont=0.,
                        opa_line=6.44, xmax=50):
