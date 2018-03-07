@@ -2,12 +2,16 @@
 Set of programs and tools to read the outputs from RH, 1.5D version
 """
 import os
+import datetime
 import numpy as np
 import xarray as xr
 import h5py
 
 
 class Rh15dout:
+    """
+    Class to load and manipulate output from RH 1.5D.
+    """
     def __init__(self, fdir='.', verbose=True, autoread=True):
         self.files = []
         self.params = {}
@@ -58,6 +62,9 @@ class Rh15dout:
 
 
 class HDF5Atmos:
+    """
+    Class to load and manipulate RH 1.5D input atmosphere files in HDF5.
+    """
     def __init__(self, infile):
         self.file = read_hdf5(self, infile)
         self.closed = False
@@ -399,7 +406,6 @@ def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
            comp:     if false, compress file.
            complev:  compression level.
     """
-    import os
     import netCDF4 as nc
 
     mode = ['w', 'a']
@@ -564,7 +570,7 @@ def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
 
 def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                     Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
-                    desc=None, snap=None, boundary=[1, 0], comp=None,
+                    desc=None, snap=None, boundary=None, comp=None,
                     complev=None, append=False):
     """
     Creates HDF5 input file for RH 1.5D.
@@ -575,12 +581,16 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         Name of destination. If file exists it will be wiped.
     T : n-D array
         Temperature in K. Its shape will determine the output
-        dimensions (can be 1D, 2D, or 3D).
+        dimensions. Shape is generally (nt, nx, ny, nz), but any
+        dimensions except nz can be omitted. Therefore the array can
+        be 1D, 2D, or 3D, 4D but ultimately will always be saved as 4D.
     vz : n-D array
         Line of sight velocity in m/s. Same shape as T.
     nH : n-D array
-        Hydrogen populations in m^-3. Shape is [nhydr, shape.T] where
-        nydr can be 1 (total number of protons) or more (level populations).
+        Hydrogen populations in m^-3. Shape is (nt, nhydr, nx, ny, nz),
+        where nt, nx, ny can be omitted but must be consistent with
+        the shape of T. nhydr can be 1 (total number of protons) or
+        more (level populations).
     z : n-D array
         Height in m. Can have same shape as T (different height scale
         for each column) or be only 1D (same height for all columns).
@@ -623,17 +633,10 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     complev : integer or tuple, optional
         Compression level. Integer for 'gzip', 2-tuple for szip.
     """
-    import os
-    import datetime
-    import h5py
     mode = ['w', 'a']
     if (append and not os.path.isfile(outfile)):
         append = False
     rootgrp = h5py.File(outfile, mode=mode[append])
-    if nH.shape == T.shape:
-        nhydr = 1
-    else:
-        nhydr = nH.shape[0]
     idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
     T = T[idx]
     if ne is not None:
@@ -656,6 +659,7 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     if len(T.shape) != 4:
         raise ValueError('Invalid shape for T')
     nt = T.shape[0]
+    nhydr = nH.shape[1]
     if snap is None:
         snap = np.arange(nt, dtype='i4')
     if not append:
@@ -674,10 +678,10 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                                         fletcher32=True, compression=comp,
                                         compression_opts=complev)
         nh_var = rootgrp.create_dataset("hydrogen_populations", dtype="f4",
-                                shape=(nt, nhydr,) + T.shape[1:],
-                                maxshape=(None, nhydr) + T.shape[1:],
-                                fletcher32=True, compression=comp,
-                                compression_opts=complev)
+                                        shape=(nt, nhydr,) + T.shape[1:],
+                                        maxshape=(None, nhydr) + T.shape[1:],
+                                        fletcher32=True, compression=comp,
+                                        compression_opts=complev)
         if ne is not None:
             ne_var = rootgrp.create_dataset("electron_density", dtype="f8",
                                             shape=T.shape, maxshape=max_dims,
@@ -686,8 +690,17 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
             ne_var.attrs["units"] = 'm^-3'
         x_var = rootgrp.create_dataset("x", dtype="f4", shape=(T.shape[1],))
         y_var = rootgrp.create_dataset("y", dtype="f4", shape=(T.shape[2],))
-        z_var = rootgrp.create_dataset("z", dtype="f4", shape=(nt, T.shape[3]),
-                                       maxshape=(None, T.shape[3]))
+        if len(z.shape) == 4:
+            z_var = rootgrp.create_dataset("z", dtype="f4",
+                                           shape=T.shape, maxshape=max_dims,
+                                           fletcher32=True, compression=comp,
+                                           compression_opts=complev)
+        elif len(z.shape) == 2:
+            z_var = rootgrp.create_dataset("z", dtype="f4",
+                                           shape=(nt, T.shape[3]),
+                                           maxshape=(None, T.shape[3]))
+        else:
+            raise ValueError("Invalid shape for z scale")
         nt_var = rootgrp.create_dataset("snapshot_number", dtype="i4",
                                         shape=(nt,))
         T_var.attrs["units"] = 'K'
@@ -807,8 +820,7 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
 
 def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                       Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
-                      desc=None, snap=None, boundary=[1, 0], comp=None,
-                      complev=None, append=False):
+                      desc=None, snap=None, boundary=None, append=False):
     """
     Creates HDF5 input file for RH 1.5D using xarray.
 
@@ -818,12 +830,16 @@ def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         Name of destination. If file exists it will be wiped.
     T : n-D array
         Temperature in K. Its shape will determine the output
-        dimensions (can be 1D, 2D, or 3D).
+        dimensions. Shape is generally (nt, nx, ny, nz), but any
+        dimensions except nz can be omitted. Therefore the array can
+        be 1D, 2D, or 3D, 4D but ultimately will always be saved as 4D.
     vz : n-D array
         Line of sight velocity in m/s. Same shape as T.
     nH : n-D array
-        Hydrogen populations in m^-3. Shape is [nhydr, shape.T] where
-        nydr can be 1 (total number of protons) or more (level populations).
+        Hydrogen populations in m^-3. Shape is (nt, nhydr, nx, ny, nz),
+        where nt, nx, ny can be omitted but must be consistent with
+        the shape of T. nhydr can be 1 (total number of protons) or
+        more (level populations).
     z : n-D array
         Height in m. Can have same shape as T (different height scale
         for each column) or be only 1D (same height for all columns).
@@ -862,12 +878,10 @@ def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     append : boolean, optional
         If True, will append to existing file (if any).
     """
-    import os
-    import datetime
     data = {'temperature': [T, 'K'],
             'velocity_z': [vz, 'm s^-1'],
             'velocity_y': [vy, 'm s^-1'],
-            'velocity_x': [vx,  'm s^-1'],
+            'velocity_x': [vx, 'm s^-1'],
             'electron_density': [ne, 'm^-3'],
             'hydrogen_populations': [nH, 'm^-3'],
             'density': [rho, 'kg m^-3'],
@@ -884,13 +898,8 @@ def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     # Remove variables not given
     data = {key: data[key] for key in data if data[key][0] is not None}
 
-    mode = ['w', 'a']
     if (append and not os.path.isfile(outfile)):
         append = False
-    if nH.shape == T.shape:
-        nhydr = 1
-    else:
-        nhydr = nH.shape[0]
     idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
     for var in data:
         if var not in ['x', 'y']:  # these are always 1D
@@ -916,16 +925,16 @@ def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                                 data[v][0], {'units': data[v][1]})
             elif v == 'z':
                 dims = ('snapshot_number', 'depth')
-                if data[v][0].shape == 1:  # extra dim for nt dependency
+                if len(data[v][0].shape) == 1:  # extra dim for nt dependency
                     data[v][0] = data[v][0][None, :]
-                elif data[v][0].shape == 4:
+                elif len(data[v][0].shape) == 4:
                     dims = ('snapshot_number', 'x', 'y', 'depth')
                 coordinates[v] = (dims, data[v][0], {'units': data[v][1]})
             elif v in ['x', 'y', 'snapshot_number']:
                 coordinates[v] = ((v), data[v][0], {'units': data[v][1]})
 
         attrs = {"comment": ("Created with make_xarray_atmos "
-                                 "on %s" % datetime.datetime.now()),
+                             "on %s" % datetime.datetime.now()),
                  "boundary_top": boundary[1], "boundary_bottom": boundary[0],
                  "has_B": int(Bz is not None), "description": str(desc),
                  "nx": nx, "ny": ny, "nz": nz, "nt": nt}
@@ -937,9 +946,9 @@ def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         nti = int(rootgrp.attrs['nt'])
         #rootgrp.attrs['nt'] = nti + nt  # add appended number of snapshots
         for var in data:
-          if var in VARS4D + ['hydrogen_populations', 'z', 'snapshot_number']:
-              rootgrp[var].resize(nti + nt, axis=0)
-              rootgrp[var][nti:nti + nt] = data[var][0][:]
+            if var in VARS4D + ['hydrogen_populations', 'z', 'snapshot_number']:
+                rootgrp[var].resize(nti + nt, axis=0)
+                rootgrp[var][nti:nti + nt] = data[var][0][:]
         rootgrp.close()
 
 
