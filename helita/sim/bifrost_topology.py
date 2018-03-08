@@ -1,10 +1,12 @@
 """
-Set of programs to read and interact with output from BifrostData simulations focus on magnetic field topology
+Set of programs to read and interact with output from BifrostData simulations
+focus on magnetic field topology
 """
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph, bifrost_units
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii
+from .bifrost import subs2grph, bifrost_units
 from . import cstagger
 from glob import glob
 import scipy as sp
@@ -17,6 +19,7 @@ except ImportError:
     found = False
 
 from q import qCalculatornopars
+
 
 class TopologyData(BifrostData):
 
@@ -54,10 +57,11 @@ class TopologyData(BifrostData):
 
             if found:
 
-                if os.environ.get('CUDA_LIB','null') == 'null':
-                    os.environ['CUDA_LIB'] = os.environ['BIFROST'] + '/CUDA/q_factor/'
+                if os.environ.get('CUDA_LIB', 'null') == 'null':
+                    os.environ['CUDA_LIB'] = os.environ['BIFROST'] + \
+                        '/CUDA/q_factor/'
 
-                #Calculation settings
+                # Calculation settings
                 qdef = False
                 adef = False
                 intdef = False
@@ -82,9 +86,9 @@ class TopologyData(BifrostData):
                 opts.dir = self.fdir
 
                 var = np.empty([self.nx, self.ny, self.nz])
-                q=qCalculatornopars(opts)
+                q = qCalculatornopars(opts)
                 for iz in range(0, self.nz):
-                    print('iz=',iz)
+                    print('iz=', iz)
                     opts.plane = iz
                     opts.slice = str(iz)
                     opts.rcalc = True
@@ -92,7 +96,7 @@ class TopologyData(BifrostData):
                     q.plane = iz
                     q.trace_snapshot()
                     q.init_q()
-                    var[:,:,iz]=q.calculate_q(iz)
+                    var[:, :, iz] = q.calculate_q(iz)
                 return var
             else:
                 raise ValueError(('This machine does not have cuda.'))
@@ -104,17 +108,18 @@ class TopologyData(BifrostData):
                               'see e.g. self.get_topology? for guidance'
                               '.' % (quant, repr(TOPO_QUANT))))
 
+
 class q_options:
-     def __init__(self):
-         self.slice = False
-         self.rcalc = False
-         self.save = False
-         self.file = None
-         self.dir =  ''
-         self.temp = ''
-         self.snap = 1
-         self.plane = 0
-         self.q=False
-         self.alt=False
-         self.integrate=False
-         self.connectivity=False
+    def __init__(self):
+        self.slice = False
+        self.rcalc = False
+        self.save = False
+        self.file = None
+        self.dir = ''
+        self.temp = ''
+        self.snap = 1
+        self.plane = 0
+        self.q = False
+        self.alt = False
+        self.integrate = False
+        self.connectivity = False
