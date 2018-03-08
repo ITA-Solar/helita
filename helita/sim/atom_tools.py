@@ -1270,11 +1270,13 @@ TOOLS
 '''
 
 
-def pop_over_species_atomf(ntot, Te, atomfiles=['H_2.atom', 'He_3.atom'],
+def pop_over_species_atomf(ntot, Te, atomfiles=None,
                            threebody=True, GENCOL_KEY='voronov'):
     '''
     this will do the SE for many species taking into account their abundances
     '''
+    if atomfiles is None:
+        atomfiles = ['H_2.atom', 'He_3.atom']
     units = bifrost_units()
     totabund = 0.0
     for isp in range(0, len(atomfiles)):
@@ -1630,12 +1632,13 @@ def add_voro_atom(
 
 
 def create_goftne_tab(ionstr='fe_14',
-                      wvlr=[98, 1600],
+                      wvlr=None,
                       abundance='sun_photospheric_1998_grevesse'):
     '''
     This allows to calculate GOFT tables in a similar fashion as we do in IDL.
     '''
-
+    if wvlr is None:
+        wvlr = [98, 1600]
     ntemp = 501
     neden = 71
     temp = 10.**(4. + 0.01 * np.arange(ntemp))

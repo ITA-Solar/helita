@@ -736,7 +736,6 @@ class BifrostData(object):
             if 'do_hion' in self.params and quant == 'ne':
                 if self.params['do_hion'][self.snapInd] > 0:
                     return self.get_var('hionne')
-                    pass
             rho = self.r
             rho = rho * ur
             ee = self.get_var('ee')
