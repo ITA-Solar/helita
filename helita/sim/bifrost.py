@@ -630,9 +630,10 @@ class BifrostData(object):
         PROJ_QUANT = ['par', 'per']
         CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
         FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
-                      'pfwy', 'pfwz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
-        PLASMA_QUANT = ['beta', 'va', 'cs', 's',
-                        'mn', 'man', 'hp', 'vax', 'vay', 'vaz']
+                      'pfwy', 'pfwz']
+        PLASMA_QUANT = ['beta', 'va', 'cs', 's', 
+                        'mn', 'man', 'hp', 'vax', 'vay', 'vaz',
+                        'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
 
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
