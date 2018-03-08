@@ -5,7 +5,7 @@ simulations focus on optically thin radiative transfer and similar
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, read_idl_ascii,
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii
 from .bifrost import subs2grph, bifrost_units
 from . import cstagger
 from glob import glob

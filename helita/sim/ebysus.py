@@ -4,7 +4,7 @@ Set of programs to read and interact with output from Multifluid/multispecies
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab,
+from .bifrost import BifrostData, Rhoeetab
 from .bifrost import read_idl_ascii, subs2grph, bifrost_units
 from . import cstagger
 
@@ -556,24 +556,11 @@ def read_mftab_ascii(filename):
     return params
 
 
-def write_mftab_ascii(filename,
-                      NSPECIES_MAX=28,
-                      SPECIES=['H_2.atom',
-                               'He_2.atom'],
-                      EOS_TABLES=['H_EOS.dat', 'He_EOS.dat'],
-                      REC_TABLES=['h_rec.dat', 'he_rec.dat'],
-                      ION_TABLES=['h_ion.dat', 'he_ion.dat'],
-                      CROSS_SECTIONS_TABLES=[[1,
-                                              1,
-                                              'p-H-elast.txt'],
-                                             [1,
-                                              2,
-                                              'p-He.txt'],
-                                             [2,
-                                              2,
-                                              'He-He.txt']],
-                      CROSS_SECTIONS_TABLES_I=[],
-                      CROSS_SECTIONS_TABLES_N=[],
+def write_mftab_ascii(filename, NSPECIES_MAX=28,
+                      SPECIES=None, EOS_TABLES=None, REC_TABLES=None,
+                      ION_TABLES=None, CROSS_SECTIONS_TABLES=None,
+                      CROSS_SECTIONS_TABLES_I=None,
+                      CROSS_SECTIONS_TABLES_N=None,
                       collist=np.linspace(1,
                                           28,
                                           28)):
@@ -602,6 +589,23 @@ def write_mftab_ascii(filename,
                 e.g., collist = [1,2,3] will include the H, He and Li
 
     '''
+
+    if SPECIES is None:
+        SPECIES=['H_2.atom', 'He_2.atom']
+    if EOS_TABLES is None:
+        EOS_TABLES=['H_EOS.dat', 'He_EOS.dat']
+    if REC_TABLES is None:
+        REC_TABLES=['h_rec.dat', 'he_rec.dat']
+    if ION_TABLES is None:
+        ION_TABLES=['h_ion.dat', 'he_ion.dat']
+    if CROSS_SECTIONS_TABLES is None:
+        CROSS_SECTIONS_TABLES=[[1, 1, 'p-H-elast.txt'],
+                               [1, 2, 'p-He.txt'],
+                               [2, 2, 'He-He.txt']]
+    if CROSS_SECTIONS_TABLES_I is None:
+        CROSS_SECTIONS_TABLES_I=[]
+    if CROSS_SECTIONS_TABLES_N is None:
+        CROSS_SECTIONS_TABLES_N=[]
 
     params = [
         'NSPECIES_MAX',
