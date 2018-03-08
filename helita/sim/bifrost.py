@@ -201,7 +201,8 @@ class BifrostData(object):
         self.params = {}
         for key in self.paramList[0]:
             self.params[key] = np.array(
-               [self.paramList[i][key] for i in range(0, len(self.paramList))])
+                [self.paramList[i][key] for i in range(
+                                            0, len(self.paramList))])
 
     def __read_mesh(self, meshfile):
         """
@@ -231,13 +232,13 @@ class BifrostData(object):
             if self.ghost_analyse:
                 # extend mesh to cover ghost zones
                 self.z = np.concatenate((self.z[0] - np.linspace(
-                                self.dz * self.nb, self.dz, self.nb),
-                                self.z, self.z[-1] + np.linspace(
-                                self.dz, self.dz * self.nb, self.nb)))
+                    self.dz * self.nb, self.dz, self.nb),
+                    self.z, self.z[-1] + np.linspace(
+                    self.dz, self.dz * self.nb, self.nb)))
                 self.zdn = np.concatenate((self.zdn[0] - np.linspace(
-                                self.dz * self.nb, self.dz, self.nb),
-                                self.zdn, (self.zdn[-1] + np.linspace(
-                                self.dz, self.dz * self.nb, self.nb))))
+                    self.dz * self.nb, self.dz, self.nb),
+                    self.zdn, (self.zdn[-1] + np.linspace(
+                        self.dz, self.dz * self.nb, self.nb))))
                 self.dzidzup = np.concatenate((
                     np.repeat(self.dzidzup[0], self.nb),
                     self.dzidzup,
@@ -468,9 +469,10 @@ class BifrostData(object):
             val = self._get_quantity(var, *args, **kwargs)
 
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-            return np.reshape(val[self.iix, self.iiy, self.iiz], (self.xLength, self.yLength, self.zLength))
-        else:
-            return val
+            val[self.iix, self.iiy, self.iiz].reshape((
+                        self.xLength, self.yLength, self.zLength))
+
+        return val
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -567,16 +569,19 @@ class BifrostData(object):
         Gets composite variables (will load into memory).
         """
         if var in ['ux', 'uy', 'uz']:  # velocities
-            p = self.get_var('p' + var[1])
+            mom = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
                 # do not recentre for 2D cases (or close)
-                return p / self.get_var('r')
+                return mom / self.get_var('r')
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / cstagger.do(self.get_var('r'), var[1] + 'dn')
+                return mom / cstagger.do(self.get_var('r'), var[1] + 'dn')
         elif var == 'ee':   # internal energy
             return self.get_var('e') / self.get_var('r')
         elif var == 's':   # entropy?
-            return np.log(self.get_var('p')) - self.params['gamma'] * np.log(self.get_var('r'))
+            entr = np.log(self.get_var(
+                            'p')) - self.params['gamma'] * np.log(
+                                    self.get_var('r'))
+            return entr
         # else:
             # raise ValueError(('_get_composite_var: do not know (yet) how to'
             # 'get composite variable %s.' % var))
@@ -647,7 +652,8 @@ class BifrostData(object):
                     raise ValueError("No magnetic field available.")
             return result / self.get_var(q)
 
-        elif (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
+        elif (quant[:3] in MODULE_QUANT) or (
+                quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
             # Calculate module of vector quantity
             if (quant[:3] in MODULE_QUANT):
                 q = quant[3:]
@@ -800,10 +806,12 @@ class BifrostData(object):
                     derv = ['ddxdn', 'ddydn']
                 var = self.get_var(q + varsn[0])
                 # 2D or close
-                if (getattr(self, 'n' + varsn[0]) < 5) or (getattr(self, 'n' + varsn[1]) < 5):
+                if (getattr(self, 'n' + varsn[0]) <
+                        5) or (getattr(self, 'n' + varsn[1]) < 5):
                     return np.zeros_like(var)
                 else:
-                    return cstagger.do(var, derv[0]) - cstagger.do(self.get_var(q + varsn[1]), derv[1])
+                    return cstagger.do(var, derv[0]) - cstagger.do(
+                            self.get_var(q + varsn[1]), derv[1])
 
         elif quant in FLUX_QUANT:
             axis = quant[-1]
@@ -815,15 +823,15 @@ class BifrostData(object):
                 varsn = ['y', 'x']
             if 'pfw' in quant or len(quant) == 3:
                 var = self.get_var('b' + axis + 'c') * (
-                        self.get_var('u' + varsn[0] + 'c') *
-                        self.get_var('b' + varsn[0] + 'c') +
-                        self.get_var('u' + varsn[1] + 'c') *
-                        self.get_var('b' + varsn[1] + 'c'))
+                    self.get_var('u' + varsn[0] + 'c') *
+                    self.get_var('b' + varsn[0] + 'c') +
+                    self.get_var('u' + varsn[1] + 'c') *
+                    self.get_var('b' + varsn[1] + 'c'))
 
             elif 'pfe' in quant or len(quant) == 3:
                 var += self.get_var('u' + axis + 'c') * (
-                       self.get_var('b' + varsn[0] + 'c')**2 +
-                       self.get_var('b' + varsn[1] + 'c')**2)
+                    self.get_var('b' + varsn[0] + 'c')**2 +
+                    self.get_var('b' + varsn[1] + 'c')**2)
             return var
 
         elif quant in PLASMA_QUANT:
@@ -835,9 +843,12 @@ class BifrostData(object):
                     else:
                         return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
                 elif quant == 'cs':
-                    return np.sqrt(self.params['gamma'][0] * var / self.get_var('r'))
+                    return np.sqrt(
+                        self.params['gamma'][0] * var / self.get_var('r'))
                 elif quant == 's':
-                    return np.log(var) - self.params['gamma'][0] * np.log(self.get_var('r'))
+                    return np.log(
+                            var) - self.params['gamma'][0] * np.log(
+                            self.get_var('r'))
                 elif quant == 'beta':
                     return 2 * var / self.get_var('b2')
 
@@ -860,7 +871,8 @@ class BifrostData(object):
                 axis = quant[-1]
                 var = self.get_var('p' + axis + 'c')
                 if quant[0] == 'h':
-                    return (self.get_var('e') + self.get_var('p')) / self.get_var('r') * var
+                    return (self.get_var('e') + self.get_var('p')) / \
+                        self.get_var('r') * var
                 else:
                     return self.get_var('u2') * var * 0.5
 
