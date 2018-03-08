@@ -4,50 +4,65 @@ Set of programs to read and interact with atom files focus.
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph, bifrost_units
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii
+from .bifrost import subs2grph, bifrost_units
 from .ebysus import EbysusData
 from . import cstagger
 import re
+import pickle
+import shutil
+import ChiantiPy.core as ch
+import datetime
+import periodictable as pt
 
 class atom_tools(object):
     """
     Reads data from atom files in Ebysus format.
     """
-    def __init__(self, atom_name = '', stage='', atom_file='', voronov_file=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat'):
+
+    def __init__(self, atom_name='', stage='', atom_file='',
+                 voronov_file=os.environ.get(
+                     'EBYSUS') + 'INPUT/MISC/voronov.dat'):
         '''
             Init file
 
             Parameters (INPUT)
             ----------
-            atom_file - atom file of interest (in this case, atom_name and stage will be ignore).
-            atom_name - lower case letter if the atom of interest. This is mostly just for using some CHIANTI read out.
-                If atom is not defined then it returns a list of all abundances in the file.
+            atom_file - atom file of interest (in this case, atom_name
+                        and stage will be ignore).
+            atom_name - lower case letter if the atom of interest.
+                        This is mostly just for using some CHIANTI read out.
+                        If atom is not defined then it returns a list of all
+                        abundances in the file.
                 In this case, one will access to it by, e.g., var['h'],
             stage - This is for the CHIANTI read out options.
-            voronov_file - path of the Ebysus file that contains all the information about Voronov. For CHIANTI stuff, it is the
-                abundance file, default is voronov.dat without Chianti data base or sun_photospheric_1998_grevesse for
-                Chianti data base.
+            voronov_file - path of the Ebysus file that contains all the
+                        information about Voronov. For CHIANTI stuff, it is
+                        the abundance file, default is voronov.dat without
+                        Chianti data base or sun_photospheric_1998_grevesse for
+                        Chianti data base.
 
             Parameters (DATA IN OBJECT)
             ----------
-            params - list containing the information of voronov.dat (following the format of read_voro_file)
+            params - list containing the information of voronov.dat
+                    (following the format of read_voro_file)
 
         '''
         self.voronov_file = voronov_file
         self.read_voro_file()
         self.keyword_atomic = [
-                    'ar85-cdi',
-                    'ar85-cea',
-                    'ar85-ch',
-                    'ar85-che',
-                    'ci',
-                    'ce',
-                    'cp',
-                    'ohm',
-                    'burgess',
-                    'slups',
-                    'shull82',
-                    'reco']
+            'ar85-cdi',
+            'ar85-cea',
+            'ar85-ch',
+            'ar85-che',
+            'ci',
+            'ce',
+            'cp',
+            'ohm',
+            'burgess',
+            'slups',
+            'shull82',
+            'reco']
         if (atom_file != ''):
             self.atom_file = atom_file
             self.read_atom_file()
@@ -57,14 +72,17 @@ class atom_tools(object):
             self.atom = atom_name.replace("_", "")
 
             if len(''.join(x for x in atom_name if x.isdigit())) == 1:
-                self.stage=int(re.findall('\d+', atom_name)[0])
+                self.stage = int(re.findall('\d+', atom_name)[0])
                 self.atom = self.atom.replace("1", "")
 
             if stage != '':
-                self.stage=stage
+                self.stage = stage
 
     def read_voro_file(self):
-        ''' Reads the miscelaneous Vofonov & abundances table formatted (command style) ascii file into dictionary '''
+        '''
+        Reads the miscelaneous Vofonov & abundances table formatted
+        (command style) ascii file into dictionary
+        '''
         li = 0
         self.vor_params = {}
         headers = ['NSPECIES_MAX', 'NLVLS_MAX', 'SPECIES']
@@ -94,8 +112,8 @@ class atom_tools(object):
                             ii = 1
                         except BaseException:
                             print(
-                                '(WWW) read_voro_file: could not find datatype in '
-                                'line %i, skipping' %
+                                '(WWW) read_voro_file: could not find datatype'
+                                'in line %i, skipping' %
                                 li)
                             li += 1
                             continue
@@ -108,8 +126,8 @@ class atom_tools(object):
                                 val_arr.append(value)
                             except BaseException:
                                 print(
-                                    '(WWW) read_voro_file: could not find datatype in '
-                                    'line %i, skipping' %
+                                    '(WWW) read_voro_file: could not find'
+                                    'datatype in line %i, skipping' %
                                     li)
                                 li += 1
                                 continue
@@ -122,8 +140,8 @@ class atom_tools(object):
 
                             except BaseException:
                                 print(
-                                    '(WWW) read_voro_file: could not find datatype in '
-                                    'line %i, skipping' %
+                                    '(WWW) read_voro_file: could not find'
+                                    'datatype in line %i, skipping' %
                                     li)
                                 li += 1
                                 continue
@@ -142,91 +160,104 @@ class atom_tools(object):
             self.vor_params['SPECIES'] = np.array(self.vor_params['SPECIES'])
 
     def get_abund(self,
-            Chianti=False,abundance = 'sun_photospheric_1998_grevesse'):
+                  Chianti=False, abundance='sun_photospheric_1998_grevesse'):
         '''
             Returns abundances from the voronov.dat file.
 
             Parameters
             ----------
-            Chianti - if true uses chianti data base, otherwise uses atom files information
+            Chianti - if true uses chianti data base, otherwise uses atom files
+                    information
         '''
 
         try:
             return self.params['abund']
 
-        except:
-            if not hasattr(self,'stage'):
+        except BaseException:
+            if not hasattr(self, 'stage'):
                 stage = 1
             else:
                 stage = self.stage
 
             if Chianti:
-                import ChiantiPy.core as ch
                 if ('.dat' in abundance):
                     abundance = 'sun_photospheric_1998_grevesse'
-                self.ion = ch.ion(self.atom+ '_' + str(stage), 1e5, abundance=abundance)
+                self.ion = ch.ion(self.atom + '_' + str(stage),
+                                  1e5, abundance=abundance)
                 return self.ion.Abundance
             else:
 
-                if (hasattr(self,'atom_file') and (len(self.atom)>0)):
-                    self.abund_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(stage))[
-                        0]], 8].astype(np.float)[0][0]
+                if (hasattr(self, 'atom_file') and (len(self.atom) > 0)):
+                    self.abund_dic = self.vor_params['SPECIES'][[np.where(
+                        self.vor_params['SPECIES'][:, 1] == self.atom + str(
+                            stage))[0]], 8].astype(np.float)[0][0]
                 else:
                     for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
-                        if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
+                        if not(any(
+                                i.isdigit() for i in self.vor_params[
+                                        'SPECIES'][ii, 1])):
                             try:
                                 abund_dic[self.vor_params['SPECIES'][ii, 1]
-                                          ] = self.vor_params['SPECIES'][ii, 8].astype(np.float)
+                                          ] = self.vor_params['SPECIES'][
+                                            ii, 8].astype(np.float)
                             except BaseException:
                                 abund_dic = {
-                                    self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 8].astype(np.float)}
+                                    self.vor_params['SPECIES'][
+                                            ii, 1]: self.vor_params[
+                                                'SPECIES'][ii, 8].astype(
+                                                        np.float)}
 
-                    self.abund_dic=abund_dic
+                    self.abund_dic = abund_dic
                 return self.abund_dic
 
     def get_atomweight(self):
         '''
-            Returns atomic weights from the voronov.dat file.
+        Returns atomic weights from the voronov.dat file.
 
-            Parameters
-            ----------
+        Parameters
+        ----------
         '''
         try:
             return self.params['weight']
-        except:
-            if (hasattr(self,'atom_file') and len(self.atom)>0):
-                        self.weight_dic = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                                        0]], 2].astype(np.float)[0][0]
+        except BaseException:
+            if (hasattr(self, 'atom_file') and len(self.atom) > 0):
+                self.weight_dic = self.vor_params['SPECIES'][[np.where(
+                    self.vor_params['SPECIES'][:, 1] == self.atom + str(
+                        self.stage))[0]], 2].astype(np.float)[0][0]
             else:
                 for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
-                    if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
+                    if not(any(i.isdigit()
+                               for i in self.vor_params['SPECIES'][ii, 1])):
                         try:
                             weight_dic[self.vor_params['SPECIES'][ii, 1]
-                                       ] = self.vor_params['SPECIES'][ii, 2].astype(np.float)
+                                       ] = self.vor_params['SPECIES'][
+                                            ii, 2].astype(np.float)
                         except BaseException:
-                            weight_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 2].astype(np.float)}
+                            weight_dic = {
+                                self.vor_params['SPECIES'][
+                                    ii, 1]: self.vor_params['SPECIES'][
+                                            ii, 2].astype(np.float)}
 
                 self.weight_dic = weight_dic
             return self.weight_dic
 
-    def get_atomde(self,
-            Chianti=True,
-            cm1=False):
+    def get_atomde(self, Chianti=True, cm1=False):
         '''
-            Returns ionization energy dE from the voronov.dat file.
+        Returns ionization energy dE from the voronov.dat file.
 
-            Parameters
-            ----------
-            Chianti - if true uses chianti data base, otherwise uses atom files information
-            cm1 - boolean and if it is true converts from eV to cm-1
+        Parameters
+        ----------
+        Chianti - if true uses chianti data base, otherwise uses atom files
+                information
+        cm1 - boolean and if it is true converts from eV to cm-1
         '''
-        if not hasattr(self,'cm1'):
+        if not hasattr(self, 'cm1'):
             self.cm1 = cm1
         else:
             if self.cm1 != cm1:
                 self.cm1 = cm1
 
-        if not hasattr(self,'Chianti'):
+        if not hasattr(self, 'Chianti'):
             self.Chianti = Chianti
         else:
             if self.Chianti != Chianti:
@@ -238,32 +269,33 @@ class atom_tools(object):
             units = 1.0
 
         if Chianti and self.atom != '':
-            import ChiantiPy.core as ch
-            ion = ch.ion(self.atom+ '_' + str(self.stage))
+            ion = ch.ion(self.atom + '_' + str(self.stage))
             self.de = ion.Ip * units
             return self.de
         else:
 
-            if (self.atom_file != '') or (len(self.atom)>0):
-                print('get_De',self.atom+str(self.stage))
-                self.de = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                    0]], 3].astype(np.float)[0][0] * units
+            if (self.atom_file != '') or (len(self.atom) > 0):
+                print('get_De', self.atom + str(self.stage))
+                self.de = self.vor_params['SPECIES'][[np.where(
+                    self.vor_params['SPECIES'][:, 1] == self.atom + str(
+                        self.stage))[0]], 3].astype(np.float)[0][0] * units
                 return self.de
             else:
                 for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
                     try:
-                        de_dic[self.vor_params['SPECIES'][ii, 1]] = self.vor_params['SPECIES'][ii, 3].astype(
-                            np.float) * units
+                        de_dic[self.vor_params['SPECIES'][
+                            ii, 1]] = self.vor_params['SPECIES'][ii, 3].astype(
+                                np.float) * units
                     except BaseException:
-                        de_dic = {self.vor_params['SPECIES'][ii,
-                                                    1]: self.vor_params['SPECIES'][ii,
-                                                                          3].astype(np.float) * units}
+                        de_dic = {self.vor_params['SPECIES'][
+                                ii, 1]: self.vor_params['SPECIES'][
+                                    ii, 3].astype(np.float) * units}
 
                 self.de_dic = de_dic
                 return self.de_dic
 
     def get_atomZ(self,
-            Chianti=True):
+                  Chianti=True):
         '''
             Returns atomic number Z from the voronov.dat file.
 
@@ -272,42 +304,49 @@ class atom_tools(object):
         '''
 
         if Chianti:
-            import ChiantiPy.core as ch
             ion = ch.ion(self.atom + '_' + str(self.stage))
-            self.ion=ion
+            self.ion = ion
             self.Z = ion.Z
         else:
 
-            if ((self.atom_file=='') > 0) and (len(self.atom)>0):
-                self.z = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                    0]], 0].astype(np.int)[0][0]
+            if ((self.atom_file == '') > 0) and (len(self.atom) > 0):
+                self.z = self.vor_params['SPECIES'][[np.where(self.vor_params[
+                    'SPECIES'][:, 1] == self.atom + str(self.stage))[
+                        0]], 0].astype(np.int)[0][0]
             else:
                 for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
-                    if not(any(i.isdigit() for i in self.vor_params['SPECIES'][ii, 1])):
+                    if not(any(i.isdigit()
+                               for i in self.vor_params['SPECIES'][ii, 1])):
                         try:
                             z_dic[self.vor_params['SPECIES'][ii, 1]
-                                  ] = self.vor_params['SPECIES'][ii, 0].astype(np.int)
+                                  ] = self.vor_params['SPECIES'][
+                                    ii, 0].astype(np.int)
                         except BaseException:
-                            z_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 0].astype(np.int)}
+                            z_dic = {
+                                self.vor_params['SPECIES'][
+                                    ii, 1]: self.vor_params[
+                                        'SPECIES'][ii, 0].astype(np.int)}
 
                 self.z_dic = z_dic
 
-
     def get_atomP(self):
         '''
-            Returns P parameter for Voronov rate fitting term from the voronov.dat file.
-                The parameter P was included to better fit the particular cross-section
-                behavior for certain ions near threshold; it only takes on the value 0 or 1
+        Returns P parameter for Voronov rate fitting term from the voronov.dat
+        file. The parameter P was included to better fit the particular
+        cross-section behavior for certain ions near threshold; it only takes
+        on the value 0 or 1
 
-            Parameters
-            ----------
-            atom - lower case letter if the atom of interest.
-                If atom is not defined then it returns a list of all P parameter in the file.
-                In this case, one will access to it by, e.g., var['he2']
+        Parameters
+        ----------
+        atom - lower case letter if the atom of interest.
+                If atom is not defined then it returns a list of all P
+                parameter in the file. In this case, one will access to it by,
+                e.g., var['he2']
         '''
 
-        if ((self.atom_file=='') > 0) and (len(self.atom)>0):
-            self.p = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
+        if ((self.atom_file == '') > 0) and (len(self.atom) > 0):
+            self.p = self.vor_params['SPECIES'][[np.where(self.vor_params[
+                'SPECIES'][:, 1] == self.atom + str(self.stage))[
                 0]], 4].astype(np.int)[0][0]
         else:
             for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
@@ -315,91 +354,106 @@ class atom_tools(object):
                     p_dic[self.vor_params['SPECIES'][ii, 1]
                           ] = self.vor_params['SPECIES'][ii, 4].astype(np.int)
                 except BaseException:
-                    p_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 4].astype(np.int)}
+                    p_dic = {
+                        self.vor_params['SPECIES'][ii, 1]: self.vor_params[
+                            'SPECIES'][ii, 4].astype(np.int)}
 
             self.p_dic = p_dic
 
-
     def get_atomA(self):
         '''
-            Returns A parameter for Voronov rate fitting term  from the voronov.dat file.
+        Returns A parameter for Voronov rate fitting term from the voronov.dat
+        file.
 
-            Parameters
-            ----------
+        Parameters
+        ----------
          '''
 
-        if ((self.atom_file=='') > 0) and (len(self.atom)>0):
-            self.a = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                0]], 5].astype(np.float)[0][0]
+        if ((self.atom_file == '') > 0) and (len(self.atom) > 0):
+            self.a = self.vor_params['SPECIES'][[np.where(
+                self.vor_params['SPECIES'][:, 1] == self.atom + str(
+                    self.stage))[0]], 5].astype(np.float)[0][0]
         else:
             for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
                 try:
                     a_dic[self.vor_params['SPECIES'][ii, 1]
-                          ] = self.vor_params['SPECIES'][ii, 5].astype(np.float)
+                          ] = self.vor_params['SPECIES'][ii, 5].astype(
+                            np.float)
                 except BaseException:
-                    a_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 5].astype(np.float)}
+                    a_dic = {
+                        self.vor_params['SPECIES'][ii, 1]: self.vor_params[
+                            'SPECIES'][ii, 5].astype(np.float)}
 
             self.a_dic = a_dic
 
-
     def get_atomX(self):
         '''
-            Returns X parameter for Voronov rate fitting term from the voronov.dat file.
+        Returns X parameter for Voronov rate fitting term from the voronov.dat
+        file.
 
-            Parameters
-            ----------
+        Parameters
+        ----------
 
         '''
 
-        if ((self.atom_file=='') > 0) and (len(self.atom)>0):
-            self.x = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                0]], 6].astype(np.float)[0][0]
+        if ((self.atom_file == '') > 0) and (len(self.atom) > 0):
+            self.x = self.vor_params['SPECIES'][[np.where(self.vor_params[
+                'SPECIES'][:, 1] == self.atom + str(self.stage))[
+                    0]], 6].astype(np.float)[0][0]
         else:
             for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
                 try:
                     x_dic[self.vor_params['SPECIES'][ii, 1]
-                          ] = self.vor_params['SPECIES'][ii, 6].astype(np.float)
+                          ] = self.vor_params['SPECIES'][
+                            ii, 6].astype(np.float)
                 except BaseException:
-                    x_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 6].astype(np.float)}
+                    x_dic = {
+                        self.vor_params['SPECIES'][ii, 1]: self.vor_params[
+                            'SPECIES'][ii, 6].astype(np.float)}
 
             self.x_dic = x_dic
 
-
     def get_atomK():
         '''
-            Returns K parameter for Voronov rate fitting term  from the voronov.dat file.
+        Returns K parameter for Voronov rate fitting term  from the voronov.dat
+        file.
 
-            Parameters
-            ----------
-            params - list containing the information of voronov.dat (following the format of read_voro_file)
-            atom - lower case letter of the atom of interest.
-                If atom is not defined then it returns a list of all K parameter in the file.
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat
+                (following the format of read_voro_file)
+        atom - lower case letter of the atom of interest.
+                If atom is not defined then it returns a list of all K
+                parameter in the file.
                 In this case, one will access to it by, e.g., var['he2']
         '''
 
-        if ((self.atom_file=='') > 0) and (len(self.atom)>0):
-            self.k = self.vor_params['SPECIES'][[np.where(self.vor_params['SPECIES'][:, 1] == self.atom+str(self.stage))[
-                0]], 7].astype(np.float)[0][0]
+        if ((self.atom_file == '') > 0) and (len(self.atom) > 0):
+            self.k = self.vor_params['SPECIES'][[np.where(self.vor_params[
+                'SPECIES'][:, 1] == self.atom + str(self.stage))[
+                    0]], 7].astype(np.float)[0][0]
         else:
             for ii in range(0, self.vor_params['NLVLS_MAX'][0]):
                 try:
-                    k_dic[self.vor_params['SPECIES'][ii, 1]
-                          ] = self.vor_params['SPECIES'][ii, 7].astype(np.float)
+                    k_dic[self.vor_params['SPECIES'][
+                        ii, 1]] = self.vor_params['SPECIES'][ii, 7].astype(
+                                np.float)
                 except BaseException:
-                    k_dic = {self.vor_params['SPECIES'][ii, 1]: self.vor_params['SPECIES'][ii, 7].astype(np.float)}
+                    k_dic = {
+                        self.vor_params['SPECIES'][ii, 1]: self.vor_params[
+                            'SPECIES'][ii, 7].astype(np.float)}
 
             self.k_dic = k_dic
 
-
     def info_atom(self):
         '''
-        provides general information about specific atom, e.g., ionization and excitation levels etc
+        provides general information about specific atom, e.g., ionization
+        and excitation levels etc
 
         Parameters
         ----------
         atom - lower case letter of the atom of interest, e.g., 'he'
         '''
-        import ChiantiPy.core as ch
 
         ion = ch.ion(self.atom + '_' + str(self.stage))
         Z = ion.Z
@@ -421,33 +475,32 @@ class atom_tools(object):
                         ion.Elvlc['ecmth'][elvl],
                         'g')
 
-
-    def get_excidE(self,  Chianti=True, cm1=False):
+    def get_excidE(self, Chianti=True, cm1=False):
         '''
-            Returns ionization energy dE for excited levels
+        Returns ionization energy dE for excited levels
 
-            Parameters
-            ----------
-            params - list containing the information of voronov.dat (following the format of read_voro_file)
-            atom - lower case letter if the atom of interest.
-                If atom is not defined then it returns a list of all ionization energy dE in the file.
-                In this case, one will access to it by, e.g., var['he2']
-            cm1 - boolean and if it is true converts from eV to cm-1
+        Parameters
+        ----------
+        params - list containing the information of voronov.dat (following
+            the format of read_voro_file)
+        atom - lower case letter if the atom of interest.
+            If atom is not defined then it returns a list of all ionization
+            energy dE in the file.
+            In this case, one will access to it by, e.g., var['he2']
+        cm1 - boolean and if it is true converts from eV to cm-1
         '''
-        import ChiantiPy.core as ch
 
-        if not hasattr(self,cm1):
+        if not hasattr(self, cm1):
             self.cm1 = cm1
         else:
             if self.cm1 != cm1:
                 self.cm1 = cm1
 
-        if not hasattr(self,Chianti):
+        if not hasattr(self, Chianti):
             self.Chianti = Chianti
         else:
             if self.Chianti != Chianti:
                 self.Chianti = Chianti
-
 
         unitscm1 = 1.0 / (8.621738e-5 / 0.695)
         if self.cm1:
@@ -455,17 +508,18 @@ class atom_tools(object):
         else:
             units = 1. / unitscm1
 
-        ion = ch.ion(self.atom+'_'+str(self.stage))
+        ion = ch.ion(self.atom + '_' + str(self.stage))
         if hasattr(ion, 'Elvlc'):
             if self.stage == '':
                 self.de = (ion.Ip * unitscm1 + ion.Elvlc['ecmth'][0]) * units
             else:
-                self.de = (ion.Ip * unitscm1 + ion.Elvlc['ecmth'][self.stage]) * units
+                self.de = (ion.Ip * unitscm1 +
+                           ion.Elvlc['ecmth'][self.stage]) * units
         else:
             print('No Elvlc in the Chianti Data base')
 
-
-    def rrec(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov', threebody=False):
+    def rrec(self, ntot, Te, lo_lvl=1, hi_lvl=2,
+             GENCOL_KEY='voronov', threebody=False):
         '''
         gives the recombination rate per particle
         Parameters:
@@ -476,15 +530,17 @@ class atom_tools(object):
         units = bifrost_units()
         TeV = Te * units.K_TO_EV
 
-        g_ilv=float(self.params['lvl'][lo_lvl][1])
-        g_jlv=float(self.params['lvl'][hi_lvl][1])
-        dE= float(self.params['lvl'][hi_lvl][0]) - float(self.params['lvl'][lo_lvl][0])
+        g_ilv = float(self.params['lvl'][lo_lvl][1])
+        g_jlv = float(self.params['lvl'][hi_lvl][1])
+        dE = float(self.params['lvl'][hi_lvl][0]) - \
+            float(self.params['lvl'][lo_lvl][0])
         dE = dE * units.CLIGHT.value * units.HPLANCK.value
-        scr1 =  dE / Te / units.KBOLTZMANN.value
+        scr1 = dE / Te / units.KBOLTZMANN.value
 
-        if ((threebody) != False):
-            if not hasattr(self,'frec3bd'):
-                self.r3body(ntot, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
+        if ((threebody) is not False):
+            if not hasattr(self, 'frec3bd'):
+                self.r3body(ntot, Te, lo_lvl=lo_lvl,
+                            hi_lvl=hi_lvl, GENCOL_KEY=GENCOL_KEY)
             cdn = self.frec3bd
         else:
             cdn = 0
@@ -493,17 +549,19 @@ class atom_tools(object):
             keylist = self.keyword_atomic
         else:
             keylist = GENCOL_KEY.lower()
-        if np.size(keylist) == 1: keylist = [keylist]
+        if np.size(keylist) == 1:
+            keylist = [keylist]
 
         for keyword in keylist:
             if keyword == 'shull82':
-                summrs=1.0
+                summrs = 1.0
                 sqrtte = np.sqrt(Te)
-                arrec = Arad * (Te/1.e4)**(-Xrad)
-                adrec = Adi / Te / sqrtte * exp(-T0/Te)*(1.e0+Bdi * np.exp(-T1/Te))
+                arrec = Arad * (Te / 1.e4)**(-Xrad)
+                adrec = Adi / Te / sqrtte * \
+                    exp(-T0 / Te) * (1.e0 + Bdi * np.exp(-T1 / Te))
                 cdn = arrec + summrs * adrec + cdn
 
-            elif keyword == 'voronov': # mcwhirter65
+            elif keyword == 'voronov':  # mcwhirter65
                 vfac = 2.6e-19
                 self.stage = 1
                 self.get_atomZ()
@@ -511,14 +569,21 @@ class atom_tools(object):
 
         self.cdn = cdn
 
-    def vrec(self, nel, Te,lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov',threebody=False):
-        ''' gives the recombination frequency '''
-        if not hasattr(self,'cdn'):
-            self.rrec(nel, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY = GENCOL_KEY,threebody=threebody)
+    def vrec(self, nel, Te, lo_lvl=1, hi_lvl=2,
+             GENCOL_KEY='voronov', threebody=False):
+        '''
+        gives the recombination frequency
+        '''
+        if not hasattr(self, 'cdn'):
+            self.rrec(nel, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl,
+                      GENCOL_KEY=GENCOL_KEY, threebody=threebody)
         self.frec = nel * self.cdn
 
-    def rion(self, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
-        ''' gives the ionization rate per particle using Voronov 1997 fitting formula'''
+    def rion(self, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY='voronov'):
+        '''
+        gives the ionization rate per particle using Voronov 1997 fitting
+        formula
+        '''
         units = bifrost_units()
         TeV = Te * units.K_TO_EV
 
@@ -528,25 +593,34 @@ class atom_tools(object):
             keylist = [GENCOL_KEY.lower()]
 
         for keyword in keylist:
-            if keyword ==  'voronov':
-                tr_line=np.where(self.params['voronov'][0][:,0] == lo_lvl+1)
-                phion = self.params['voronov'][0][tr_line[0],2] # get_atomde(atom, Chianti=False)  # 13.6
-                A = self.params['voronov'][0][tr_line[0],4] * 1e6 # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
-                X = self.params['voronov'][0][tr_line[0],5] # get_atomX(atom)  # 0.232
-                K = self.params['voronov'][0][tr_line[0],6] # get_atomK(atom)  # 0.39
-                P = self.params['voronov'][0][tr_line[0],3] # get_atomP(atom)  # 0
+            if keyword == 'voronov':
+                tr_line = np.where(
+                    self.params['voronov'][0][:, 0] == lo_lvl + 1)
+                # get_atomde(atom, Chianti=False)  # 13.6
+                phion = self.params['voronov'][0][tr_line[0], 2]
+                # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
+                A = self.params['voronov'][0][tr_line[0], 4] * 1e6
+                # get_atomX(atom)  # 0.232
+                X = self.params['voronov'][0][tr_line[0], 5]
+                # get_atomK(atom)  # 0.39
+                K = self.params['voronov'][0][tr_line[0], 6]
+                # get_atomP(atom)  # 0
+                P = self.params['voronov'][0][tr_line[0], 3]
 
-                self.cup = A * (1 + np.sqrt(phion / TeV) * P) / (X + phion /
-                             TeV) * (phion / TeV)**K * np.exp(-phion / TeV)
+                self.cup = A * (1 + np.sqrt(phion / TeV) * P) / (
+                        X + phion / TeV) * (phion / TeV)**K * np.exp(
+                            -phion / TeV)
 
             elif keyword == 'ar85-cdi':
-                '''  Data for electron impact ionization Arnaud and Rothenflug (1985)
-                   1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) + D ln(u)/u) (cm^2)
+                '''  Data for electron impact ionization Arnaud and
+                    Rothenflug (1985)
+                   1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) +
+                                                            D ln(u)/u) (cm^2)
                         #   i   j
                         # Numbers of shells
                     # dE(eV)  A   B   C   D
                 '''
-                tr_list=self.params['ar85-cdi'][:,0][:]
+                tr_list = self.params['ar85-cdi'][:, 0][:]
                 tr_line = [v for v in tr_list[:][0] if tr_list[v][0] == lo_lvl]
                 nshells = var['ar85-cdi'][tr_line][1]
                 phion = np.zeros(nshells)
@@ -554,21 +628,25 @@ class atom_tools(object):
                 B = np.zeros(nshells)
                 C = np.zeros(nshells)
                 D = np.zeros(nshells)
-                for ishell in range(0,nshells):
-                    phion[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][0]
+                for ishell in range(0, nshells):
+                    phion[ishell] = self.params['ar85-cdi'][tr_line][2][
+                            ishell][0]
                     A[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][1]
                     B[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][2]
                     C[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][3]
                     D[ishell] = self.params['ar85-cdi'][tr_line][2][ishell][2]
 
-                g_ilv=float(self.params['lvl'][lo_lvl][1])
-                g_jlv=float(self.params['lvl'][hi_lvl][1])
+                g_ilv = float(self.params['lvl'][lo_lvl][1])
+                g_jlv = float(self.params['lvl'][hi_lvl][1])
 
-                for ishell in range(0,nshells):
-                    xj = phion[ishell] * units.EV_TO_ERG / units.KBOLTZMANN.value / Te
+                for ishell in range(0, nshells):
+                    xj = phion[ishell] * units.EV_TO_ERG / \
+                        units.KBOLTZMANN.value / Te
                     fac = np.exp(-xj) * sqrt(xj)
-                    fxj = fac * (A[ishell] + B[ishell] * (1. + xj) + (C[ishell] - xj *
-                            (A[ishell] + B[ishell] * (2. + xj))) * fone(xj,0) + D[ishell] * xj * ftwo(xj,0) )
+                    fxj = fac * (A[ishell] + B[ishell] * (1. + xj) + (
+                        C[ishell] - xj * (A[ishell] + B[ishell] * (
+                            2. + xj))) * fone(
+                        xj, 0) + D[ishell] * xj * ftwo(xj, 0))
                     fac = 6.69e-07 / TeV / np.sqrt(TeV)
                     cup = cup + fac * fxj
 
@@ -577,27 +655,36 @@ class atom_tools(object):
             elif keyword == 'ar85-cea':
                 '''
                 '''
-                tr_list=self.params['ar85-cea'][:,0][:]
-                tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == lo_lvl]
+                tr_list = self.params['ar85-cea'][:, 0][:]
+                tr_line = [v for v in tr_list[:][0]
+                           [0] if tr_list[v][0][0] == lo_lvl]
                 coeff = self.params['ar85-cea'][lo_lvl][1]
 
             elif keyword == 'burgess':
                 '''
                 '''
-                tr_list=self.params['burgess'][:,0][:]
-                tr_line = [v for v in tr_list[:][0][0] if tr_list[v][0][0] == lo_lvl]
+                tr_list = self.params['burgess'][:, 0][:]
+                tr_line = [v for v in tr_list[:][0]
+                           [0] if tr_list[v][0][0] == lo_lvl]
                 coeff = self.params['burgess'][lo_lvl][1]
 
             elif keyword == 'shull82':
                 '''
                     Recombination rate coefficients Shull and Steenberg (1982)
-                    provides direct collisional ionization with the following fitting:
-                    Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T), with Ai ~ 0.1
-                    for the recombination rate combines the sum of radiative and dielectronic recombination rate
-                    alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2) exp(-T0/T) (1+Bdi exp(-T1/T))
-                    i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi       T0       T1
+                    provides direct collisional ionization with the following
+                    fitting:
+                    Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T),
+                        with Ai ~ 0.1
+                    for the recombination rate combines the sum of radiative
+                    and dielectronic recombination rate
+                    alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2)
+                    i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi
+                        exp(-T0/T) (1+Bdi exp(-T1/T))
+                            T0       T1
                 '''
-                tr_line =  [v for v in range(0,len(self.params['shull82'])) if  self.params['shull82'][v,0][0] == lo_lvl]
+                tr_line = [v for v in range(
+                    0, len(self.params['shull82'])) if self.params['shull82'][
+                            v, 0][0] == lo_lvl]
                 Acol = self.params['shull82'][lo_lvl][1][0]
                 Tcol = self.params['shull82'][lo_lvl][1][2]
                 Arad = self.params['shull82'][lo_lvl][1][3]
@@ -609,29 +696,34 @@ class atom_tools(object):
                 if (T_4 < T0) or (T_4 > T1):
                     print('Warning[ar85-che]: Temperature out of bounds')
 
-                g_ilv=float(self.params['lvl'][lo_lvl][1])
-                g_jlv=float(self.params['lvl'][hi_lvl][1])
+                g_ilv = float(self.params['lvl'][lo_lvl][1])
+                g_jlv = float(self.params['lvl'][hi_lvl][1])
 
-                dE= float(self.params['lvl'][hi_lvl][0]) - float(self.params['lvl'][lo_lvl][0])
+                dE = float(self.params['lvl'][hi_lvl][0]) - \
+                    float(self.params['lvl'][lo_lvl][0])
                 dE = dE * units.CLIGHT * units.HPLANCK
-                scr1 =  dE / Te / units.KBOLTZMANN.value
+                scr1 = dE / Te / units.KBOLTZMANN.value
 
                 sqrtte = np.sqrt(Te)
-                cup=0.
+                cup = 0.
                 if (Acol != 0.):
-                    cup = Acol * sqrtte * np.exp( -Tcol / Te) / (1.e0 + 0.1 * Te / Tcol)
+                    cup = Acol * sqrtte * \
+                        np.exp(-Tcol / Te) / (1.e0 + 0.1 * Te / Tcol)
 
-                self.cup =  cup
+                self.cup = cup
 
             elif keyword == 'ar85-ch':
                 '''
-                    charge transfer recombination with neutral hydrogen Arnaud and Rothenflug (1985)
-                    updated for Fe ions by Arnaud and Rothenflug (1992)
-                    alpha = a (T_4)^b (1 + c exp(d T_4))
-                    i   j
-                    Temperature range (K)   a(1e-9cm3/s)    b      c    d
+                charge transfer recombination with neutral hydrogen Arnaud
+                and Rothenflug (1985) updated for Fe ions by Arnaud and
+                Rothenflug (1992)
+                alpha = a (T_4)^b (1 + c exp(d T_4))
+                i   j
+                Temperature range (K)   a(1e-9cm3/s)    b      c    d
                 '''
-                tr_line = [v for v in range(0,len(self.params['ar85-ch'])) if  self.params['ar85-ch'][v][0][1] == lo_lvl]
+                tr_line = [v for v in range(
+                    0, len(self.params['ar85-ch'])) if self.params['ar85-ch'][
+                            v][0][1] == lo_lvl]
                 T0 = self.params['ar85-ch'][lo_lvl][1][0]
                 T1 = self.params['ar85-ch'][lo_lvl][1][1]
                 a = self.params['ar85-ch'][lo_lvl][1][2]
@@ -640,11 +732,13 @@ class atom_tools(object):
                 d = self.params['ar85-ch'][lo_lvl][1][5]
                 if (T_4 < T0) or (T_4 > T1):
                     print('Warning[ar85-che]: Temperature out of bounds')
-                #self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
+                # self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
 
             elif keyword == 'ar85-che':
                 ''' same as above '''
-                tr_line = [v for v in range(0,len(self.params['ar85-che'])) if  self.params['ar85-che'][v][0][1] == lo_lvl]
+                tr_line = [v for v in range(
+                    0, len(self.params['ar85-che'])) if self.params[
+                            'ar85-che'][v][0][1] == lo_lvl]
                 T0 = self.params['ar85-che'][lo_lvl][1][0]
                 T1 = self.params['ar85-che'][lo_lvl][1][1]
                 a = self.params['ar85-che'][lo_lvl][1][2]
@@ -653,43 +747,48 @@ class atom_tools(object):
                 d = self.params['ar85-che'][lo_lvl][1][5]
                 if (T_4 < T0) or (T_4 > T1):
                     print('Warning[ar85-che]: Temperature out of bounds')
-                #self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
+                # self.cup = a (T_4)**b * (1 + c * np.exp(d * T_4))
 
-    def vion(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
-        ''' gives the ionization frequency using Voronov 1997 fitting formula'''
-        if not hasattr(self,'cup'):
-            self.rion(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
+    def vion(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY='voronov'):
+        '''
+        gives the ionization frequency using Voronov 1997 fitting formula
+        '''
+        if not hasattr(self, 'cup'):
+            self.rion(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY=GENCOL_KEY)
         self.fion = nel * self.cup
 
-    def ionfraction(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY = 'voronov'):
+    def ionfraction(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY='voronov'):
         ''' gives the ionization fraction using vrec and vion'''
-        if not hasattr(self,'cup'):
-            self.rion(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
-        if not hasattr(self,'cdn'):
-            self.rrec(ntot, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
+        if not hasattr(self, 'cup'):
+            self.rion(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY=GENCOL_KEY)
+        if not hasattr(self, 'cdn'):
+            self.rrec(ntot, Te, lo_lvl=lo_lvl,
+                      hi_lvl=hi_lvl, GENCOL_KEY=GENCOL_KEY)
 
         self.ionfrac = self.fion / (self.rec + 2.0 * self.fion)
 
-    def ionse(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
+    def ionse(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY='voronov'):
         ''' gives electron or ion number density using vrec and vion'''
-        if not hasattr(self,ionfrac):
-            self.ionfraction(ntot, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
-        self.ion_ndens  = ntot * self.ionfrac
+        if not hasattr(self, ionfrac):
+            self.ionfraction(ntot, Te, lo_lvl=lo_lvl,
+                             hi_lvl=hi_lvl, GENCOL_KEY=GENCOL_KEY)
+        self.ion_ndens = ntot * self.ionfrac
 
-    def neuse(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
+    def neuse(self, ntot, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY='voronov'):
         ''' gives neutral number density using vrec and vion'''
-        if not hasattr(self,ionfrac):
-            self.ionse(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
+        if not hasattr(self, ionfrac):
+            self.ionse(Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY=GENCOL_KEY)
         self.neu_ndens = ntot - 2.0 * self.ion_ndens
 
-    def r3body(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY ='voronov'):
+    def r3body(self, nel, Te, lo_lvl=1, hi_lvl=2, GENCOL_KEY='voronov'):
         ''' three body recombination '''
         units = bifrost_units()
-        gst_hi=float(self.params['lvl'][lo_lvl][1]) #2.0
-        gst_lo=float(self.params['lvl'][hi_lvl][1]) #1.0
+        gst_hi = float(self.params['lvl'][lo_lvl][1])  # 2.0
+        gst_lo = float(self.params['lvl'][hi_lvl][1])  # 1.0
 
-        if not hasattr(self,'cup'):
-            self.vion(nel, Te, lo_lvl=lo_lvl, hi_lvl=hi_lvl, GENCOL_KEY =GENCOL_KEY)
+        if not hasattr(self, 'cup'):
+            self.vion(nel, Te, lo_lvl=lo_lvl,
+                      hi_lvl=hi_lvl, GENCOL_KEY=GENCOL_KEY)
         '''
         if lo_lvl > 0:
             self.stage = lo_lvl + 1
@@ -698,68 +797,83 @@ class atom_tools(object):
         dekt = self.get_atomde(Chianti=False)
         dekt = float(self.get_atomde(Chianti=False))/ units.K_TO_EV / Te
         '''
-        dekt= float(self.params['lvl'][hi_lvl][0]) - float(self.params['lvl'][lo_lvl][0])
-        dekt = dekt * units.CLIGHT.value * units.HPLANCK.value / Te / units.KBOLTZMANN.value
+        dekt = float(self.params['lvl'][hi_lvl][0]) - \
+            float(self.params['lvl'][lo_lvl][0])
+        dekt = dekt * units.CLIGHT.value * \
+            units.HPLANCK.value / Te / units.KBOLTZMANN.value
 
-        saha=2.07e-16*nel*gst_lo/gst_hi*Te**(-1.5)*np.exp(dekt)  # Assuming nel in cgs. (For SI units would be 2.07e-22)
-        self.frec3bd = saha*self.cup # vion is collisional ionization rate
+        # Assuming nel in cgs. (For SI units would be 2.07e-22)
+        saha = 2.07e-16 * nel * gst_lo / gst_hi * Te**(-1.5) * np.exp(dekt)
+        self.frec3bd = saha * self.cup  # vion is collisional ionization rate
 
-
-    def inv_pop_atomf(self, ntot,Te,niter=100,nel=None, threebody=True, GENCOL_KEY = 'voronov'):
+    def inv_pop_atomf(self, ntot, Te, niter=100, nel=None,
+                      threebody=True, GENCOL_KEY='voronov'):
         ''' Inverts the Matrix for Statistical Equilibrum'''
         # nel starting guess is:
-        if nel is None: nel=ntot*1.0
-        shape=np.shape(ntot)
-        nelf=np.ravel(nel)
-        ntotf=np.ravel(ntot)
-        tef=np.ravel(Te)
-        npoints=len(tef)
-        nlevels=len(self.params['lvl'])
-        n_isp=np.zeros((npoints,nlevels))
-        for ipoint in range(0,npoints):
-            if (ipoint*100/(1.0*npoints) in np.linspace(0,99,100)): print('Done %s grid points of %s' %(str(ipoint),str(npoints)))
-            for iel in range(1,niter):
-                B=np.zeros((nlevels))
-                A=np.zeros((nlevels,nlevels))
+        if nel is None:
+            nel = ntot * 1.0
+        shape = np.shape(ntot)
+        nelf = np.ravel(nel)
+        ntotf = np.ravel(ntot)
+        tef = np.ravel(Te)
+        npoints = len(tef)
+        nlevels = len(self.params['lvl'])
+        n_isp = np.zeros((npoints, nlevels))
+        for ipoint in range(0, npoints):
+            if (ipoint * 100 / (1.0 * npoints) in np.linspace(0, 99, 100)):
+                print('Done %s grid points of %s' %
+                      (str(ipoint), str(npoints)))
+            for iel in range(1, niter):
+                B = np.zeros((nlevels))
+                A = np.zeros((nlevels, nlevels))
                 igen = 0
-                for ilev in range(0,nlevels-1):
-                    if hasattr(self,'cdn'):
-                        delattr(self,'cdn')
-                    if hasattr(self,'cup'):
-                        delattr(self,'cup')
-                    self.vrec(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,threebody=threebody,GENCOL_KEY=GENCOL_KEY)
-                    self.vion(nelf[ipoint],tef[ipoint],lo_lvl=ilev,hi_lvl=ilev+1,GENCOL_KEY=GENCOL_KEY)
-                    #print(nelf[ipoint],tef[ipoint],self.cdn,self.cup)
-                    if igen == 0: ## JMS Not sure what is that for....
+                for ilev in range(0, nlevels - 1):
+                    if hasattr(self, 'cdn'):
+                        delattr(self, 'cdn')
+                    if hasattr(self, 'cup'):
+                        delattr(self, 'cup')
+                    self.vrec(nelf[ipoint], tef[
+                        ipoint], lo_lvl=ilev, hi_lvl=ilev + 1,
+                            threebody=threebody, GENCOL_KEY=GENCOL_KEY)
+                    self.vion(nelf[ipoint], tef[
+                        ipoint], lo_lvl=ilev, hi_lvl=ilev + 1,
+                        GENCOL_KEY=GENCOL_KEY)
+                    # print(nelf[ipoint],tef[ipoint],self.cdn,self.cup)
+                    if igen == 0:  # JMS Not sure what is that for....
                         Rip = self.frec
                     else:
                         Rip += self.frec
                     Cip = self.fion
-                    A[ilev,ilev] += - Cip
-                    A[ilev,ilev+1] = Rip #+ Ri3d #Ri3d!?
-                    if ilev < nlevels-2:
-                        A[ilev+1,ilev+1] = - Rip# - Ri3d
-                        A[ilev+1,ilev] = Cip
+                    A[ilev, ilev] += - Cip
+                    A[ilev, ilev + 1] = Rip  # + Ri3d #Ri3d!?
+                    if ilev < nlevels - 2:
+                        A[ilev + 1, ilev + 1] = - Rip  # - Ri3d
+                        A[ilev + 1, ilev] = Cip
                     igen = 1
-                A[ilev+1,:] = 1.0
-                B[ilev+1] = ntotf[ipoint]
-                n_isp[ipoint,:] = np.linalg.solve(A,B)
+                A[ilev + 1, :] = 1.0
+                B[ilev + 1] = ntotf[ipoint]
+                n_isp[ipoint, :] = np.linalg.solve(A, B)
                 nelpos = 0.0
-                for ilev in range(1,nlevels):
-                    nelpos += n_isp[ipoint,ilev]*ilev
-                if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) < 1e-4:
-                    #print("Jump iter with iter = ",iel)
-                    nelf[ipoint] =nelpos
+                for ilev in range(1, nlevels):
+                    nelpos += n_isp[ipoint, ilev] * ilev
+                if (nelf[ipoint] - nelpos) / (nelf[ipoint] + nelpos) < 1e-4:
+                    # print("Jump iter with iter = ",iel)
+                    nelf[ipoint] = nelpos
                     break
-                if (iel == niter-1):
-                    if (nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos) > 1e-4:
-                        print("Warning, No stationary solution was found",(nelf[ipoint] - nelpos)/(nelf[ipoint] + nelpos),nelpos,nelf[ipoint])
-                nelf[ipoint] =nelpos
-        self.n_el=np.reshape(nelf,(shape))
-        self.n_isp=np.reshape(n_isp,(np.append(shape,nlevels)))
+                if (iel == niter - 1):
+                    if (nelf[ipoint] - nelpos) / \
+                            (nelf[ipoint] + nelpos) > 1e-4:
+                        print("Warning, No stationary solution was found",
+                              (nelf[ipoint] - nelpos) / (
+                                nelf[ipoint] + nelpos), nelpos, nelf[ipoint])
+                nelf[ipoint] = nelpos
+        self.n_el = np.reshape(nelf, (shape))
+        self.n_isp = np.reshape(n_isp, (np.append(shape, nlevels)))
 
     def read_atom_file(self):
-        ''' Reads the atom (command style) ascii file into dictionary '''
+        '''
+        Reads the atom (command style) ascii file into dictionary
+        '''
         def readnextline(lines, lp):
             line = lines[lp]
             while line == '\n':
@@ -767,7 +881,7 @@ class atom_tools(object):
                 line = lines[lp]
             while len(line) < 1 or line[0] == '#' or line[0] == '*':
                 lp += 1
-                line=lines[lp]
+                line = lines[lp]
             line = line.split(';')[0].split(' ')
             while '\n' in line:
                 line.remove('\n')
@@ -783,7 +897,7 @@ class atom_tools(object):
         ncon = 0
         nlin = 0
         nk = 0
-        #nl = sum(1 for line in open(atomfile))
+        # nl = sum(1 for line in open(atomfile))
         f = open(self.atom_file)
         start = True
         key = ''
@@ -804,7 +918,7 @@ class atom_tools(object):
             'TEMP',
             'RECO',
             'VORONOV',
-            'EMASK']  # Missing AR85-RR, RADRAT, SPLUPS5, I think AR85-CHE is not used in OOE
+            'EMASK']  # Missing AR85-RR, RADRAT, SPLUPS5. AR85-CHE not used
         headerslow = [
             'gencol',
             'cexc',
@@ -823,11 +937,11 @@ class atom_tools(object):
             'reco',
             'voronov',
             'emask']
-        lines=f.readlines()
+        lines = f.readlines()
         f.close()
-        for il in range(0,len(lines)): # for line in iter(f):
+        for il in range(0, len(lines)):  # for line in iter(f):
             # ignore empty lines and comments
-            line=lines[il]
+            line = lines[il]
             line = line.strip()
             if len(line) < 1:
                 li += 1
@@ -868,15 +982,19 @@ class atom_tools(object):
                     continue
                 elif(np.size(line) > 4):
                     if nk < int(params['nk']):
-                        string = [" ".join(line[v].strip()
-                                           for v in range(3, np.size(line) - 3))]
+                        string = [" ".join(
+                            line[v].strip() for v in range(
+                                3, np.size(line) - 3))]
                         nk += 1
                         if 'lvl' in params:
-                            params['lvl'] = np.vstack((params['lvl'], [float(line[0].strip()), float(
-                                line[1].strip()), string[0], int(line[-2].strip()), int(line[-1].strip())]))
+                            params['lvl'] = np.vstack((params['lvl'], [float(
+                                line[0].strip()), float(
+                                line[1].strip()), string[0], int(
+                                line[-2].strip()), int(line[-1].strip())]))
                         else:
                             params['lvl'] = [float(line[0].strip()), float(
-                                line[1].strip()), string[0], int(line[-2].strip()), int(line[-1].strip())]
+                                line[1].strip()), string[0], int(
+                                line[-2].strip()), int(line[-1].strip())]
                         continue
                     elif nlin < int(params['nlin']):
                         nlin += 1
@@ -911,37 +1029,42 @@ class atom_tools(object):
                         else:  # this is for HION, HELIUM or MF standards
                             if 'line' in params:
                                 params['line'] = np.vstack(
-                                    (params['line'], [
-                                        int(
-                                            line[0].strip()), int(
-                                            line[1].strip()), float(
-                                            line[2].strip()), int(
-                                            line[3].strip()), float(
-                                            line[4].strip()), line[5].strip()]))
+                                    (params['line'], [int(
+                                        line[0].strip()), int(
+                                        line[1].strip()), float(
+                                        line[2].strip()), int(
+                                        line[3].strip()), float(
+                                        line[4].strip()), line[5].strip()]))
                             else:
-                                params['line'] = [int(line[0].strip()), int(line[1].strip()), float(
-                                    line[2].strip()), int(line[3].strip()), float(line[4].strip()), line[5].strip()]
+                                params['line'] = [int(line[0].strip()), int(
+                                    line[1].strip()), float(
+                                    line[2].strip()), int(
+                                    line[3].strip()), float(
+                                    line[4].strip()), line[5].strip()]
                         continue
                     elif ncon < int(params['ncnt']):
                         ncon += 1
                         if len(line) > 2:  # this is for HION standards
                             if 'cont' in params:
                                 params['cont'] = np.vstack(
-                                    (params['cont'], [
-                                        int(
-                                            line[0].strip()), int(
-                                            line[1].strip()), float(
-                                            line[2].strip()), int(
-                                            line[3].strip()), float(
-                                            line[4].strip()), line[5].strip()]))
+                                    (params['cont'], [int(
+                                        line[0].strip()), int(
+                                        line[1].strip()), float(
+                                        line[2].strip()), int(
+                                        line[3].strip()), float(
+                                        line[4].strip()), line[5].strip()]))
                             else:
-                                params['cont'] = [int(line[0].strip()), int(line[1].strip()), float(
-                                    line[2].strip()), int(line[3].strip()), float(line[4].strip()), line[5].strip()]
+                                params['cont'] = [int(line[0].strip()), int(
+                                    line[1].strip()), float(
+                                    line[2].strip()), int(
+                                    line[3].strip()), float(
+                                    line[4].strip()), line[5].strip()]
                         else:
                             ii = 4  # this is for Helium format
                         continue
-                    if nk == int(params['nk']) - 1 and nlin == int(params['nlin']
-                                                                   ) - 1 and ncnt == int(params['ncon']) - 1:
+                    if nk == int(params['nk']) - 1 and nlin == int(
+                            params['nlin']) - 1 and ncnt == int(
+                            params['ncon']) - 1:
                         ii = 4
                     continue
             elif(ii == 4):
@@ -969,7 +1092,8 @@ class atom_tools(object):
                         params['photioncross'] = {}
                     try:
                         params['photioncross'][tr] = np.vstack(
-                            (params['photioncross'][tr], [int(line[0].strip()), float(line[1].strip())]))
+                            (params['photioncross'][tr], [int(
+                                line[0].strip()), float(line[1].strip())]))
                     except BaseException:
                         params['photioncross'][tr] = [
                             int(line[0].strip()), float(line[1].strip())]
@@ -979,12 +1103,12 @@ class atom_tools(object):
             params['bin_euv'] = [
                 6, [911.7, 753.143, 504.0, 227.800, 193.919, 147.540, 20.0]]
 
-        lp=li
+        lp = li
         while True:
             line, lp = readnextline(lines, lp)
             if(line[0].strip().lower() == 'end'):
                 break
-            #if line == "":
+            # if line == "":
             #    break
 
             if line[0].strip().lower() in headerslow:
@@ -1014,17 +1138,19 @@ class atom_tools(object):
                     for iterar in range(0, niter):
                         line, lp = readnextline(lines, lp)
                         if iterar == 0:
-                            temp = [float(line[v].strip()) for v in range(0, 5)]
+                            temp = [float(line[v].strip())
+                                    for v in range(0, 5)]
                         else:
-                            temp = [temp, [
-                                    float(line[v].strip()) for v in range(0, 5)]]
+                            temp = [temp, [float(
+                                    line[v].strip()) for v in range(0, 5)]]
                     temp = [temp0, niter, temp]
                     if key in params:
                         params[key] = np.vstack((params[key], [temp]))
                     else:
                         params[key] = [temp]
 
-                elif(line[0].strip().lower() == 'ar85-cea' or line[0].strip().lower() == 'burgess'):
+                elif((line[0].strip().lower() == 'ar85-cea') or (
+                        line[0].strip().lower() == 'burgess')):
                     key = line[0].strip().lower()
                     line, lp = readnextline(lines, lp)
                     temp0 = [int(line[0].strip()), int(line[1].strip())]
@@ -1036,7 +1162,8 @@ class atom_tools(object):
                     else:
                         params[key] = [temp]
 
-                elif(line[0].strip().lower() == 'ar85-ch') or (line[0].strip().lower() == 'ar85-che'):
+                elif(line[0].strip().lower() == 'ar85-ch') or (
+                        line[0].strip().lower() == 'ar85-che'):
                     key = line[0].strip().lower()
                     line, lp = readnextline(lines, lp)
                     temp0 = [int(line[0].strip()), int(line[1].strip())]
@@ -1070,10 +1197,10 @@ class atom_tools(object):
                 elif(line[0].strip().lower() == 'shull82'):
                     key = line[0].strip().lower()
                     line, lp = readnextline(lines, lp)
-                    trans= [int(line[v].strip()) for v in range(0, 2)]
+                    trans = [int(line[v].strip()) for v in range(0, 2)]
                     temp = [float(line[v].strip()) for v in range(2, 9)]
                     line, lp = readnextline(lines, lp)
-                    temp = [trans,temp, [float(line[0].strip())]]
+                    temp = [trans, temp, [float(line[0].strip())]]
                     if key in params:
                         params[key] = np.vstack((params[key], [temp]))
                     else:
@@ -1084,15 +1211,15 @@ class atom_tools(object):
                     line, lp = readnextline(lines, lp)
                     z = int(line[0].strip())
                     vorpar = np.zeros((z, 7))
-                    for iterv in range(0,z):
+                    for iterv in range(0, z):
                         line, lp = readnextline(lines, lp)
-                        vorpar[iterv,0] = int(line[0].strip())
-                        vorpar[iterv,1] = int(line[1].strip())
-                        vorpar[iterv,2] = float(line[2].strip())
-                        vorpar[iterv,3] = int(line[3].strip())
-                        vorpar[iterv,4] = float(line[4].strip())
-                        vorpar[iterv,5] = float(line[5].strip())
-                        vorpar[iterv,6] = float(line[6].strip())
+                        vorpar[iterv, 0] = int(line[0].strip())
+                        vorpar[iterv, 1] = int(line[1].strip())
+                        vorpar[iterv, 2] = float(line[2].strip())
+                        vorpar[iterv, 3] = int(line[3].strip())
+                        vorpar[iterv, 4] = float(line[4].strip())
+                        vorpar[iterv, 5] = float(line[5].strip())
+                        vorpar[iterv, 6] = float(line[6].strip())
                     if key in params:
                         params[key] = np.vstack((params[key], [vorpar]))
                     else:
@@ -1110,15 +1237,17 @@ class atom_tools(object):
                             temp[itertemp] = float(line[v].strip())
                             itertemp += 1
 
-                elif(line[0].strip().lower() in [ 'ci', 'ohm', 'ce', 'cp', 'reco']):
+                elif (line[0].strip().lower() in [
+                        'ci', 'ohm', 'ce', 'cp', 'reco']):
 
                     key = line[0].strip().lower()
                     line, lp = readnextline(lines, lp)
-                    if not hasattr(params,key):
-                        params[key]={}
-                    ij=line[0].strip()+line[1].strip()
+                    if not hasattr(params, key):
+                        params[key] = {}
+                    ij = line[0].strip() + line[1].strip()
                     params[key][ij] = {}
-                    params[key][ij]['tr'] = [int(line[0].strip()), int(line[1].strip())]
+                    params[key][ij]['tr'] = [
+                        int(line[0].strip()), int(line[1].strip())]
                     params[key][ij]['temp'] = temp
                     params[key][ij]['ntemp'] = nitert
 
@@ -1136,38 +1265,63 @@ class atom_tools(object):
 
         self.params = params
 
-### TOOLS ####
-def pop_over_species_atomf(ntot,Te,atomfiles=['H_2.atom','He_3.atom'],threebody=True, GENCOL_KEY = 'voronov'):
-    ''' this will do the SE for many species taking into account their abundances'''
+'''
+TOOLS
+'''
+
+
+def pop_over_species_atomf(ntot, Te, atomfiles=['H_2.atom', 'He_3.atom'],
+                           threebody=True, GENCOL_KEY='voronov'):
+    '''
+    this will do the SE for many species taking into account their abundances
+    '''
     units = bifrost_units()
     totabund = 0.0
-    for isp in range(0,len(atomfiles)):
-        atominfo=atom_tools(atom_file=atomfiles[isp])
+    for isp in range(0, len(atomfiles)):
+        atominfo = atom_tools(atom_file=atomfiles[isp])
         totabund += 10.0**atominfo.get_abund(Chianti=True)
 
-    all_pop_species={}
+    all_pop_species = {}
     nel = 0
-    for isp in range(0,len(atomfiles)):
+    for isp in range(0, len(atomfiles)):
         print('Starting with atom', atomfiles[isp])
-        atominfo=atom_tools(atom_file=atomfiles[isp])
+        atominfo = atom_tools(atom_file=atomfiles[isp])
         abund = np.array(10.0**atominfo.get_abund(Chianti=True))
-        atomweight = atominfo.get_atomweight()*units.AMU
+        atomweight = atominfo.get_atomweight() * units.AMU
         n_species = np.zeros((np.shape(ntot)))
-        n_species = ntot*(np.array(abund/totabund))
-        atominfo.inv_pop_atomf(n_species,Te,niter=100,threebody=threebody, GENCOL_KEY=GENCOL_KEY)
+        n_species = ntot * (np.array(abund / totabund))
+        atominfo.inv_pop_atomf(n_species, Te, niter=100,
+                               threebody=threebody, GENCOL_KEY=GENCOL_KEY)
         all_pop_species[atominfo.atom] = atominfo.n_isp
         nel += atominfo.n_el
         print('Done with atom', atomfiles[isp])
     all_pop_species['nel'] = nel
     return all_pop_species
 
+
 def diper2eb_atom_ascii(atomfile, output):
-    ''' Writes the atom (command style) ascii file into dictionary '''
-    num_map = [(1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'), (90, 'XC'),
-               (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')]
+    '''
+    Writes the atom (command style) ascii file into dictionary
+    '''
+    num_map = [
+            (1000, 'M'),
+            (900, 'CM'),
+            (500, 'D'),
+            (400, 'CD'),
+            (100, 'C'),
+            (90, 'XC'),
+            (50, 'L'),
+            (40, 'XL'),
+            (10, 'X'),
+            (9, 'IX'),
+            (5, 'V'),
+            (4, 'IV'),
+            (1, 'I')]
 
     def num2roman(num):
-        ''' converts integer to roman number '''
+        '''
+        converts integer to roman number
+        '''
         roman = ''
         while num > 0:
             for i, r in num_map:
@@ -1177,15 +1331,12 @@ def diper2eb_atom_ascii(atomfile, output):
         return roman
 
     def copyfile(scr, dest):
-        import shutil
         try:
             shutil.copy(scr, dest)
         except shutil.Error as e:  # scr and dest same
             print('Error: %s' % e)
         except IOError as e:  # scr or dest does not exist
             print('Error: %s' % e.strerror)
-
-    import datetime
 
     datelist = []
     today = datetime.date.today()
@@ -1195,7 +1346,8 @@ def diper2eb_atom_ascii(atomfile, output):
              str(datelist[0]) +
              ' \n' +
              '# with diper2eb_atom_ascii only for ground ionized levels \n' +
-             '# the atom file has been created using diper 1.1, REGIME=1, APPROX=1 \n']
+             '# the atom file has been created using diper 1.1, ' +
+             '# REGIME=1, APPROX=1 \n']
 
     neuv_bins = 6
     euv_bound = [911.7, 753.143, 504.0, 227.800, 193.919, 147.540, 20.0]
@@ -1214,8 +1366,8 @@ def diper2eb_atom_ascii(atomfile, output):
     f.close()
     for v in range(0, len(data)):
         data[v] = data[v].replace("*", "#")
-    data = data[0:2] + [str(data[2]).upper()] + [data[3]] + \
-        [str(data[4]).upper()] + data[5:]
+    data = data[0: 2] + [str(data[2]).upper()] + [
+            data[3]] + [str(data[4]).upper()] + data[5:]
     data = text0 + data
     text = ['# nk is number of levels, continuum included \n' +
             '# nlin is number of spectral lines in detail \n' +
@@ -1230,7 +1382,7 @@ def diper2eb_atom_ascii(atomfile, output):
     atom = str(line[0])
     atom = atom.replace("\n", "")
     data[2] = ' ' + atom + '\n'
-    data = data[:5] + ['#    NK NLIN NCNT NFIX \n'] + data[6:]
+    data = data[: 5] + ['#    NK NLIN NCNT NFIX \n'] + data[6:]
     line = data[6]
     line = line.split(';')[0].split(' ')
     while '' in line:
@@ -1241,11 +1393,12 @@ def diper2eb_atom_ascii(atomfile, output):
     ncont = int(line[2])
     nfix = int(line[3])
 
-    data[6] = '    {0:3d}'.format(nk) + '  {0:3d}'.format(nlin) + \
-        '  {0:3d}'.format(ncont) + '  {0:3d}'.format(nfix) + '\n'
+    data[6] = '    {0:3d}'.format(nk) + '  {0:3d}'.format(
+            nlin) + '  {0:3d}'.format(ncont) + '  {0:3d}'.format(nfix) + '\n'
 
     text = [
-        "#        E[cm-1]     g              label[35]                   stg  lvlN \n" +
+        "#        E[cm-1]     g              label[35]                   " +
+        "stg  lvlN \n" +
         "#                        '----|----|----|----|----|----|----|'\n"]
     data = data[0:7] + text + data[7:]
 
@@ -1259,8 +1412,13 @@ def diper2eb_atom_ascii(atomfile, output):
         line[2] = line[2].replace("'", "")
         strlvl = [" ".join(line[v].strip()
                            for v in range(2, np.size(line) - 1))]
-        data[iv] = ('    {0:13.3f}'.format(float(line[0])) + '  {0:5.2f}'.format(float(line[1])) + " ' {0:2}".format(atom.upper()) + ' {0:5}'.format(num2roman(
-            int(line[-1]))) + ' {0:26}'.format(strlvl[0]) + "'  {0:3d}".format(int(line[-1])) + '   {0:3d}'.format(iv - 7) + '\n')  # the two iv are wrong at the end...
+        # the two iv are wrong at the end...
+        data[iv] = ('    {0:13.3f}'.format(float(
+            line[0])) + '  {0:5.2f}'.format(float(
+                line[1])) + " ' {0:2}".format(atom.upper()) + ' {0:5}'.format(
+                    num2roman(int(line[-1]))) + ' {0:26}'.format(
+                        strlvl[0]) + "'  {0:3d}".format(int(
+                            line[-1])) + '   {0:3d}'.format(iv - 7) + '\n')
 
     headers = [
         'GENCOL',
@@ -1279,45 +1437,55 @@ def diper2eb_atom_ascii(atomfile, output):
         'TEMP',
         'RECO',
         'VORONOV',
-        'EMASK']  # Missing AR85-RR, RADRAT, SPLUPS5, I think AR85-CHE is not used in OOE
+        'EMASK']  # Missing AR85-RR, RADRAT, SPLUPS5. AR85-CHE is not used
     DONE = 'AR85-CDI', 'AR85-CH', 'AR85-CHE', 'SHULL82'
 
     textar85cdi = [
-        '# Data for electron impact ionization Arnaud and Rothenflug (1985) \n' +
-        '# updated for Fe ions by Arnaud and Rothenflug (1992) \n' +
-        '# 1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) + D ln(u)/u) (cm^2)  \n' +
+        '# Data for electron impact ionization Arnaud and Rothenflug  \n' +
+        '# (1985) updated for Fe ions by Arnaud and Rothenflug (1992) \n' +
+        '# 1/(u I^2) (A (1 - 1/u) + B (1 - 1/u)^2) + C ln(u) + ' +
+        ' D ln(u)/u) (cm^2)  \n' +
         '#   i   j \n']
 
     textar85cdishell = ['# Numbers of shells \n']
     textar85cdiparam = ['# dE(eV)  A   B   C   D \n']
 
     textar85ct = [
-        '# Data for charge transfer rate of ionization and recombination Arnaud and Rothenflug (1985) \n' +
+        '# Data for charge transfer rate of ionization and recombination' +
+        '# Arnaud and Rothenflug (1985) \n' +
         '# updated for Fe ions by Arnaud and Rothenflug (1992) \n']
     textar85cea = [
-        '# Data authoionization following excitation Arnaud and Rothenflug (1985) \n' +
-        '# (this is a bit of caos... uses different expression for different species) See appendix A.  \n' +
+        '# Data authoionization following excitation Arnaud and ' +
+        'Rothenflug (1985) \n' +
+        '# (this is a bit of caos... uses different expression for different' +
+        '# species) See appendix A.  \n' +
         '#   i   j \n']
 
     textshull82 = [
         '# Recombination rate coefficients Shull and Steenberg (1982) \n' +
-        '# provides direct collisional ionization with the following fitting: \n' +
-        '# Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T), with Ai ~ 0.1 \n' +
-        '# for the recombination rate combines the sum of radiative and dielectronic recombination rate \n' +
-        '# alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2) exp(-T0/T) (1+Bdi exp(-T1/T))\n' +
-        '#   i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi       T0       T1 \n']
+        '# provides direct collisional ionization with the following \n' +
+        '# fitting: \n' +
+        '# Ci  = Acol T^(0.5) (1 + Ai T / Tcol)^(-1) exp(-Tcol/T), with\n' +
+        '# Ai ~ 0.1 for the recombination rate combines the sum of radiative\n'
+        '# + and dielectronic recombination rate \n' +
+        '# alpha_r = Arad (T_4)^(-Xrad) ; and alpha_d = Adi T^(-3/2)' +
+        ' exp(-T0/T) (1+Bdi exp(-T1/T))\n' +
+        '#   i  j   Acol     Tcol     Arad     Xrad      Adi      Bdi      ' +
+        ' T0       T1 \n']
 
     textar85ch = [
-        '# charge transfer recombination with neutral hydrogen Arnaud and Rothenflug (1985) \n' +
-        '# updated for Fe ions by Arnaud and Rothenflug (1992) \n' +
+        '# charge transfer recombination with neutral hydrogen Arnaud\n' +
+        '#  and Rothenflug (1985) updated for Fe ions by Arnaud and \n' +
+        '# Rothenflug (1992) \n' +
         '# alpha = a (T_4)^b (1 + c exp(d T_4)) \n' +
         '#   i   j \n']
     textar85chparam = [
         '#   Temperature range (K)   a(1e-9cm3/s)    b      c    d \n']
     textar85chem = [
-        '# charge transfer recombination with ionized hydrogen Arnaud and Rothenflug (1985) \n' +
+        '# charge transfer recombination with ionized hydrogen Arnaud and \n' +
+        '# Rothenflug (1985) \n' +
         '# updated for Fe ions by Arnaud and Rothenflug (1992) \n' +
-        '# alpha = a (T_4)^b (1 + c exp(d T_4)) \n'
+        '# alpha = a (T_4)^b (1 + c exp(d T_4)) \n' +
         '#   i   j \n']
 
     # if 'SHULL82\n' in data:
@@ -1374,24 +1542,25 @@ def diper2eb_atom_ascii(atomfile, output):
     f.close()
     add_voro_atom('temp.atom', output, atom=atom.lower(), nk=nk)
 
+
 def add_voro_atom(
         inputfile,
         outputfile,
         atom='',
-        vorofile=os.environ.get('EBYSUS')+'INPUT/MISC/voronov.dat',
+        vorofile=os.environ.get('EBYSUS') + 'INPUT/MISC/voronov.dat',
         nk='100'):
     '''
-        Add voronov information at the end of the atom file.
+    Add voronov information at the end of the atom file.
 
-        Parameters
-        ----------
-        inputfile - name of the input atom file
-        outputfile - name of the output atom file which will include the VORONOV information
-        atom - lower case letters of the atom of interest. Make sure that it matches with the atom file.
-        vorofile - voronot table file.
+    Parameters
+    ----------
+    inputfile - name of the input atom file
+    outputfile - name of the output atom file which will include the VORONOV
+            information
+    atom - lower case letters of the atom of interest. Make sure that it
+            matches with the atom file.
+    vorofile - voronot table file.
     '''
-
-    import shutil
 
     shutil.copy(inputfile, outputfile)
     atom = atom.lower()
@@ -1410,9 +1579,10 @@ def add_voro_atom(
     f.write("VORONOV\n")
 
     f.write(
-        "# from Voronov fit formula for ionization rates by electron impact \n" +
-        "# by G. S. Voronov: \n" +
-        "# ATOMIC DATA AND NUCLEAR DATA TABLES 65, 1-35 (1997) ARTICLE NO. DT970732\n" +
+        "# from Voronov fit formula for ionization rates by \n" +
+        "# electron impact by G. S. Voronov: \n" +
+        "# ATOMIC DATA AND NUCLEAR DATA TABLES 65, 1-35 (1997) \n" +
+        "# ARTICLE NO. DT970732\n" +
         "# <cross> = A (1+P*U^(1/2))/(X + U)*U^K e-U (cm3/s) with U = dE/Te\n")
 
     strat = ''
@@ -1421,14 +1591,16 @@ def add_voro_atom(
 
     # where I need to add a check if atom is the same as the one in the atom
     # file or even better use directly the atom file info for this.
-    atominfo=atom_tools(atom_file=inputfile)
+    atominfo = atom_tools(atom_file=inputfile)
     atominfo.get_atomZ(atom=atom + strat)
-                #tr_line=np.where(atominfo.params['voronov'][0][:,0] == lo_lvl+1)
-                #phion = self.params['voronov'][0][tr_line[0],2] # get_atomde(atom, Chianti=False)  # 13.6
-                #A = self.params['voronov'][0][tr_line[0],4] * 1e6 # get_atomA(atom) * 1.0e6  # converted to SI 2.91e-14
-                #X = self.params['voronov'][0][tr_line[0],5] # get_atomX(atom)  # 0.232
-                #K = self.params['voronov'][0][tr_line[0],6] # get_atomK(atom)  # 0.39
-                #P = self.params['voronov'][0][tr_line[0],3] # get_atomP(atom)  # 0
+    # tr_line=np.where(atominfo.params['voronov'][0][:,0] == lo_lvl+1)
+    # phion = self.params['voronov'][0][tr_line[0],2] # get_atomde(atom,
+    # Chianti=False)  # 13.6
+    # A = self.params['voronov'][0][tr_line[0],4] * 1e6 # get_atomA(atom) *
+    # 1.0e6  # converted to SI 2.91e-14
+    # X = self.params['voronov'][0][tr_line[0],5] # get_atomX(atom)  # 0.232
+    # K = self.params['voronov'][0][tr_line[0],6] # get_atomK(atom)  # 0.39
+    # P = self.params['voronov'][0][tr_line[0],3] # get_atomP(atom)  # 0
 
     f.write(str(atominfo.Z) + "\n")
     jj = 1
@@ -1436,61 +1608,67 @@ def add_voro_atom(
     for ii in range(0, params['NLVLS_MAX'][0]):
         if (atominfo.Z == int(params['SPECIES'][ii, 0])) and jj < nk:
             strat = ''
-            if len(
-                    ''.join(x for x in params['SPECIES'][ii, 1] if x.isdigit())) == 0:
+            if len(''.join(
+                    x for x in params['SPECIES'][ii, 1] if x.isdigit())) == 0:
                 strat = '_1'
-            f.write('  {0:3d}'.format(jj) +
-                    '  {0:3d}'.format(jj +
-                                      1) +
-                    '  {0:9.3f}'.format(get_atomde(atom=params['SPECIES'][ii, 1] +
-                                                   strat, Chianti=False)) +
-                    '  {0:3}'.format(get_atomP(atom=params['SPECIES'][ii, 1])) +
-                    '  {0:7.3e}'.format(get_atomA(atom=params['SPECIES'][ii, 1])) +
-                    ' {0:.3f}'.format(get_atomX(atom=params['SPECIES'][ii, 1])) +
-                    ' {0:.3f}'.format(get_atomK(atom=params['SPECIES'][ii, 1])) +
+            f.write(' {0:3d}'.format(jj) +
+                    ' {0:3d}'.format(jj + 1) +
+                    ' {0:9.3f}'.format(get_atomde(
+                            atom=params['SPECIES'][
+                                ii, 1] + strat, Chianti=False)) +
+                    ' {0:3}'.format(get_atomP(atom=params['SPECIES'][ii, 1])) +
+                    ' {0:7.3e}'.format(get_atomA(
+                        atom=params['SPECIES'][ii, 1])) +
+                    ' {0:.3f}'.format(get_atomX(
+                        atom=params['SPECIES'][ii, 1])) +
+                    ' {0:.3f}'.format(get_atomK(
+                        atom=params['SPECIES'][ii, 1])) +
                     '\n')
             jj += 1
     f.write("END")
     f.close()
 
-def create_goftne_tab(ionstr='fe_14',wvlr=[98,1600],abundance='sun_photospheric_1998_grevesse'):
+
+def create_goftne_tab(ionstr='fe_14',
+                      wvlr=[98, 1600],
+                      abundance='sun_photospheric_1998_grevesse'):
     '''
     This allows to calculate GOFT tables in a similar fashion as we do in IDL.
     '''
-    import ChiantiPy.core as ch
-    import pickle
-    import periodictable as pt
 
     ntemp = 501
     neden = 71
-    temp = 10.**(4. + 0.01*np.arange(ntemp))
+    temp = 10.**(4. + 0.01 * np.arange(ntemp))
     press = 10**(np.arange(neden) * 0.1 + 12)
-    gofnt=np.zeros((ntemp,neden))
-    for iden in range(0,neden):
-        ion = ch.ion(ionstr, temperature=temp,  eDensity=press[iden]/temp,abundance=abundance)
+    gofnt = np.zeros((ntemp, neden))
+    for iden in range(0, neden):
+        ion = ch.ion(ionstr, temperature=temp,
+                     eDensity=press[iden] / temp, abundance=abundance)
         ion.populate()
         ion.intensity()
-        ion.gofnt(wvlRange=wvlr,top=1,plot=False)
-        if iden == 0: print('Doing wvl=', ion.Gofnt['wvl'])
-        gofnt[:,iden] = ion.Gofnt['gofnt']
+        ion.gofnt(wvlRange=wvlr, top=1, plot=False)
+        if iden == 0:
+            print('Doing wvl=', ion.Gofnt['wvl'])
+        gofnt[:, iden] = ion.Gofnt['gofnt']
 
     ion.Gofnt['gofnt'] = gofnt
     ion.Gofnt['press'] = press
     try:
-        ion.mass =  pt.elements[ion.Z].ion[ion.Ion].mass
-    except:
-        ion.mass =  pt.elements[ion.Z].mass
-    path=os.environ['BIFROST']+'/PYTHON/br_int/br_ioni/data/'
-    name=getattr(ion,'IonStr') + '_' + str(ion.Gofnt['wvl'])+'.opy'
-    filehandler = open(path+name, 'wb')
+        ion.mass = pt.elements[ion.Z].ion[ion.Ion].mass
+    except BaseException:
+        ion.mass = pt.elements[ion.Z].mass
+    path = os.environ['BIFROST'] + '/PYTHON/br_int/br_ioni/data/'
+    name = getattr(ion, 'IonStr') + '_' + str(ion.Gofnt['wvl']) + '.opy'
+    filehandler = open(path + name, 'wb')
     pickle.dump(ion, filehandler)
 
+
 def add_goftab(filenames=None):
-    import pickle
-    nf=np.size(filenames)
-    for ifile in range(0,nf):
-        fileh=open(filenames[ifile],'rb')
-        table=pickle.load(fileh)
+
+    nf = np.size(filenames)
+    for ifile in range(0, nf):
+        fileh = open(filenames[ifile], 'rb')
+        table = pickle.load(fileh)
         if ifile == 0:
             goftab = table.Gofnt['gofnt']
         else:
@@ -1500,89 +1678,9 @@ def add_goftab(filenames=None):
 
 def norm_ne_goftab(table=None):
 
-    nne=np.shape(table)[1]
-    tablenorm=table*1.0
-    for i in range(0,nne):
-        tablenorm[:,i] = (table[:,i]+1e-40)/(table[:,30]+1e-40)
+    nne = np.shape(table)[1]
+    tablenorm = table * 1.0
+    for i in range(0, nne):
+        tablenorm[:, i] = (table[:, i] + 1e-40) / (table[:, 30] + 1e-40)
 
     return tablenorm
-
-def fig_norm_ne_goftab_all():
-
-    import pickle
-    import glob
-    import matplotlib.pyplot as plt
-
-    files=glob.glob("./*.opy")
-
-    nfiles=np.size(files)
-    for ifile in range(0,nfiles):
-        fileh=open(files[ifile],'rb')
-        print(files[ifile])
-        table=pickle.load(fileh)
-        goftab=table.Gofnt['gofnt']
-        tabnorm=norm_ne_goftab(goftab)
-        fig = plt.figure()
-        extent = np.log10((np.min(table.Gofnt['press']),np.max(table.Gofnt['press']),np.min(table.Gofnt['temperature']),np.max(table.Gofnt['temperature'])))
-        im=plt.imshow(tabnorm, extent=extent,aspect='auto')
-        plt.colorbar(im)
-        plt.title(files[ifile][2:-4])
-        plt.ylabel("Temperature")
-        plt.xlabel("Pressure")
-        fig.savefig('pressure_dependence_%s.png'% files[ifile][2:-4] ,bbox_inches="tight", format="png", dpi=650)
-
-def print_all_max():
-
-    import pickle
-    import glob
-    import matplotlib.pyplot as plt
-
-    files=glob.glob("./*.opy")
-
-    nfiles=np.size(files)
-    for ifile in range(0,nfiles):
-        fileh=open(files[ifile],'rb')
-        table=pickle.load(fileh)
-        print(files[ifile],np.max(table.Gofnt['gofnt']))
-
-def print_comp_lines():
-
-    import pickle
-    import glob
-    import matplotlib.pyplot as plt
-
-    files=glob.glob("./*.opy")
-
-    nfiles=np.size(files)
-    for ifile in range(0,nfiles):
-        fileh=open(files[ifile],'rb')
-        table=pickle.load(fileh)
-        fileb=open(files[ifile],'rb')
-        high=pickle.load(fileb)
-        high.gofnt(wvlRange=[table.Gofnt['wvl']-0.1,table.Gofnt['wvl']+0.1],top=1,plot=False)
-        print(files[ifile],table.Gofnt['wvl'],high.Gofnt['wvl'])
-
-
-def fig_norm_ne_goftab_comb(namelist="./*_10?.*.opy"):
-
-    import pickle
-    import glob
-    import matplotlib.pyplot as plt
-
-    files=glob.glob(namelist)
-    goftab = add_goftab(files)
-    nfiles=np.size(files)
-    tabnorm=norm_ne_goftab(goftab)
-
-    fileh=open(files[0],'rb')
-    print(files[0])
-    table=pickle.load(fileh)
-
-    fig = plt.figure()
-    extent = np.log10((np.min(table.Gofnt['press']),np.max(table.Gofnt['press']),np.min(table.Gofnt['temperature']),np.max(table.Gofnt['temperature'])))
-    im=plt.imshow(tabnorm, extent=extent,aspect='auto')
-    plt.colorbar(im)
-    plt.title(namelist[4:-7])
-    plt.ylabel("Temperature")
-    plt.xlabel("Pressure")
-    fig.savefig('All_pressure_dependence_%s.png'% namelist[3:-5] ,bbox_inches="tight", format="png", dpi=650)
