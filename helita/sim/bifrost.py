@@ -978,9 +978,9 @@ class BifrostData(object):
         # write to file
         if self.verbose:
             print('Write to file...')
-        rh15d.make_hdf5_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
-                              append=append, Bx=Bx, By=By, Bz=Bz, desc=desc,
-                              snap=self.snap)
+        rh15d.make_xarray_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
+                                append=append, Bx=Bx, By=By, Bz=Bz, desc=desc,
+                                snap=self.snap)
 
     def write_multi3d(self, outfile, mesh='mesh.dat', desc=None,
                       sx=slice(None), sy=slice(None), sz=slice(None)):

@@ -2,57 +2,40 @@
 Set of programs and tools to read the outputs from RH, 1.5D version
 """
 import os
+import datetime
 import numpy as np
+import xarray as xr
+import h5py
 
 
 class Rh15dout:
-    def __init__(self, fdir='.', verbose=True):
+    """
+    Class to load and manipulate output from RH 1.5D.
+    """
+    def __init__(self, fdir='.', verbose=True, autoread=True):
         self.files = []
         self.params = {}
         self.verbose = verbose
         self.fdir = fdir
-        OUTFILE_FUNC = {"output_aux": self.read_aux,
-                        "output_indata": self.read_indata,
-                        "output_ray": self.read_ray,
-                        "output_spectrum": self.read_spectrum}
-        for outfile, func in OUTFILE_FUNC.items():
-            if (os.path.isfile("%s/%s.ncdf" % (self.fdir, outfile)) or
-                os.path.isfile("%s/%s.hdf5" % (self.fdir, outfile))):
-                func()
+        if autoread:
+            for outfile in ["output_aux", "output_indata"]:
+                OUTFILE = os.path.join(self.fdir, "%s.hdf5" % (outfile))
+                self.read_groups(OUTFILE)
+            RAYFILE = os.path.join(self.fdir, "output_ray.hdf5")
+            self.read_ray(RAYFILE)
 
-    def read_aux(self, infile=None):
-        ''' Reads Aux file. '''
-        if infile is None:
-            infile = '%s/output_aux.hdf5' % self.fdir
-            if not os.path.isfile(infile):  # See if netCDF file exists
-                infile = os.path.splitext(infile)[0] + '.ncdf'
+    def read_groups(self, infile):
+        ''' Reads indata file, group by group. '''
+        if not os.path.isfile(infile):   # See if netCDF file exists
+            infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
             return
-        self.files.append(read_hdf5(self, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_indata(self, infile=None):
-        ''' Reads indata file. '''
-        if infile is None:
-            infile = '%s/output_indata.hdf5' % self.fdir
-            if not os.path.isfile(infile):  # See if netCDF file exists
-                infile = os.path.splitext(infile)[0] + '.ncdf'
-        if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
-        self.files.append(read_hdf5(self, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_spectrum(self, infile=None):
-        ''' Reads spectrum file. '''
-        if infile is None:
-            infile = '%s/output_spectrum.ncdf' % self.fdir
-        self.spectrum = DataHolder()
-        self.files.append(read_hdf5(self.spectrum, infile))
+        f = h5py.File(infile, "r")
+        GROUPS = [g for g in f.keys() if type(f[g]) == h5py._hl.group.Group]
+        f.close()
+        for g in GROUPS:
+            setattr(self, g, xr.open_dataset(infile, group=g, autoclose=True))
+            self.files.append(getattr(self, g))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
@@ -63,26 +46,25 @@ class Rh15dout:
             if not os.path.isfile(infile):  # See if netCDF file exists
                 infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
-        self.ray = DataHolder()
-        self.files.append(read_hdf5(self.ray, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_J(self, infile='scratch/J.dat.hdf5'):
-        ''' Reads angle averaged intensity file '''
-        self.files.append(read_hdf5(self, infile))
+            return
+        self.ray = xr.open_dataset(infile, autoclose=True)
+        self.files.append(self.ray)
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
     def close(self):
-        ''' Closes the open NetCDF files '''
+        ''' Closes the open files '''
         for f in self.files:
             f.close()
 
+    def __del__(self):
+        self.close()
+
 
 class HDF5Atmos:
+    """
+    Class to load and manipulate RH 1.5D input atmosphere files in HDF5.
+    """
     def __init__(self, infile):
         self.file = read_hdf5(self, infile)
         self.closed = False
@@ -373,7 +355,10 @@ def read_hdf5(inclass, infile):
     # add attributes
     attrs = [a for a in f.attrs]
     for att in f.attrs:
-        inclass.params[att] = f.attrs[att]
+        try:
+            inclass.params[att] = f.attrs[att]
+        except OSError:  # catch errors where h5py cannot read UTF-8 strings
+            pass
     # add variables and groups
     for element in f:
         name = element.replace(' ', '_')    # sanitise string for spaces
@@ -421,7 +406,6 @@ def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
            comp:     if false, compress file.
            complev:  compression level.
     """
-    import os
     import netCDF4 as nc
 
     mode = ['w', 'a']
@@ -586,7 +570,7 @@ def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
 
 def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                     Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
-                    desc=None, snap=None, boundary=[1, 0], comp=None,
+                    desc=None, snap=None, boundary=None, comp=None,
                     complev=None, append=False):
     """
     Creates HDF5 input file for RH 1.5D.
@@ -597,12 +581,16 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         Name of destination. If file exists it will be wiped.
     T : n-D array
         Temperature in K. Its shape will determine the output
-        dimensions (can be 1D, 2D, or 3D).
+        dimensions. Shape is generally (nt, nx, ny, nz), but any
+        dimensions except nz can be omitted. Therefore the array can
+        be 1D, 2D, or 3D, 4D but ultimately will always be saved as 4D.
     vz : n-D array
         Line of sight velocity in m/s. Same shape as T.
     nH : n-D array
-        Hydrogen populations in m^-3. Shape is [nhydr, shape.T] where
-        nydr can be 1 (total number of protons) or more (level populations).
+        Hydrogen populations in m^-3. Shape is (nt, nhydr, nx, ny, nz),
+        where nt, nx, ny can be omitted but must be consistent with
+        the shape of T. nhydr can be 1 (total number of protons) or
+        more (level populations).
     z : n-D array
         Height in m. Can have same shape as T (different height scale
         for each column) or be only 1D (same height for all columns).
@@ -645,17 +633,10 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     complev : integer or tuple, optional
         Compression level. Integer for 'gzip', 2-tuple for szip.
     """
-    import os
-    import datetime
-    import h5py
     mode = ['w', 'a']
     if (append and not os.path.isfile(outfile)):
         append = False
     rootgrp = h5py.File(outfile, mode=mode[append])
-    if nH.shape == T.shape:
-        nhydr = 1
-    else:
-        nhydr = nH.shape[0]
     idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
     T = T[idx]
     if ne is not None:
@@ -678,6 +659,7 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     if len(T.shape) != 4:
         raise ValueError('Invalid shape for T')
     nt = T.shape[0]
+    nhydr = nH.shape[1]
     if snap is None:
         snap = np.arange(nt, dtype='i4')
     if not append:
@@ -696,10 +678,10 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                                         fletcher32=True, compression=comp,
                                         compression_opts=complev)
         nh_var = rootgrp.create_dataset("hydrogen_populations", dtype="f4",
-                                shape=(nt, nhydr,) + T.shape[1:],
-                                maxshape=(None, nhydr) + T.shape[1:],
-                                fletcher32=True, compression=comp,
-                                compression_opts=complev)
+                                        shape=(nt, nhydr,) + T.shape[1:],
+                                        maxshape=(None, nhydr) + T.shape[1:],
+                                        fletcher32=True, compression=comp,
+                                        compression_opts=complev)
         if ne is not None:
             ne_var = rootgrp.create_dataset("electron_density", dtype="f8",
                                             shape=T.shape, maxshape=max_dims,
@@ -708,8 +690,17 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
             ne_var.attrs["units"] = 'm^-3'
         x_var = rootgrp.create_dataset("x", dtype="f4", shape=(T.shape[1],))
         y_var = rootgrp.create_dataset("y", dtype="f4", shape=(T.shape[2],))
-        z_var = rootgrp.create_dataset("z", dtype="f4", shape=(nt, T.shape[3]),
-                                       maxshape=(None, T.shape[3]))
+        if len(z.shape) == 4:
+            z_var = rootgrp.create_dataset("z", dtype="f4",
+                                           shape=T.shape, maxshape=max_dims,
+                                           fletcher32=True, compression=comp,
+                                           compression_opts=complev)
+        elif len(z.shape) == 2:
+            z_var = rootgrp.create_dataset("z", dtype="f4",
+                                           shape=(nt, T.shape[3]),
+                                           maxshape=(None, T.shape[3]))
+        else:
+            raise ValueError("Invalid shape for z scale")
         nt_var = rootgrp.create_dataset("snapshot_number", dtype="i4",
                                         shape=(nt,))
         T_var.attrs["units"] = 'K'
@@ -827,6 +818,140 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     return
 
 
+def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
+                      Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
+                      desc=None, snap=None, boundary=None, append=False):
+    """
+    Creates HDF5 input file for RH 1.5D using xarray.
+
+    Parameters
+    ----------
+    outfile : string
+        Name of destination. If file exists it will be wiped.
+    T : n-D array
+        Temperature in K. Its shape will determine the output
+        dimensions. Shape is generally (nt, nx, ny, nz), but any
+        dimensions except nz can be omitted. Therefore the array can
+        be 1D, 2D, or 3D, 4D but ultimately will always be saved as 4D.
+    vz : n-D array
+        Line of sight velocity in m/s. Same shape as T.
+    nH : n-D array
+        Hydrogen populations in m^-3. Shape is (nt, nhydr, nx, ny, nz),
+        where nt, nx, ny can be omitted but must be consistent with
+        the shape of T. nhydr can be 1 (total number of protons) or
+        more (level populations).
+    z : n-D array
+        Height in m. Can have same shape as T (different height scale
+        for each column) or be only 1D (same height for all columns).
+    ne : n-D array, optional
+        Electron density in m^-3. Same shape as T.
+    rho : n-D array, optional
+        Density in kg m^-3. Same shape as T.
+    vx : n-D array, optional
+        x velocity in m/s. Same shape as T. Not in use by RH 1.5D.
+    vy : n-D array, optional
+        y velocity in m/s. Same shape as T. Not in use by RH 1.5D.
+    vturb : n-D array, optional
+        Turbulent velocity (Microturbulence) in km/s. Not usually needed
+        for MHD models, and should only be used when a depth dependent
+        microturbulence is needed (constant microturbulence can be added
+        in RH).
+    Bx : n-D array, optional
+        Magnetic field in x dimension, in Tesla. Same shape as T.
+    By : n-D array, optional
+        Magnetic field in y dimension, in Tesla. Same shape as T.
+    Bz : n-D array, optional
+        Magnetic field in z dimension, in Tesla. Same shape as T.
+    x : 1-D array, optional
+        Grid distances in m. Same shape as first index of T.
+    y : 1-D array, optional
+        Grid distances in m. Same shape as second index of T.
+    x : 1-D array, optional
+        Grid distances in m. Same shape as first index of T.
+    snap : array-like, optional
+        Snapshot number(s).
+    desc : string, optional
+        Description of file
+    boundary : Tuple, optional
+        Tuple with [bottom, top] boundary conditions. Options are:
+        0: Zero, 1: Thermalised, 2: Reflective.
+    append : boolean, optional
+        If True, will append to existing file (if any).
+    """
+    data = {'temperature': [T, 'K'],
+            'velocity_z': [vz, 'm s^-1'],
+            'velocity_y': [vy, 'm s^-1'],
+            'velocity_x': [vx, 'm s^-1'],
+            'electron_density': [ne, 'm^-3'],
+            'hydrogen_populations': [nH, 'm^-3'],
+            'density': [rho, 'kg m^-3'],
+            'B_x': [Bx, 'T'],
+            'B_y': [By, 'T'],
+            'B_z': [Bz, 'T'],
+            'velocity_turbulent': [vturb, 'm s^-1'],
+            'x': [x, 'm'],
+            'y': [y, 'm'],
+            'z': [z, 'm']}
+    VARS4D = ['temperature', 'B_x', 'B_y', 'B_z', 'density', 'velocity_x',
+              'velocity_y', 'velocity_z', 'velocity_turbulent', 'density',
+              'electron_density']
+    # Remove variables not given
+    data = {key: data[key] for key in data if data[key][0] is not None}
+
+    if (append and not os.path.isfile(outfile)):
+        append = False
+    idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
+    for var in data:
+        if var not in ['x', 'y']:  # these are always 1D
+            data[var][0] = data[var][0][idx]
+    if len(data['temperature'][0].shape) != 4:
+        raise ValueError('Invalid shape for T')
+    nt, nx, ny, nz = data['temperature'][0].shape
+    if boundary is None:
+        boundary = [1, 0]
+    if snap is None:
+        data['snapshot_number'] = [np.arange(nt, dtype='i4'), '']
+    else:
+        data['snapshot_number'] = [np.array([snap], dtype='i4'), '']
+    if not append:
+        variables = {}
+        coordinates = {}
+        for v in data:
+            if v in VARS4D:
+                variables[v] = (('snapshot_number', 'x', 'y', 'depth'),
+                                data[v][0], {'units': data[v][1]})
+            elif v == 'hydrogen_populations':
+                variables[v] = (('snapshot_number', 'nhydr', 'x', 'y', 'depth'),
+                                data[v][0], {'units': data[v][1]})
+            elif v == 'z':
+                dims = ('snapshot_number', 'depth')
+                if len(data[v][0].shape) == 1:  # extra dim for nt dependency
+                    data[v][0] = data[v][0][None, :]
+                elif len(data[v][0].shape) == 4:
+                    dims = ('snapshot_number', 'x', 'y', 'depth')
+                coordinates[v] = (dims, data[v][0], {'units': data[v][1]})
+            elif v in ['x', 'y', 'snapshot_number']:
+                coordinates[v] = ((v), data[v][0], {'units': data[v][1]})
+
+        attrs = {"comment": ("Created with make_xarray_atmos "
+                             "on %s" % datetime.datetime.now()),
+                 "boundary_top": boundary[1], "boundary_bottom": boundary[0],
+                 "has_B": int(Bz is not None), "description": str(desc),
+                 "nx": nx, "ny": ny, "nz": nz, "nt": nt}
+        data = xr.Dataset(variables, coordinates, attrs)
+        data.to_netcdf(outfile, mode='w', format='NETCDF4',
+                       unlimited_dims=('snapshot_number'))
+    else:  # use h5py to append existing file
+        rootgrp = h5py.File(outfile, mode='a')
+        nti = int(rootgrp.attrs['nt'])
+        #rootgrp.attrs['nt'] = nti + nt  # add appended number of snapshots
+        for var in data:
+            if var in VARS4D + ['hydrogen_populations', 'z', 'snapshot_number']:
+                rootgrp[var].resize(nti + nt, axis=0)
+                rootgrp[var][nti:nti + nt] = data[var][0][:]
+        rootgrp.close()
+
+
 def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
                 tmax=5e4):
     """
@@ -882,8 +1007,10 @@ def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
     result = [nheight, ntemp, nne, nvz, nrho]
     if nh is not None:
         for k in range(nh.shape[0]):
-            nh[k] = np.exp(interp.splev(nheight, interp.splrep(height[::-1],
-                                                               np.log(nh[k, ::-1]), k=3, s=0), der=0))
+            nh[k] = np.exp(interp.splev(nheight,
+                                        interp.splrep(height[::-1],
+                                                      np.log(nh[k, ::-1]), k=3,
+                                                      s=0), der=0))
         result += [nh]
     if bx is not None:
         nbx = interp.splev(nheight, interp.splrep(
