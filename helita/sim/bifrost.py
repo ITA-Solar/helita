@@ -631,7 +631,7 @@ class BifrostData(object):
         CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
         FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
                       'pfwy', 'pfwz']
-        PLASMA_QUANT = ['beta', 'va', 'cs', 's', 
+        PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke',
                         'mn', 'man', 'hp', 'vax', 'vay', 'vaz',
                         'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
 
@@ -876,6 +876,10 @@ class BifrostData(object):
                 else:
                     return self.get_var('u2') * var * 0.5
 
+            if quant in ['ke']:
+                var = self.get_var('r')
+                return self.get_var('u2') * var * 0.5
+                
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
