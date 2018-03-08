@@ -469,10 +469,12 @@ class BifrostData(object):
             val = self._get_quantity(var, *args, **kwargs)
 
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-            val[self.iix, self.iiy, self.iiz].reshape((
-                        self.xLength, self.yLength, self.zLength))
+            return np.reshape(val[self.iix, self.iiy, self.iiz], (
+                                  self.xLength, self.yLength, 
+                                  self.zLength))
+        else: 
+            return val
 
-        return val
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
