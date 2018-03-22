@@ -818,7 +818,7 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     return
 
 
-def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
+def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=None,
                       Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
                       desc=None, snap=None, boundary=None, append=False):
     """
@@ -835,18 +835,18 @@ def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
         be 1D, 2D, or 3D, 4D but ultimately will always be saved as 4D.
     vz : n-D array
         Line of sight velocity in m/s. Same shape as T.
-    nH : n-D array
-        Hydrogen populations in m^-3. Shape is (nt, nhydr, nx, ny, nz),
-        where nt, nx, ny can be omitted but must be consistent with
-        the shape of T. nhydr can be 1 (total number of protons) or
-        more (level populations).
     z : n-D array
         Height in m. Can have same shape as T (different height scale
         for each column) or be only 1D (same height for all columns).
+    nH : n-D array, optional
+        Hydrogen populations in m^-3. Shape is (nt, nhydr, nx, ny, nz),
+        where nt, nx, ny can be omitted but must be consistent with
+        the shape of T. nhydr can be 1 (total number of protons) or
+        more (level populations). If nH is not given, rho must be given!
     ne : n-D array, optional
         Electron density in m^-3. Same shape as T.
     rho : n-D array, optional
-        Density in kg m^-3. Same shape as T.
+        Density in kg m^-3. Same shape as T. Only used if nH is not given.
     vx : n-D array, optional
         x velocity in m/s. Same shape as T. Not in use by RH 1.5D.
     vy : n-D array, optional
@@ -897,7 +897,8 @@ def make_xarray_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
               'electron_density']
     # Remove variables not given
     data = {key: data[key] for key in data if data[key][0] is not None}
-
+    if (nH is None) and (rho is None):
+        raise ValueError("Missing nH or rho. Need at least one of them")
     if (append and not os.path.isfile(outfile)):
         append = False
     idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
