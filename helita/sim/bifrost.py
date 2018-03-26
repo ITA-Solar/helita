@@ -470,9 +470,9 @@ class BifrostData(object):
 
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             return np.reshape(val[self.iix, self.iiy, self.iiz], (
-                                  self.xLength, self.yLength, 
+                                  self.xLength, self.yLength,
                                   self.zLength))
-        else: 
+        else:
             return val
 
 
@@ -747,6 +747,7 @@ class BifrostData(object):
                 print(quant + ' interpolation...')
 
             fac = 1.0
+            #JMS Why SI?? SI seems to work with bifrost_uvotrt. 
             if quant == 'ne':
                 fac = 1.e6  # cm^-3 to m^-3
             if quant in ['eps', 'opa', 'temt']:
@@ -881,7 +882,7 @@ class BifrostData(object):
             if quant in ['ke']:
                 var = self.get_var('r')
                 return self.get_var('u2') * var * 0.5
-                
+
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
@@ -1260,6 +1261,7 @@ class bifrost_units():
     K_TO_EV = 8.621738E-5    # KtoeV
     EV_TO_K = 11604.50520    # eVtoK
     ergd2wd = 0.1
+    GRPH = 2.27e-24
 
 
 class Rhoeetab:
