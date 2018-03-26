@@ -23,6 +23,7 @@ except ImportError:
 
 datapath = 'PYTHON/br_int/br_ioni/data/'
 
+units = bifrost_units()
 
 class UVOTRTData(BifrostData):
 
@@ -435,7 +436,7 @@ class UVOTRTData(BifrostData):
 
         return vdem
 
-    def get_vdem(self, order=1, axis=2, vel_axis=np.linspace(- 20, 20, 20),
+    def get_vdem(self, axis=2, vel_axis=np.linspace(- 20, 20, 20),
                  tg_axis=np.linspace(4, 9, 25), zcut=None):
         """
         Calculates emissivity (EM) as a funtion of temparature and velocity,
@@ -457,12 +458,14 @@ class UVOTRTData(BifrostData):
         -----
             Uses cuda
         """
-        ems = self.get_dem(axis=axis, order=order, zcut=zcut)
+        ems = self.get_dem(axis=axis, zcut=zcut)
         tg = self.get_var('tg')
         if axis == 0:
             vel = self.get_var('ux')
             nx = self.ny
             ny = self.nz
+            dx = self.dy * units.u_l
+            dy = self.dzidzdn * units.u_l
             ems = np.transpose(ems, (1, 2, 0))
             tg = np.transpose(tg, (1, 2, 0))
             vel = np.transpose(vel, (1, 2, 0))
@@ -470,6 +473,8 @@ class UVOTRTData(BifrostData):
             vel = self.get_var('uy')
             nx = self.nx
             ny = self.nz
+            dx = self.dx * units.u_l
+            dy = self.dzidzdn * units.u_l
             ems = np.transpose(ems, (0, 2, 1))
             tg = np.transpose(tg, (0, 2, 1))
             vel = np.transpose(vel, (0, 2, 1))
@@ -477,6 +482,8 @@ class UVOTRTData(BifrostData):
             vel = self.get_var('uz')
             nx = self.nx
             ny = self.ny
+            dx = self.dx * units.u_l
+            dy = self.dy * units.u_l
 
         nvel = len(vel_axis)
         ntg = len(tg_axis)
@@ -497,11 +504,12 @@ class UVOTRTData(BifrostData):
                 ems_temp_v[loc] = 0.0
                 for ix in range(0, nx):
                     for iy in range(0, ny):
-                        vdem[itg, ivel, ix, iy] = np.sum(ems_temp_v[ix, iy, :])
+                        vdem[itg, ivel, ix, iy] = np.sum(
+                            ems_temp_v[ix, iy, :] * dx * dy)
 
         return vdem
 
-    def get_dem(self, axis=2, order=1, zcut=None, *args, **kwargs):
+    def get_dem(self, axis=2, zcut=None, *args, **kwargs):
         """
         Calculates emissivity (EM).
 
@@ -522,9 +530,6 @@ class UVOTRTData(BifrostData):
             Uses cuda
         """
         # mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
-        units = bifrost_units()
-        GRPH = 2.27e-24
-
         tg = self.get_var('tg')
         en = self.get_var('ne')
         rho = self.get_var('r')
@@ -535,7 +540,7 @@ class UVOTRTData(BifrostData):
         else:
             ds = self.dzidzdn * units.u_l
 
-        nh = rho * units.u_r / GRPH
+        nh = rho * units.u_r / units.GRPH
         dem = nh * 0.0
 
         for ix in range(0, self.nx):
@@ -572,10 +577,8 @@ class UVOTRTData(BifrostData):
         """
         # mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
 
-        units = bifrost_units()
         CC = units.CLIGHT.value * units.CM_TO_M  # 2.99792458e8 m/s
         CCA = CC * 1e10  # AA/s
-        GRPH = 2.27e-24
         nspline = np.size(spline)
 
         if nspline > 1:
@@ -659,7 +662,7 @@ class UVOTRTData(BifrostData):
             ds = self.dy * units.u_l
         else:
             ds = self.dzidzdn * units.u_l
-        nh = rho * units.u_r / GRPH
+        nh = rho * units.u_r / units.GRPH
 
         for ix in range(0, self.nx):
             for iy in range(0, self.ny):
