@@ -531,7 +531,7 @@ class UVOTRTData(BifrostData):
         """
         # mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
         tg = self.get_var('tg')
-        en = self.get_var('ne')
+        en = self.get_var('ne') / 1e6  # from SI to cgs
         rho = self.get_var('r')
         if axis == 0:
             ds = self.dx * units.u_l
@@ -545,7 +545,7 @@ class UVOTRTData(BifrostData):
 
         for ix in range(0, self.nx):
             for iy in range(0, self.ny):
-                dem[ix, iy, :] = ds * nh[ix, iy, :] / 1e40
+                dem[ix, iy, :] = ds * nh[ix, iy, :]
 
         if (zcut is not None):
             for iz in range(0, self.nz):
