@@ -4,7 +4,8 @@ Set of programs to read and interact with output from Multifluid/multispecies
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, subs2grph, bifrost_units
+from .bifrost import BifrostData, Rhoeetab
+from .bifrost import read_idl_ascii, subs2grph, bifrost_units
 from . import cstagger
 
 
@@ -42,8 +43,10 @@ class EbysusData(BifrostData):
             if hasattr(self, 'with_electrons'):
                 if self.with_electrons:
                     self.mf_e_file = self.file_root + '_mf_e'
-                    self.snapevars.remove('ee') # JMS This must be properly done whenever is implemented
-                    self.snapvars.append('e') # JMS This must be properly done whenever is implemented
+                    # JMS This must be properly done whenever is implemented
+                    self.snapevars.remove('ee')
+                    # JMS This must be properly done whenever is implemented
+                    self.snapvars.append('e')
             self.mhdvars.append('e')
 
         for var in (
@@ -57,7 +60,7 @@ class EbysusData(BifrostData):
             if self.mf_total_nlevel == 1:
                 self.snapvars.append('e')
 
-        self.simple_vars = self.snapvars + self.mhdvars  + self.auxvars + \
+        self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + \
             self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
 
         self.auxxyvars = []
@@ -71,8 +74,8 @@ class EbysusData(BifrostData):
                 self.auxvars.remove(var)
                 self.vars2d.append(var)
 
-        '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup',
-                         'dxdbdn', 'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
+        '''self.compvars = ['ux', 'uy', 'uz', 's', 'rup', 'dxdbup', 'dxdbdn',
+                            'dydbup', 'dydbdn', 'dzdbup', 'dzdbdn', 'modp']
         if (self.do_mhd):
             self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
 
@@ -104,7 +107,6 @@ class EbysusData(BifrostData):
             self.mf_tabparam = read_mftab_ascii(filename)
         except KeyError:
             print('warning, this idl file does not include mf_param_file')
-            #raise KeyError('read_params: could not find mf_total_nlevel in idl file!')
 
     def _init_vars(self, *args, **kwargs):
         """
@@ -129,7 +131,8 @@ class EbysusData(BifrostData):
             except BaseException:
                 if self.verbose:
                     if not (self.mf_ilevel == 1 and var in self.varsmfc):
-                        print(('(WWW) init_vars: could not read variable %s' % var))
+                        print(('(WWW) init_vars: could not read '
+                               'variable %s' % var))
 
         rdt = self.r.dtype
         cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
@@ -183,30 +186,34 @@ class EbysusData(BifrostData):
             by running self.set_snap(snap).
         """
         '''assert (mf_ispecies > 0 and mf_ispecies <= 28)'''
-        if var in ['x','y','z']:
-            return getattr(self,var)
+        if var in ['x', 'y', 'z']:
+            return getattr(self, var)
 
         if var in self.varsmfc:
-            if mf_ilevel == None and self.mf_ilevel == 1:
+            if mf_ilevel is None and self.mf_ilevel == 1:
                 mf_ilevel = 2
-                print("Warning: mfc is only for ionized species, Level changed to 2")
+                print("Warning: mfc is only for ionized species,"
+                      "Level changed to 2")
             if mf_ilevel == 1:
                 mf_ilevel = 2
-                print("Warning: mfc is only for ionized species. Level changed to 2")
+                print("Warning: mfc is only for ionized species."
+                      " Level changed to 2")
 
         if var not in self.snapevars:
             if (mf_ispecies is None):
                 if self.mf_ispecies < 1:
                     mf_ispecies = 1
-                    print("Warning: variable is only for electrons, iSpecie changed to 1")
+                    print("Warning: variable is only for electrons, "
+                          "iSpecie changed to 1")
             elif (mf_ispecies < 1):
                 mf_ispecies = 1
-                print("Warning: variable is only for electrons, iSpecie changed to 1")
+                print("Warning: variable is only for electrons, "
+                      "iSpecie changed to 1")
 
-
-        if (((snap is not None) and (snap != self.snap)) or
-            ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
-                ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
+        if (((snap is not None) and (snap != self.snap)) or ((
+                mf_ispecies is not None) and (
+                mf_ispecies != self.mf_ispecies)) or ((
+                mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
             self.set_mfi(mf_ispecies, mf_ilevel)
             self.set_snap(snap)
 
@@ -221,9 +228,11 @@ class EbysusData(BifrostData):
             return super(EbysusData, self)._get_simple_var_xy(var)
         else:
             return self._get_composite_mf_var(var)
-        '''else:
-            raise ValueError(("get_var: could not read variable"
-                              "%s. Must be one of %s" % (var, str(self.simple_vars + self.compvars + self.auxxyvars))))'''
+        # else:
+        # raise ValueError(("get_var: could not read variable"
+        # "%s. Must be one of %s" %
+        # (var, str(self.simple_vars + self.compvars +
+        # self.auxxyvars))))'''
 
     def _get_simple_var(
             self,
@@ -237,7 +246,8 @@ class EbysusData(BifrostData):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
 
-        Overloads super class to make a distinction between different filenames for different variables
+        Overloads super class to make a distinction between different
+        filenames for different variables
 
         Parameters:
         -----------
@@ -267,7 +277,7 @@ class EbysusData(BifrostData):
         elif currSnap == 0:
             filename = self.file_root
             fsuffix_b = ''
-            currStr= ''
+            currStr = ''
         else:
             filename = self.file_root
             fsuffix_b = ''
@@ -310,7 +320,8 @@ class EbysusData(BifrostData):
 
         filename = filename + currStr + fsuffix_a + fsuffix_b
 
-        '''if var not in self.mhdvars and not (var in self.snapevars and self.mf_ispecies < 0) and var not in self.auxvars :
+        '''if var not in self.mhdvars and not (var in self.snapevars and
+            self.mf_ispecies < 0) and var not in self.auxvars :
             filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
 
         dsize = np.dtype(self.dtype).itemsize
@@ -359,8 +370,9 @@ class EbysusData(BifrostData):
         else:
             return super(EbysusData, self)._get_quantity(var)
 
-    def get_varTime(self, var, snap = None, iix = None, iiy = None, iiz = None,
-                    mf_ispecies=None,  mf_ilevel=None, order='F', mode='r', *args, **kwargs):
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
+                    mf_ispecies=None, mf_ilevel=None, order='F',
+                    mode='r', *args, **kwargs):
 
         self.iix = iix
         self.iiy = iiy
@@ -375,25 +387,29 @@ class EbysusData(BifrostData):
                 self.set_snap(snap)
 
         if var in self.varsmfc:
-            if mf_ilevel == None and self.mf_ilevel == 1:
+            if mf_ilevel is None and self.mf_ilevel == 1:
                 mf_ilevel = 2
-                print("Warning: mfc is only for ionized species, Level changed to 2")
+                print("Warning: mfc is only for ionized species,"
+                      "Level changed to 2")
             if mf_ilevel == 1:
                 mf_ilevel = 2
-                print("Warning: mfc is only for ionized species. Level changed to 2")
+                print("Warning: mfc is only for ionized species."
+                      "Level changed to 2")
 
         if var not in self.snapevars:
             if (mf_ispecies is None):
                 if self.mf_ispecies < 1:
                     mf_ispecies = 1
-                    print("Warning: variable is only for electrons, iSpecie changed to 1")
+                    print("Warning: variable is only for electrons,"
+                          "iSpecie changed to 1")
             elif (mf_ispecies < 1):
                 mf_ispecies = 1
-                print("Warning: variable is only for electrons, iSpecie changed to 1")
+                print("Warning: variable is only for electrons,"
+                      "iSpecie changed to 1")
 
-
-        if (((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)) or
-                ((mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
+        if (((mf_ispecies is not None) and (
+                mf_ispecies != self.mf_ispecies)) or ((
+                mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
         def helper(var, *args, **kwargs):
@@ -406,14 +422,15 @@ class EbysusData(BifrostData):
             elif var in self.auxxyvars:
                 return self._get_simple_var_xy(var, *args, **kwargs)
             elif var in self.compvars:  # add to variable list
-                self.variables[var] = self._get_composite_var(var, *args, **kwargs)
+                self.variables[var] = self._get_composite_var(
+                    var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
                 return self.variables[var]
             else:
-                '''raise ValueError(
-                    ("get_var: could not read variable %s. Must be "
-                     "one of %s" %
-                     (var, (self.simple_vars + self.compvars + self.auxxyvars))))'''
+                # raise ValueError(
+                # ("get_var: could not read variable %s. Must be "
+                # "one of %s" %
+                # (var,(self.simple_vars +self.compvars + self.auxxyvars))))
                 return self._get_quantity(var, *args, **kwargs)
 
         # lengths for size of return array
@@ -452,8 +469,12 @@ class EbysusData(BifrostData):
 ###########
 #  TOOLS  #
 ###########
+
+
 def read_mftab_ascii(filename):
-    ''' Reads mf_tabparam.in-formatted (command style) ascii file into dictionary '''
+    '''
+    Reads mf_tabparam.in-formatted (command style) ascii file into dictionary
+    '''
     li = 0
     params = {}
     # go through the file, add stuff to dictionary
@@ -468,10 +489,10 @@ def read_mftab_ascii(filename):
                 li += 1
                 continue
             line, sep, tail = line.partition('#')
-            line=line.strip()
+            line = line.strip()
             line = line.split(';')[0].split('\t')
             # if (len(line) > 2):
-            #    print(('(WWW) read_params: line %i is invalid, skipping' % li))
+            #  print(('(WWW) read_params: line %i is invalid, skipping' % li))
             #    li += 1
             #    continue
             if (np.size(line) == 1):
@@ -484,7 +505,7 @@ def read_mftab_ascii(filename):
                 try:
                     value = int(value)
                 except BaseException:
-                    print('(WWW) read_mftab_ascii: could not find datatype in '
+                    print('(WWW) read_mftab_ascii: could not find datatype in'
                           'line %i, skipping' % li)
                     li += 1
                     continue
@@ -501,18 +522,16 @@ def read_mftab_ascii(filename):
                         value = int(value)
                     except BaseException:
                         print(
-                            '(WWW) read_mftab_ascii: could not find datatype in '
-                            'line %i, skipping' %
-                            li)
+                            '(WWW) read_mftab_ascii: could not find datatype'
+                            'in line %i, skipping' % li)
                 else:
                     try:
                         value = int(value)
                         value2 = int(value2)
                     except BaseException:
                         print(
-                            '(WWW) read_mftab_ascii: could not find datatype in '
-                            'line %i, skipping' %
-                            li)
+                            '(WWW) read_mftab_ascii: could not find datatype'
+                            'in line %i, skipping' % li)
                     li += 1
                     continue
                 if not (key[0] in params):
@@ -525,7 +544,7 @@ def read_mftab_ascii(filename):
                 try:
                     arr = [int(numeric_string) for numeric_string in line]
                 except BaseException:
-                    print('(WWW) read_mftab_ascii: could not find datatype in '
+                    print('(WWW) read_mftab_ascii: could not find datatype in'
                           'line %i, skipping' % li)
                     li += 1
                     continue
@@ -537,24 +556,11 @@ def read_mftab_ascii(filename):
     return params
 
 
-def write_mftab_ascii(filename,
-                      NSPECIES_MAX=28,
-                      SPECIES=['H_2.atom',
-                               'He_2.atom'],
-                      EOS_TABLES=['H_EOS.dat','He_EOS.dat'],
-                      REC_TABLES=['h_rec.dat','he_rec.dat'],
-                      ION_TABLES=['h_ion.dat','he_ion.dat'],
-                      CROSS_SECTIONS_TABLES=[[1,
-                                              1,
-                                              'p-H-elast.txt'],
-                                             [1,
-                                              2,
-                                              'p-He.txt'],
-                                             [2,
-                                              2,
-                                              'He-He.txt']],
-                      CROSS_SECTIONS_TABLES_I=[],
-                      CROSS_SECTIONS_TABLES_N=[],
+def write_mftab_ascii(filename, NSPECIES_MAX=28,
+                      SPECIES=None, EOS_TABLES=None, REC_TABLES=None,
+                      ION_TABLES=None, CROSS_SECTIONS_TABLES=None,
+                      CROSS_SECTIONS_TABLES_I=None,
+                      CROSS_SECTIONS_TABLES_N=None,
                       collist=np.linspace(1,
                                           28,
                                           28)):
@@ -567,16 +573,39 @@ def write_mftab_ascii(filename,
             Name of the file to write.
         NSPECIES_MAX - integer [28], maximum # of species
         SPECIES - list of strings containing the name of the atom files
-        EOS_TABLES - list of strings containing the name of the eos tables (no use)
-        REC_TABLES - list of strings containing the name of the rec tables (no use)
-        ION_TABLES - list of strings containing the name of the ion tables (no use)
-        CROSS_SECTIONS_TABLES - list of strings containing the name of the cross section files from VK between ion and neutrals
-        CROSS_SECTIONS_TABLES_I - list of strings containing the name of the cross section files from VK between ions
-        CROSS_SECTIONS_TABLES_N - list of strings containing the name of the cross section files from VK  between ions
+        EOS_TABLES - list of strings containing the name of the eos
+                    tables (no use)
+        REC_TABLES - list of strings containing the name of the rec
+                    tables (no use)
+        ION_TABLES - list of strings containing the name of the ion
+                    tables (no use)
+        CROSS_SECTIONS_TABLES - list of strings containing the name of the
+                    cross section files from VK between ion and neutrals
+        CROSS_SECTIONS_TABLES_I - list of strings containing the name of the
+                    cross section files from VK between ions
+        CROSS_SECTIONS_TABLES_N - list of strings containing the name of the
+                    cross section files from VK  between ions
         collist - integer vector of the species used.
                 e.g., collist = [1,2,3] will include the H, He and Li
 
     '''
+
+    if SPECIES is None:
+        SPECIES=['H_2.atom', 'He_2.atom']
+    if EOS_TABLES is None:
+        EOS_TABLES=['H_EOS.dat', 'He_EOS.dat']
+    if REC_TABLES is None:
+        REC_TABLES=['h_rec.dat', 'he_rec.dat']
+    if ION_TABLES is None:
+        ION_TABLES=['h_ion.dat', 'he_ion.dat']
+    if CROSS_SECTIONS_TABLES is None:
+        CROSS_SECTIONS_TABLES=[[1, 1, 'p-H-elast.txt'],
+                               [1, 2, 'p-He.txt'],
+                               [2, 2, 'He-He.txt']]
+    if CROSS_SECTIONS_TABLES_I is None:
+        CROSS_SECTIONS_TABLES_I=[]
+    if CROSS_SECTIONS_TABLES_N is None:
+        CROSS_SECTIONS_TABLES_N=[]
 
     params = [
         'NSPECIES_MAX',
@@ -680,7 +709,8 @@ def write_mftab_ascii(filename,
                 '.dat')
 
     if (np.shape(collist) != np.shape(SPECIES)):
-        print('write_mftab_ascii: WARNING the list of atom files is different \n than the selected list of species in collist')
+        print('write_mftab_ascii: WARNING the list of atom files is \n '
+              'different than the selected list of species in collist')
 
     CROSS_SECTIONS_TABLES_I = []
     CROSS_SECTIONS_TABLES_N = []
@@ -701,14 +731,15 @@ def write_mftab_ascii(filename,
                     COLISIONS_MAP_I[i - 1, j - 1] = (i - 1) * NSPECIES_MAX + j
                     COLISIONS_MAP_N[i - 1, j - 1] = (i - 1) * NSPECIES_MAX + j
 
-    for j in range(0, NSPECIES_MAX ):
+    for j in range(0, NSPECIES_MAX):
         EMASK_MAP[j] = 99
 
     for symb in SPECIES:
         symb = symb.split('_')[0]
         if not(symb.lower() in coll_vars_list):
-            print('write_mftab_ascii: WARNING there may be a mismatch between the atom files and selected species.')
-            print('                   Check for species', symb.lower())
+            print('write_mftab_ascii: WARNING there may be a mismatch between'
+                  'the atom files and selected species.\n'
+                  'Check for species', symb.lower())
 
     f = open(filename, 'w')
     for head in params:
@@ -803,30 +834,39 @@ def write_mftab_ascii(filename,
                         "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP':
-            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
-                                      for v in range(0, NSPECIES_MAX)]) + "\n")
+            f.write("#\t" + "\t".join(
+                    [coll_vars_n[v].upper().ljust(2) for v in range(
+                            0, NSPECIES_MAX)]) + "\n")
             for crs in range(0, NSPECIES_MAX):
-                f.write("\t" + "\t".join([str(int(COLISIONS_MAP[crs][v])).zfill(2)
-                                          for v in range(0, NSPECIES_MAX)]) + "\n")
+                f.write("\t" + "\t".join(
+                        [str(int(
+                            COLISIONS_MAP[crs][v])).zfill(2) for v in range(
+                                    0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP_I':
-            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
-                                      for v in range(0, NSPECIES_MAX)]) + "\n")
+            f.write("#\t" + "\t".join(
+                    [coll_vars_n[v].upper().ljust(2) for v in range(
+                            0, NSPECIES_MAX)]) + "\n")
             for crs in range(0, NSPECIES_MAX):
-                f.write("\t" + "\t".join([str(int(COLISIONS_MAP_I[crs][v])).zfill(2)
-                                          for v in range(0, NSPECIES_MAX)]) + "\n")
+                f.write("\t" + "\t".join([str(int(
+                        COLISIONS_MAP_I[crs][v])).zfill(2) for v in range(
+                                0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP_N':
-            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
-                                      for v in range(0, NSPECIES_MAX)]) + "\n")
+            f.write("#\t" + "\t".join(
+                    [coll_vars_n[v].upper().ljust(2) for v in range(
+                            0, NSPECIES_MAX)]) + "\n")
             for crs in range(0, NSPECIES_MAX):
-                f.write("\t" + "\t".join([str(int(COLISIONS_MAP_N[crs][v])).zfill(2)
-                                          for v in range(0, NSPECIES_MAX)]) + "\n")
+                f.write("\t" + "\t".join([str(int(
+                        COLISIONS_MAP_N[crs][v])).zfill(2) for v in range(
+                                0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'EMASK':
-            f.write("#\t" + "\t".join([coll_vars_n[v].upper().ljust(2)
-                                      for v in range(0, NSPECIES_MAX)]) + "\n")
-            f.write("\t" + "\t".join([str(int(EMASK_MAP[v])).zfill(2)
-                                      for v in range(0, NSPECIES_MAX)]) + "\n")
+            f.write("#\t" + "\t".join(
+                    [coll_vars_n[v].upper().ljust(2) for v in range(
+                            0, NSPECIES_MAX)]) + "\n")
+            f.write("\t" + "\t".join([str(
+                    int(EMASK_MAP[v])).zfill(2) for v in range(
+                            0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
     f.close()
