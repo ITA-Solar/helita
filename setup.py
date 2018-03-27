@@ -63,7 +63,7 @@ setup(
           'Topic :: Scientific/Engineering :: Physics'
     ],
     packages=[NAME] + ["%s.%s" % (NAME, package) for package in PACKAGES],
-    package_data={'': ['*.pyx', '*.f'], '': ['data/*']},
+    package_data={'': ['*.pyx', '*.f']},
     ext_modules=extensions,
     python_requires='>=2.7',
     use_2to3=False
