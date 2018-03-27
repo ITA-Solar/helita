@@ -251,7 +251,7 @@ def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
         scl = z
         desc = 'HEIGHT (KM)'
     elif scale.lower() == 'tau':
-        if not logtau:
+        if logtau is None:
             raise ValueError('watmos_multi: tau scale selected but '
                              'tau not given!')
         scl = logtau
