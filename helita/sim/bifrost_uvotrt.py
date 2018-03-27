@@ -146,6 +146,13 @@ class UVOTRTData(BifrostData):
 
         nt=np.size(self.snap)
         t0 = time.time()
+        if (axis == 0):
+            axis_txt='_yz_'
+        elif (axis == 1):
+            axis_txt='_xz_'
+        else:
+            axis_txt='_xy_'
+            
         for it in range(0,nt):
             self.set_snap(snap[it])
             t1 = time.time()
@@ -154,7 +161,7 @@ class UVOTRTData(BifrostData):
                         altitude=altitude, ooe = ooe, stepsize = stepsize)
 
                 # make file
-                savedFile = open(spline+"it"+str(self.snap)+".bin", "wb")
+                savedFile = open(spline+axis_txt+"it"+str(self.snap)+".bin", "wb")
                 # write to file
                 nx=np.shape(intny[0])[0]
                 ny=np.shape(intny[0])[1]
@@ -172,7 +179,7 @@ class UVOTRTData(BifrostData):
                             altitude=altitude, ooe = ooe, stepsize = stepsize)
 
                     # make file
-                    savedFile = open(spline[iline]+"it"+str(self.snap)+".bin", "wb")
+                    savedFile = open(spline[iline]+axis_txt+"it"+str(self.snap)+".bin", "wb")
                     # write to file
                     nx=np.shape(intny[0])[0]
                     ny=np.shape(intny[0])[1]
