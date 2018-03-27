@@ -2,9 +2,9 @@
 Set of programs to read and interact with output from Bifrost
 """
 
-import numpy as np
 import os
 from glob import glob
+import numpy as np
 from . import cstagger
 
 
@@ -341,6 +341,8 @@ class BifrostData(object):
                 filename = filename + '.hion.snap'
             elif isnap > 0:
                 filename = '%s.hion_%s.snap' % (self.file_root, isnap)
+                if not os.path.isfile(filename):
+                    filename = '%s_.hion%s.snap' % (self.file_root, isnap)
         else:
             raise ValueError(('_get_simple_var: could not find variable '
                               '%s. Available variables:' % (var) +
