@@ -14,6 +14,7 @@ import time
 import imp
 import pickle
 import scipy.ndimage as ndimage
+import struct
 
 try:
     imp.find_module('pycuda')
@@ -176,26 +177,28 @@ class UVOTRTData(BifrostData):
                   '2, pycuda: https://wiki.tiker.net/PyCuda/Installation\n' +
                   'no warranty that this will work on non-NVIDIA')
 
-    def load_intny(self, spline, snap=None, nlamb=141, axis=2,
-                   rend_opacity=False, dopp_width_range=5e1, azimuth=None,
-                   altitude=None, ooe=False, stepsize=0.01, *args, **kwargs):
+    def load_intny(self, spfilebin):
         """
         Calculate and dave profiles in a binary file.
         """
-        nlines = np.size(spline)
-        if (snap is None):
-            snap = self.snap
-
-        self.set_snap(snap)
-
         # open  file
-        loadFile = open(spline + "it" + str(self.snap) + ".bin", "rb")
+        loadFile = open(spfilebin, "rb")
         # write to file
         data = loadFile.read()
         loadFile.close()
-        self.nwvl, nx, ny = data[:2]
-        self.wvl = data[3:3 + self.nwvl]
-        self.intny = np.reshape(data[3+self.nwvl:],(self.nwvl, nx, ny))
+        (nwvl, temp, nx, temp, ny) = struct.unpack('iiiii',data[:4*5])
+        intny={}
+        intny[1] = np.zeros((nwvl))
+        intny[0] = np.zeros((nwvl, nx, ny))
+        for iwvl in range(nwvl):
+            intny[1][iwvl] = struct.unpack('f',data[4*6+iwvl*4:4*6+4*iwvl+4])[0]
+            for iix in range(nx):
+                for iiy in range(ny):
+                    const = 4*6 + 4*nwvl + iix*nwvl*ny*4 + iiy*nwvl*4 + iwvl*4
+                    intny[0][iwvl,iix,iiy] = struct.unpack(
+                        'f',data[const: const+ 4])[0]
+        self.wvl = intny[1]
+        return intny
 
     def save_intny(self, spline, snap=None, nlamb=141, axis=2,
                    rend_opacity=False, dopp_width_range=5e1, azimuth=None,
@@ -434,7 +437,7 @@ class UVOTRTData(BifrostData):
                 self.nlnt, 1)).reshape(
                 self.nlnt, self.ndop, self.nx, self.ny)
 
-    def trapez(xvec,yvec):
+    def trapez(self,xvec,yvec):
         '''
         performs trapezoidal integration.
 
@@ -449,14 +452,14 @@ class UVOTRTData(BifrostData):
         if nxv != nyv:
           print('trapez: different number of elements in x and y array')
 
-        integrand=(yvec[:nyv-2]+yvec[1:])*(xvec[1:]-xvec[:nxv-2])*0.5
+        integrand=(yvec[:-1]+yvec[1:])*(xvec[1:]-xvec[:-1])*0.5
         return np.sum(integrand)
 
     def calc_profmoments(self,intny):
         '''
         calculates 0, 1st and 2nd moment of intensity profiles
         '''
-        dny = intny[0]
+        dny = intny[1]
         nwvl = np.size(dny)
         ddny = np.outer(dny,np.ones((nwvl)))
 
@@ -464,19 +467,20 @@ class UVOTRTData(BifrostData):
 
         nsx = np.shape(intny[0])[1]
         nsy = np.shape(intny[0])[2]
-        prof_mom['itot'] = np.arra((nsx,nsy))
-        prof_mom['utot'] = np.arra((nsx,nsy))
-        prof_mom['wtot'] = np.arra((nsx,nsy))
+        prof_mom['itot'] = np.zeros((nsx,nsy))
+        prof_mom['utot'] = np.zeros((nsx,nsy))
+        prof_mom['wtot'] = np.zeros((nsx,nsy))
 
         for iix in range(nsx):
             for iiy in range(nsy):
                 prof_mom['itot'][iix,iiy] = self.trapez(
                                     dny, intny[0][:,iix,iiy])
-                prof_mom['utot'][iix,iiy] = trapez(
-                    dny, intny[0][:,iix,iiy] * ddny) / itot[iix,iiy]
+                prof_mom['utot'][iix,iiy] = self.trapez(
+                    dny, np.inner(
+                    intny[0][:,iix,iiy], ddny)) / prof_mom['itot'][iix,iiy]
                 prof_mom['wtot'][iix,iiy] = self.trapez(
-                    dny,intny[0][:,iix,iiy] * ddny**2) / (
-                        itot[iix,iiy] - utot[iix,iiy]**2)
+                    dny,np.inner(intny[0][:,iix,iiy], ddny**2)) / (
+                        prof_mom['itot'][iix,iiy] - prof_mom['utot'][iix,iiy]**2)
         prof_mom['utot'] *= self.ny2vel
         prof_mom['wtot'] *= self.ny2vel * self.ny2vel
 
@@ -485,14 +489,14 @@ class UVOTRTData(BifrostData):
     def get_lambda(self,spline):
         '''
         '''
-        acont_filename = [os.path.relpath(
-            i, os.path.dirname('')) for i in glob(
-            os.environ['BIFROST'] + datapath + spline + '.opy')]
-        iontab = pickle.dump(acont_filename)
+        acont_filename = os.path.relpath(
+            os.environ['BIFROST'] + datapath + spline + '.opy')
+        filehandler = open(acont_filename, 'rb')
+        iontab = pickle.load(filehandler)
         self.wvl0 = iontab.Gofnt['wvl']
         self.lambd = self.wvl0 / (
-            self.wvl * self.wvl0 / 1.0e13 + cc.CLIGHT /
-                1.0e5 ) * units.CLIGHT / 1.0e5
+            self.wvl * self.wvl0 / 1.0e13 + units.CLIGHT.value /
+                1.0e5 ) * units.CLIGHT.value / 1.0e5
         self.ny2vel = self.wvl0 * 1.e-13
         self.wvldop = self.wvl * self.ny2vel
 
