@@ -22,6 +22,7 @@ except ImportError:
     found = False
 
 datapath = 'PYTHON/br_int/br_ioni/data/'
+genxpath = 'IDL/data/lines/emissivity_functions/'
 
 units = bifrost_units()
 
@@ -174,6 +175,27 @@ class UVOTRTData(BifrostData):
                   'https://developer.nvidia.com/cuda-downloads\n ' +
                   '2, pycuda: https://wiki.tiker.net/PyCuda/Installation\n' +
                   'no warranty that this will work on non-NVIDIA')
+
+    def load_intny(self, spline, snap=None, nlamb=141, axis=2,
+                   rend_opacity=False, dopp_width_range=5e1, azimuth=None,
+                   altitude=None, ooe=False, stepsize=0.01, *args, **kwargs):
+        """
+        Calculate and dave profiles in a binary file.
+        """
+        nlines = np.size(spline)
+        if (snap is None):
+            snap = self.snap
+
+        self.set_snap(snap)
+
+        # open  file
+        loadFile = open(spline + "it" + str(self.snap) + ".bin", "rb")
+        # write to file
+        data = loadFile.read()
+        loadFile.close()
+        self.nwvl, nx, ny = data[:2]
+        self.wvl = data[3:3 + self.nwvl]
+        self.intny = np.reshape(data[3+self.nwvl:],(self.nwvl, nx, ny))
 
     def save_intny(self, spline, snap=None, nlamb=141, axis=2,
                    rend_opacity=False, dopp_width_range=5e1, azimuth=None,
@@ -369,6 +391,152 @@ class UVOTRTData(BifrostData):
                   '2, pycuda: https://wiki.tiker.net/PyCuda/Installation no' +
                   'warranty that this will work on non-NVIDIA')
 
+    def read_synlines(self, spline=None):
+        '''
+        reads the Source function for specific lines over a range of log T,
+        '''
+        if spline is None:
+            spline = "*"
+        synlines = [os.path.relpath(i, os.path.dirname('')) for i in glob(
+                        os.environ['BIFROST'] + genxpath + spline +  '.genx')]
+
+        self.synlinfiles = {}
+        for ifile in range(0, np.size(synlines)):
+            self.synlinfiles[ifile] = synlines[ifile]
+
+        self.sglin = {}
+        for ilines in self.synlinfiles.keys():
+            print(ilines)
+            # Read in precomputed response functions for 108 171 and 284, from
+            # muse_resp.pro in IDL
+            self.sglin[ilines] = read_genx(self.synlinfiles[ilines])
+        self.sglin_ntg = np.size(self.sglin[0]['TEMP'])
+
+    def calc_synvdemint(self, vdem):
+        '''
+        Calculate profile intensity for each velocity bin
+        '''
+
+        if not hasattr(self,'vdem'):
+            vdem = self.get_vdem()
+        synvdemint = {}
+        for ilines in self.synlinfiles.keys():
+            thisg = np.interp(self,tg_axis,
+                              np.log10(self.sglin[ilines]['TEMP']),
+                              self.sglin[ilines]['G'])
+            self.synprofras[ilines] = {}
+            self.synvdemint[ilines]['intvtg'] = (self.vdem.reshape(
+                self.nlnt, self.ndop * self.nx * self.ny) * thisg.reshape(
+                self.nlnt, 1)).reshape(
+                self.nlnt, self.ndop, self.nx, self.ny)
+
+    def trapez(xvec,yvec):
+        '''
+        performs trapezoidal integration.
+
+        Input:
+            xvec: vector of n elements
+            yvec: vector with same number of elements as yvec
+        Output:
+            float number of the trapezoidal integration
+        '''
+        nxv=np.size(xvec)
+        nyv=np.size(yvec)
+        if nxv != nyv:
+          print('trapez: different number of elements in x and y array')
+
+        integrand=(yvec[:nyv-2]+yvec[1:])*(xvec[1:]-xvec[:nxv-2])*0.5
+        return np.sum(integrand)
+
+    def calc_profmoments(self,intny):
+        '''
+        calculates 0, 1st and 2nd moment of intensity profiles
+        '''
+        dny = intny[0]
+        nwvl = np.size(dny)
+        ddny = np.outer(dny,np.ones((nwvl)))
+
+        prof_mom = {}
+
+        nsx = np.shape(intny[0])[1]
+        nsy = np.shape(intny[0])[2]
+        prof_mom['itot'] = np.arra((nsx,nsy))
+        prof_mom['utot'] = np.arra((nsx,nsy))
+        prof_mom['wtot'] = np.arra((nsx,nsy))
+
+        for iix in range(nsx):
+            for iiy in range(nsy):
+                prof_mom['itot'][iix,iiy] = self.trapez(
+                                    dny, intny[0][:,iix,iiy])
+                prof_mom['utot'][iix,iiy] = trapez(
+                    dny, intny[0][:,iix,iiy] * ddny) / itot[iix,iiy]
+                prof_mom['wtot'][iix,iiy] = self.trapez(
+                    dny,intny[0][:,iix,iiy] * ddny**2) / (
+                        itot[iix,iiy] - utot[iix,iiy]**2)
+        prof_mom['utot'] *= self.ny2vel
+        prof_mom['wtot'] *= self.ny2vel * self.ny2vel
+
+        return prof_mom
+
+    def get_lambda(self,spline):
+        '''
+        '''
+        acont_filename = [os.path.relpath(
+            i, os.path.dirname('')) for i in glob(
+            os.environ['BIFROST'] + datapath + spline + '.opy')]
+        iontab = pickle.dump(acont_filename)
+        self.wvl0 = iontab.Gofnt['wvl']
+        self.lambd = self.wvl0 / (
+            self.wvl * self.wvl0 / 1.0e13 + cc.CLIGHT /
+                1.0e5 ) * units.CLIGHT / 1.0e5
+        self.ny2vel = self.wvl0 * 1.e-13
+        self.wvldop = self.wvl * self.ny2vel
+
+    def calc_vdemmoments(self):
+        '''
+        Calculate moments for each lines in sglin using the true VDEM raster
+        '''
+
+        if not hasattr(self,'synvdemint'):
+            self.calc_synvdemint()
+
+        for ilines in self.synlinfiles.keys():
+
+            trthisprofile = np.transpose(
+                self.synvdemint[ilines]['intvtg'], (1, 0, 2, 3)).reshape(
+                self.ndop, self.nlnt * self.nx * self.ny)
+
+            self.synprofras[ilines]['intens'] = np.sum(np.sum(
+                self.synvdemint[ilines]['intvtg'], axis=0), axis=0)  # ph/s/pix
+
+            self.synprofras[ilines]['firstmom'] = (np.sum(np.sum(
+                trthisprofile.reshape(
+                    self.ndop, self.nlnt * self.nx * self.ny) * self.dopaxis.reshape(
+                    self.ndop, 1), axis=0),
+                    axis=0) / self.synprofsolras[ilines]['intens']).reshape(
+                    self.nslits * np.size(self.ioffset), self.ny)
+
+            self.synprofras[ilines]['secondmom'] = np.sqrt(np.sum(np.sum(
+                trthisprofile.reshape(
+                    self.ndop, self.nlnt * self.nx * self.ny) * self.dopaxis.reshape(
+                    self.ndop, 1)**2, axis=0),
+                    axis=0) / self.synprofsolras[ilines]['intens']).reshape(
+                    self.nslits * np.size(self.ioffset), self.ny)
+
+            thirdmom = (np.sum(np.sum(
+                trthisprofile.reshape(
+                    self.ndop, self.nlnt * self.nx * self.ny) * self.dopaxis.reshape(
+                    self.ndop, 1)**3, axis=0),
+                    axis=0) / self.synprofsolras[ilines]['intens']).reshape(
+                    self.nslits * np.size(self.ioffset) , self.ny)
+
+            sign = np.zeros((self.nx, self.ny))
+            sign[:, :] = 1
+            sign[np.where(thirdmom < 0)] = -1.
+
+            self.synprofras[ilines]['thirdmom'] = (
+                np.abs(thirdmom))**(1. / 3.) * sign
+
     def get_emstgu(self, spline, order=1, axis=2,
                    vel_axis=np.linspace(- 20, 20, 20),
                    tg_axis=np.linspace(4, 9, 25)):
@@ -436,7 +604,25 @@ class UVOTRTData(BifrostData):
 
         return vdem
 
-    def get_vdem(self, axis=2, vel_axis=np.linspace(- 20, 20, 20),
+
+    def load_vdem_npz(self, vdemfile):
+        '''
+        reads the ground true VDEM. The npz file can be
+            generated using bifrost.py for Bifrost simulations.
+            It needs to be called prior doing the inversions:
+            VDEMSInversionCode, or all_comb
+        VDEM function shape (T, v, nx, ny).
+        '''
+
+        vdem_str = np.load(vdemfile)
+        self.vdem = self.vdem_str['vdem']
+        self.vel_axis = self.vdem_str['vel_axis']
+        self.tg_axis = self.vdem_str['tg_axis']
+
+        self.nlnt = np.size(tg_axis)
+        self.ndop = np.size(vel_axis)
+
+    def get_vdem(self, axis=2, vel_axis=np.linspace(- 20, 20, 21),
                  tg_axis=np.linspace(4, 9, 25), zcut=None):
         """
         Calculates emissivity (EM) as a funtion of temparature and velocity,
@@ -506,6 +692,20 @@ class UVOTRTData(BifrostData):
                     for iy in range(0, ny):
                         vdem[itg, ivel, ix, iy] = np.sum(
                             ems_temp_v[ix, iy, :] * dx * dy)
+
+        self.vdem = vdem
+        self.tg_axis = tg_axis
+        self.vel_axis = vel_axis
+        self.nlnt = np.size(tg_axis)
+        self.ndop = np.size(vel_axis)
+
+        if save_vdem is not None:
+            np.savez('%s_tg=%.1f-%.1f_%.1f_vel=%i_%i_it=%i.npz' % (
+                     save_vdem, tg_axis[0], max(tg_axis), tg_axis[1]-tg_axis[0],
+                     max(vel_axis*units.u_u),
+                     (vel_axis[1]-vel_axis[0])*units.u_u,
+                     self.snap[0]), tg_axis=tg_axis, vel_axis=vel_axis,
+                     vdem=vdem)
 
         return vdem
 
