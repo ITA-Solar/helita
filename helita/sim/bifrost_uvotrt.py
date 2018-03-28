@@ -627,11 +627,11 @@ class UVOTRTData(BifrostData):
         self.ndop = np.size(vel_axis)
 
     def get_vdem(self, axis=2, vel_axis=np.linspace(- 20, 20, 21),
-                 tg_axis=np.linspace(4, 9, 25), zcut=None):
+                 tg_axis=np.linspace(4, 9, 25), zcut=None,
+                 save_vdem = None):
         """
-        Calculates emissivity (EM) as a funtion of temparature and velocity,
-        i.e., VDEM.
-
+        Calculates DEM as a funtion of temparature and velocity,
+            i.e., VDEM.
         Parameters
         ----------
         spline - string
@@ -642,11 +642,8 @@ class UVOTRTData(BifrostData):
         Returns
         -------
         array - ndarray
-            Array with the dimensions of the 3D spatial from the simulation
-
-        Notes
-        -----
-            Uses cuda
+            Array with the dimensions of the 2D spatial from the simulation
+            and temperature and velocity bins.
         """
         ems = self.get_dem(axis=axis, zcut=zcut)
         tg = self.get_var('tg')
