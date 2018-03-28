@@ -229,8 +229,12 @@ def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
                  cmass=None, nh=None, id='Model', scale='height', logg=4.44,
                  write_dscale=False, spherical=False, radius=6.96e5):
     """
-    Writes atmosphere in MULTI format, either HEIGHT scale or TAU(5000) scale.
-    Does NOT write dscale file.
+    Writes atmosphere in MULTI format.
+
+    'scale' defines type of file. Options are:
+    'height' - HEIGHT scale
+    'tau'    - TAU(5000) scale
+    'mass'  - column mass scale
 
     The following units must be used:
         * Temp  [K]
@@ -240,9 +244,6 @@ def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
         * vturb [km/s]
         * z     [km]
         * cmass [gm cm^-2] (optional)
-
-    --Tiago, 20101118
-
     """
     if scale.lower() == 'height':
         if z is None:
@@ -262,6 +263,8 @@ def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
                              'column mass not given!')
         scl = cmass
         desc = 'LOG COLUMN MASS'
+    else:
+        raise ValueError('watmos_multi: invalid scale: {0}'.format(scale))
     f = open(filename, 'w')
     ndep = len(temp)
     # write 'header'
