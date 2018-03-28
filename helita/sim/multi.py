@@ -282,7 +282,7 @@ def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
             'VTURB\n'.format(desc))
     if vz is None:
         vz = np.zeros(ndep, dtype='f')
-    if not vturb:
+    if vturb is None:
         vturb = np.zeros(ndep, dtype='f')
     elif type(vturb) == type(5):   # constant vturb
         vturb = np.zeros(ndep, dtype='f') + vturb
