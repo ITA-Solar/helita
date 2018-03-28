@@ -215,7 +215,7 @@ class UVOTRTData(BifrostData):
             axis_txt='_xz_'
         else:
             axis_txt='_xy_'
-            
+
         for it in range(0,nt):
             self.set_snap(snap[it])
             t1 = time.time()
@@ -261,11 +261,9 @@ class UVOTRTData(BifrostData):
                     savedFile.write(intny[1])
                     savedFile.write(intny[0])
                     savedFile.close()
-                    print(it, spline[iline], time.time() - t2)
                     if (self.verbose):
                         print('done ', spline[iline], ' it=',
                               it, ',time used:', time.time() - t0)
-        print(it, time.time() - t1)
 
     def get_int(self, spline, axis=2, rend_opacity=False, azimuth=None,
                 altitude=None, ooe=False, *args, **kwargs):
