@@ -513,24 +513,27 @@ class UVOTRTData(BifrostData):
             self.synprofras[ilines]['intens'] = np.sum(np.sum(
                 self.synvdemint[ilines]['intvtg'], axis=0), axis=0)  # ph/s/pix
 
-            self.synprofras[ilines]['firstmom'] = (np.sum(np.sum(
+            self.synprofras[ilines]['firstmom'] = (np.sum(np.sum(np.reshape(
                 trthisprofile.reshape(
                     self.ndop, self.nlnt * self.nx * self.ny) * self.dopaxis.reshape(
-                    self.ndop, 1), axis=0),
+                    self.ndop, 1), (
+                    self.ndop, self.nlnt, self.nx, self.ny)), axis=0),
                     axis=0) / self.synprofsolras[ilines]['intens']).reshape(
                     self.nslits * np.size(self.ioffset), self.ny)
 
-            self.synprofras[ilines]['secondmom'] = np.sqrt(np.sum(np.sum(
+            self.synprofras[ilines]['secondmom'] = np.sqrt(np.sum(np.sum(np.reshape(
                 trthisprofile.reshape(
                     self.ndop, self.nlnt * self.nx * self.ny) * self.dopaxis.reshape(
-                    self.ndop, 1)**2, axis=0),
+                    self.ndop, 1)**2, (
+                    self.ndop, self.nlnt, self.nx, self.ny)), axis=0),
                     axis=0) / self.synprofsolras[ilines]['intens']).reshape(
                     self.nslits * np.size(self.ioffset), self.ny)
 
-            thirdmom = (np.sum(np.sum(
+            thirdmom = (np.sum(np.sum(np.reshape(
                 trthisprofile.reshape(
                     self.ndop, self.nlnt * self.nx * self.ny) * self.dopaxis.reshape(
-                    self.ndop, 1)**3, axis=0),
+                    self.ndop, 1)**3, (
+                    self.ndop, self.nlnt, self.nx, self.ny)), axis=0),
                     axis=0) / self.synprofsolras[ilines]['intens']).reshape(
                     self.nslits * np.size(self.ioffset) , self.ny)
 
@@ -602,9 +605,7 @@ class UVOTRTData(BifrostData):
                 ems_temp_v[loc] = 0.0
                 loc = np.where(vel > vel_axis[ivel + 1])
                 ems_temp_v[loc] = 0.0
-                for ix in range(0, nx):
-                    for iy in range(0, ny):
-                        vdem[itg, ivel, ix, iy] = np.sum(ems_temp_v[ix, iy, :])
+                vdem[itg, ivel, :, :] = np.sum(ems_temp_v,axis=2)
 
         return vdem
 
@@ -654,8 +655,6 @@ class UVOTRTData(BifrostData):
             vel = self.get_var('ux')
             nx = self.ny
             ny = self.nz
-            dx = self.dy * units.u_l
-            dy = self.dzidzdn * units.u_l
             ems = np.transpose(ems, (1, 2, 0))
             tg = np.transpose(tg, (1, 2, 0))
             vel = np.transpose(vel, (1, 2, 0))
@@ -663,8 +662,6 @@ class UVOTRTData(BifrostData):
             vel = self.get_var('uy')
             nx = self.nx
             ny = self.nz
-            dx = self.dx * units.u_l
-            dy = self.dzidzdn * units.u_l
             ems = np.transpose(ems, (0, 2, 1))
             tg = np.transpose(tg, (0, 2, 1))
             vel = np.transpose(vel, (0, 2, 1))
@@ -672,8 +669,6 @@ class UVOTRTData(BifrostData):
             vel = self.get_var('uz')
             nx = self.nx
             ny = self.ny
-            dx = self.dx * units.u_l
-            dy = self.dy * units.u_l
 
         nvel = len(vel_axis)
         ntg = len(tg_axis)
@@ -692,10 +687,7 @@ class UVOTRTData(BifrostData):
                 ems_temp_v[loc] = 0.0
                 loc = np.where(vel > vel_axis[ivel + 1])
                 ems_temp_v[loc] = 0.0
-                for ix in range(0, nx):
-                    for iy in range(0, ny):
-                        vdem[itg, ivel, ix, iy] = np.sum(
-                            ems_temp_v[ix, iy, :] * dx * dy)
+                vdem[itg, ivel, :, :] = np.sum(ems_temp_v,axis=2)
 
         self.vdem = vdem
         self.tg_axis = tg_axis
@@ -708,7 +700,7 @@ class UVOTRTData(BifrostData):
                      save_vdem, tg_axis[0], max(tg_axis), tg_axis[1]-tg_axis[0],
                      max(vel_axis*units.u_u),
                      (vel_axis[1]-vel_axis[0])*units.u_u,
-                     self.snap[0]), tg_axis=tg_axis, vel_axis=vel_axis,
+                     self.snap[0]), tg_axis=tg_axis, vel_axis=vel_axis*10,
                      vdem=vdem)
 
         return vdem
@@ -733,7 +725,6 @@ class UVOTRTData(BifrostData):
         -----
             Uses cuda
         """
-        # mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
         tg = self.get_var('tg')
         en = self.get_var('ne') / 1e6  # from SI to cgs
         rho = self.get_var('r')
@@ -742,22 +733,20 @@ class UVOTRTData(BifrostData):
         elif axis == 1:
             ds = self.dy * units.u_l
         else:
-            ds = self.dzidzdn * units.u_l
+            ds = self.dz1d * units.u_l
 
         nh = rho * units.u_r / units.GRPH
-        dem = nh * 0.0
 
         for ix in range(0, self.nx):
             for iy in range(0, self.ny):
-                dem[ix, iy, :] = ds * nh[ix, iy, :]
+                nh[ix, iy, :] = ds * nh[ix, iy, :]
 
         if (zcut is not None):
             for iz in range(0, self.nz):
                 if self.z[iz] < zcut:
                     izcut = iz
-            dem[:, :, izcut:] = 0.0
-        print(np.max(en), np.max(dem))
-        return en * dem
+            nh[:, :, izcut:] = 0.0
+        return en * nh
 
     def get_emiss(self, spline, axis=2, order=1, *args, **kwargs):
         """
@@ -865,7 +854,7 @@ class UVOTRTData(BifrostData):
         elif axis == 1:
             ds = self.dy * units.u_l
         else:
-            ds = self.dzidzdn * units.u_l
+            ds = self.dz1d * units.u_l
         nh = rho * units.u_r / units.GRPH
 
         for ix in range(0, self.nx):
