@@ -1665,30 +1665,25 @@ def create_goftne_tab(ionstr='fe_14',
     filehandler = open(path + name, 'wb')
     pickle.dump(ion, filehandler)
 
-def add_goftab(filenames=None,response_func=None):
 
+def add_goftab(filenames=None):
 
     nf = np.size(filenames)
     for ifile in range(0, nf):
         fileh = open(filenames[ifile], 'rb')
         table = pickle.load(fileh)
-        print(filenames[ifile],np.max(table.Gofnt['gofnt']))
-        if response_func is not None:
-            table.Gofnt['gofnt'] = table.Gofnt['gofnt'] * np.interp(
-                table.Gofnt['wvl'],response_func[0,:],response_func[1,:])
         if ifile == 0:
             goftab = table.Gofnt['gofnt']
         else:
             goftab += table.Gofnt['gofnt']
-        print('add',filenames[ifile],np.max(goftab))
-        fileh.close()
     return goftab
+
 
 def norm_ne_goftab(table=None):
 
     nne = np.shape(table)[1]
     tablenorm = table * 1.0
     for i in range(0, nne):
-        tablenorm[:, i] = table[:, i] / table[:, 60]
-    tablenorm[np.where( table < 1.e-50 )] = 1.0
+        tablenorm[:, i] = (table[:, i] + 1e-40) / (table[:, 30] + 1e-40)
+
     return tablenorm
