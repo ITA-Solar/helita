@@ -276,6 +276,8 @@ class BifrostData(object):
             self.dzidzup = np.zeros(self.nz) + 1. / self.dz
             self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
 
+        self.dz1d = np.gradient(self.z)
+
     def _init_vars(self, *args, **kwargs):
         """
         Memmaps "simple" variables, and maps them to methods.
@@ -747,7 +749,7 @@ class BifrostData(object):
                 print(quant + ' interpolation...')
 
             fac = 1.0
-            #JMS Why SI?? SI seems to work with bifrost_uvotrt. 
+            #JMS Why SI?? SI seems to work with bifrost_uvotrt.
             if quant == 'ne':
                 fac = 1.e6  # cm^-3 to m^-3
             if quant in ['eps', 'opa', 'temt']:
