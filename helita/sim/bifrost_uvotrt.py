@@ -15,7 +15,7 @@ import imp
 import pickle
 import scipy.ndimage as ndimage
 import struct
-
+from sunpy.io.special import read_genx
 try:
     imp.find_module('pycuda')
     found = True
@@ -39,7 +39,7 @@ class UVOTRTData(BifrostData):
 
     def get_intny(self, spline, nlamb=141, axis=2, rend_opacity=False,
                   dopp_width_range=5e1, azimuth=None,
-                  altitude=None, ooe=False, stepsize=0.01, *args, **kwargs):
+                  altitude=None, ooe=False, stepsize=0.001, *args, **kwargs):
         """
         Calculates intensity profiles from the simulation quantiables.
 
@@ -202,7 +202,7 @@ class UVOTRTData(BifrostData):
 
     def save_intny(self, spline, snap=None, nlamb=141, axis=2,
                    rend_opacity=False, dopp_width_range=5e1, azimuth=None,
-                   altitude=None, ooe=False, stepsize=0.01, *args, **kwargs):
+                   altitude=None, ooe=False, stepsize=0.001, *args, **kwargs):
         """
         Calculate and dave profiles in a binary file.
         """
@@ -269,7 +269,7 @@ class UVOTRTData(BifrostData):
                               it, ',time used:', time.time() - t0)
 
     def get_int(self, spline, axis=2, rend_opacity=False, azimuth=None,
-                altitude=None, ooe=False, *args, **kwargs):
+                altitude=None, ooe=False, stepsize=0.001, *args, **kwargs):
         """
         Calculates intensity from the simulation quantiables.
 
@@ -385,7 +385,7 @@ class UVOTRTData(BifrostData):
                                              snap=opts.snap)
 
             rend_reverse = False
-            gridsplit = 64
+            gridsplit = 350
 
             return s.i_render(channel, azimuth, -altitude, axis,
                               reverse=rend_reverse, gridsplit=gridsplit,
@@ -419,23 +419,25 @@ class UVOTRTData(BifrostData):
             self.sglin[ilines] = read_genx(self.synlinfiles[ilines])
         self.sglin_ntg = np.size(self.sglin[0]['TEMP'])
 
-    def calc_synvdemint(self, vdem):
+    def calc_synvdemint(self):
         '''
         Calculate profile intensity for each velocity bin
         '''
 
         if not hasattr(self,'vdem'):
             vdem = self.get_vdem()
-        synvdemint = {}
+        self.synvdemint = {}
         for ilines in self.synlinfiles.keys():
-            thisg = np.interp(self,tg_axis,
+            thisg = np.interp(self.tg_axis,
                               np.log10(self.sglin[ilines]['TEMP']),
                               self.sglin[ilines]['G'])
-            self.synprofras[ilines] = {}
+            self.synvdemint[ilines] = {}
             self.synvdemint[ilines]['intvtg'] = (self.vdem.reshape(
                 self.nlnt, self.ndop * self.nx * self.ny) * thisg.reshape(
                 self.nlnt, 1)).reshape(
                 self.nlnt, self.ndop, self.nx, self.ny)
+            self.synvdemint[ilines]['intens'] = np.sum(np.sum(
+                self.synvdemint[ilines]['intvtg'], axis=0), axis=0)
 
     def trapez(self,xvec,yvec):
         '''
@@ -623,12 +625,12 @@ class UVOTRTData(BifrostData):
         '''
 
         vdem_str = np.load(vdemfile)
-        self.vdem = self.vdem_str['vdem']
-        self.vel_axis = self.vdem_str['vel_axis']
-        self.tg_axis = self.vdem_str['tg_axis']
+        self.vdem = vdem_str['vdem']
+        self.vel_axis = vdem_str['vel_axis']
+        self.tg_axis = vdem_str['tg_axis']
 
-        self.nlnt = np.size(tg_axis)
-        self.ndop = np.size(vel_axis)
+        self.nlnt = np.size(self.tg_axis)
+        self.ndop = np.size(self.vel_axis)
 
     def get_vdem(self, axis=2, vel_axis=np.linspace(- 20, 20, 21),
                  tg_axis=np.linspace(4, 9, 25), zcut=None,
