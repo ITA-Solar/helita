@@ -37,6 +37,90 @@ class UVOTRTData(BifrostData):
     def __init__(self, *args, **kwargs):
         super(UVOTRTData, self).__init__(*args, **kwargs)
 
+    def load_intny_module(self, axis=2, azimuth=None,
+                  altitude=None, ooe=False, *args, **kwargs):
+
+        if found:
+
+            if os.environ.get('CUDA_LIB', 'null') == 'null':
+                os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
+
+            if azimuth is not None or altitude is not None:  # For any angle
+                if ooe:
+                    choice = 'tdi'
+                else:
+                    choice = 'static'
+                if azimuth is not None:
+                    azimuth = 90.0
+                if altitude is not None:
+                    altitude = 0.0
+            else:  # For a specific axis, this is setup with axis =[0,1,2]
+                if ooe:
+                    choice = 'satdi'
+                else:
+                    choice = 'sastatic'
+                azimuth = 90.0
+                altitude = 0.0
+
+            opts = int_options()
+            opts.infile = self.file_root
+            opts.snap = self.snap
+            opts.choice = choice
+            opts.simdir = self.fdir
+            data_dir = (opts.simdir if opts.simdir else askdirectory(
+                title='Simulation Directory')).rstrip('/')
+
+            snap_range = (self.snap, self.snap)
+            # + '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
+            template = opts.infile
+
+            # from br_ioni import RenderGUI
+
+            if opts.rendtype == 'tdi':  # OOE along any angle
+                from br_ioni import TDIEmRenderer
+                tdi_paramfile_abs = (
+                    opts.tdiparam if opts.tdiparam else askopenfilename(
+                        title='OOE Ionization Paramfile'))
+                tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
+                self.intcudamod = TDIEmRenderer(
+                    data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap,
+                    cstagop=self.cstagop)
+            else:
+                # Statistical Equibilibrium along specific axis: x, y or z
+                if opts.rendtype == 'sastatic':
+                    from br_ioni import SAStaticEmRenderer
+                    self.intcudamod = SAStaticEmRenderer(snap_range,
+                                           template, data_dir=data_dir,
+                                           snap=opts.snap,
+                                           cstagop=self.cstagop)
+                else:
+                    # OOE along specific axis, i.e., x, y or z
+                    if opts.rendtype == 'satdi':
+                        from br_ioni import SATDIEmRenderer
+                        tdi_paramfile_abs = (
+                            opts.tdiparam if (
+                                opts.tdiparam) else askopenfilename(
+                                    title='OOE Ionization Paramfile'))
+                        tdi_paramfile = os.path.relpath(
+                            tdi_paramfile_abs, data_dir)
+
+                        self.intcudamod = SATDIEmRenderer(
+                            data_dir=data_dir, paramfile=tdi_paramfile,
+                            snap=opts.snap, cstagop=self.cstagop)
+                    else:  # Statistical Equibilibrium along any direction
+                        from br_ioni import StaticEmRenderer
+                        self.intcudamod = StaticEmRenderer(snap_range,
+                                             template, data_dir=data_dir,
+                                             snap=opts.snap,
+                                             cstagop=self.cstagop)
+
+        else:
+            print('I am so sorry... but you need pycuda:\n' +
+                  '1, install latest CUDA at \n' +
+                  'https://developer.nvidia.com/cuda-downloads\n ' +
+                  '2, pycuda: https://wiki.tiker.net/PyCuda/Installation\n' +
+                  'no warranty that this will work on non-NVIDIA')
+
     def get_intny(self, spline, nlamb=141, axis=2, rend_opacity=False,
                   dopp_width_range=5e1, azimuth=None,
                   altitude=None, ooe=False, stepsize=0.01, *args, **kwargs):
@@ -77,105 +161,32 @@ class UVOTRTData(BifrostData):
         Notes
         -----
             uses cuda
-        """
+    """
+        rend_reverse = False
+        gridsplit = 128
 
-        if found:
+        if not hasattr(self,'intcudamod'):
+            self.load_intny_module(axis=axis, azimuth=azimuth,
+                                   altitude=altitude, ooe=ooe)
 
-            if os.environ.get('CUDA_LIB', 'null') == 'null':
-                os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
 
-            if azimuth is not None or altitude is not None:  # For any angle
-                if ooe:
-                    choice = 'tdi'
-                else:
-                    choice = 'static'
-                if azimuth is not None:
-                    azimuth = 90.0
-                if altitude is not None:
-                    altitude = 0.0
-            else:  # For a specific axis, this is setup with axis =[0,1,2]
-                if ooe:
-                    choice = 'satdi'
-                else:
-                    choice = 'sastatic'
-                azimuth = 90.0
-                altitude = 0.0
+        acont_filenames = [os.path.relpath(
+            i, os.path.dirname('')) for i in glob(
+                os.environ[
+                    'BIFROST'] + datapath + spline + '.opy')]
+        channel = 0
 
-            opts = int_options()
-            opts.infile = self.file_root
-            opts.snap = self.snap
-            opts.choice = choice
-            opts.simdir = self.fdir
-            data_dir = (opts.simdir if opts.simdir else askdirectory(
-                title='Simulation Directory')).rstrip('/')
+        if len(acont_filenames) == 0:
+            raise ValueError(
+                "(EEE) get_intny: GOFT file does not exist", spline)
 
-            acont_filenames = [os.path.relpath(
-                i, os.path.dirname('')) for i in glob(
-                    os.environ[
-                        'BIFROST'] + datapath + spline + '.opy')]
-            channel = 0
+        self.intcudamod.save_accontfiles(acont_filenames)
 
-            if len(acont_filenames) == 0:
-                raise ValueError(
-                    "(EEE) get_intny: GOFT file does not exist", spline)
-            snap_range = (self.snap, self.snap)
-            # + '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
-            template = opts.infile
-
-            # from br_ioni import RenderGUI
-
-            if opts.rendtype == 'tdi':  # OOE along any angle
-                from br_ioni import TDIEmRenderer
-                tdi_paramfile_abs = (
-                    opts.tdiparam if opts.tdiparam else askopenfilename(
-                        title='OOE Ionization Paramfile'))
-                tdi_paramfile = os.path.relpath(tdi_paramfile_abs, data_dir)
-                s = TDIEmRenderer(
-                    data_dir=data_dir, paramfile=tdi_paramfile, snap=opts.snap,
-                    cstagop=self.cstagop)
-            else:
-                # Statistical Equibilibrium along specific axis: x, y or z
-                if opts.rendtype == 'sastatic':
-                    from br_ioni import SAStaticEmRenderer
-                    s = SAStaticEmRenderer(snap_range, acont_filenames,
-                                           template, data_dir=data_dir,
-                                           snap=opts.snap,
-                                           cstagop=self.cstagop)
-                else:
-                    # OOE along specific axis, i.e., x, y or z
-                    if opts.rendtype == 'satdi':
-                        from br_ioni import SATDIEmRenderer
-                        tdi_paramfile_abs = (
-                            opts.tdiparam if (
-                                opts.tdiparam) else askopenfilename(
-                                    title='OOE Ionization Paramfile'))
-                        tdi_paramfile = os.path.relpath(
-                            tdi_paramfile_abs, data_dir)
-
-                        s = SATDIEmRenderer(
-                            data_dir=data_dir, paramfile=tdi_paramfile,
-                            snap=opts.snap, cstagop=self.cstagop)
-                    else:  # Statistical Equibilibrium along any direction
-                        from br_ioni import StaticEmRenderer
-                        s = StaticEmRenderer(snap_range, acont_filenames,
-                                             template, data_dir=data_dir,
-                                             snap=opts.snap,
-                                             cstagop=self.cstagop)
-
-            rend_reverse = False
-            gridsplit = 128
-
-            return s.il_render(channel, azimuth, -altitude, axis,
-                               rend_reverse, gridsplit=gridsplit, nlamb=nlamb,
-                               dopp_width_range=dopp_width_range,
-                               opacity=rend_opacity, verbose=self.verbose,
-                               stepsize=stepsize)
-        else:
-            print('I am so sorry... but you need pycuda:\n' +
-                  '1, install latest CUDA at \n' +
-                  'https://developer.nvidia.com/cuda-downloads\n ' +
-                  '2, pycuda: https://wiki.tiker.net/PyCuda/Installation\n' +
-                  'no warranty that this will work on non-NVIDIA')
+        return self.intcudamod.il_render(channel, azimuth, -altitude, axis,
+                           rend_reverse, gridsplit=gridsplit, nlamb=nlamb,
+                           dopp_width_range=dopp_width_range,
+                           opacity=rend_opacity, verbose=self.verbose,
+                           stepsize=stepsize)
 
     def load_intny(self, spfilebin):
         """
@@ -362,7 +373,7 @@ class UVOTRTData(BifrostData):
                 if opts.rendtype == 'sastatic':
                     from br_ioni import SAStaticEmRenderer
                     s = SAStaticEmRenderer(
-                        snap_range, acont_filenames, template,
+                        snap_range, template,
                         data_dir=data_dir, snap=opts.snap)
                 else:
                     # OOE along specific axis, i.e., x, y or z
@@ -380,13 +391,14 @@ class UVOTRTData(BifrostData):
                             snap=opts.snap)
                     else:  # Statistical Equibilibrium for any angle
                         from br_ioni import StaticEmRenderer
-                        s = StaticEmRenderer(snap_range, acont_filenames,
+                        s = StaticEmRenderer(snap_range,
                                              template, data_dir=data_dir,
                                              snap=opts.snap)
 
             rend_reverse = False
             gridsplit = 64
 
+            s.save_accontfiles(acont_filenames)
             return s.i_render(channel, azimuth, -altitude, axis,
                               reverse=rend_reverse, gridsplit=gridsplit,
                               tau=None, opacity=rend_opacity,
