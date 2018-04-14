@@ -243,7 +243,7 @@ class UVOTRTData(BifrostData):
                                        stepsize=stepsize)
 
                 # make file
-                savedFile = open(spline+axis_txt+"it"+str(self.snap)+".bin", "wb")
+                savedFile = open(spline+axis_txt+"it"+str(self.snap[it])+".bin", "wb")
                 # write to file
                 nx = np.shape(intny[0])[0]
                 ny = np.shape(intny[0])[1]
@@ -267,7 +267,7 @@ class UVOTRTData(BifrostData):
                                            stepsize=stepsize)
 
                     # make file
-                    savedFile = open(spline[iline]+axis_txt+"it"+str(self.snap)+".bin", "wb")
+                    savedFile = open(spline[iline]+axis_txt+"it"+str(self.snap[it])+".bin", "wb")
                     # write to file
                     nx = np.shape(intny[0])[0]
                     ny = np.shape(intny[0])[1]
