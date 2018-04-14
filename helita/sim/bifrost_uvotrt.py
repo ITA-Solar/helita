@@ -181,9 +181,10 @@ class UVOTRTData(BifrostData):
             raise ValueError(
                 "(EEE) get_intny: GOFT file does not exist", spline)
 
+        print(acont_filenames)
         self.intcudamod.save_accontfiles(acont_filenames)
 
-        return self.intcudamod.il_render(channel, azimuth, -altitude, axis,
+        return self.intcudamod.il_render(channel, azimuth, altitude, axis,
                            rend_reverse, gridsplit=gridsplit, nlamb=nlamb,
                            dopp_width_range=dopp_width_range,
                            opacity=rend_opacity, verbose=self.verbose,
