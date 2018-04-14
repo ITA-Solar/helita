@@ -91,7 +91,7 @@ class UVOTRTData(BifrostData):
                 if opts.rendtype == 'sastatic':
                     from br_ioni import SAStaticEmRenderer
                     self.intcudamod = SAStaticEmRenderer(snap_range,
-                                           template, data_dir=data_dir,
+                                           template,axis=axis, data_dir=data_dir,
                                            snap=opts.snap,
                                            cstagop=self.cstagop)
                 else:
@@ -105,7 +105,7 @@ class UVOTRTData(BifrostData):
                         tdi_paramfile = os.path.relpath(
                             tdi_paramfile_abs, data_dir)
 
-                        self.intcudamod = SATDIEmRenderer(
+                        self.intcudamod = SATDIEmRenderer(axis=axis, 
                             data_dir=data_dir, paramfile=tdi_paramfile,
                             snap=opts.snap, cstagop=self.cstagop)
                     else:  # Statistical Equibilibrium along any direction
