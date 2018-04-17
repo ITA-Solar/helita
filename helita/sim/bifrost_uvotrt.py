@@ -105,7 +105,7 @@ class UVOTRTData(BifrostData):
                         tdi_paramfile = os.path.relpath(
                             tdi_paramfile_abs, data_dir)
 
-                        self.intcudamod = SATDIEmRenderer(axis=axis, 
+                        self.intcudamod = SATDIEmRenderer(axis=axis,
                             data_dir=data_dir, paramfile=tdi_paramfile,
                             snap=opts.snap, cstagop=self.cstagop)
                     else:  # Statistical Equibilibrium along any direction
@@ -713,13 +713,12 @@ class UVOTRTData(BifrostData):
         self.ndop = np.size(vel_axis)
 
         if save_vdem is not None:
-            np.savez('%s_tg=%.1f-%.1f_%.1f_vel=%i_%i_it=%i.npz' % (
+            np.savez('%s_tg=%.1f-%.1f_%.1f_vel=%.1f_%.1f_it=%i.npz' % (
                      save_vdem, tg_axis[0], max(tg_axis), tg_axis[1]-tg_axis[0],
                      max(vel_axis*units.u_u),
                      (vel_axis[1]-vel_axis[0])*units.u_u,
-                     self.snap[0]), tg_axis=tg_axis, vel_axis=vel_axis*10,
+                     self.snap), tg_axis=tg_axis, vel_axis=vel_axis*10,
                      vdem=vdem)
-
         return vdem
 
     def get_dem(self, axis=2, zcut=None, *args, **kwargs):
