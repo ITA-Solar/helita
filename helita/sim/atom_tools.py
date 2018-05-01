@@ -1687,3 +1687,14 @@ def norm_ne_goftab(table=None):
         tablenorm[:, i] = (table[:, i] + 1e-40) / (table[:, 30] + 1e-40)
 
     return tablenorm
+
+def const_press_tab(filename):
+     filehandler = open(filename+'.opy', 'rb')
+     ion = pickle.load(filehandler)
+     filehandler.close()
+     temp = ion.Gofnt['gofnt'][:,35]*1.0
+     for ipres in range(71):
+         ion.Gofnt['gofnt'][:,ipres] = temp
+     filehandler = open(filename+'cp.opy', 'wb')
+     pickle.dump(ion, filehandler)
+     filehandler.close()
