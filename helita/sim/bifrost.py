@@ -612,6 +612,8 @@ class BifrostData(object):
                 print('ne interpolation...')
             eostab = Rhoeetab(fdir=self.fdir)
             ne = eostab.tab_interp(rho, ee, order=1) * 1.e6  # cm^-3 to m^-3
+        if nh.shape == temp.shape:
+            nh = nh[None]  # add extra empty dimension when nhydr = 1
         if desc is None:
             desc = 'BIFROST snapshot from sequence %s, sx=%s sy=%s sz=%s.' % \
                    (self.file_root, repr(sx), repr(sy), repr(sz))
@@ -620,7 +622,7 @@ class BifrostData(object):
         # write to file
         if self.verbose:
             print('Write to file...')
-        rh15d.make_xarray_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
+        rh15d.make_xarray_atmos(outfile, temp, vz, z, nH=nh, ne=ne, x=x, y=y,
                                 append=append, Bx=Bx, By=By, Bz=Bz, desc=desc,
                                 snap=self.snap)
 
