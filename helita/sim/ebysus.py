@@ -47,7 +47,7 @@ class EbysusData(BifrostData):
                     self.snapevars.remove('ee')
                     # JMS This must be properly done whenever is implemented
                     self.snapvars.append('e')
-            self.mhdvars.append('e')
+            self.mhdvars.insert(0, 'e')
 
         for var in (
                 self.varsmfe +
@@ -56,9 +56,9 @@ class EbysusData(BifrostData):
                 self.varsmm):
             self.auxvars.remove(var)
 
-        if hasattr(self, 'mf_total_nlevel'):
-            if self.mf_total_nlevel == 1:
-                self.snapvars.append('e')
+        #if hasattr(self, 'mf_total_nlevel'):
+        #    if self.mf_total_nlevel == 1:
+        #        self.snapvars.append('e')
 
         self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + \
             self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
