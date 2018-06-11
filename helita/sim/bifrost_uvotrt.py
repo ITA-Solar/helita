@@ -122,6 +122,7 @@ class UVOTRTData(BifrostData):
                   '2, pycuda: https://wiki.tiker.net/PyCuda/Installation\n' +
                   'no warranty that this will work on non-NVIDIA')
 
+
     def get_intny(self, spline, nlamb=141, axis=2, rend_opacity=False,
                   dopp_width_range=5e1, azimuth=None,
                   altitude=None, ooe=False, stepsize=0.01, *args, **kwargs):
@@ -645,6 +646,68 @@ class UVOTRTData(BifrostData):
 
         self.nlnt = np.size(self.tg_axis)
         self.ndop = np.size(self.vel_axis)
+
+    def dem_cuda(self, axis=2, vel_axis=np.linspace(- 20, 20, 21),
+                 tg_axis=np.linspace(4, 9, 25), zcut=None,
+                 save_vdem = None):
+
+        if found:
+            gridsplit = 128
+
+            if os.environ.get('CUDA_LIB', 'null') == 'null':
+                os.environ['CUDA_LIB'] = os.environ['BIFROST'] + 'CUDA/'
+
+
+            opts = int_options()
+            opts.infile = self.file_root
+            opts.snap = self.snap
+            opts.simdir = self.fdir
+            data_dir = (opts.simdir if opts.simdir else askdirectory(
+                title='Simulation Directory')).rstrip('/')
+
+            snap_range = (self.snap, self.snap)
+            # + '_' + '%%0%ii' % np.max((len(str(self.snap)),3))
+            template = opts.infile
+
+            nvel = len(vel_axis)
+            ntg = len(tg_axis)
+
+            from br_dem import DEMRenderer
+            self.intcudamod = DEMRenderer(snap_range, template,axis=axis,
+                                           data_dir=data_dir, snap=opts.snap,
+                                           cstagop=self.cstagop)
+            vdem = np.zeros((ntg, nvel, nx, ny))
+            for itg in range(0, ntg - 1):
+                for ivel in range(0, nvel - 1):
+                    self.intcudamod.load_minmax(tg_axis[itg], tg_axis[itg+1],
+                                                vel_axis[ivel],
+                                                vel_axis[ivel+1])
+                    vdem[itg, ivel, :, :]= self.intcudamod.dem_render(axis,
+                                                   gridsplit=gridsplit,
+                                                   verbose=self.verbose,
+                                                   stepsize=stepsize)
+
+            self.vdem = vdem
+            self.tg_axis = tg_axis
+            self.vel_axis = vel_axis
+            self.nlnt = np.size(tg_axis)
+            self.ndop = np.size(vel_axis)
+
+            if save_vdem is not None:
+                np.savez('%s_tg=%.1f-%.1f_%.1f_vel=%.1f_%.1f_it=%i.npz' % (
+                         save_vdem, tg_axis[0], max(tg_axis), tg_axis[1]-tg_axis[0],
+                         max(vel_axis*units.u_u),
+                         (vel_axis[1]-vel_axis[0])*units.u_u,
+                         self.snap), tg_axis=tg_axis, vel_axis=vel_axis*10,
+                         vdem=vdem)
+            return vdem
+
+        else:
+            print('I am so sorry... but you need pycuda:\n' +
+                  '1, install latest CUDA at \n' +
+                  'https://developer.nvidia.com/cuda-downloads\n ' +
+                  '2, pycuda: https://wiki.tiker.net/PyCuda/Installation\n' +
+                  'no warranty that this will work on non-NVIDIA')
 
     def get_vdem(self, axis=2, vel_axis=np.linspace(- 20, 20, 21),
                  tg_axis=np.linspace(4, 9, 25), zcut=None,
