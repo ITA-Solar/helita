@@ -8,7 +8,7 @@ from glob import glob
 from . import cstagger
 import numba
 import scipy as sp
-
+from scipy.ndimage import map_coordinates
 
 class BifrostData(object):
     """
@@ -833,9 +833,10 @@ class BifrostData(object):
                     self.get_var('b' + varsn[0] + 'c') +
                     self.get_var('u' + varsn[1] + 'c') *
                     self.get_var('b' + varsn[1] + 'c'))
-
-            elif 'pfe' in quant or len(quant) == 3:
-                var += self.get_var('u' + axis + 'c') * (
+            else:
+                var=self.r*0.0
+            if 'pfe' in quant or len(quant) == 3:
+                var -= self.get_var('u' + axis + 'c') * (
                     self.get_var('b' + varsn[0] + 'c')**2 +
                     self.get_var('b' + varsn[1] + 'c')**2)
             return var
@@ -1231,6 +1232,46 @@ class create_new_br_files():
             f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
         f.close()
 
+def polar2cartesian(r, t, grid, x, y, order=3):
+
+    X, Y = np.meshgrid(x, y)
+
+    new_r = np.sqrt(X*X+Y*Y)
+    new_t = np.arctan2(X, Y)
+
+    ir = sp.interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
+    it = sp.interpolate.interp1d(t, np.arange(len(t)))
+
+    new_ir = ir(new_r.ravel())
+    new_it = it(new_t.ravel())
+
+    new_ir[new_r.ravel() > r.max()] = len(r)-1
+    new_ir[new_r.ravel() < r.min()] = 0
+
+    return map_coordinates(grid, np.array([new_ir, new_it]),
+                            order=order).reshape(new_r.shape)
+
+def cartesian2polar(x, y, grid, r, t, order=3):
+
+    R, T = np.meshgrid(r, t)
+
+    new_x = R * np.cos(T)
+    new_y = R * np.sin(T)
+
+    ix = sp.interpolate.interp1d(x, np.arange(len(x)), bounds_error=False)
+    iy = sp.interpolate.interp1d(y, np.arange(len(y)), bounds_error=False)
+
+    new_ix = ix(new_x.ravel())
+    new_iy = iy(new_y.ravel())
+
+    new_ix[new_x.ravel() > x.max()] = len(x)-1
+    new_ix[new_x.ravel() < x.min()] = 0
+
+    new_iy[new_y.ravel() > y.max()] = len(y)-1
+    new_iy[new_y.ravel() < y.min()] = 0
+
+    return map_coordinates(grid, np.array([new_ix, new_iy]),
+                            order=order).reshape(new_x.shape)
 
 class bifrost_units():
     import scipy.constants as const
