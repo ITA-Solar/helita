@@ -21,7 +21,6 @@ class BifrostData(object):
                  ghost_analyse=False):
         """
         Loads metadata and initialises variables.
-
         Parameters
         ----------
         file_root - string
@@ -44,22 +43,16 @@ class BifrostData(object):
         ghost_analyse - bool, optional
             If True, will read data from ghost zones when this is saved
             to files. Default is never to read ghost zones.
-
         Examples
         --------
         This reads snapshot 383 from simulation "cb24bih", whose file
         root is "cb24bih_", and is found at directory /data/cb24bih:
-
         >>> a = Bifrost.Data("cb24bih_", snap=383, fdir=""/data/cb24bih")
-
         Scalar variables do not need de-staggering and are available as
         memory map (only loaded to memory when needed), e.g.:
-
         >>> a.r.shape
         (504, 504, 496)
-
         Composite variables need to be obtained by get_var():
-
         >>> vx = a.get_var("ux")
         """
         self.fdir = fdir
@@ -107,7 +100,6 @@ class BifrostData(object):
         """
         Reads metadata and sets variable memmap links for a given snapshot
         number.
-
         Parameters
         ----------
         snap - integer or array
@@ -322,27 +314,6 @@ class BifrostData(object):
             if ((snap is not None) and any(snap != self.snap)):
                 self.set_snap(snap)
 
-        def helper(var, *args, **kwargs):
-
-            if var in ['x', 'y', 'z']:
-                return getattr(self, var)
-
-            if var in self.simple_vars:  # is variable already loaded?
-                return self._get_simple_var(var, *args, **kwargs)
-            elif var in self.auxxyvars:
-                return self._get_simple_var_xy(var, *args, **kwargs)
-            elif var in self.compvars:  # add to variable list
-                self.variables[var] = self._get_composite_var(
-                    var, *args, **kwargs)
-                setattr(self, var, self.variables[var])
-                return self.variables[var]
-            else:
-                # raise ValueError(
-                    # ("get_var: could not read variable %s. Must be "
-                    # "one of %s" (var, (self.simple_vars +
-                    # self.compvars + self.auxxyvars))))
-                return self._get_quantity(var, *args, **kwargs)
-
         # lengths for size of return array
         self.xLength = 0
         self.yLength = 0
@@ -372,20 +343,9 @@ class BifrostData(object):
             self._set_snapvars()
             self._init_vars()
 
-            if (np.size(self.iix) > 1 or np.size(self.iiy) > 1 or
-                    np.size(self.iiz) > 1):
-                axes = [0, -2, -1]
-                helperCall = helper(var)
-
-                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                    if getattr(self, dim) != slice(None):
-                        helperCall = helperCall.take(
-                            getattr(self, dim), axis=axes[counter])
-            else:
-                helperCall = helper(var)[self.iix, self.iiy, self.iiz]
-
-            value[self.xInd, self.yInd, self.zInd, i] = helperCall
-        # self.params = self.paramList
+            value[:, :, :, i] = self.get_var(
+                var, self.snap, iix=self.iix, iiy=self.iiy, iiz=self.iiz)
+            
         return value
 
     def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
@@ -423,7 +383,6 @@ class BifrostData(object):
                 iiz=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
-
         Parameters
         ----------
         var - string
@@ -435,12 +394,14 @@ class BifrostData(object):
         """
         if self.verbose:
             print('(get_var): reading ', var)
+            # print(var, 'iix: ', iix, ' iiy: ', iiy, ' iiz: ', iiz)
 
         if not hasattr(self, 'iix'):
             self.set_domain_iiaxis(iinum=iix, iiaxis='x')
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
+        
         else:
             if (iix is not None) and (iix != self.iix):
                 self.set_domain_iiaxis(iinum=iix, iiaxis='x')
@@ -448,6 +409,10 @@ class BifrostData(object):
                 self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             if (iiz is not None) and (iiz != self.iiz):
                 self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
+
+        if (self.iix is not None) or (self.iiy is not None) or (self.iiz is not None):
+            self.cstagop = False
+            print('WARNING: cstagger use has been turned off, turn it back on with "dd.cstagop = True"')
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
@@ -471,17 +436,23 @@ class BifrostData(object):
             val = self._get_quantity(var, *args, **kwargs)
 
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+
+            if self.verbose:
+                print('reshaping ', var, self.xLength, self.yLength, self.zLength)
+    
             return np.reshape(val[self.iix, self.iiy, self.iiz], (
                                   self.xLength, self.yLength,
                                   self.zLength))
         else:
+
+            if self.verbose:
+                print('not reshaping val')
             return val
 
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
-
         Parameters
         ----------
         var - string
@@ -491,7 +462,6 @@ class BifrostData(object):
         mode - string, optional
             numpy.memmap read mode. By default is read only ('r'), but
             you can use 'r+' to read and write. DO NOT USE 'w+'.
-
         Returns
         -------
         result - numpy.memmap array
@@ -576,15 +546,15 @@ class BifrostData(object):
             mom = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
                 # do not recentre for 2D cases (or close)
-                return mom / self.get_var('r')
+                return mom / self.get_var('r', *args, **kwargs)
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return mom / cstagger.do(self.get_var('r'), var[1] + 'dn')
+                return mom / cstagger.do(self.get_var('r', *args, **kwargs), var[1] + 'dn')
         elif var == 'ee':   # internal energy
-            return self.get_var('e') / self.get_var('r')
+            return self.get_var('e', *args, **kwargs) / self.get_var('r', *args, **kwargs)
         elif var == 's':   # entropy?
             entr = np.log(self.get_var(
-                            'p')) - self.params['gamma'] * np.log(
-                                    self.get_var('r'))
+                            'p', *args, **kwargs)) - self.params['gamma'] * np.log(
+                                    self.get_var('r', *args, **kwargs))
             return entr
         # else:
             # raise ValueError(('_get_composite_var: do not know (yet) how to'
@@ -593,17 +563,14 @@ class BifrostData(object):
     def _get_quantity(self, quant, *args, **kwargs):
         """
         Calculates a quantity from the simulation quantiables.
-
         Parameters
         ----------
         quant - string
             Name of the quantity to calculate (see below for some categories).
-
         Returns
         -------
         array - ndarray
             Array with the dimensions of the simulation.
-
         Notes
         -----
         Not all possibilities for quantities are shown here. But there are
@@ -706,7 +673,7 @@ class BifrostData(object):
                                   'z': ['zup']}
             transf = AXIS_TRANSFORM[axis]
 
-            var = self.get_var(q)
+            var = self.get_var(q, **kwargs)
             # 2D
             if getattr(self, 'n' + axis) < 5 or self.cstagop is False:
                 return var
@@ -766,12 +733,12 @@ class BifrostData(object):
             v1 = quant[0]
             v2 = quant[4]
 
-            x1 = self.get_var(v1 + 'xc', self.snap)
-            y1 = self.get_var(v1 + 'yc', self.snap)
-            z1 = self.get_var(v1 + 'zc', self.snap)
-            x2 = self.get_var(v2 + 'xc', self.snap)
-            y2 = self.get_var(v2 + 'yc', self.snap)
-            z2 = self.get_var(v2 + 'zc', self.snap)
+            x1 = self.get_var(v1 + 'xc', self.snap, **kwargs)
+            y1 = self.get_var(v1 + 'yc', self.snap, **kwargs)
+            z1 = self.get_var(v1 + 'zc', self.snap, **kwargs)
+            x2 = self.get_var(v2 + 'xc', self.snap, **kwargs)
+            y2 = self.get_var(v2 + 'yc', self.snap, **kwargs)
+            z2 = self.get_var(v2 + 'zc', self.snap, **kwargs)
 
             v2Mag = np.sqrt(x2**2 + y2**2 + z2**2)
             v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
@@ -952,7 +919,6 @@ class BifrostData(object):
                     sx=slice(None), sy=slice(None), sz=slice(None)):
         """
         Writes snapshot in RH 1.5D format.
-
         Parameters
         ----------
         outfile - string
@@ -966,7 +932,6 @@ class BifrostData(object):
             Slice objects for x, y, and z dimensions, when not all points
             are needed. E.g. use slice(None) for all points, slice(0, 100, 2)
             for every second point up to 100.
-
         Returns
         -------
         None.
@@ -1051,7 +1016,6 @@ class BifrostData(object):
                       sx=slice(None), sy=slice(None), sz=slice(None)):
         """
         Writes snapshot in Multi3D format.
-
         Parameters
         ----------
         outfile - string
@@ -1064,7 +1028,6 @@ class BifrostData(object):
             Slice objects for x, y, and z dimensions, when not all points
             are needed. E.g. use slice(None) for all points, slice(0, 100, 2)
             for every second point up to 100.
-
         Returns
         -------
         None.
@@ -1278,7 +1241,6 @@ class bifrost_units():
     from astropy import constants as aconst
     """
     bifrost_units.py
-
     Created by Mikolaj Szydlarski on 2017-01-20.
     Copyright (c) 2014, ITA UiO - All rights reserved.
     """
@@ -1452,13 +1414,11 @@ class Rhoeetab:
 
     def tab_interp(self, rho, ei, out='ne', bin=None, order=1):
         ''' Interpolates the EOS/rad table for the required quantity in out.
-
             IN:
                 rho  : density [g/cm^3]
                 ei   : internal energy [erg/g]
                 bin  : (optional) radiation bin number for bin parameters
                 order: interpolation order (1: linear, 3: cubic)
-
             OUT:
                 depending on value of out:
                 'nel'  : electron density [cm^-3]
@@ -1520,7 +1480,6 @@ class Opatab:
         sections given by anzer & heinzel apj 622: 714-721, 2005, march 20
         they have big typos in their reported c's.... correct values to
         be found in rumph et al 1994 aj, 107: 2108, june 1994
-
         gaunt factors are set to 0.99 for h and 0.85 for heii,
         which should be good enough for the purposes of this code
         '''
@@ -1710,15 +1669,11 @@ def subs2grph(subsfile):
 def ne_rt_table(rho, temp, order=1, tabfile=None):
     ''' Calculates electron density by interpolating the rho/temp table.
         Based on Mats Carlsson's ne_rt_table.pro.
-
         IN: rho (in g/cm^3),
             temp (in K),
-
         OPTIONAL: order (interpolation order 1: linear, 3: cubic),
                   tabfile (path of table file)
-
         OUT: electron density (in g/cm^3)
-
         '''
     import os
     import scipy.interpolate as interp
