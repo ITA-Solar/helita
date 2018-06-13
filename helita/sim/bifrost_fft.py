@@ -5,7 +5,7 @@ simulations focusing on Fourier transforms
 import time
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, read_idl_ascii
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, polar2cartesian, cartesian2polar
 import imp
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -164,7 +164,7 @@ class FFTData(BifrostData):
     def get_fft(self, quantity, snap, numThreads=1, numBlocks=1,
                 iix=None, iiy=None, iiz=None):
         """
-        Calculates FFT (by calling fftHelper)
+        Calculates FFT (by calling fftHelper) based on time
 
         Parameters
         ----------
@@ -183,11 +183,11 @@ class FFTData(BifrostData):
 
         Notes
         -----
-            uses reikna (cuda & openCL) if available
+            uses reikna (cuda & openCL) if available and run_gpu has been called
         """
 
         # gets data cube, already sliced with iix/iiy/iiz
-        if not hasattr(self, 'preTransform'):
+        if (not hasattr(self, 'preTransform')) and (type(snap) is not int):
             self.linearTimeInterp(quantity, snap, iix, iiy, iiz)
             # finds frequency with evenly spaced times
             self.freq = np.fft.fftshift(np.fft.fftfreq(
@@ -233,6 +233,28 @@ class FFTData(BifrostData):
             print('total time: ', t1-t0)
         return output
 
+    def get_sfft(self, quantity, snap, numThreads=1, numBlocks=1,
+                iix=None, iiy=None, iiz=None):
+        # at least one of iix/iiy/iiz needs to be specified, can't do 3d yet
+        self.preTransform = self.get_varTime(quantity, snap, iix, iiy, iiz)
+
+        if iiz is None:
+            if iix is None:
+                ax1 = self.y
+            else:
+                ax1 = self.z
+            
+            interp = sp.interpolate.interp2d(ax1, dd.z, self.preTransform)
+            evenZ = np.linspace(self.z[0], self.z[-1], np.size(self.z))
+            self.preTransform = interp(ax1, evenZ)
+
+        # currently 2d
+        # select axis, if z then interpolate along z (like with linearTimeInterp)
+        # transform var from cartesian to polar
+        # do fft similar to energy_power_avert
+
+        # take fft along r
+
 
 def singleRun(arr):
     """
@@ -240,12 +262,11 @@ def singleRun(arr):
         - could be entire array, or a piece of a larger array
     runs linearly
     """
-    print(np.shape(arr))
     transformed_piece = np.abs(np.fft.fftshift((np.fft.fft(arr)), axes=-1))
     return transformed_piece
 
 
-def threadTask(task, numThreads, *args):
+def threadTask(task, numThreads, arr):
     """
     Threads a given method using python multiprocessing
 
@@ -253,7 +274,7 @@ def threadTask(task, numThreads, *args):
     ----------
     task - method to be parallelized
     numThreads - number of threads to be run in parallel
-    *args - parameters for the task
+    arr - the preTransformed data cube
 
     Returns
     -------
@@ -263,14 +284,9 @@ def threadTask(task, numThreads, *args):
     -----
         does not use cuda, uses python multiprocessing
     """
-    # split arg arrays
-    args = list(args)
+    args = np.array_split(arr, numThreads)
 
-    for index in range(np.shape(args)[0]):
-        args[index] = np.array_split(args[index], numThreads)
-
-    print(np.shape(args))
-    # make threadpool, task = task, with zipped args
+    # make threadpool, task = task given
     pool = ThreadPool(processes=numThreads)
-    result = np.concatenate(pool.map(task, args)[0])
+    result = np.concatenate(pool.map(task, args))
     return result
