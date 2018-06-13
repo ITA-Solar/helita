@@ -400,6 +400,7 @@ class BifrostData(object):
 
         if np.size(getattr(self, dim)) == 1:
             if getattr(self, dim) == slice(None):
+                setattr(self, dim, np.linspace(0,getattr(self, 'n' + dim[2])-1,getattr(self, 'n' + dim[2])))
                 setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
                 setattr(self, dim[2] + 'Ind', slice(None))
             else:
@@ -443,20 +444,30 @@ class BifrostData(object):
 
         else:
             if (iix is not None) and (iix != self.iix):
+                if self.verbose:
+                    print('(get_var): iix ', iix,self.iix)
                 self.set_domain_iiaxis(iinum=iix, iiaxis='x')
             if (iiy is not None) and (iiy != self.iiy):
+                if self.verbose:
+                    print('(get_var): iiy ', iix,self.iix)
                 self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             if (iiz is not None) and (iiz != self.iiz):
+                if self.verbose:
+                    print('(get_var): iiz ', iix,self.iix)
                 self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
         if (snap is not None) and (snap != self.snap):
+            if self.verbose:
+                print('(get_var): setsnap ', snap,self.snap)
             self.set_snap(snap)
 
         if var in self.simple_vars:  # is variable already loaded?
             val = self._get_simple_var(var, *args, **kwargs)
+            if self.verbose:
+                print('(get_var): reading simple ', np.shape(val))
         elif var in self.auxxyvars:
             val = self._get_simple_var_xy(var, *args, **kwargs)
         elif var in self.compvars:  # add to variable list
@@ -470,6 +481,8 @@ class BifrostData(object):
                 # (self.simple_vars + self.compvars + self.auxxyvars))))
             val = self._get_quantity(var, *args, **kwargs)
 
+        if self.verbose:
+            print('(get_var): reshaping ', np.shape(val),self.xLength, self.yLength, self.zLength, np.size(self.iix), np.size(self.iiy), np.size(self.iiz),self.iix,self.iiy,self.iiz)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             return np.reshape(val[self.iix, self.iiy, self.iiz], (
                                   self.xLength, self.yLength,
@@ -630,7 +643,8 @@ class BifrostData(object):
         DIV_QUANT = ['div']
         SQUARE_QUANT = ['2']
         RATIO_QUANT = 'rat'
-        EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt']
+        EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
+        TAU_QUANT = 'tau'
         PROJ_QUANT = ['par', 'per']
         CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
         FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
@@ -759,7 +773,7 @@ class BifrostData(object):
                 radtab = False
             eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
             return eostab.tab_interp(
-                rho, ee, order=1, out=quant) * fac
+                    rho, ee, order=1, out=quant) * fac
 
         elif quant[1:4] in PROJ_QUANT:
             # projects v1 onto v2
@@ -887,6 +901,10 @@ class BifrostData(object):
                 var = self.get_var('r')
                 return self.get_var('u2') * var * 0.5
 
+        elif quant == 'tau': 
+            
+            return self.calc_tau()
+
         elif quant in WAVE_QUANT:
             bx = self.get_var('bxc')
             by = self.get_var('byc')
@@ -947,6 +965,51 @@ class BifrostData(object):
                               'get_quantity can read others computed variables'
                               ' see e.g. self._get_quantity? for guidance'
                               '.' % (quant, repr(self.simple_vars))))
+
+    def calc_tau(self):
+
+       if not hasattr(self,'z'):
+          print('(WWW) get_tau needs the input z (height) in Mm (units of the code)')
+
+       # if not arg_present(nel) then nel=exp(1.d0*interpolate(lnne,ifr,jfr))
+       # if not arg_present(tg) then tg=interpolate(tgt,ifr,jfr)
+       # grph = 2.38049d-24 uni.GRPH
+       # bk = 1.38e-16 uni.KBOLTZMANN
+       crhmbf = 2.9256e-17
+       # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
+       if not hasattr(self,'ne'):
+           nel = self.get_var('ne')
+       else:
+           nel = self.ne
+
+       if not hasattr(self,'tg'):
+           tg = self.get_var('tg')
+       else:
+           tg = self.tg
+
+       if not hasattr(self,'r'):
+           r = self.get_var('r')
+       else:
+           r = self.r
+
+       uni = bifrost_units()
+
+       tau = np.zeros((self.nx,self.ny,self.nz))+1.e-16
+       xhmbf = np.zeros((self.nz))
+       for iix in range(self.nx):
+           for iiy in range(self.ny):
+               for iiz in range(self.nz):
+                   xhmbf[iiz] = 1.03526e-16 * nel[iix,iiy,iiz] * crhmbf / \
+                                tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
+                                uni.EV_TO_ERG / uni.KBOLTZMANN / \
+                                tg[iix,iiy,iiz]) * r[iix,iiy,iiz] / uni.GRPH
+
+               for iiz in range(1,self.nz):
+                   tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] + \
+                                    xhmbf[iiz-1]) * np.abs(self.dz1d[iiz]) * 1.0e8
+
+       return tau
+
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
@@ -1370,6 +1433,7 @@ class Rhoeetab:
         self.big_endian = big_endian
         self.eosload = False
         self.radload = False
+        self.entload = False
         # read table file and calculate parameters
         if tabfile is None:
             tabfile = '%s/tabparam.in' % (fdir)
@@ -1414,6 +1478,27 @@ class Rhoeetab:
             print(('*** Read EOS table from ' + eostabfile))
         return
 
+    def load_ent_table(self,eostabfile=None):
+        ''' Generates Entropy table from EOS table '''
+        self.enttab = np.zeros((self.params['neibin'],self.params['nrhobin']))
+        for irho in range(1,self.params['nrhobin']):
+            dinvrho = (1.0 / np.exp(self.lnrho[irho]) - 1.0 / np.exp(
+                                                    self.lnrho[irho-1]))
+
+            self.enttab[0,irho] = self.enttab[0,irho-1] + 1.0 / self.tgt[0,irho] * \
+                                np.exp(self.lnpg[0,irho]) * dinvrho
+
+            for iei in range(1,self.params['neibin']):
+                dei = np.exp(self.lnei[iei]) - np.exp(self.lnei[iei-1])
+                self.enttab[iei,irho] = self.enttab[iei-1,irho]+ 1.0 / \
+                                        self.tgt[iei,irho] * dei
+        for iei in range(1, self.params['neibin']):
+            dei = np.exp(self.lnei[iei]) - np.exp(self.lnei[iei-1])
+            self.enttab[iei,0] = self.enttab[iei-1,0]+ 1.0 / self.tgt[iei,0] * dei
+
+        self.enttab = self.enttab - np.min(self.enttab) - 5.0e8
+        print(np.max(self.enttab))
+
     def load_rad_table(self, radtabfile=None):
         ''' Loads rhoei_radtab table. '''
         if radtabfile is None:
@@ -1436,9 +1521,16 @@ class Rhoeetab:
     def get_table(self, out='ne', bine=None, order=1):
         import scipy.ndimage as ndimage
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
-                 'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab'}
+                 'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab',
+                 'ent' : 'enttab'}
         if out in ['ne tg pg kr'.split()] and not self.eosload:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
+        if out in ['ent'] and not self.entload:
+            if not self.eosload:
+                raise ValueError("(EEE) tab_interp: EOS table not loaded!")
+            if not self.entload:
+                self.load_ent_table()
+                self.entload = True
         if out in ['opa eps temp'.split()] and not self.radload:
             raise ValueError("(EEE) tab_interp: rad table not loaded!")
         quant = getattr(self, qdict[out])
@@ -1471,9 +1563,16 @@ class Rhoeetab:
         '''
         import scipy.ndimage as ndimage
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
-                 'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab'}
+                 'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab',
+                 'ent' : 'enttab'}
         if out in ['ne tg pg kr'.split()] and not self.eosload:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
+        if out in ['ent'] and not self.entload:
+            if not self.eosload:
+                raise ValueError("(EEE) tab_interp: EOS table not loaded!")
+            if not self.entload:
+                self.load_ent_table()
+                self.entload = True
         if out in ['opa eps temp'.split()] and not self.radload:
             raise ValueError("(EEE) tab_interp: rad table not loaded!")
         quant = getattr(self, qdict[out])
