@@ -1,11 +1,12 @@
 """
+Created by Carmel Baharav  (Juan Martinez-Sykora)
 Set of programs to read and interact with output from BifrostData
 simulations focusing on Fourier transforms
 """
 import time
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, read_idl_ascii, polar2cartesian, cartesian2polar
+from .bifrost import BifrostData, Rhoeetab, read_idl_ascii
 import imp
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -232,28 +233,6 @@ class FFTData(BifrostData):
         if self.verbose:
             print('total time: ', t1-t0)
         return output
-
-    def get_sfft(self, quantity, snap, numThreads=1, numBlocks=1,
-                iix=None, iiy=None, iiz=None):
-        # at least one of iix/iiy/iiz needs to be specified, can't do 3d yet
-        self.preTransform = self.get_varTime(quantity, snap, iix, iiy, iiz)
-
-        if iiz is None:
-            if iix is None:
-                ax1 = self.y
-            else:
-                ax1 = self.z
-            
-            interp = sp.interpolate.interp2d(ax1, dd.z, self.preTransform)
-            evenZ = np.linspace(self.z[0], self.z[-1], np.size(self.z))
-            self.preTransform = interp(ax1, evenZ)
-
-        # currently 2d
-        # select axis, if z then interpolate along z (like with linearTimeInterp)
-        # transform var from cartesian to polar
-        # do fft similar to energy_power_avert
-
-        # take fft along r
 
 
 def singleRun(arr):
