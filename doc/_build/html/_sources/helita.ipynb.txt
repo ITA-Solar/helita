@@ -1,0 +1,407 @@
+{
+ "cells": [
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "******\n",
+    "helita\n",
+    "******"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "Helita documentation can be found here (the installation section is taken from this link):\n",
+    "\n",
+    "http://helita.readthedocs.io/en/latest/index.html\n",
+    "\n",
+    "Helita is a Python library for solar physics focused on interfacing with code and projects from the `Institute of Theoretical Astrophysics <http://astro.uio.no>`_ (ITA) at the `University of Oslo <https://www.uio.no>`_. The name comes from Helios + ITA. Currently, the library is a loose collection of different scripts and classes with varying degrees of portability and usefulness.\n",
+    "\n",
+    "=====\n",
+    "\n",
+    "Installation\n",
+    "============\n",
+    "\n",
+    "Pre-requisites\n",
+    "--------------\n",
+    "\n",
+    "To make use of helita **you need a Fortran compiler** (`GFortran <https://gcc.gnu.org/wiki/GFortran>`_ is recommended), because some modules are compiled from Fortran. The packages in the left column should be installed before installing helita. The right column contains recommended packages that allow the user to take advantage of all of the features.\n",
+    "\n",
+    ".. list-table::\n",
+    "    :align: center\n",
+    "    :header-rows: 1\n",
+    "    \n",
+    "    * - Required\n",
+    "      - Recommended\n",
+    "    * - * `Python (2.7.x, 3.4.x or later) <https://www.python.org>`_\n",
+    "        * `Astropy <http://www.astropy.org>`_\n",
+    "        * `NumPy <http://www.numpy.org>`_\n",
+    "        * `SciPy <https://www.scipy.org>`_\n",
+    "      - * `Matplotlib <https://matplotlib.org>`_\n",
+    "        * `h5py <http://www.h5py.org>`_\n",
+    "        * `netCDF4 <https://unidata.github.io/netcdf4-python/>`_\n",
+    "        * `Cython <http://cython.org>`_\n",
+    "        * `pandas <http://pandas.pydata.org>`_\n",
+    "        * `beautifulsoup4 <https://www.crummy.com/software/BeautifulSoup/>`_\n",
+    "        \n",
+    "Helita will install without the recommended packages, but functionality will be limited. All of these packages are available through Anaconda, and that is the recommended way of setting up your Python distribution.\n",
+    "\n",
+    "Cloning git repository\n",
+    "----------------------\n",
+    "The easiest way is to use git to clone the repository. To grab the latest version of helita and install it::\n",
+    "\n",
+    "\t$ git clone https://github.com/ITA-solar/helita.git\n",
+    "\t$ cd helita\n",
+    "\t$ python setup.py install\n",
+    "  \n",
+    "\n",
+    ".. Note::\n",
+    "\tThe majority of the most updated versions of bifrost.py, ebysus.py, and all things bifrost related are in the https://github.com/jumasy/helita.git fork.\n",
+    "\n",
+    "Non-root install\n",
+    "----------------\n",
+    "If you don't have write permission to your Python packages directory, use the following option with setup.py::\n",
+    "\n",
+    "\t$ python setup.py install --user\n",
+    "\n",
+    "This will install helita under your home directory (typically ~/.local)\n",
+    "\n",
+    "Developer install\n",
+    "-----------------\n",
+    "If you want to install helita but also actively change the code or contribute to its development, it is recommended that you do a developer install instead::\n",
+    "\n",
+    "\t$ python setup.py develop\n",
+    "\n",
+    "This will set up the package, such as the source files used, from the git repository that you cloned (only a link to it is placed on the Python packages directory). Can also be combined with the *-user* flag for local installs::\n",
+    "\n",
+    "\t$ python setup.py develop --user\n",
+    "\n",
+    "Installing with different C or Fortran compilers\n",
+    "------------------------------------------------\n",
+    "The procedure above will compile the C and Fortran modules using the default gcc/gfortran compilers. It will fail if these are not available in the system. If you want to use a different compiler, please use *setup.py* with the *-compiler=xxx* and/or *-fcompiler=yyy* options, where *xxx*, *yyy* are C and Fortran compiler families (names depend on system). To check which Fortran compilers are available in your system, you can run::\n",
+    "\n",
+    "\t$ python setup.py build --help-fcompiler\n",
+    "\n",
+    "and to check which C compilers are available::\n",
+    "\n",
+    "\t$ python setup.py build --help-compiler\n",
+    "\n",
+    "=====\n",
+    "\n",
+    "bifrost.py\n",
+    "==========\n",
+    "bifrost.py is a set of tools to read and interact with output from Bifrost simulations.\n",
+    "\n",
+    "BifrostData class\n",
+    "-----------------\n",
+    "bifrost.py includes the BifrostData class (among others). The following allows to create the class for snapshot number 430 from simulation 'cb10f' from directory '/net/opal/Volumes/Amnesia/mpi3drun/Granflux':"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "from helita.sim import bifrost as br"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "dd = br.BifrostData('cb10f', snap = 430, fdir = '/net/opal/Volumes/Amnesia/mpi3drun/Granflux', verbose = False)"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "The snapshot(s) being read can be defined when creating the object, or set/changed anytime later. Snaps can be ints, arrays, or lists. \n",
+    "\n",
+    "Getting variables & quantities\n",
+    "------------------------------\n",
+    "get_var and get_varTime can be used to read variables as well as to calculate quantities (with a call to _get_quantity). iix, iiy, and iiz can be specified to slice the return array (they can be ints, arrays, or lists). If iix, iiy, or iiz is not specified, get_var will read all the numerical domain along the x, y, or z axis, respectively. If no snapshot is specified, the current snap value will be used (either the initialized one, which is the first in the series, or the most recent snap used in set_snap or in a call to get_var). To get variable 'r' at snap 430 with only values at y = 200, z = 5, and z = 7:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "WARNING: cstagger use has been turned off, turn it back on with \"dd.cstagop = True\"\n"
+     ]
+    }
+   ],
+   "source": [
+    "var1 = dd.get_var('r', snap = 430, iiy = 200, iiz = [5, 7])"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "get_varTime can be used in the same fashion, with the added option of reading a specific variable or quantity from many snapshots at once. Its return arrays have an added dimension for time.\n",
+    "\n",
+    "Several of the class's parameters can be found in the dictionary *params*. This dictionary contains information about time (t and dt) and the axes (dx, dy, dz) among other things. When snap contains more than one snapshot, many of the parameters in the dictionary contain one entry for each snap. To get time:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "time = dd.params['t']"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "To view all available keys:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "dict_keys(['mx', 'my', 'mz', 'mb', 'nstep', 'nstepstart', 'debug', 'periodic_x', 'periodic_y', 'periodic_z', 'ndim', 'u_l', 'u_t', 'u_r', 'u_p', 'u_u', 'u_kr', 'u_ee', 'u_e', 'u_te', 'u_tg', 'u_b', 'meshfile', 'dx', 'dy', 'dz', 'cdt', 'dt', 't', 'timestepdebug', 'nu1', 'nu2', 'nu3', 'nu_r_xy', 'nu_r_xy_k', 'nu_r', 'nu_r_min', 'nu_r_k', 'nu_ee_xy', 'nu_ee', 'grav', 'eta3', 'ca_max', 'mhddebug', 'do_mhd', 'mhdclean', 'one_file', 'snapname', 'isnap', 'large_memory', 'nsnap', 'nscr', 'aux', 'dtsnap', 'newaux', 'dtscr', 'tsnap', 'tscr', 'boundarychk', 'max_r', 'smooth_r', 'qmax', 'noneq', 'do_hion', 'gamma', 'tabinputfile', 'do_rad', 'dtrad', 'quadrature', 'zrefine', 'maxiter', 'taustream', 'accuracy', 'strictint', 'linear', 'monotonic', 'minbin', 'maxbin', 'dualsweep', 'teff', 'timing', 'spitzer', 'debug_spitzer', 'info_spitzer', 'spitzer_amp', 'theta_mg', 'dtgerr', 'ntest_mg', 'tgb0', 'tgb1', 'tau_tg', 'fix_grad_tg', 'niter_mg', 'bmin', 'do_genrad', 'genradfile', 'debug_genrad', 'incrad_detail', 'incrad_quad', 'dtincrad', 'debug_incrad', 'bctypelower', 'tau_bcl', 'tau_ee_bcl', 'tau_d2_bcl', 'tau_d5_bcl', 'tau_d6_bcl', 'tau_d7_bcl', 'tau_d8_bcl', 's0', 'e0', 'r0', 'cs0', 'p0', 'nsmooth_bcl', 'naver_bcl', 'nclean_bcl', 'nclean_lbl', 'nclean_ubl', 't_bdry', 'rbot', 'ebot', 'bx0', 'by0', 'x0_bcu', 'x1_bcu', 'y0_bcu', 'y1_bcu', 'uz_bcu', 'strtb', 'rtb', 'xotb', 'zotb', 'qtb', 'nclean_bcu'])"
+      ]
+     },
+     "execution_count": 5,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "dd.params.keys()"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    ".. list-table:: Variables\n",
+    "\t:stub-columns: 1\n",
+    "\n",
+    "\t* - Simple\n",
+    "\t  - r, px, py, pz, e, bx, by, bz, p, tg, i1, i4, qjoule, qspitz\n",
+    "\t* - Composite\n",
+    "\t  - ux, uy, uz, ee, s\n",
+    "\n",
+    ".. list-table:: Calculated Quantities\n",
+    "\t:stub-columns: 1\n",
+    "\n",
+    "\t* - Derivatives\n",
+    "\t  - dxup, dyup, dzup, dxdn, dydn, dzdn\n",
+    "\t* - Centers vector quantity in cells\n",
+    "\t  - xc, yc, zc\n",
+    "\t* - Module of vector\n",
+    "\t  - 'mod' + root letter of varname (eg. modb)\n",
+    "\t* - Divergence of vector\n",
+    "\t  - 'div' + root letter of varname (eg. divb)\n",
+    "\t* - Squared module\n",
+    "\t  - root letter of varname + '2' (eg. u2)\n",
+    "\t* - Ratio of two vars\n",
+    "\t  - var1 + 'rat' + var2 (eg. rratpx)\n",
+    "\t* - Eostab (unit conversion to SI)\n",
+    "\t  - ne, tg, pg, kr, eps, opa, temt\n",
+    "\t* - Magnitude of vector components // or ⟂\n",
+    "\t  - root letter of v1 + 'par' or 'per' + root letter of v2 (eg. uparb)\n",
+    "\t* - Current\n",
+    "\t  - ix, iy, iz, wx, wy, wz\n",
+    "\t* - Flux\n",
+    "\t  - pfx, pfy, pfz, pfex, pfey, pfez, pfwx\n",
+    "\t* - Plasma\n",
+    "\t  - beta, va, cs, s, ke, mn, man, hp, vax, vay, hx, hy, hz, kx, ky, kz\n",
+    "\t* - Wave forces\n",
+    "\t  - alf, fast, long\n",
+    "\n",
+    "FFTData class\n",
+    "-------------\n",
+    "This class can be found within bifrost_fft.py. It performs operations on Bifrost simulation data in its native format. After creating a class for a specific snap root name and directory (much like with BifrostData), one can get a dictionary of the frequency and amplitude of the Fourier Transform for a certain quantity over a range of snapshots."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "from helita.sim import bifrost_fft as brft"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "dd = brft.FFTData(file_root = 'cb10f', fdir = '/net/opal/Volumes/Amnesia/mpi3drun/Granflux')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "WARNING: cstagger use has been turned off, turn it back on with \"dd.cstagop = True\"\n",
+      "WARNING: cstagger use has been turned off, turn it back on with \"dd.cstagop = True\"\n",
+      "WARNING: cstagger use has been turned off, turn it back on with \"dd.cstagop = True\"\n"
+     ]
+    }
+   ],
+   "source": [
+    "transformed = dd.get_fft('r', snap = [430, 431, 432], iiy = 20)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "dict_keys(['freq', 'ftCube'])"
+      ]
+     },
+     "execution_count": 9,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "transformed.keys()"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "Depending on the number of snaps and the size of the cube, using cuda or python multiprocessing may speed up the calculation.\n",
+    "\n",
+    "1. Using cuda\n",
+    "^^^^^^^^^^^^^\n",
+    "If pycuda is available, the code imports reikna (a python library that contains fft functions using pycuda). In order to make use of the GPU, use the function run_gpu(). The default is to **not** use the GPU, even if there is one available."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "dd.run_gpu() # to use GPU\n",
+    "dd.run_gpu(False) # to stop use of GPU"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "When get_fft() is called, the GPU will be used in accordance with the last call to run_gpu(). If the GPU has limited memory, the user can specify numBlocks in the call to get_fft. This will send the calculation over to the GPU in several blocks as opposed to all at once. To use 5 different blocks, a call would look like this:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "usingBlocks = dd.get_fft('bx', snap = [400, 401, 402], numBlocks = 5)"
+   ]
+  },
+  {
+   "cell_type": "raw",
+   "metadata": {
+    "raw_mimetype": "text/restructuredtext"
+   },
+   "source": [
+    "2. Using python multiprocessing\n",
+    "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+    "This can be used whether or not pycuda is available, as multiprocessing is a library that comes with python. It makes use of threading on the CPU. In order to use a multiprocessing threadpool when calculating the Fourier Transform, specify numThreads with a number greater than 1, when calling get_fft():"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "usingThreads = dd.get_fft('bx', snap = [400, 401, 402], numThreads = 10)"
+   ]
+  }
+ ],
+ "metadata": {
+  "celltoolbar": "Raw Cell Format",
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.1"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}

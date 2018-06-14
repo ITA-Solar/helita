@@ -1,0 +1,432 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>bq_t5_look Tool &mdash; bifrostDocs 1.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="helita" href="helita.html" /> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> bifrostDocs
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="helita.html">helita</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">bq_t5_look Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#setup">Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#launch">Launch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#description">Description</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#initial-window">Initial Window</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#overlays-additional-settings">Overlays &amp; Additional Settings</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#vectors">1. Vectors</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#lines">2. Lines</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#contour">3. Contour</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#additional-display-features">4. Additional Display Features</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#movies-and-animation">5. Movies and Animation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">bifrostDocs</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>bq_t5_look Tool</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/bq_t5.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast,
+.nboutput.nblast {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast + .nbinput {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+</style>
+<div class="section" id="bq-t5-look-tool">
+<h1>bq_t5_look Tool<a class="headerlink" href="#bq-t5-look-tool" title="Permalink to this headline">¶</a></h1>
+<p>This tool can be used to visualize and manipulate data sets produced by Bifrost (and Ebysus) simulations. Previous tools were written in IDL, but this tool is written in Python, increasing accessibility. It also has a range of added features including the creation of movies and animations.</p>
+<div class="figure" id="id1">
+<img alt="_images/AGU_poster.png" src="_images/AGU_poster.png" />
+<p class="caption"><span class="caption-text">Poster submitted to AGU Virtual Poster Showcase Fall of 2017</span></p>
+</div>
+<div class="section" id="setup">
+<h2>Setup<a class="headerlink" href="#setup" title="Permalink to this headline">¶</a></h2>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The Bifrost code, which includes this tool, is <strong>not</strong> publicly available yet.</p>
+</div>
+<p>This tool can be found in Bifrost (which is a separate folder from helita), and requires that helita be installed in order to function. Once you have created a path for the Bifrost folder, add that path to your .cshrc, eg:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">setenv</span> <span class="n">BIFROSTPATH</span> <span class="n">yourpath</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="launch">
+<h2>Launch<a class="headerlink" href="#launch" title="Permalink to this headline">¶</a></h2>
+<p>To launch the tool, call:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="n">path_to_file</span> <span class="o">-</span><span class="n">i</span> <span class="n">path_to_snapshot</span>
+</pre></div>
+</div>
+<p>Possible extensions include:</p>
+<table class="docutils option-list" frame="void" rules="none">
+<col class="option" />
+<col class="description" />
+<tbody valign="top">
+<tr><td class="option-group">
+<kbd><span class="option">-i</span>, <span class="option">--input</span></kbd></td>
+<td>required, points to snapshot file</td></tr>
+<tr><td class="option-group">
+<kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></td>
+<td>returns help message</td></tr>
+<tr><td class="option-group">
+<kbd><span class="option">-s</span>, <span class="option">--slice</span></kbd></td>
+<td>jumps directly to data[:, :, slice], defaults to 0</td></tr>
+<tr><td class="option-group">
+<kbd><span class="option">-z</span>, <span class="option">--depth</span></kbd></td>
+<td>finds a slice at the corresponding depth value provided in real [mM] coordinates</td></tr>
+<tr><td class="option-group">
+<kbd><span class="option">-e</span>, <span class="option">--ebysus</span></kbd></td>
+<td>code based on Bifrost</td></tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="description">
+<h2>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
+<img alt="_images/description.png" src="_images/description.png" />
+<div class="section" id="initial-window">
+<h3>Initial Window<a class="headerlink" href="#initial-window" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div><ul class="simple">
+<li>Slider: moves through third dimension</li>
+<li>Variable choice: select variable to be plotted from dropdown</li>
+<li>Customizable quantity: input custom data for image</li>
+<li>Plane view: select plane view from dropdown</li>
+<li>Control of overlays: quickly add or remove overlays specified in respective window</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="overlays-additional-settings">
+<h3>Overlays &amp; Additional Settings<a class="headerlink" href="#overlays-additional-settings" title="Permalink to this headline">¶</a></h3>
+<p>Each of the overlays (vectors, lines, and contour) has its own corresponding pop-up settings window that can be opened from the initial page of the tool. As previously mentioned, the initial window also has the option to quickly hide/reveal a previously loaded overlay. By default, all overlays are shown once a quantity is specified.</p>
+<hr class="docutils" />
+<div class="section" id="vectors">
+<h4>1. Vectors<a class="headerlink" href="#vectors" title="Permalink to this headline">¶</a></h4>
+<div class="figure align-right" id="id2">
+<a class="reference internal image-reference" href="_images/vector_settings.png"><img alt="_images/vector_settings.png" src="_images/vector_settings.png" style="width: 251.0px; height: 137.0px;" /></a>
+<p class="caption"><span class="caption-text">Vector Settings Window</span></p>
+</div>
+<dl class="docutils">
+<dt>This feature allows the user to visualize non-scalar data. The user can manipulate:</dt>
+<dd><ul class="first last simple">
+<li>Vector quantity (eg. p or u)</li>
+<li>Arrow head width/length</li>
+<li>Arrow shaft width</li>
+<li>Sparsity of vectors shown</li>
+</ul>
+</dd>
+</dl>
+</div>
+<hr class="docutils" />
+<div class="section" id="lines">
+<h4>2. Lines<a class="headerlink" href="#lines" title="Permalink to this headline">¶</a></h4>
+<div class="figure align-right" id="id3">
+<a class="reference internal image-reference" href="_images/line_settings.png"><img alt="_images/line_settings.png" src="_images/line_settings.png" style="width: 250.5px; height: 135.0px;" /></a>
+<p class="caption"><span class="caption-text">Line Settings Window</span></p>
+</div>
+<dl class="docutils">
+<dt>Lines offer the user another method of illustrating non-scalar data besides vector fields. The user can specify:</dt>
+<dd><ul class="first last simple">
+<li>Line quantity (eg. b)</li>
+<li>Line density in the X and Y directions</li>
+<li>Line color</li>
+<li>Arrow style and size</li>
+</ul>
+</dd>
+</dl>
+</div>
+<hr class="docutils" />
+<div class="section" id="contour">
+<h4>3. Contour<a class="headerlink" href="#contour" title="Permalink to this headline">¶</a></h4>
+<div class="figure align-right" id="id4">
+<a class="reference internal image-reference" href="_images/contour_settings.png"><img alt="_images/contour_settings.png" src="_images/contour_settings.png" style="width: 247.5px; height: 134.0px;" /></a>
+<p class="caption"><span class="caption-text">Contour Settings Window</span></p>
+</div>
+<dl class="docutils">
+<dt>Plotting contours allows the user to display two scalar quantities simultaneously. The user can determine:</dt>
+<dd><ul class="first last simple">
+<li>Contour quantity (can select from dropdown or specify custom quantity)</li>
+<li>Scale (eg. absolute or log)</li>
+<li>Units (CGS)</li>
+<li>Minimum and maximum used (based on individual slice, whole data cube, or custom values)</li>
+<li>Color map</li>
+</ul>
+</dd>
+</dl>
+</div>
+<hr class="docutils" />
+<div class="section" id="additional-display-features">
+<h4>4. Additional Display Features<a class="headerlink" href="#additional-display-features" title="Permalink to this headline">¶</a></h4>
+<div class="figure align-right" id="id5">
+<a class="reference internal image-reference" href="_images/display_settings.png"><img alt="_images/display_settings.png" src="_images/display_settings.png" style="width: 247.5px; height: 134.5px;" /></a>
+<p class="caption"><span class="caption-text">Display Settings Window</span></p>
+</div>
+<dl class="docutils">
+<dt>These settings alter the background image and provide similar options to the contour settings. The added specifications are:</dt>
+<dd><ul class="first last simple">
+<li>Black and white image</li>
+<li>Dynamic range</li>
+</ul>
+</dd>
+<dt>The repeated features are:</dt>
+<dd><ul class="first last simple">
+<li>Scale</li>
+<li>Units</li>
+<li>Minimum and maximum used</li>
+<li>Color Map</li>
+</ul>
+</dd>
+</dl>
+</div>
+<hr class="docutils" />
+<div class="section" id="movies-and-animation">
+<h4>5. Movies and Animation<a class="headerlink" href="#movies-and-animation" title="Permalink to this headline">¶</a></h4>
+<div class="figure align-right" id="id6">
+<a class="reference internal image-reference" href="_images/animation_settings.png"><img alt="_images/animation_settings.png" src="_images/animation_settings.png" style="width: 294.0px; height: 134.5px;" /></a>
+<p class="caption"><span class="caption-text">Animation Settings Window</span></p>
+</div>
+<dl class="docutils">
+<dt>Both animations and movies use the current settings (including any overlays that are active), and can move through either time or space. With both, the user can specify:</dt>
+<dd><ul class="first last simple">
+<li>Start depth and end depth</li>
+<li>OR start time and end time (if “Through Time” box is checked)</li>
+</ul>
+</dd>
+<dt>Animation features:</dt>
+<dd><ul class="first last simple">
+<li>Make animation begins the animation on the display window</li>
+<li>User can pause/play current animation at any point</li>
+<li>Animation will loop until paused</li>
+</ul>
+</dd>
+<dt>Movie features:</dt>
+<dd><ul class="first last simple">
+<li>File destination (default is home directory)</li>
+<li>Frames per second</li>
+<li>Whether pictures should be saved or removed (the movie is created from saved pictures)</li>
+</ul>
+</dd>
+</dl>
+<iframe src="https://drive.google.com/file/d/1EABhi73_FXNSaL6rXDiBlvGZrRomNHY4/preview" width="640" height="480"></iframe></div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="helita.html" class="btn btn-neutral" title="helita" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2018, Carmel Baharav.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'1.0',
+            LANGUAGE:'None',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
