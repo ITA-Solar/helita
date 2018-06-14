@@ -9,6 +9,8 @@ from . import cstagger
 import numba
 import scipy as sp
 from scipy.ndimage import map_coordinates
+from multiprocessing.dummy import Pool as ThreadPool
+
 
 class BifrostData(object):
     """
@@ -194,7 +196,7 @@ class BifrostData(object):
         for key in self.paramList[0]:
             self.params[key] = np.array(
                 [self.paramList[i][key] for i in range(
-                                            0, len(self.paramList))])
+                    0, len(self.paramList))])
 
     def __read_mesh(self, meshfile):
         """
@@ -301,7 +303,9 @@ class BifrostData(object):
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     order='F', mode='r', *args, **kwargs):
-
+        """
+        Uses get_var to read a given variable from several snapshots
+        """
         self.iix = iix
         self.iiy = iiy
         self.iiz = iiz
@@ -314,26 +318,18 @@ class BifrostData(object):
             if ((snap is not None) and any(snap != self.snap)):
                 self.set_snap(snap)
 
-        # lengths for size of return array
+        # lengths for dimensions of return array
         self.xLength = 0
         self.yLength = 0
         self.zLength = 0
 
-        # indices for filling in the 4D return array
-        self.xInd = 0
-        self.yInd = 0
-        self.zInd = 0
-
         for dim in ('iix', 'iiy', 'iiz'):
             if getattr(self, dim) is None:
                 setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                setattr(self, dim[2] + 'Ind', slice(None))
                 setattr(self, dim, slice(None))
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
-                if indSize > 1:
-                    setattr(self, dim[2] + 'Ind', slice(None))
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
@@ -345,38 +341,38 @@ class BifrostData(object):
 
             value[:, :, :, i] = self.get_var(
                 var, self.snap, iix=self.iix, iiy=self.iiy, iiz=self.iiz)
-            
+
         return value
 
     def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
-
+        """
+        Sets length of each dimension for get_var based on iix/iiy/iiz
+        ----------
+        iinum - int, list, or array
+            Slice to be taken from get_var quantity in that axis (iiaxis)
+        iiaxis - string
+            Axis from which the slice will be taken ('x', 'y', or 'z')
+        """
         if iinum is None:
             iinum = slice(None)
 
         dim = 'ii' + iiaxis
         setattr(self, dim, iinum)
         setattr(self, iiaxis + 'Length', np.size(iinum))
-        setattr(self, iiaxis + 'Ind', 0)
 
         if np.size(getattr(self, dim)) == 1:
             if getattr(self, dim) == slice(None):
-                setattr(self, dim, np.linspace(0,getattr(self, 'n' + dim[2])-1,getattr(self, 'n' + dim[2])))
                 setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                setattr(self, dim[2] + 'Ind', slice(None))
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
-                if indSize > 1:
-                    setattr(self, dim[2] + 'Ind', slice(None))
-                elif indSize == 1:
+                if indSize == 1:
                     temp = np.asarray(getattr(self, dim))
                     setattr(self, dim, temp.item())
         else:
             indSize = np.size(getattr(self, dim))
             setattr(self, dim[2] + 'Length', indSize)
-            if indSize > 1:
-                setattr(self, dim[2] + 'Ind', slice(None))
-            elif indSize == 1:
+            if indSize == 1:
                 temp = np.asarray(getattr(self, dim))
                 setattr(self, dim, temp.item())
 
@@ -402,31 +398,33 @@ class BifrostData(object):
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
-        
         else:
-            if (iix is not None) and (iix != self.iix):
+            if (iix is not None) and np.any(iix != self.iix):
                 if self.verbose:
-                    print('(get_var): iix ', iix,self.iix)
+                    print('(get_var): iix ', iix, self.iix)
                 self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-            if (iiy is not None) and (iiy != self.iiy):
+            if (iiy is not None) and np.any(iiy != self.iiy):
                 if self.verbose:
-                    print('(get_var): iiy ', iix,self.iix)
+                    print('(get_var): iiy ', iiy, self.iiy)
                 self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-            if (iiz is not None) and (iiz != self.iiz):
+            if (iiz is not None) and np.any(iiz != self.iiz):
                 if self.verbose:
-                    print('(get_var): iiz ', iix,self.iix)
+                    print('(get_var): iiz ', iiz, self.iiz)
                 self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
-        if (self.iix is not None) or (self.iiy is not None) or (self.iiz is not None):
+        if self.cstagop and ((self.iix is not None) or
+                             (self.iiy is not None) or (self.iiz is not None)):
             self.cstagop = False
-            print('WARNING: cstagger use has been turned off, turn it back on with "dd.cstagop = True"')
+            print(
+                'WARNING: cstagger use has been turned off,',
+                'turn it back on with "dd.cstagop = True"')
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
         if (snap is not None) and (snap != self.snap):
             if self.verbose:
-                print('(get_var): setsnap ', snap,self.snap)
+                print('(get_var): setsnap ', snap, self.snap)
             self.set_snap(snap)
 
         if var in self.simple_vars:  # is variable already loaded?
@@ -446,22 +444,27 @@ class BifrostData(object):
                 # (self.simple_vars + self.compvars + self.auxxyvars))))
             val = self._get_quantity(var, *args, **kwargs)
 
-        if self.verbose:
-            print('(get_var): reshaping ', np.shape(val),self.xLength, self.yLength, self.zLength, np.size(self.iix), np.size(self.iiy), np.size(self.iiz),self.iix,self.iiy,self.iiz)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
 
-            if self.verbose:
-                print('reshaping ', var, self.xLength, self.yLength, self.zLength)
-    
-            return np.reshape(val[self.iix, self.iiy, self.iiz], (
-                                  self.xLength, self.yLength,
-                                  self.zLength))
-        else:
+            if np.size(self.iix)+np.size(self.iiy)+np.size(self.iiz) > 3:
+                # at least one slice has more than one value
 
-            if self.verbose:
-                print('not reshaping val')
-            return val
+                # x axis may be squeezed out, axes for take()
+                axes = [0, -2, -1]
 
+                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
+                    if (np.size(getattr(self, dim)) > 1 or
+                            getattr(self, dim) != slice(None)):
+                        # slicing each dimension in turn
+                        val = val.take(getattr(self, dim), axis=axes[counter])
+            else:
+                # all of the slices are only one int or slice(None)
+                val = val[self.iix, self.iiy, self.iiz]
+
+            # ensuring that dimensions of size 1 are retained
+            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+
+        return val
 
     def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -559,21 +562,21 @@ class BifrostData(object):
             mom = self.get_var('p' + var[1])
             if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
                 # do not recentre for 2D cases (or close)
-                return mom / self.get_var('r', *args, **kwargs)
+                return mom / self.get_var('r')
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return mom / cstagger.do(self.get_var('r', *args, **kwargs), var[1] + 'dn')
+                return mom / cstagger.do(self.get_var('r'), var[1] + 'dn')
         elif var == 'ee':   # internal energy
-            return self.get_var('e', *args, **kwargs) / self.get_var('r', *args, **kwargs)
+            return self.get_var('e') / self.get_var('r')
         elif var == 's':   # entropy?
             entr = np.log(self.get_var(
-                            'p', *args, **kwargs)) - self.params['gamma'] * np.log(
-                                    self.get_var('r', *args, **kwargs))
+                'p', *args, **kwargs)) - self.params['gamma'] * np.log(
+                self.get_var('r', *args, **kwargs))
             return entr
         # else:
             # raise ValueError(('_get_composite_var: do not know (yet) how to'
             # 'get composite variable %s.' % var))
 
-    def _get_quantity(self, quant, *args, **kwargs):
+    def _get_quantity(self, quant, numThreads=1, *args, **kwargs):
         """
         Calculates a quantity from the simulation quantiables.
         Parameters
@@ -731,7 +734,7 @@ class BifrostData(object):
                 print(quant + ' interpolation...')
 
             fac = 1.0
-            #JMS Why SI?? SI seems to work with bifrost_uvotrt.
+            # JMS Why SI?? SI seems to work with bifrost_uvotrt.
             if quant == 'ne':
                 fac = 1.e6  # cm^-3 to m^-3
             if quant in ['eps', 'opa', 'temt']:
@@ -740,37 +743,47 @@ class BifrostData(object):
                 radtab = False
             eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
             return eostab.tab_interp(
-                    rho, ee, order=1, out=quant) * fac
+                rho, ee, order=1, out=quant) * fac
 
         elif quant[1:4] in PROJ_QUANT:
             # projects v1 onto v2
             v1 = quant[0]
             v2 = quant[4]
 
-            x1 = self.get_var(v1 + 'xc', self.snap, **kwargs)
-            y1 = self.get_var(v1 + 'yc', self.snap, **kwargs)
-            z1 = self.get_var(v1 + 'zc', self.snap, **kwargs)
-            x2 = self.get_var(v2 + 'xc', self.snap, **kwargs)
-            y2 = self.get_var(v2 + 'yc', self.snap, **kwargs)
-            z2 = self.get_var(v2 + 'zc', self.snap, **kwargs)
+            x_a = self.get_var(v1 + 'xc', self.snap)
+            y_a = self.get_var(v1 + 'yc', self.snap)
+            z_a = self.get_var(v1 + 'zc', self.snap)
+            x_b = self.get_var(v2 + 'xc', self.snap)
+            y_b = self.get_var(v2 + 'yc', self.snap)
+            z_b = self.get_var(v2 + 'zc', self.snap)
 
-            v2Mag = np.sqrt(x2**2 + y2**2 + z2**2)
-            v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
-            # parX, parY, parZ = x1 * v2x, y1 * v2x, z1 * v2x
-            parScal = x1 * v2x + y1 * v2y + z1 * v2z
-            parX, parY, parZ = parScal * v2x, parScal * v2y, parScal * v2z
-            result = np.abs(parScal)
+            # can be used for threadQuantity() or as is
+            def proj_task(x1, y1, z1, x2, y2, z2):
 
-            if quant[1:4] == 'per':
-                perX = x1 - parX
-                perY = y1 - parY
-                perZ = z1 - parZ
-                # print(np.min(x1*x1 + y1*y1 + z1*z1 - result**2))
-                # result1 = np.sqrt(x1*x1 + y1*y1 + z1*z1 - result**2)
-                v1Mag = np.sqrt(perX**2 + perY**2 + perZ**2)
-                result = v1Mag
-                # print(np.nanmax(np.abs(result - result1)))
-            return result
+                v2Mag = np.sqrt(x2**2 + y2**2 + z2**2)
+                v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
+                parScal = x1 * v2x + y1 * v2y + z1 * v2z
+                parX, parY, parZ = parScal * v2x, parScal * v2y, parScal * v2z
+                result = np.abs(parScal)
+
+                if quant[1:4] == 'per':
+                    perX = x1 - parX
+                    perY = y1 - parY
+                    perZ = z1 - parZ
+
+                    v1Mag = np.sqrt(perX**2 + perY**2 + perZ**2)
+                    result = v1Mag
+
+                return result
+
+            if numThreads > 1:
+                if self.verbose:
+                    print('Threading')
+
+                return threadQuantity(
+                    proj_task, numThreads, x_a, y_a, z_a, x_b, y_b, z_b)
+            else:
+                return proj_task(x_a, y_a, z_a, x_b, y_b, z_b)
 
         elif quant in CURRENT_QUANT:
             # Calculate derivative of quantity
@@ -798,7 +811,7 @@ class BifrostData(object):
                     return np.zeros_like(var)
                 else:
                     return cstagger.do(var, derv[0]) - cstagger.do(
-                            self.get_var(q + varsn[1]), derv[1])
+                        self.get_var(q + varsn[1]), derv[1])
 
         elif quant in FLUX_QUANT:
             axis = quant[-1]
@@ -815,7 +828,7 @@ class BifrostData(object):
                     self.get_var('u' + varsn[1] + 'c') *
                     self.get_var('b' + varsn[1] + 'c'))
             else:
-                var=self.r*0.0
+                var = self.r*0.0
             if 'pfe' in quant or len(quant) == 3:
                 var -= self.get_var('u' + axis + 'c') * (
                     self.get_var('b' + varsn[0] + 'c')**2 +
@@ -835,8 +848,8 @@ class BifrostData(object):
                         self.params['gamma'][0] * var / self.get_var('r'))
                 elif quant == 's':
                     return np.log(
-                            var) - self.params['gamma'][0] * np.log(
-                            self.get_var('r'))
+                        var) - self.params['gamma'][0] * np.log(
+                        self.get_var('r'))
                 elif quant == 'beta':
                     return 2 * var / self.get_var('b2')
 
@@ -868,8 +881,8 @@ class BifrostData(object):
                 var = self.get_var('r')
                 return self.get_var('u2') * var * 0.5
 
-        elif quant == 'tau': 
-            
+        elif quant == 'tau':
+
             return self.calc_tau()
 
         elif quant in WAVE_QUANT:
@@ -935,48 +948,47 @@ class BifrostData(object):
 
     def calc_tau(self):
 
-       if not hasattr(self,'z'):
-          print('(WWW) get_tau needs the input z (height) in Mm (units of the code)')
+        if not hasattr(self, 'z'):
+            print('(WWW) get_tau needs the input z (height) in Mm (units of the code)')
 
-       # if not arg_present(nel) then nel=exp(1.d0*interpolate(lnne,ifr,jfr))
-       # if not arg_present(tg) then tg=interpolate(tgt,ifr,jfr)
-       # grph = 2.38049d-24 uni.GRPH
-       # bk = 1.38e-16 uni.KBOLTZMANN
-       crhmbf = 2.9256e-17
-       # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
-       if not hasattr(self,'ne'):
-           nel = self.get_var('ne')
-       else:
-           nel = self.ne
+        # if not arg_present(nel) then nel=exp(1.d0*interpolate(lnne,ifr,jfr))
+        # if not arg_present(tg) then tg=interpolate(tgt,ifr,jfr)
+        # grph = 2.38049d-24 uni.GRPH
+        # bk = 1.38e-16 uni.KBOLTZMANN
+        crhmbf = 2.9256e-17
+        # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
+        if not hasattr(self, 'ne'):
+            nel = self.get_var('ne')
+        else:
+            nel = self.ne
 
-       if not hasattr(self,'tg'):
-           tg = self.get_var('tg')
-       else:
-           tg = self.tg
+        if not hasattr(self, 'tg'):
+            tg = self.get_var('tg')
+        else:
+            tg = self.tg
 
-       if not hasattr(self,'r'):
-           r = self.get_var('r')
-       else:
-           r = self.r
+        if not hasattr(self, 'r'):
+            r = self.get_var('r')
+        else:
+            r = self.r
 
-       uni = bifrost_units()
+        uni = bifrost_units()
 
-       tau = np.zeros((self.nx,self.ny,self.nz))+1.e-16
-       xhmbf = np.zeros((self.nz))
-       for iix in range(self.nx):
-           for iiy in range(self.ny):
-               for iiz in range(self.nz):
-                   xhmbf[iiz] = 1.03526e-16 * nel[iix,iiy,iiz] * crhmbf / \
-                                tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
-                                uni.EV_TO_ERG / uni.KBOLTZMANN / \
-                                tg[iix,iiy,iiz]) * r[iix,iiy,iiz] / uni.GRPH
+        tau = np.zeros((self.nx, self.ny, self.nz))+1.e-16
+        xhmbf = np.zeros((self.nz))
+        for iix in range(self.nx):
+            for iiy in range(self.ny):
+                for iiz in range(self.nz):
+                    xhmbf[iiz] = 1.03526e-16 * nel[iix, iiy, iiz] * crhmbf / \
+                        tg[iix, iiy, iiz]**1.5 * np.exp(0.754e0 *
+                                                        uni.EV_TO_ERG / uni.KBOLTZMANN /
+                                                        tg[iix, iiy, iiz]) * r[iix, iiy, iiz] / uni.GRPH
 
-               for iiz in range(1,self.nz):
-                   tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] + \
-                                    xhmbf[iiz-1]) * np.abs(self.dz1d[iiz]) * 1.0e8
+                for iiz in range(1, self.nz):
+                    tau[iix, iiy, iiz] = tau[iix, iiy, iiz-1] + 0.5 * (xhmbf[iiz] +
+                                                                       xhmbf[iiz-1]) * np.abs(self.dz1d[iiz]) * 1.0e8
 
-       return tau
-
+        return tau
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
@@ -1258,6 +1270,7 @@ class create_new_br_files():
             f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
         f.close()
 
+
 def polar2cartesian(r, t, grid, x, y, order=3):
 
     X, Y = np.meshgrid(x, y)
@@ -1275,7 +1288,8 @@ def polar2cartesian(r, t, grid, x, y, order=3):
     new_ir[new_r.ravel() < r.min()] = 0
 
     return map_coordinates(grid, np.array([new_ir, new_it]),
-                            order=order).reshape(new_r.shape)
+                           order=order).reshape(new_r.shape)
+
 
 def cartesian2polar(x, y, grid, r, t, order=3):
 
@@ -1297,7 +1311,8 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     new_iy[new_y.ravel() < y.min()] = 0
 
     return map_coordinates(grid, np.array([new_ix, new_iy]),
-                            order=order).reshape(new_x.shape)
+                           order=order).reshape(new_x.shape)
+
 
 class bifrost_units():
     import scipy.constants as const
@@ -1440,23 +1455,24 @@ class Rhoeetab:
             print(('*** Read EOS table from ' + eostabfile))
         return
 
-    def load_ent_table(self,eostabfile=None):
+    def load_ent_table(self, eostabfile=None):
         ''' Generates Entropy table from EOS table '''
-        self.enttab = np.zeros((self.params['neibin'],self.params['nrhobin']))
-        for irho in range(1,self.params['nrhobin']):
+        self.enttab = np.zeros((self.params['neibin'], self.params['nrhobin']))
+        for irho in range(1, self.params['nrhobin']):
             dinvrho = (1.0 / np.exp(self.lnrho[irho]) - 1.0 / np.exp(
-                                                    self.lnrho[irho-1]))
+                self.lnrho[irho-1]))
 
-            self.enttab[0,irho] = self.enttab[0,irho-1] + 1.0 / self.tgt[0,irho] * \
-                                np.exp(self.lnpg[0,irho]) * dinvrho
+            self.enttab[0, irho] = self.enttab[0, irho-1] + 1.0 / self.tgt[0, irho] * \
+                np.exp(self.lnpg[0, irho]) * dinvrho
 
-            for iei in range(1,self.params['neibin']):
+            for iei in range(1, self.params['neibin']):
                 dei = np.exp(self.lnei[iei]) - np.exp(self.lnei[iei-1])
-                self.enttab[iei,irho] = self.enttab[iei-1,irho]+ 1.0 / \
-                                        self.tgt[iei,irho] * dei
+                self.enttab[iei, irho] = self.enttab[iei-1, irho] + 1.0 / \
+                    self.tgt[iei, irho] * dei
         for iei in range(1, self.params['neibin']):
             dei = np.exp(self.lnei[iei]) - np.exp(self.lnei[iei-1])
-            self.enttab[iei,0] = self.enttab[iei-1,0]+ 1.0 / self.tgt[iei,0] * dei
+            self.enttab[iei, 0] = self.enttab[iei-1, 0] + \
+                1.0 / self.tgt[iei, 0] * dei
 
         self.enttab = self.enttab - np.min(self.enttab) - 5.0e8
         print(np.max(self.enttab))
@@ -1484,7 +1500,7 @@ class Rhoeetab:
         import scipy.ndimage as ndimage
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
                  'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab',
-                 'ent' : 'enttab'}
+                 'ent': 'enttab'}
         if out in ['ne tg pg kr'.split()] and not self.eosload:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
         if out in ['ent'] and not self.entload:
@@ -1524,7 +1540,7 @@ class Rhoeetab:
         import scipy.ndimage as ndimage
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
                  'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab',
-                 'ent' : 'enttab'}
+                 'ent': 'enttab'}
         if out in ['ne tg pg kr'.split()] and not self.eosload:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
         if out in ['ent'] and not self.entload:
@@ -1818,3 +1834,16 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
     result = ndimage.map_coordinates(
         tt['ne_rt_table'], [x, y], order=order, mode='nearest')
     return 10**result * rho / tt['grph']
+
+
+def threadQuantity(task, numThreads, *args):
+    # split arg arrays
+    args = list(args)
+
+    for index in range(np.shape(args)[0]):
+        args[index] = np.array_split(args[index], numThreads)
+
+    # make threadpool, task = task, with zipped args
+    pool = ThreadPool(processes=numThreads)
+    result = np.concatenate(pool.starmap(task, zip(*args)))
+    return result
