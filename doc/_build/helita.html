@@ -1,0 +1,425 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>helita &mdash; bifrostDocs 1.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="bq_t5_look Tool" href="bq_t5.html" />
+    <link rel="prev" title="Welcome to helita and bifrost documentation!" href="index.html" /> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> bifrostDocs
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">helita</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pre-requisites">Pre-requisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cloning-git-repository">Cloning git repository</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#non-root-install">Non-root install</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#developer-install">Developer install</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#installing-with-different-c-or-fortran-compilers">Installing with different C or Fortran compilers</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#bifrost-py">bifrost.py</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#bifrostdata-class">BifrostData Class</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#getting-variables-quantities">Getting Variables &amp; Quantities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fftdata-class">FFTData Class</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bq_t5.html">bq_t5_look Tool</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">bifrostDocs</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>helita</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/helita.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast,
+.nboutput.nblast {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast + .nbinput {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+</style>
+<div class="section" id="helita">
+<h1>helita<a class="headerlink" href="#helita" title="Permalink to this headline">¶</a></h1>
+<p>Helita documentation can be found here (this section is taken from this link):</p>
+<p><a class="reference external" href="http://helita.readthedocs.io/en/latest/index.html">http://helita.readthedocs.io/en/latest/index.html</a></p>
+<p>Helita is a Python library for solar physics focused on interfacing with code and projects from the <a class="reference external" href="http://astro.uio.no">Institute of Theoretical Astrophysics</a> (ITA) at the <a class="reference external" href="https://www.uio.no">University of Oslo</a>. The name comes from Helios + ITA. Currently, the library is a loose collection of different scripts and classes with varying degrees of portability and usefulness.</p>
+<hr class="docutils" />
+<div class="section" id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="pre-requisites">
+<h3>Pre-requisites<a class="headerlink" href="#pre-requisites" title="Permalink to this headline">¶</a></h3>
+<p>To make use of helita <strong>you need a Fortran compiler</strong> (<a class="reference external" href="https://gcc.gnu.org/wiki/GFortran">GFortran</a> is recommended), because some modules are compiled from Fortran. Before attempting to install helita, you also need the following:</p>
+<ul class="simple">
+<li><a class="reference external" href="https://www.python.org">Python (2.7.x, 3.4.x or later)</a></li>
+<li><a class="reference external" href="http://www.astropy.org">Astropy</a></li>
+<li><a class="reference external" href="http://www.numpy.org">NumPy</a></li>
+<li><a class="reference external" href="https://www.scipy.org">SciPy</a></li>
+</ul>
+<p>In addition, the following packages are recommended to take advantage of all the features:</p>
+<ul class="simple">
+<li><a class="reference external" href="https://matplotlib.org">Matplotlib</a></li>
+<li><a class="reference external" href="http://www.h5py.org">h5py</a></li>
+<li><a class="reference external" href="https://unidata.github.io/netcdf4-python/">netCDF4</a></li>
+<li><a class="reference external" href="http://cython.org">Cython</a></li>
+<li><a class="reference external" href="http://pandas.pydata.org">pandas</a></li>
+<li><a class="reference external" href="https://www.crummy.com/software/BeautifulSoup/">beautifulsoup4</a></li>
+</ul>
+<p>Helita will install without the above packages, but functionality will be limited. All of these packages are available through Anaconda, and that is the recommended way of setting up your Python distribution.</p>
+</div>
+<div class="section" id="cloning-git-repository">
+<h3>Cloning git repository<a class="headerlink" href="#cloning-git-repository" title="Permalink to this headline">¶</a></h3>
+<p>The easiest way is to use git to clone the repository. To grab the latest version of helita and install it:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ git clone https://github.com/ITA-solar/helita.git
+$ cd helita
+$ python setup.py install
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The majority of the most updated versions of bifrost.py, ebysus.py, and all things bifrost related are in the <a class="reference external" href="https://github.com/jumasy/helita.git">https://github.com/jumasy/helita.git</a> fork.</p>
+</div>
+</div>
+<div class="section" id="non-root-install">
+<h3>Non-root install<a class="headerlink" href="#non-root-install" title="Permalink to this headline">¶</a></h3>
+<p>If you don’t have write permission to your Python packages directory, use the following option with setup.py:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python setup.py install --user
+</pre></div>
+</div>
+<p>This will install helita under your home directory (typically ~/.local)</p>
+</div>
+<div class="section" id="developer-install">
+<h3>Developer install<a class="headerlink" href="#developer-install" title="Permalink to this headline">¶</a></h3>
+<p>If you want to install helita but also actively change the code or contribute to its development, it is recommended that you do a developer install instead:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python setup.py develop
+</pre></div>
+</div>
+<p>This will set up the package, such as the source files used, from the git repository that you cloned (only a link to it is placed on the Python packages directory). Can also be combined with the <em>-user</em> flag for local installs:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python setup.py develop --user
+</pre></div>
+</div>
+</div>
+<div class="section" id="installing-with-different-c-or-fortran-compilers">
+<h3>Installing with different C or Fortran compilers<a class="headerlink" href="#installing-with-different-c-or-fortran-compilers" title="Permalink to this headline">¶</a></h3>
+<p>The procedure above will compile the C and Fortran modules using the default gcc/gfortran compilers. It will fail if these are not available in the system. If you want to use a different compiler, please use <em>setup.py</em> with the <em>-compiler=xxx</em> and/or <em>-fcompiler=yyy</em> options, where <em>xxx</em>, <em>yyy</em> are C and Fortran compiler families (names depend on system). To check which Fortran compilers are available in your system, you can run:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python setup.py build --help-fcompiler
+</pre></div>
+</div>
+<p>and to check which C compilers are available:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python setup.py build --help-compiler
+</pre></div>
+</div>
+</div>
+</div>
+<hr class="docutils" />
+<div class="section" id="bifrost-py">
+<h2>bifrost.py<a class="headerlink" href="#bifrost-py" title="Permalink to this headline">¶</a></h2>
+<p>bifrost.py is a set of tools to read and interact with output from Bifrost simulations.</p>
+<div class="section" id="bifrostdata-class">
+<h3>BifrostData Class<a class="headerlink" href="#bifrostdata-class" title="Permalink to this headline">¶</a></h3>
+<p>bifrost.py includes the BifrostData class (among others). The following allows to create the class for snapshot number 430 from simulation ‘cb10f’ from directory ‘/net/opal/Volumes/Amnesia/mpi3drun/Granflux’:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">helita.sim</span> <span class="k">import</span> <span class="n">bifrost</span> <span class="k">as</span> <span class="n">br</span>
+<span class="n">dd</span> <span class="o">=</span> <span class="n">br</span><span class="o">.</span><span class="n">BifrostData</span><span class="p">(</span><span class="s1">&#39;cb10f&#39;</span><span class="p">,</span> <span class="n">snap</span> <span class="o">=</span> <span class="mi">430</span><span class="p">,</span> <span class="n">fdir</span> <span class="o">=</span> <span class="s1">&#39;/net/opal/Volumes/Amnesia/mpi3drun/Granflux&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The snapshot(s) being read can be defined when creating the object, or set/changed anytime later. Snaps can be ints, arrays, or lists.</p>
+</div>
+<div class="section" id="getting-variables-quantities">
+<h3>Getting Variables &amp; Quantities<a class="headerlink" href="#getting-variables-quantities" title="Permalink to this headline">¶</a></h3>
+<p>get_var and get_varTime can be used to read variables as well as to calculate quantities (with a call to _get_quantity). iix, iiy, and iiz can be specified to slice the return array (they can be ints, arrays, or lists). If iix, iiy, or iiz is not specified, get_var will read all the numerical domain along the x, y, or z axis, respectively. If no snapshot is specified, the current snap value will be used (either the initialized one, which is the first in the series, or the most recent snap used in set_snap or in a call to get_var). To get variable ‘r’ at snap 430 with only values at y = 200, z = 5, and z = 7:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">var1</span> <span class="o">=</span> <span class="n">dd</span><span class="o">.</span><span class="n">get_var</span><span class="p">(</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">snap</span> <span class="o">=</span> <span class="mi">430</span><span class="p">,</span> <span class="n">iiy</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">iiz</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">7</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>get_varTime can be used in the same fashion, with the added option of reading a specific variable or quantity from many snapshots at once. Its return arrays have an added dimension for time.</p>
+<p>Several of the class’s parameters can be found in the dictionary <em>params</em>. This dictionary contains information about time (t and dt) and the axes (dx, dy, dz) among other things. When snap contains more than one snapshot, many of the parameters in the dictionary contain one entry for each snap. To get time:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">time</span> <span class="o">=</span> <span class="n">dd</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;t&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>To view all available keys:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dd</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+</pre></div>
+</div>
+<table border="1" class="docutils" id="id1">
+<caption><span class="caption-text">Variables</span><a class="headerlink" href="#id1" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><th class="stub">Simple</th>
+<td>r, px, py, pz, e, bx, by, bz, p, tg, i1, i4, qjoule, qspitz</td>
+</tr>
+<tr class="row-even"><th class="stub">Composite</th>
+<td>ux, uy, uz, ee, s</td>
+</tr>
+</tbody>
+</table>
+<table border="1" class="docutils" id="id2">
+<caption><span class="caption-text">Calculated Quantities</span><a class="headerlink" href="#id2" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><th class="stub">Derivatives</th>
+<td>dxup, dyup, dzup, dxdn, dydn, dzdn</td>
+</tr>
+<tr class="row-even"><th class="stub">Centers vector quantity in cells</th>
+<td>xc, yc, zc</td>
+</tr>
+<tr class="row-odd"><th class="stub">Module of vector</th>
+<td>‘mod’ + root letter of varname (eg. modb)</td>
+</tr>
+<tr class="row-even"><th class="stub">Divergence of vector</th>
+<td>‘div’ + root letter of varname (eg. divb)</td>
+</tr>
+<tr class="row-odd"><th class="stub">Squared module</th>
+<td>root letter of varname + ‘2’ (eg. u2)</td>
+</tr>
+<tr class="row-even"><th class="stub">Ratio of two vars</th>
+<td>var1 + ‘rat’ + var2 (eg. rratpx)</td>
+</tr>
+<tr class="row-odd"><th class="stub">Eostab (unit conversion to SI)</th>
+<td>ne, tg, pg, kr, eps, opa, temt</td>
+</tr>
+<tr class="row-even"><th class="stub">Magnitude of vector components // or ⟂</th>
+<td>root letter of v1 + ‘par’ or ‘per’ + root letter of v2 (eg. uparb)</td>
+</tr>
+<tr class="row-odd"><th class="stub">Current</th>
+<td>ix, iy, iz, wx, wy, wz</td>
+</tr>
+<tr class="row-even"><th class="stub">Flux</th>
+<td>pfx, pfy, pfz, pfex, pfey, pfez, pfwx</td>
+</tr>
+<tr class="row-odd"><th class="stub">Plasma</th>
+<td>beta, va, cs, s, ke, mn, man, hp, vax, vay, hx, hy, hz, kx, ky, kz</td>
+</tr>
+<tr class="row-even"><th class="stub">Wave forces</th>
+<td>alf, fast, long</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="fftdata-class">
+<h3>FFTData Class<a class="headerlink" href="#fftdata-class" title="Permalink to this headline">¶</a></h3>
+<p>This class can be found within bifrost_fft.py. It performs operations on Bifrost simulation data in its native format. After creating a class for a specific snap root name and directory (much like with BifrostData), one can get a dictionary of the frequency and amplitude of the Fourier Transform for a certain quantity over a range of snapshots.</p>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="bq_t5.html" class="btn btn-neutral float-right" title="bq_t5_look Tool" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="index.html" class="btn btn-neutral" title="Welcome to helita and bifrost documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2018, Carmel Baharav.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'1.0',
+            LANGUAGE:'None',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
