@@ -96,6 +96,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#bifrost.py">bifrost.py</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#BifrostData-class">BifrostData class</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#Getting-variables-&amp;-quantities">Getting variables &amp; quantities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#Small-Demo">Small Demo</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#FFTData-class">FFTData class</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#1.-Using-cuda">1. Using cuda</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#2.-Using-python-multiprocessing">2. Using python multiprocessing</a></li>
@@ -584,12 +585,128 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 </tbody>
 </table>
 </div>
+<div class="section" id="Small-Demo">
+<h3>Small Demo<a class="headerlink" href="#Small-Demo" title="Permalink to this headline">¶</a></h3>
+<p>Here, we plot dz versus z, illustrating the non-uniform gaps in the z axis.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [18]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">helita.sim</span> <span class="kn">import</span> <span class="n">bifrost</span> <span class="k">as</span> <span class="n">br</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="n">rootname</span><span class="o">=</span><span class="s1">&#39;l2d90x40r_it&#39;</span> <span class="c1">#this is for the 2D case</span>
+<span class="n">fdir</span><span class="o">=</span><span class="s1">&#39;/net/opal/Volumes/Amnesia/mpi3drun/2Druns/genohm/rain/l2d90x40r&#39;</span>
+<span class="n">dd</span><span class="o">=</span><span class="n">br</span><span class="o">.</span><span class="n">BifrostData</span><span class="p">(</span><span class="n">rootname</span><span class="p">,</span><span class="n">fdir</span><span class="o">=</span><span class="n">fdir</span><span class="p">,</span> <span class="n">verbose</span> <span class="o">=</span> <span class="bp">False</span><span class="p">)</span> <span class="c1">#this loads the structure</span>
+<span class="n">var</span><span class="o">=</span><span class="n">dd</span><span class="o">.</span><span class="n">get_var</span><span class="p">(</span><span class="s1">&#39;r&#39;</span><span class="p">,</span><span class="mi">305</span><span class="p">)</span> <span class="c1">#this reads the density (r) for the instant 305</span>
+
+<span class="c1"># gets the z coordinates of data points and makes an empty array of the same length for values of dz</span>
+<span class="n">zArr</span> <span class="o">=</span> <span class="n">dd</span><span class="o">.</span><span class="n">z</span>
+<span class="n">length</span> <span class="o">=</span> <span class="n">zArr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">dzArr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="n">length</span><span class="p">])</span>
+
+<span class="c1"># iterates through zArr and sets each entry in dzArr as the difference between the next and current values of z</span>
+<span class="c1"># for the final value of dzArr, sets it to be the same as the previous value of dzArr</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">zArr</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">length</span> <span class="o">-</span> <span class="mi">1</span> <span class="p">:</span>
+        <span class="n">dzArr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">zArr</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">val</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="k">else</span> <span class="p">:</span>
+        <span class="n">dzArr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">dzArr</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+<span class="c1"># plots z vs dz and labels the axes</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">zArr</span><span class="p">,</span> <span class="n">dzArr</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;dZ&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop = True&#34;
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/helita_12_1.png" src="_images/helita_12_1.png" />
+</div>
+</div>
+<p>In this example, we interpolate temperature data from the simulation to conform to a uniform Z axis and plot both the data with both the original, and the even Z axes.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [21]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">scipy.interpolate</span> <span class="kn">as</span> <span class="nn">sp</span>
+<span class="kn">import</span> <span class="nn">pylab</span>
+<span class="c1"># bifrost already imported and dd initialized after previous example</span>
+
+<span class="k">def</span> <span class="nf">graphTemp</span><span class="p">(</span><span class="n">time</span><span class="p">):</span>
+    <span class="n">temp</span> <span class="o">=</span> <span class="n">dd</span><span class="o">.</span><span class="n">get_var</span><span class="p">(</span><span class="s1">&#39;tg&#39;</span><span class="p">,</span> <span class="n">time</span><span class="p">)</span>
+
+    <span class="n">zArr</span> <span class="o">=</span> <span class="n">dd</span><span class="o">.</span><span class="n">z</span>
+    <span class="n">xArr</span> <span class="o">=</span> <span class="n">dd</span><span class="o">.</span><span class="n">x</span>
+
+    <span class="c1"># at instant 305 -  x is uniform, y is kept constant, and z is non uniform</span>
+
+    <span class="c1"># converts the 3d array with width of 1 to 2d array (and transposes because otherwise image is sidewise)</span>
+    <span class="n">temp2D</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">temp</span><span class="p">[:,</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">f</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">interp2d</span><span class="p">(</span><span class="n">xArr</span><span class="p">,</span> <span class="n">zArr</span><span class="p">,</span> <span class="n">temp2D</span><span class="p">)</span>
+
+    <span class="c1"># makes a new uniform z, x is already uniform</span>
+    <span class="n">zLength</span> <span class="o">=</span> <span class="n">zArr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">zStart</span> <span class="o">=</span> <span class="n">zArr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">zEnd</span> <span class="o">=</span> <span class="n">zArr</span><span class="p">[</span><span class="n">zLength</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">newZ</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">zStart</span><span class="p">,</span> <span class="n">zEnd</span><span class="p">,</span> <span class="n">zLength</span><span class="p">)</span>
+
+    <span class="c1"># makes the interpolated data with the previously created interpolation function acting on the new uniform axes</span>
+    <span class="n">uniA</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">xArr</span><span class="p">,</span> <span class="n">newZ</span><span class="p">)</span>
+
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+
+    <span class="c1"># optional plotting of the non uniform data to show the difference</span>
+    <span class="n">ax0</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">ax0</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">temp2D</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;hot&#39;</span><span class="p">,</span> <span class="n">extent</span> <span class="o">=</span> <span class="p">(</span><span class="n">xArr</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">xArr</span><span class="p">[</span><span class="n">xArr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">zEnd</span><span class="p">,</span> <span class="n">zStart</span><span class="p">),</span> <span class="n">aspect</span> <span class="o">=</span> <span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="n">ax0</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Non-Uniform, Temperature at t = &#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">time</span><span class="p">))</span>
+
+    <span class="n">ax1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">uniA</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;hot&#39;</span><span class="p">,</span> <span class="n">extent</span> <span class="o">=</span> <span class="p">(</span><span class="n">xArr</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">xArr</span><span class="p">[</span><span class="n">xArr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">zEnd</span><span class="p">,</span> <span class="n">zStart</span><span class="p">),</span> <span class="n">aspect</span> <span class="o">=</span> <span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Uniform, Temperature at t = &#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">time</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="n">graphTemp</span><span class="p">(</span><span class="mi">300</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/helita_14_0.png" src="_images/helita_14_0.png" />
+</div>
+</div>
+</div>
 <div class="section" id="FFTData-class">
 <h3>FFTData class<a class="headerlink" href="#FFTData-class" title="Permalink to this headline">¶</a></h3>
 <p>This class can be found within bifrost_fft.py. It performs operations on Bifrost simulation data in its native format. After creating a class for a specific snap root name and directory (much like with BifrostData), one can get a dictionary of the frequency and amplitude of the Fourier Transform for a certain quantity over a range of snapshots.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>In [6]:
+<span></span>In [8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
@@ -599,7 +716,7 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 </div>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>In [7]:
+<span></span>In [9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
@@ -609,7 +726,7 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 </div>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>In [8]:
+<span></span>In [10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
@@ -623,13 +740,11 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop = True&#34;
-WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop = True&#34;
-WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop = True&#34;
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>In [9]:
+<span></span>In [11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
@@ -639,7 +754,7 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 </div>
 <div class="nboutput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>Out[9]:
+<span></span>Out[11]:
 </pre></div>
 </div>
 <div class="output_area highlight-none notranslate"><div class="highlight"><pre>
@@ -653,7 +768,7 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 <p>If pycuda is available, the code imports reikna (a python library that contains fft functions using pycuda). In order to make use of the GPU, use the function run_gpu(). The default is to <strong>not</strong> use the GPU, even if there is one available.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>In [10]:
+<span></span>In [12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
@@ -662,10 +777,10 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 </pre></div>
 </div>
 </div>
-<p>When get_fft() is called, the GPU will be used in accordance with the last call to run_gpu(). If the GPU has limited memory, the user can specify numBlocks in the call to get_fft. This will send the calculation over to the GPU in several blocks as opposed to all at once. To use 5 different blocks, a call would look like this:</p>
+<p>When get_fft() is called, the GPU will be used in accordance with the last call to run_gpu(). If the GPU has limited memory, the user can specify numBlocks in the call to get_fft(). This will send the calculation over to the GPU in several blocks as opposed to all at once. To use 5 different blocks, a call would look like this:</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>In [11]:
+<span></span>In [13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
@@ -679,7 +794,7 @@ WARNING: cstagger use has been turned off, turn it back on with &#34;dd.cstagop 
 <p>This can be used whether or not pycuda is available, as multiprocessing is a library that comes with python. It makes use of threading on the CPU. In order to use a multiprocessing threadpool when calculating the Fourier Transform, specify numThreads with a number greater than 1, when calling get_fft():</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre>
-<span></span>In [12]:
+<span></span>In [14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
