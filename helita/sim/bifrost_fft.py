@@ -188,7 +188,7 @@ class FFTData(BifrostData):
         """
 
         # gets data cube, already sliced with iix/iiy/iiz
-        if (not hasattr(self, 'preTransform')) and (type(snap) is not int):
+        if type(snap) is not str:
             self.linearTimeInterp(quantity, snap, iix, iiy, iiz)
             # finds frequency with evenly spaced times
             self.freq = np.fft.fftshift(np.fft.fftfreq(
