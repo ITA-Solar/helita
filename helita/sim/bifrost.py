@@ -422,7 +422,7 @@ class BifrostData(object):
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
-        if (snap is not None) and (snap != self.snap):
+        if (snap is not None) and np.any(snap != self.snap):
             if self.verbose:
                 print('(get_var): setsnap ', snap, self.snap)
             self.set_snap(snap)
