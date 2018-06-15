@@ -17,4 +17,4 @@ Contents:
    :maxdepth: 3
 
    helita.ipynb
-   bq_t5.rst
+   .. bq_t5.rst
