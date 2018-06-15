@@ -9,6 +9,7 @@ import os
 from .bifrost import BifrostData, Rhoeetab, read_idl_ascii
 import imp
 from multiprocessing.dummy import Pool as ThreadPool
+import scipy as sp
 
 try:
     imp.find_module('pycuda')
