@@ -345,7 +345,7 @@ class BifrostData(object):
 
             value[:, :, :, i] = self.get_var(
                 var, self.snap, iix=self.iix, iiy=self.iiy, iiz=self.iiz)
-            
+
         return value
 
     def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
@@ -402,7 +402,7 @@ class BifrostData(object):
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
-        
+
         else:
             if (iix is not None) and (iix != self.iix):
                 if self.verbose:
@@ -452,7 +452,7 @@ class BifrostData(object):
 
             if self.verbose:
                 print('reshaping ', var, self.xLength, self.yLength, self.zLength)
-    
+
             return np.reshape(val[self.iix, self.iiy, self.iiz], (
                                   self.xLength, self.yLength,
                                   self.zLength))
@@ -868,8 +868,8 @@ class BifrostData(object):
                 var = self.get_var('r')
                 return self.get_var('u2') * var * 0.5
 
-        elif quant == 'tau': 
-            
+        elif quant == 'tau':
+
             return self.calc_tau()
 
         elif quant in WAVE_QUANT:
@@ -907,7 +907,6 @@ class BifrostData(object):
                 uperb = self.get_var('uperb')
                 uperbVect = uperb * unitB
 
-                print(np.shape(uperbVect))
                 result = np.abs(cstagger.do(cstagger.do(
                     uperbVect[0], 'ddxdn'), 'xup') + cstagger.do(cstagger.do(
                         uperbVect[1], 'ddydn'), 'yup') + cstagger.do(
@@ -943,6 +942,7 @@ class BifrostData(object):
        # grph = 2.38049d-24 uni.GRPH
        # bk = 1.38e-16 uni.KBOLTZMANN
        crhmbf = 2.9256e-17
+       uni = bifrost_units()
        # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
        if not hasattr(self,'ne'):
            nel = self.get_var('ne')
@@ -955,11 +955,9 @@ class BifrostData(object):
            tg = self.tg
 
        if not hasattr(self,'r'):
-           r = self.get_var('r')
+           r = self.get_var('r') * uni.u_r
        else:
-           r = self.r
-
-       uni = bifrost_units()
+           r = self.r * uni.u_r
 
        tau = np.zeros((self.nx,self.ny,self.nz))+1.e-16
        xhmbf = np.zeros((self.nz))
@@ -968,7 +966,7 @@ class BifrostData(object):
                for iiz in range(self.nz):
                    xhmbf[iiz] = 1.03526e-16 * nel[iix,iiy,iiz] * crhmbf / \
                                 tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
-                                uni.EV_TO_ERG / uni.KBOLTZMANN / \
+                                uni.EV_TO_ERG / uni.KBOLTZMANN.value / \
                                 tg[iix,iiy,iiz]) * r[iix,iiy,iiz] / uni.GRPH
 
                for iiz in range(1,self.nz):
@@ -1458,8 +1456,7 @@ class Rhoeetab:
             dei = np.exp(self.lnei[iei]) - np.exp(self.lnei[iei-1])
             self.enttab[iei,0] = self.enttab[iei-1,0]+ 1.0 / self.tgt[iei,0] * dei
 
-        self.enttab = self.enttab - np.min(self.enttab) - 5.0e8
-        print(np.max(self.enttab))
+        self.enttab = np.log(self.enttab - np.min(self.enttab) - 5.0e8)
 
     def load_rad_table(self, radtabfile=None):
         ''' Loads rhoei_radtab table. '''
