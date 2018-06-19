@@ -649,7 +649,7 @@ class UVOTRTData(BifrostData):
 
     def dem_cuda(self, axis=2, vel_axis=np.linspace(- 20, 20, 21),
                  tg_axis=np.linspace(4, 9, 25), zcut=None,
-                 save_vdem = None):
+                 save_vdem = None, stepsize=0.001):
 
         if found:
             gridsplit = 128
@@ -671,12 +671,21 @@ class UVOTRTData(BifrostData):
 
             nvel = len(vel_axis)
             ntg = len(tg_axis)
+            if axis == 0:
+                nx = self.ny
+                ny = self.nz
+            elif axis == 1:
+                nx = self.nx
+                ny = self.nz
+            else:
+                nx = self.nx
+                ny = self.ny
 
             from br_dem import DEMRenderer
-            self.intcudamod = DEMRenderer(snap_range, template,axis=axis,
+            self.intcudamod = DEMRenderer(snap_range, template, axis=axis,
                                            data_dir=data_dir, snap=opts.snap,
-                                           cstagop=self.cstagop)
-            vdem = np.zeros((ntg, nvel, nx, ny))
+                                           cstagop=self.cstagop,zcut=zcut)
+            vdem = np.zeros((ntg-1, nvel-1, nx, ny))
             for itg in range(0, ntg - 1):
                 for ivel in range(0, nvel - 1):
                     self.intcudamod.load_minmax(tg_axis[itg], tg_axis[itg+1],
