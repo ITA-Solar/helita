@@ -376,8 +376,8 @@ class BifrostData(object):
                 temp = np.asarray(getattr(self, dim))
                 setattr(self, dim, temp.item())
 
-    def get_var(self, var, snap=None, iix=None, iiy=None,
-                iiz=None, *args, **kwargs):
+    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None),
+                iiz=slice(None), *args, **kwargs):
         """
         Reads a given variable from the relevant files.
         Parameters
@@ -398,21 +398,25 @@ class BifrostData(object):
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
         else:
-            if (iix is not None) and np.any(iix != self.iix):
+            if (iix != slice(None)) and np.any(iix != self.iix):
                 if self.verbose:
                     print('(get_var): iix ', iix, self.iix)
                 self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-            if (iiy is not None) and np.any(iiy != self.iiy):
+            if (iiy != slice(None)) and np.any(iiy != self.iiy):
                 if self.verbose:
                     print('(get_var): iiy ', iiy, self.iiy)
                 self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-            if (iiz is not None) and np.any(iiz != self.iiz):
+            if (iiz != slice(None)) and np.any(iiz != self.iiz):
                 if self.verbose:
                     print('(get_var): iiz ', iiz, self.iiz)
                 self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
 
-        if self.cstagop and ((self.iix is not None) or
-                             (self.iiy is not None) or (self.iiz is not None)):
+        if self.cstagop and ((self.iix != slice(None)) or
+                             (self.iiy != slice(None)) or
+                             (self.iiz != slice(None))):
+            print('x',self.iix)
+            print('y',self.iiy)
+            print('z',self.iiz)
             self.cstagop = False
             print(
                 'WARNING: cstagger use has been turned off,',
@@ -1078,7 +1082,7 @@ class BifrostData(object):
         # write to file
         if self.verbose:
             print('Write to file...')
-        rh15d.make_xarray_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
+        rh15d.make_hdf5_atmos(outfile, temp, vz, nh, z, ne=ne, x=x, y=y,
                                 append=append, Bx=Bx, By=By, Bz=Bz, desc=desc,
                                 snap=self.snap)
 
