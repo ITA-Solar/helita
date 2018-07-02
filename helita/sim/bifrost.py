@@ -951,7 +951,6 @@ class BifrostData(object):
 
        # grph = 2.38049d-24 uni.GRPH
        # bk = 1.38e-16 uni.KBOLTZMANN
-       crhmbf = 2.9256e-17
        uni = bifrost_units()
        # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
        if not hasattr(self,'ne'):
@@ -968,16 +967,17 @@ class BifrostData(object):
            r = self.get_var('r') * uni.u_r
        else:
            r = self.r * uni.u_r
-
-       tau = np.zeros((self.nx,self.ny,self.nz))+1.e-16
+       print(np.max(nel),np.max(tg),np.max(r))
+       tau = np.zeros((self.nx,self.ny,self.nz))+1.e-19
        xhmbf = np.zeros((self.nz))
+       const = (1.03526e-16 / uni.GRPH) / 1.0e6 * 2.9256e-17
        for iix in range(self.nx):
            for iiy in range(self.ny):
                for iiz in range(self.nz):
-                   xhmbf[iiz] = 1.03526e-16 * nel[iix,iiy,iiz] * crhmbf / \
+                   xhmbf[iiz] = const * nel[iix,iiy,iiz] / \
                                 tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
                                 uni.EV_TO_ERG / uni.KBOLTZMANN.value / \
-                                tg[iix,iiy,iiz]) * r[iix,iiy,iiz] / uni.GRPH
+                                tg[iix,iiy,iiz]) * r[iix,iiy,iiz]
 
                for iiz in range(1,self.nz):
                    tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] + \
