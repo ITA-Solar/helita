@@ -565,12 +565,11 @@ class BifrostData(object):
             print('Slicing and unit conversion...')
         temp = self.tg[sx, sy, sz]
         rho = self.r[sx, sy, sz]
-        rho = rho * ur
-        # TIAGO: must get this at cell centres!
+
         if self.do_mhd:
-            Bx = self.bx[sx, sy, sz]
-            By = self.by[sx, sy, sz]
-            Bz = self.bz[sx, sy, sz]
+            Bx = cstagger.xup(self.bx)[sx, sy, sz]
+            By = cstagger.yup(self.by)[sx, sy, sz]
+            Bz = cstagger.zup(self.bz)[sx, sy, sz]
             # Change sign of Bz (because of height scale) and By
             # (to make right-handed system)
             Bx = Bx * ub
@@ -579,12 +578,12 @@ class BifrostData(object):
         else:
             Bx = By = Bz = None
 
-        # TIAGO: must get this at cell centres!
-        vz = self.get_var('uz')[sx, sy, sz]
+        vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         x = self.x[sx] * ul
         y = self.y[sy] * (-ul)
         z = self.z[sz] * (-ul)
+        rho = rho * ur   # to cgs
         # convert from rho to H atoms, ideally from subs.dat. Otherwise
         # default.
         if hion:
