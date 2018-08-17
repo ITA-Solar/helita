@@ -663,15 +663,15 @@ class BifrostData(object):
             print('Slicing and unit conversion...')
         temp = self.tg[sx, sy, sz]
         rho = self.r[sx, sy, sz]
-        rho = rho * ur
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
-        vx = self.get_var('ux')[sx, sy, sz]
+        vx = cstagger.xup(self.px)[sx, sy, sz]
         vx *= uv
-        vy = self.get_var('uy')[sx, sy, sz]
+        vy = cstagger.yup(self.py)[sx, sy, sz]
         vy *= -uv
-        vz = self.get_var('uz')[sx, sy, sz]
+        vz = cstagger.zup(self.pz)[sx, sy, sz]
         vz *= -uv
+        rho = rho * ur  # to cgs
         x = self.x[sx] * ul
         y = self.y[sy] * ul
         z = self.z[sz] * (-ul)
