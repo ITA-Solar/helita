@@ -518,7 +518,7 @@ class BifrostData(object):
             elif isnap == 0:
                 filename = filename + '.hion.snap'
             elif isnap > 0:
-                filename = '%s_.hion%s.snap' % (self.file_root, isnap)
+                filename = '%s.hion_%s.snap' % (self.file_root, isnap)
         else:
             raise ValueError(('_get_simple_var: could not find variable '
                               '%s. Available variables:' % (var) +
@@ -635,15 +635,17 @@ class BifrostData(object):
         if (RATIO_QUANT in quant):
             # Calculate module of vector quantity
             q = quant[:quant.find(RATIO_QUANT)]
+            print(q)
             if q[0] == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             result = self.get_var(q)
             q = quant[quant.find(RATIO_QUANT) + 3:]
+            print(q)
             if q[0] == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            return result / self.get_var(q)
+            return result / (self.get_var(q)+1e-19)
 
         elif (quant[:3] in MODULE_QUANT) or (
                 quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
@@ -655,7 +657,9 @@ class BifrostData(object):
             if q == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
+            print('a1',q+ 'xc')
             result = self.get_var(q + 'xc') ** 2
+            print('a2',q+ 'yc')
             result += self.get_var(q + 'yc') ** 2
             if not(quant[-1] in MODULE_QUANT):
                 result += self.get_var(q + 'zc') ** 2
@@ -669,7 +673,7 @@ class BifrostData(object):
             # Calculate derivative of quantity
             axis = quant[-3]
             q = quant[1:-4]  # base variable
-
+            print('a3',q)
             var = self.get_var(q)
 
             if getattr(self, 'n' + axis) < 5:  # 2D or close
@@ -800,21 +804,24 @@ class BifrostData(object):
             except AttributeError:
                 if axis == 'x':
                     varsn = ['z', 'y']
-                    derv = ['ddydn', 'ddzdn']
+                    derv = ['dydn', 'dzdn']
                 elif axis == 'y':
                     varsn = ['x', 'z']
-                    derv = ['ddzdn', 'ddxdn']
+                    derv = ['dzdn', 'dxdn']
                 elif axis == 'z':
                     varsn = ['y', 'x']
-                    derv = ['ddxdn', 'ddydn']
-                var = self.get_var(q + varsn[0])
+                    derv = ['dxdn', 'dydn']
+                print('a4','d' + q + varsn[0]+derv[0])
+                var = self.get_var('d' + q + varsn[0] + derv[0])
                 # 2D or close
+                print('b')
+                #var = cstagger.do(var, derv[0])
+                print('c')
                 if (getattr(self, 'n' + varsn[0]) <
                         5) or (getattr(self, 'n' + varsn[1]) < 5):
                     return np.zeros_like(var)
                 else:
-                    return cstagger.do(var, derv[0]) - cstagger.do(
-                        self.get_var(q + varsn[1]), derv[1])
+                    return var - self.get_var('d' + q + varsn[1] + derv[1])
 
         elif quant in FLUX_QUANT:
             axis = quant[-1]
@@ -955,7 +962,6 @@ class BifrostData(object):
 
        # grph = 2.38049d-24 uni.GRPH
        # bk = 1.38e-16 uni.KBOLTZMANN
-       crhmbf = 2.9256e-17
        uni = bifrost_units()
        # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
        if not hasattr(self,'ne'):
@@ -972,16 +978,16 @@ class BifrostData(object):
            r = self.get_var('r') * uni.u_r
        else:
            r = self.r * uni.u_r
-
-       tau = np.zeros((self.nx,self.ny,self.nz))+1.e-16
+       tau = np.zeros((self.nx,self.ny,self.nz))+1.e-19
        xhmbf = np.zeros((self.nz))
+       const = (1.03526e-16 / uni.GRPH) / 1.0e6 * 2.9256e-17
        for iix in range(self.nx):
            for iiy in range(self.ny):
                for iiz in range(self.nz):
-                   xhmbf[iiz] = 1.03526e-16 * nel[iix,iiy,iiz] * crhmbf / \
+                   xhmbf[iiz] = const * nel[iix,iiy,iiz] / \
                                 tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
                                 uni.EV_TO_ERG / uni.KBOLTZMANN.value / \
-                                tg[iix,iiy,iiz]) * r[iix,iiy,iiz] / uni.GRPH
+                                tg[iix,iiy,iiz]) * r[iix,iiy,iiz]
 
                for iiz in range(1,self.nz):
                    tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] + \
