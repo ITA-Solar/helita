@@ -20,7 +20,7 @@ class BifrostData(object):
 
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
                  verbose=True, cstagop=True, dtype='f4', big_endian=False,
-                 ghost_analyse=False):
+                 ghost_analyse=False, lowbus=False, numThreads = 1):
         """
         Loads metadata and initialises variables.
         Parameters
@@ -60,6 +60,8 @@ class BifrostData(object):
         self.fdir = fdir
         self.verbose = verbose
         self.cstagop = cstagop
+        self.lowbus = lowbus
+        self.numThreads = numThreads
         self.file_root = os.path.join(self.fdir, file_root)
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
@@ -579,7 +581,7 @@ class BifrostData(object):
             # raise ValueError(('_get_composite_var: do not know (yet) how to'
             # 'get composite variable %s.' % var))
 
-    def _get_quantity(self, quant, numThreads=1, *args, **kwargs):
+    def _get_quantity(self, quant, *args, **kwargs):
         """
         Calculates a quantity from the simulation quantiables.
         Parameters
@@ -602,9 +604,10 @@ class BifrostData(object):
         - MODULE_QUANT: allows to calculate the module of any vector.
                         It must start with 'mod' followed with the root
                         letter of varname, e.g., 'modb'
-        - DIV_QUANT: allows to calculate the divergence of any vector.
-                     It must start with div followed with the root letter
-                     of the varname, e.g., 'divb'
+        - GRADVECT_QUANT: allows to calculate decompose the vector field.
+                     i.e., it calculates the divergence, rotation and shear.
+                     It must start with div, rot or she followed with the
+                     root letter of the varname, e.g., 'divb' or 'rotbx'
         - SQUARE_QUANT: allows to calculate the squared modules for any
                         vector. It must end with 2 after the root lelter
                         of the varname, e.g. 'u2'.
@@ -613,7 +616,9 @@ class BifrostData(object):
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
         CENTRE_QUANT = ['xc', 'yc', 'zc']
         MODULE_QUANT = ['mod', 'h']
-        DIV_QUANT = ['div']
+        HORVAR_QUANT = ['horvar']
+        GRADVECT_QUANT = ['div','rot','she']
+        GRADSCAL_QUANT = ['gra']
         SQUARE_QUANT = ['2']
         RATIO_QUANT = 'rat'
         EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
@@ -643,7 +648,7 @@ class BifrostData(object):
             if q[0] == 'b':
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
-            return result / self.get_var(q)
+            return result / (self.get_var(q)+1e-19)
 
         elif (quant[:3] in MODULE_QUANT) or (
                 quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
@@ -672,12 +677,41 @@ class BifrostData(object):
 
             var = self.get_var(q)
 
+            def deriv_loop(var,quant):
+                return cstagger.do(var, 'd' + quant[0])
+
             if getattr(self, 'n' + axis) < 5:  # 2D or close
                 print('(WWW) get_quantity: DERIV_QUANT: '
                       'n%s < 5, derivative set to 0.0' % axis)
                 return np.zeros_like(var)
             else:
-                return cstagger.do(var, 'd' + quant[-4:])
+                if self.numThreads > 1:
+                    if self.verbose:
+                        print('Threading')
+                    quantlist = [quant[-4:] for numb in range(self.numThreads)]
+                    if axis != 'z':
+                        return threadQuantity_z(
+                            deriv_loop, self.numThreads, var, quantlist)
+                    else:
+                        return threadQuantity_y(
+                            deriv_loop, self.numThreads, var, quantlist)
+                else:
+                    if self.lowbus:
+                        output = np.zeros_like(var)
+                        if axis != 'z':
+                            for iiz in range(self.nz):
+                                output[:,:,iiz] = np.reshape(cstagger.do(
+                                    var[:,:,iiz].reshape((self.nx,self.ny,1)),
+                                    'd' + quant[-4:]),(self.nx,self.ny))
+                        else:
+                            for iiy in range(self.ny):
+                                output[:,iiy,:] = np.reshape(cstagger.do(
+                                    var[:,iiy,:].reshape((self.nx,1,self.nz)),
+                                    'd' + quant[-4:]),(self.nx,self.nz))
+
+                        return output
+                    else:
+                        return cstagger.do(var, 'd' + quant[-4:])
 
         elif quant[-2:] in CENTRE_QUANT:
             # This brings a given vector quantity to cell centres
@@ -694,31 +728,129 @@ class BifrostData(object):
             transf = AXIS_TRANSFORM[axis]
 
             var = self.get_var(q, **kwargs)
+
             # 2D
             if getattr(self, 'n' + axis) < 5 or self.cstagop is False:
                 return var
             else:
                 if len(transf) == 2:
-                    tmp = cstagger.do(var, transf[0])
-                    return cstagger.do(tmp, transf[1])
+                    if self.lowbus:
+                        output = np.zeros_like(var)
+                        if transf[0][0] != 'z':
+                            for iiz in range(self.nz):
+                                output[:,:,iiz] = np.reshape(cstagger.do(
+                                    var[:,:,iiz].reshape((self.nx,self.ny,1)),
+                                    transf[0]),(self.nx,self.ny))
+                        else:
+                            for iiy in range(self.ny):
+                                output[:,iiy,:] = np.reshape(cstagger.do(
+                                    var[:,iiy,:].reshape((self.nx,1,self.nz)),
+                                    transf[0]),(self.nx,self.nz))
+
+                        if transf[1][0] != 'z':
+                            for iiz in range(self.nz):
+                                output[:,:,iiz] = np.reshape(cstagger.do(
+                                    output[:,:,iiz].reshape((self.nx,self.ny,1)),
+                                    transf[1]),(self.nx,self.ny))
+                        else:
+                            for iiy in range(self.ny):
+                                output[:,iiy,:] = np.reshape(cstagger.do(
+                                    output[:,iiy,:].reshape((self.nx,1,self.nz)),
+                                    transf[1]),(self.nx,self.nz))
+                        return output
+                    else:
+                        tmp = cstagger.do(var, transf[0])
+                        return cstagger.do(tmp, transf[1])
                 else:
-                    return cstagger.do(var, transf[0])
+                    if self.lowbus:
+                        output = np.zeros_like(var)
+                        if axis != 'z':
+                            for iiz in range(self.nz):
+                                output[:,:,iiz] = np.reshape(cstagger.do(
+                                    var[:,:,iiz].reshape((self.nx,self.ny,1)),
+                                    transf[0]),(self.nx,self.ny))
+                        else:
+                            for iiy in range(self.ny):
+                                output[:,iiy,:] = np.reshape(cstagger.do(
+                                    var[:,iiy,:].reshape((self.nx,1,self.nz)),
+                                    transf[0]),(self.nx,self.nz))
+                        return output
+                    else:
+                        return cstagger.do(var, transf[0])
 
-        elif quant[:3] in DIV_QUANT:
+        elif quant[:3] in GRADVECT_QUANT:
             # Calculates divergence of vector quantity
-            q = quant[3:]  # base variable
-            varx = self.get_var(q + 'x')
-            vary = self.get_var(q + 'y')
-            varz = self.get_var(q + 'z')
+            if quant[:3] == 'div':
+                q = quant[3:]  # base variable
+                if getattr(self, 'nx') < 5:  # 2D or close
+                    result = np.zeros_like(self.r)
+                else:
+                    result = self.get_var('d' + q + 'xdxup')
+                if getattr(self, 'ny') > 5:
+                    result += self.get_var('d' + q + 'ydyup')
+                if getattr(self, 'nz') > 5:
+                    result += self.get_var('d' + q + 'zdzup')
 
-            if getattr(self, 'nx') < 5:  # 2D or close
-                result = np.zeros_like(varx)
-            else:
-                result = cstagger.ddxup(varx)
-            if getattr(self, 'ny') > 5:
-                result += cstagger.ddyup(vary)
-            if getattr(self, 'nz') > 5:
-                result += cstagger.ddzup(varz)
+            if quant[:3] == 'rot' or quant[:3] == 'she':
+                q = quant[3:-1]  # base variable
+                qaxis = quant[-1]
+                if qaxis == 'x':
+                    if getattr(self, 'ny') < 5:  # 2D or close
+                        result = np.zeros_like(self.r)
+                    else:
+                        result = self.get_var('d' + q + 'zdyup')
+                    if getattr(self, 'nz') > 5:
+                        if quant[:3] == 'rot':
+                            result -= self.get_var('d' + q + 'ydzup')
+                        else:  # shear
+                            result += self.get_var('d' + q + 'ydzup')
+                if qaxis == 'y':
+                    if getattr(self, 'nz') < 5:  # 2D or close
+                        result = np.zeros_like(self.r)
+                    else:
+                        result = self.get_var('d' + q + 'xdzup')
+                    if getattr(self, 'nx') > 5:
+                        if quant[:3] == 'rot':
+                            result -= self.get_var('d' + q + 'zdxup')
+                        else: # shear
+                            result += self.get_var('d' + q + 'zdxup')
+                if qaxis == 'z':
+                    if getattr(self, 'nx') < 5:  # 2D or close
+                        result = np.zeros_like(self.r)
+                    else:
+                        result = self.get_var('d' + q + 'ydxup')
+                    if getattr(self, 'ny') > 5:
+                        if quant[:3] == 'rot':
+                            result -= self.get_var('d' + q + 'xdyup')
+                        else: #shear
+                            result += self.get_var('d' + q + 'xdyup')
+
+            return result
+
+        elif quant[:3] in GRADSCAL_QUANT:
+            # Calculates divergence of vector quantity
+            if quant[:3] == 'gra':
+                q = quant[3:]  # base variable
+                if getattr(self, 'nx') < 5:  # 2D or close
+                    result = np.zeros_like(self.r)
+                else:
+                    result = self.get_var('d' + q + 'dxup')
+                if getattr(self, 'ny') > 5:
+                    result += self.get_var('d' + q + 'dyup')
+                if getattr(self, 'nz') > 5:
+                    result += self.get_var('d' + q + 'dzup')
+            return result
+
+        elif quant[:6] in HORVAR_QUANT:
+            # Calculates divergence of vector quantity
+            if quant[:6] == 'horvar':
+                result = np.zeros_like(self.r)
+                result += self.get_var(quant[6:])  # base variable
+                horv = np.mean(np.mean(result,0),0)
+                print('shape horv',np.shape(horv))
+                for iix in range(0,getattr(self, 'nx')):
+                    for iiy in range(0,getattr(self, 'ny')):
+                        result[iix,iiy,:] = result[iix,iiy,:] / horv[:]
             return result
 
         elif quant in EOSTAB_QUANT:
@@ -779,12 +911,12 @@ class BifrostData(object):
 
                 return result
 
-            if numThreads > 1:
+            if self.numThreads > 1:
                 if self.verbose:
                     print('Threading')
 
                 return threadQuantity(
-                    proj_task, numThreads, x_a, y_a, z_a, x_b, y_b, z_b)
+                    proj_task, self.numThreads, x_a, y_a, z_a, x_b, y_b, z_b)
             else:
                 return proj_task(x_a, y_a, z_a, x_b, y_b, z_b)
 
@@ -800,21 +932,21 @@ class BifrostData(object):
             except AttributeError:
                 if axis == 'x':
                     varsn = ['z', 'y']
-                    derv = ['ddydn', 'ddzdn']
+                    derv = ['dydn', 'dzdn']
                 elif axis == 'y':
                     varsn = ['x', 'z']
-                    derv = ['ddzdn', 'ddxdn']
+                    derv = ['dzdn', 'dxdn']
                 elif axis == 'z':
                     varsn = ['y', 'x']
-                    derv = ['ddxdn', 'ddydn']
-                var = self.get_var(q + varsn[0])
+                    derv = ['dxdn', 'dydn']
+
                 # 2D or close
                 if (getattr(self, 'n' + varsn[0]) <
                         5) or (getattr(self, 'n' + varsn[1]) < 5):
                     return np.zeros_like(var)
                 else:
-                    return cstagger.do(var, derv[0]) - cstagger.do(
-                        self.get_var(q + varsn[1]), derv[1])
+                    return self.get_var('d' + q + varsn[0] + derv[0]) - \
+                        self.get_var('d' + q + varsn[1] + derv[1])
 
         elif quant in FLUX_QUANT:
             axis = quant[-1]
@@ -971,7 +1103,6 @@ class BifrostData(object):
            r = self.get_var('r') * uni.u_r
        else:
            r = self.r * uni.u_r
-       print(np.max(nel),np.max(tg),np.max(r))
        tau = np.zeros((self.nx,self.ny,self.nz))+1.e-19
        xhmbf = np.zeros((self.nz))
        const = (1.03526e-16 / uni.GRPH) / 1.0e6 * 2.9256e-17
@@ -1843,4 +1974,34 @@ def threadQuantity(task, numThreads, *args):
     # make threadpool, task = task, with zipped args
     pool = ThreadPool(processes=numThreads)
     result = np.concatenate(pool.starmap(task, zip(*args)))
+    return result
+
+def threadQuantity_y(task, numThreads, *args):
+    # split arg arrays
+    args = list(args)
+
+    for index in range(np.shape(args)[0]):
+        if len(np.shape(args[index])) == 3:
+            args[index] = np.array_split(args[index], numThreads,axis=1)
+        else:
+            args[index] = np.array_split(args[index], numThreads)
+    # make threadpool, task = task, with zipped args
+    pool = ThreadPool(processes=numThreads)
+    result = np.concatenate(pool.starmap(task, zip(*args)),axis=1)
+    return result
+
+def threadQuantity_z(task, numThreads, *args):
+    # split arg arrays
+    args = list(args)
+
+    for index in range(np.shape(args)[0]):
+        print(len(np.shape(args[index])))
+        if len(np.shape(args[index])) == 3:
+            args[index] = np.array_split(args[index], numThreads,axis=2)
+        else:
+            args[index] = np.array_split(args[index], numThreads)
+
+    # make threadpool, task = task, with zipped args
+    pool = ThreadPool(processes=numThreads)
+    result = np.concatenate(pool.starmap(task, zip(*args)),axis=2)
     return result
