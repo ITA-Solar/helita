@@ -520,7 +520,7 @@ class BifrostData(object):
             elif isnap == 0:
                 filename = filename + '.hion.snap'
             elif isnap > 0:
-                filename = '%s_.hion%s.snap' % (self.file_root, isnap)
+                filename = '%s.hion_%s.snap' % (self.file_root, isnap)
         else:
             raise ValueError(('_get_simple_var: could not find variable '
                               '%s. Available variables:' % (var) +
@@ -674,7 +674,6 @@ class BifrostData(object):
             # Calculate derivative of quantity
             axis = quant[-3]
             q = quant[1:-4]  # base variable
-
             var = self.get_var(q)
 
             def deriv_loop(var,quant):
@@ -941,6 +940,9 @@ class BifrostData(object):
                     derv = ['dxdn', 'dydn']
 
                 # 2D or close
+                print('b')
+                #var = cstagger.do(var, derv[0])
+                print('c')
                 if (getattr(self, 'n' + varsn[0]) <
                         5) or (getattr(self, 'n' + varsn[1]) < 5):
                     return np.zeros_like(var)
