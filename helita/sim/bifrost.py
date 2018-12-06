@@ -860,7 +860,7 @@ class BifrostData(object):
             if 'do_hion' in self.params and quant == 'ne':
                 if self.params['do_hion'][self.snapInd] > 0:
                     return self.get_var('hionne')
-            rho = self.r
+            rho = self.get_var('r')
             rho = rho * ur
             ee = self.get_var('ee')
             ee = ee * ue
@@ -965,7 +965,7 @@ class BifrostData(object):
                     self.get_var('u' + varsn[1] + 'c') *
                     self.get_var('b' + varsn[1] + 'c'))
             else:
-                var = self.r*0.0
+                var = self.get_var('r')*0.0
             if 'pfe' in quant or len(quant) == 3:
                 var -= self.get_var('u' + axis + 'c') * (
                     self.get_var('b' + varsn[0] + 'c')**2 +
@@ -1713,6 +1713,9 @@ class Rhoeetab:
         x = (np.log(ei) - self.lnei[0]) / self.dlnei
         y = (np.log(rho) - self.lnrho[0]) / self.dlnrho
         # interpolate quantity
+        print(np.shape(x))
+        print(np.shape(y))
+        print(np.shape(quant))
         result = ndimage.map_coordinates(
             quant, [x, y], order=order, mode='nearest')
         return (np.exp(result) if out != 'tg' else result)
