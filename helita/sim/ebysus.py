@@ -161,14 +161,9 @@ class EbysusData(BifrostData):
         elif not hasattr(self, 'mf_ilevel'):
             self.mf_ilevel = 1
 
-    def get_var(
-            self,
-            var,
-            snap=None,
-            mf_ispecies=None,
-            mf_ilevel=None,
-            *args,
-            **kwargs):
+    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None),
+                iiz=slice(None), mf_ispecies=None, mf_ilevel=None, *args,
+                **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -210,12 +205,40 @@ class EbysusData(BifrostData):
                 print("Warning: variable is only for electrons, "
                       "iSpecie changed to 1")
 
-        if (((snap is not None) and (snap != self.snap)) or ((
-                mf_ispecies is not None) and (
-                mf_ispecies != self.mf_ispecies)) or ((
-                mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
-            self.set_mfi(mf_ispecies, mf_ilevel)
+        if not hasattr(self, 'iix'):
+            self.set_domain_iiaxis(iinum=iix, iiaxis='x')
+            self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
+            self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
+        else:
+            if (iix != slice(None)) and np.any(iix != self.iix):
+                if self.verbose:
+                    print('(get_var): iix ', iix, self.iix)
+                self.set_domain_iiaxis(iinum=iix, iiaxis='x')
+            if (iiy != slice(None)) and np.any(iiy != self.iiy):
+                if self.verbose:
+                    print('(get_var): iiy ', iiy, self.iiy)
+                self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
+            if (iiz != slice(None)) and np.any(iiz != self.iiz):
+                if self.verbose:
+                    print('(get_var): iiz ', iiz, self.iiz)
+                self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
+
+        if self.cstagop and ((self.iix != slice(None)) or
+                             (self.iiy != slice(None)) or
+                             (self.iiz != slice(None))):
+            self.cstagop = False
+            print(
+                'WARNING: cstagger use has been turned off,',
+                'turn it back on with "dd.cstagop = True"')
+
+
+        if ((snap is not None) and np.any(snap != self.snap)):
             self.set_snap(snap)
+
+        if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)):
+            self.set_mfi(mf_ispecies, mf_ilevel)
+        elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
+            self.set_mfi(mf_ispecies, mf_ilevel)
 
         assert (self.mf_ispecies <= 28)
 
@@ -223,16 +246,33 @@ class EbysusData(BifrostData):
         # if var in self.variables:
         #     return self.variables[var]
         if var in self.simple_vars:  # is variable already loaded?
-            return self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel)
+            val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel)
         elif var in self.auxxyvars:
-            return super(EbysusData, self)._get_simple_var_xy(var)
+            val =  super(EbysusData, self)._get_simple_var_xy(var)
         else:
-            return self._get_composite_mf_var(var)
-        # else:
-        # raise ValueError(("get_var: could not read variable"
-        # "%s. Must be one of %s" %
-        # (var, str(self.simple_vars + self.compvars +
-        # self.auxxyvars))))'''
+            val =  self._get_composite_mf_var(var)
+
+        if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+
+            if np.size(self.iix)+np.size(self.iiy)+np.size(self.iiz) > 3:
+                # at least one slice has more than one value
+
+                # x axis may be squeezed out, axes for take()
+                axes = [0, -2, -1]
+
+                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
+                    if (np.size(getattr(self, dim)) > 1 or
+                            getattr(self, dim) != slice(None)):
+                        # slicing each dimension in turn
+                        val = val.take(getattr(self, dim), axis=axes[counter])
+            else:
+                # all of the slices are only one int or slice(None)
+                val = val[self.iix, self.iiy, self.iiz]
+
+            # ensuring that dimensions of size 1 are retained
+            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+
+        return val
 
     def _get_simple_var(
             self,
@@ -412,59 +452,40 @@ class EbysusData(BifrostData):
                 mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
-        def helper(var, *args, **kwargs):
-
-            if var in ['x', 'y', 'z']:
-                return getattr(self, var)
-
-            if var in self.simple_vars:  # is variable already loaded?
-                return self._get_simple_var(var, *args, **kwargs)
-            elif var in self.auxxyvars:
-                return self._get_simple_var_xy(var, *args, **kwargs)
-            elif var in self.compvars:  # add to variable list
-                self.variables[var] = self._get_composite_var(
-                    var, *args, **kwargs)
-                setattr(self, var, self.variables[var])
-                return self.variables[var]
-            else:
-                # raise ValueError(
-                # ("get_var: could not read variable %s. Must be "
-                # "one of %s" %
-                # (var,(self.simple_vars +self.compvars + self.auxxyvars))))
-                return self._get_quantity(var, *args, **kwargs)
-
-        # lengths for size of return array
+        # lengths for dimensions of return array
         self.xLength = 0
         self.yLength = 0
         self.zLength = 0
 
-        # indices for filling in the 4D return array
-        self.xInd = 0
-        self.yInd = 0
-        self.zInd = 0
-
         for dim in ('iix', 'iiy', 'iiz'):
             if getattr(self, dim) is None:
                 setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                setattr(self, dim[2] + 'Ind', slice(None))
                 setattr(self, dim, slice(None))
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
-                if indSize == 1:
-                    setattr(self, dim[2] + 'Ind', 0)
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
         for i in range(0, snapLen):
-            self.snapInd = i
+            self.snapInd = 0
             self._set_snapvars()
             self._init_vars()
-            helperCall = helper(var)[self.iix, self.iiy, self.iiz]
-            value[self.xInd, self.yInd, self.zInd, i] = helperCall
+            value[:, :, :, i] = self.get_var(
+                var, snap=snap[i], iix=self.iix, iiy=self.iiy, iiz=self.iiz,
+                mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel)
 
+        try:
+            if ((snap is not None) and (snap != self.snap)):
+                self.set_snap(snap)
+
+        except ValueError:
+            if ((snap is not None) and any(snap != self.snap)):
+                self.set_snap(snap)
+                
         return value
+
 
 ###########
 #  TOOLS  #
