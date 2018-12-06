@@ -121,7 +121,6 @@ class BifrostData(object):
                     raise ValueError(("(EEE) set_snap: snapshot not defined "
                                       "and no .idl files found"))
         self.snap = snap
-
         # if not (isinstance(snap, np.int64) or isinstance(snap, int)):
         if np.size(snap) > 1:
             self.snap_str = []
@@ -142,7 +141,7 @@ class BifrostData(object):
         """
         Reads parameter file (.idl)
         """
-        if type(self.snap) is int:
+        if np.shape(self.snap) is ():
             snap = [self.snap]
             snap_str = [self.snap_str]
         else:
@@ -342,7 +341,7 @@ class BifrostData(object):
             self._init_vars()
 
             value[:, :, :, i] = self.get_var(
-                var, self.snap, iix=self.iix, iiy=self.iiy, iiz=self.iiz)
+                var, self.snap[i], iix=self.iix, iiy=self.iiy, iiz=self.iiz)
 
         return value
 
@@ -416,9 +415,6 @@ class BifrostData(object):
         if self.cstagop and ((self.iix != slice(None)) or
                              (self.iiy != slice(None)) or
                              (self.iiz != slice(None))):
-            print('x',self.iix)
-            print('y',self.iiy)
-            print('z',self.iiz)
             self.cstagop = False
             print(
                 'WARNING: cstagger use has been turned off,',
@@ -617,7 +613,7 @@ class BifrostData(object):
         CENTRE_QUANT = ['xc', 'yc', 'zc']
         MODULE_QUANT = ['mod', 'h']
         HORVAR_QUANT = ['horvar']
-        GRADVECT_QUANT = ['div','rot','she']
+        GRADVECT_QUANT = ['div','rot','she','chkdiv']
         GRADSCAL_QUANT = ['gra']
         SQUARE_QUANT = ['2']
         RATIO_QUANT = 'rat'
@@ -777,7 +773,33 @@ class BifrostData(object):
                     else:
                         return cstagger.do(var, transf[0])
 
-        elif quant[:3] in GRADVECT_QUANT:
+        elif quant[:3] in GRADVECT_QUANT[:3]:
+
+            if GRADVECT_QUANT[:3] == 'chk':
+
+                # Calculates divergence of vector quantity
+                q = quant[6:]  # base variable
+                varx = self.get_var(q + 'x')
+                vary = self.get_var(q + 'y')
+                varz = self.get_var(q + 'z')
+
+                if getattr(self, 'nx') < 5:  # 2D or close
+                    result = np.zeros_like(varx)
+                else:
+                    result = cstagger.ddxup(varx)
+                if getattr(self, 'ny') > 5:
+                    varx = cstagger.ddyup(vary)
+                    result += varx
+                else:
+                    varx = np.zeros_like(varx)
+                if getattr(self, 'nz') > 5:
+                    vary = cstagger.ddzup(varz)
+                    result += vary
+                else:
+                    vary = np.zeros_like(varx)
+                varz = np.maximum(np.abs(result),np.abs(varx),np.abs(vary))
+                return np.abs(result)/(varz+1e-20)
+
             # Calculates divergence of vector quantity
             if quant[:3] == 'div':
                 q = quant[3:]  # base variable
@@ -959,7 +981,7 @@ class BifrostData(object):
             elif axis == 'z':
                 varsn = ['y', 'x']
             if 'pfw' in quant or len(quant) == 3:
-                var = self.get_var('b' + axis + 'c') * (
+                var -= self.get_var('b' + axis + 'c') * (
                     self.get_var('u' + varsn[0] + 'c') *
                     self.get_var('b' + varsn[0] + 'c') +
                     self.get_var('u' + varsn[1] + 'c') *
@@ -967,7 +989,7 @@ class BifrostData(object):
             else:
                 var = self.get_var('r')*0.0
             if 'pfe' in quant or len(quant) == 3:
-                var -= self.get_var('u' + axis + 'c') * (
+                var += self.get_var('u' + axis + 'c') * (
                     self.get_var('b' + varsn[0] + 'c')**2 +
                     self.get_var('b' + varsn[1] + 'c')**2)
             return var
@@ -1102,10 +1124,11 @@ class BifrostData(object):
            tg = self.tg
 
        if not hasattr(self,'r'):
-           r = self.get_var('r') * uni.u_r
+           rho = self.get_var('r') * uni.u_r
        else:
-           r = self.r * uni.u_r
-       tau = np.zeros((self.nx,self.ny,self.nz))+1.e-19
+           rho = self.r * uni.u_r
+
+       tau = np.zeros((self.nx,self.ny,self.nz)) + 1.e-16
        xhmbf = np.zeros((self.nz))
        const = (1.03526e-16 / uni.GRPH) / 1.0e6 * 2.9256e-17
        for iix in range(self.nx):
@@ -1114,11 +1137,11 @@ class BifrostData(object):
                    xhmbf[iiz] = const * nel[iix,iiy,iiz] / \
                                 tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
                                 uni.EV_TO_ERG / uni.KBOLTZMANN.value / \
-                                tg[iix,iiy,iiz]) * r[iix,iiy,iiz]
+                                tg[iix,iiy,iiz]) * rho[iix,iiy,iiz] / uni.GRPH
 
                for iiz in range(1,self.nz):
-                   tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] + \
-                                    xhmbf[iiz-1]) * np.abs(self.dz1d[iiz]) * 1.0e8
+                   tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] \
+                            + xhmbf[iiz-1]) * np.abs(self.dz1d[iiz]) * 1.0e8
 
        return tau
 
