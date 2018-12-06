@@ -613,7 +613,7 @@ class BifrostData(object):
         CENTRE_QUANT = ['xc', 'yc', 'zc']
         MODULE_QUANT = ['mod', 'h']
         HORVAR_QUANT = ['horvar']
-        GRADVECT_QUANT = ['div','rot','she','chkdiv']
+        GRADVECT_QUANT = ['div','rot','she','chkdiv','chbdiv']
         GRADSCAL_QUANT = ['gra']
         SQUARE_QUANT = ['2']
         RATIO_QUANT = 'rat'
@@ -779,6 +779,30 @@ class BifrostData(object):
 
                 # Calculates divergence of vector quantity
                 q = quant[6:]  # base variable
+
+                if getattr(self, 'nx') < 5:  # 2D or close
+                    result = np.zeros_like(varx)
+                else:
+                    result = self.get_var('d' + q + 'xdxup')
+
+                if getattr(self, 'ny') > 5:
+                    varx = self.get_var('d' + q + 'ydyup')
+                    result += varx
+                else:
+                    varx = np.zeros_like(varx)
+
+                if getattr(self, 'nz') > 5:
+                    vary = self.get_var('d' + q + 'zdzup')
+                    result += vary
+                else:
+                    vary = np.zeros_like(varx)
+
+                return np.abs(result)/( np.maximum(np.abs(result),np.abs(varx),np.abs(vary)) +1e-20)
+
+            if quant[:3] == 'chb':
+
+                # Calculates divergence of vector quantity                                                                                           
+                q = quant[6:]  # base variable
                 varx = self.get_var(q + 'x')
                 vary = self.get_var(q + 'y')
                 varz = self.get_var(q + 'z')
@@ -786,19 +810,15 @@ class BifrostData(object):
                 if getattr(self, 'nx') < 5:  # 2D or close
                     result = np.zeros_like(varx)
                 else:
-                    result = cstagger.ddxup(varx)
+                    result = self.get_var('d' + q + 'xdxup')
+
                 if getattr(self, 'ny') > 5:
-                    varx = cstagger.ddyup(vary)
-                    result += varx
-                else:
-                    varx = np.zeros_like(varx)
+                    result += self.get_var('d' + q + 'ydyup')
+
                 if getattr(self, 'nz') > 5:
-                    vary = cstagger.ddzup(varz)
-                    result += vary
-                else:
-                    vary = np.zeros_like(varx)
-                varz = np.maximum(np.abs(result),np.abs(varx),np.abs(vary))
-                return np.abs(result)/(varz+1e-20)
+                    result += self.get_var('d' + q + 'zdzup')
+
+                return np.abs(result/(np.sqrt(varx*varx+vary*vary+varz*varz)+1e-12))
 
             # Calculates divergence of vector quantity
             if quant[:3] == 'div':
