@@ -773,9 +773,9 @@ class BifrostData(object):
                     else:
                         return cstagger.do(var, transf[0])
 
-        elif quant[:3] in GRADVECT_QUANT[:3]:
+        elif quant[:6] in GRADVECT_QUANT:
 
-            if GRADVECT_QUANT[:3] == 'chk':
+            if quant[:3] == 'chk':
 
                 # Calculates divergence of vector quantity
                 q = quant[6:]  # base variable
