@@ -781,23 +781,21 @@ class BifrostData(object):
                 q = quant[6:]  # base variable
 
                 if getattr(self, 'nx') < 5:  # 2D or close
-                    result = np.zeros_like(varx)
+                    varx = np.zeros_like(self.r)
                 else:
-                    result = self.get_var('d' + q + 'xdxup')
-
+                    varx = self.get_var('d' + q + 'xdxup')
+                
                 if getattr(self, 'ny') > 5:
-                    varx = self.get_var('d' + q + 'ydyup')
-                    result += varx
-                else:
-                    varx = np.zeros_like(varx)
-
-                if getattr(self, 'nz') > 5:
-                    vary = self.get_var('d' + q + 'zdzup')
-                    result += vary
+                    vary = self.get_var('d' + q + 'ydyup')
                 else:
                     vary = np.zeros_like(varx)
 
-                return np.abs(result)/( np.maximum(np.abs(result),np.abs(varx),np.abs(vary)) +1e-20)
+                if getattr(self, 'nz') > 5:
+                    varz = self.get_var('d' + q + 'zdzup')
+                else:
+                    varz = np.zeros_like(varx)
+
+                return np.abs(varx+vary+varx)/(np.maximum(np.abs(varx),np.abs(vary),np.abs(varz)) +1e-20)
 
             if quant[:3] == 'chb':
 
