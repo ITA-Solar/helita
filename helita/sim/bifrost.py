@@ -613,7 +613,7 @@ class BifrostData(object):
         CENTRE_QUANT = ['xc', 'yc', 'zc']
         MODULE_QUANT = ['mod', 'h']
         HORVAR_QUANT = ['horvar']
-        GRADVECT_QUANT = ['div','rot','she','chkdiv','chbdiv']
+        GRADVECT_QUANT = ['div','rot','she','chkdiv','chbdiv','chhdiv']
         GRADSCAL_QUANT = ['gra']
         SQUARE_QUANT = ['2']
         RATIO_QUANT = 'rat'
@@ -817,6 +817,29 @@ class BifrostData(object):
                     result += self.get_var('d' + q + 'zdzup')
 
                 return np.abs(result/(np.sqrt(varx*varx+vary*vary+varz*varz)+1e-12))
+
+            if quant[:3] == 'chh':
+
+                # Calculates divergence of vector quantity                                                                                           
+                q = quant[6:]  # base variable
+                varx = self.get_var(q + 'x')
+                vary = self.get_var(q + 'y')
+                varz = self.get_var(q + 'z')
+
+                if getattr(self, 'nx') < 5:  # 2D or close
+                    result = np.zeros_like(varx)
+                else:
+                    result = self.get_var('d' + q + 'xdxup')
+
+                if getattr(self, 'ny') > 5:
+                    result += self.get_var('d' + q + 'ydyup')
+
+                if getattr(self, 'nz') > 5:
+                    result += self.get_var('d' + q + 'zdzup')
+
+                for iiz in range(0,self.nz):  
+                    result[:,:,iiz]=np.abs(result[:,:,iiz])/np.mean((np.sqrt(varx[:,:,iiz]**2+vary[:,:,iiz]**2+varz[:,:,iiz]**2)))
+                return result
 
             # Calculates divergence of vector quantity
             if quant[:3] == 'div':
