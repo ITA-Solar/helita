@@ -82,12 +82,15 @@ class BifrostData(object):
         if (self.do_mhd):
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
+        self.heliumvars = []
         if 'do_hion' in self.params:
             if self.params['do_hion'][self.snapInd] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
                                  'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
+            if self.params['do_helium'][self.snapInd] > 0:
+                self.heliumvars = ['nhe1', 'nhe2', 'nhe3']
         self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
-        self.simple_vars = self.snapvars + self.auxvars + self.hionvars
+        self.simple_vars = self.snapvars + self.auxvars + self.hionvars + self.heliumvars
         self.auxxyvars = []
         # special case for the ixy1 variable, lives in a separate file
         if 'ixy1' in self.auxvars:
@@ -517,6 +520,15 @@ class BifrostData(object):
                 filename = filename + '.hion.snap'
             elif isnap > 0:
                 filename = '%s.hion_%s.snap' % (self.file_root, isnap)
+        elif var in self.heliumvars:
+            idx = self.heliumvars.index(var)
+            isnap = self.params['isnap'][self.snapInd]
+            if isnap <= -1:
+                filename = filename + '.helium.snap.scr'
+            elif isnap == 0:
+                filename = filename + '.helium.snap'
+            elif isnap > 0:
+                filename = '%s.helium_%s.snap' % (self.file_root, isnap)
         else:
             raise ValueError(('_get_simple_var: could not find variable '
                               '%s. Available variables:' % (var) +
@@ -784,7 +796,7 @@ class BifrostData(object):
                     varx = np.zeros_like(self.r)
                 else:
                     varx = self.get_var('d' + q + 'xdxup')
-                
+
                 if getattr(self, 'ny') > 5:
                     vary = self.get_var('d' + q + 'ydyup')
                 else:
@@ -799,7 +811,7 @@ class BifrostData(object):
 
             if quant[:3] == 'chb':
 
-                # Calculates divergence of vector quantity                                                                                           
+                # Calculates divergence of vector quantity
                 q = quant[6:]  # base variable
                 varx = self.get_var(q + 'x')
                 vary = self.get_var(q + 'y')
@@ -820,7 +832,7 @@ class BifrostData(object):
 
             if quant[:3] == 'chh':
 
-                # Calculates divergence of vector quantity                                                                                           
+                # Calculates divergence of vector quantity
                 q = quant[6:]  # base variable
                 varx = self.get_var(q + 'x')
                 vary = self.get_var(q + 'y')
@@ -837,7 +849,7 @@ class BifrostData(object):
                 if getattr(self, 'nz') > 5:
                     result += self.get_var('d' + q + 'zdzup')
 
-                for iiz in range(0,self.nz):  
+                for iiz in range(0,self.nz):
                     result[:,:,iiz]=np.abs(result[:,:,iiz])/np.mean((np.sqrt(varx[:,:,iiz]**2+vary[:,:,iiz]**2+varz[:,:,iiz]**2)))
                 return result
 
@@ -1022,7 +1034,7 @@ class BifrostData(object):
             elif axis == 'z':
                 varsn = ['y', 'x']
             if 'pfw' in quant or len(quant) == 3:
-                var -= self.get_var('b' + axis + 'c') * (
+                var = - self.get_var('b' + axis + 'c') * (
                     self.get_var('u' + varsn[0] + 'c') *
                     self.get_var('b' + varsn[0] + 'c') +
                     self.get_var('u' + varsn[1] + 'c') *
