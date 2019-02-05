@@ -2,10 +2,12 @@
 Set of programs and tools to read the outputs from RH, 1.5D version
 """
 import os
+import warnings
 import datetime
 import numpy as np
 import xarray as xr
 import h5py
+from io import StringIO
 
 
 class Rh15dout:
@@ -292,6 +294,140 @@ class NcdfAtmos:
 class DataHolder:
     def __init__(self):
         pass
+
+class AtomFile:
+    """
+    Class to hold data from an RH or MULTI atom file.
+
+    Parameters
+    ----------
+    filename: str
+        String with atom file name.
+    format: str
+        Can be 'RH' (default) or 'MULTI'.
+    """
+    def __init__(self, filename, format='RH'):
+        self.read_atom(filename, format)
+
+    def read_atom(self, filename, format='RH'):
+        data = []
+        counter = 0
+        with open(filename, 'r') as atom_file:
+            for line in atom_file:
+                tmp = line.strip()
+                # clean up comments and blank lines
+                if len(tmp) == 0:
+                    continue
+                if tmp[0] in ['#', '*']:
+                    continue
+                data.append(tmp)
+        self.element = data[0]
+        nlevel, nline, ncont, nfixed = np.array(data[1].split(), dtype='i')
+        self.nlevel = nlevel
+        self.nline = nline
+        self.ncont = ncont
+        self.nfixed = nfixed
+        counter += 2
+
+        # read levels
+        self.levels = read_atom_levels(data[counter:counter + nlevel])
+        counter += nlevel
+        # read lines
+        tmp = StringIO('\n'.join(data[counter:counter + nline]))
+        data_type = [('level_start', 'i4'), ('level_end', 'i4'),
+                     ('f_value', 'f8'), ('type', 'U10'), ('nlambda', 'i'),
+                     ('symmetric', 'U10'), ('qcore', 'f8'), ('qwing', 'f8'),
+                     ('vdApprox', 'U10'), ('vdWaals', 'f8', (4,)),
+                     ('radiative_broadening', 'f8'), ('stark_broadening', 'f8')]
+        self.lines = np.genfromtxt(tmp, dtype=data_type)
+        counter += nline
+        # read continua
+        self.continua = []
+        for _ in range(ncont):
+            line = data[counter].split()
+            counter += 1
+            result = {}
+            result['level_start'] = int(line[0])
+            result['level_end'] = int(line[1])
+            result['edge_cross_section'] = float(line[2])
+            result['nlambda'] = int(line[3])
+            result['wave_min'] = float(line[5])
+            if line[4].upper() == 'EXPLICIT':  # different for Multi?
+                tmp = '\n'.join(data[counter:counter + result['nlambda']])
+                counter += result['nlambda']
+                result['cross_section'] = np.genfromtxt(StringIO(tmp))
+            self.continua.append(result)
+        # read collisions
+        ### IN MULTI FORMAT COLLISIONS START WITH GENCOL
+        ### Also in MULTI, must merge together lines that are written in
+        ### free format (ie, not prefixed by OMEGA, CE, etc...)
+        self.collision_temperatures = []
+        self.collision_tables = []
+        # Keys for rates given as function of temperature
+        COLLISION_KEYS_TEMP = ['OMEGA', 'CE', 'CI', 'CP', 'CH', 'CH0', 'CH+',
+                               'CR']
+        # Keys for rates written as single line
+        COLLISION_KEYS_LINE = ['AR85-CEA', 'AR85-CHP', 'AR85-CHH', 'SHULL82',
+                               'BURGESS', 'SUMMERS']
+        COLLISION_KEYS_OTHER = ['AR85-CDI', 'BADNELL']
+        unread_lines = False
+        while counter < len(data) - 1:
+            line = data[counter].split()
+            key = line[0].upper()
+            result = {}
+            if key == 'END':
+                break
+            elif key == 'TEMP':
+                temp_tmp = np.array(line[2:]).astype('f')
+                self.collision_temperatures.append(temp_tmp)
+            # Collision rates given as function of temperature
+            elif key in COLLISION_KEYS_TEMP:
+                assert self.collision_temperatures, ('No temperature block'
+                         ' found before %s table' % (key))
+                result = {'type': key, 'level_start': int(line[1]),
+                          'level_end': int(line[2]),
+                          'temp_index': len(self.collision_temperatures) - 1,
+                          'data': np.array(line[3:]).astype('d')}
+                assert len(result['data']) == len(temp_tmp), ('Inconsistent '
+                    'number of points between temperature and collision table')
+            elif key in COLLISION_KEYS_LINE:
+                if key == "SUMMERS":
+                    result = {'type': key, 'data': float(line[1])}
+                else:
+                    result = {'type': key, 'level_start': int(line[1]),
+                              'level_end': int(line[2]),
+                              'data': np.array(line[2:]).astype('f')}
+            elif key in ["AR85-CDI", "BADNELL"]:
+                assert len(line) == 4, '%s must have exactly 3 arguments' % key
+                result = {'type': key, 'level_start': int(line[1]),
+                          'level_end': int(line[2])}
+                if key == "BADNELL":
+                    rows = 2
+                else:
+                    rows = int(line[3])
+                tmp = data[counter + 1: counter + 1 + rows]
+                result['data'] = np.array([l.split() for l in tmp]).astype('d')
+                counter += rows
+            else:
+                unread_lines = True
+
+            if result:
+                self.collision_tables.append(result)
+            counter += 1
+
+        if unread_lines:
+            warnings.warn("Some lines in collision section were not understood",
+                          RuntimeWarning)
+
+def read_atom_levels(data):
+    tmp = []
+    for line in data:
+        buf = line.split("'")
+        assert len(buf) == 3
+        tmp.append(tuple(buf[0].split() + [buf[1].strip()] + buf[2].split()[:2]))
+    return np.array(tmp, dtype=[('energy', 'f8'), ('g_factor', 'f8'),
+                                ('label', '|U30'), ('stage', 'i4'),
+                                ('level_no','i4')])
 
 
 def read_ncdf(inclass, infile):
