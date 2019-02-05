@@ -10,7 +10,7 @@ import numba
 import scipy as sp
 from scipy.ndimage import map_coordinates
 from multiprocessing.dummy import Pool as ThreadPool
-
+import scipy.ndimage as ndimage
 
 class BifrostData(object):
     """
@@ -274,7 +274,10 @@ class BifrostData(object):
             self.dzidzup = np.zeros(self.nz) + 1. / self.dz
             self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
 
-        self.dz1d = np.gradient(self.z)
+        if self.nz > 1:
+            self.dz1d = np.gradient(self.z)
+        else:
+            self.dz1d = np.zeros(self.nz)
 
     def _init_vars(self, *args, **kwargs):
         """
@@ -541,7 +544,12 @@ class BifrostData(object):
             offset = (self.nx * self.ny *
                       (self.nzb + (self.nzb - self.nz) // 2) * idx * dsize)
             ss = (self.nx, self.ny, self.nz)
-        return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
+
+        if var in self.heliumvars:
+            return np.exp(np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
+                         offset=offset, shape=ss))
+        else:
+            return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
                          offset=offset, shape=ss)
 
     def _get_simple_var_xy(self, var, order='F', mode='r'):
@@ -635,10 +643,18 @@ class BifrostData(object):
         CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
         FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
                       'pfwy', 'pfwz']
-        PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke',
-                        'mn', 'man', 'hp', 'vax', 'vay', 'vaz',
-                        'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
+        PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke','mn', 'man', 'hp',
+                    'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
         WAVE_QUANT = ['alf', 'fast', 'long']
+        CYCL_RES = ['n6nhe2', 'n6nhe3','nhe2nhe3']
+        elemlist = ['h','he','c','o','ne','na','mg','al','si','s','k','ca',
+                    'cr','fe','ni']
+        CROSTAB_QUANT = ['h_' + clist for clist in elemlist]
+        CROSTAB_QUANT = CROSTAB_QUANT + ['he_' + clist for clist in elemlist]
+        COLFRE_QUANT = ['nu' + croslist for croslist in CROSTAB_QUANT]
+        COLFRI_QUANT = ['nuh_i','nuhe_i','nuh_n','nuhe_n','nu_ni']
+        IONP_QUANT = ['n' + croslist + '-' for croslist in elemlist]
+        IONP_QUANT = IONP_QUANT + ['r' + croslist+ '-' for croslist in elemlist]
 
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
@@ -657,26 +673,6 @@ class BifrostData(object):
                 if not self.do_mhd:
                     raise ValueError("No magnetic field available.")
             return result / (self.get_var(q)+1e-19)
-
-        elif (quant[:3] in MODULE_QUANT) or (
-                quant[-1] in MODULE_QUANT) or (quant[-1] in SQUARE_QUANT):
-            # Calculate module of vector quantity
-            if (quant[:3] in MODULE_QUANT):
-                q = quant[3:]
-            else:
-                q = quant[:-1]
-            if q == 'b':
-                if not self.do_mhd:
-                    raise ValueError("No magnetic field available.")
-            result = self.get_var(q + 'xc') ** 2
-            result += self.get_var(q + 'yc') ** 2
-            if not(quant[-1] in MODULE_QUANT):
-                result += self.get_var(q + 'zc') ** 2
-
-            if (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT):
-                return np.sqrt(result)
-            elif quant[-1] in SQUARE_QUANT:
-                return result
 
         elif quant[0] == 'd' and quant[-4:] in DERIV_QUANT:
             # Calculate derivative of quantity
@@ -921,7 +917,6 @@ class BifrostData(object):
                 result = np.zeros_like(self.r)
                 result += self.get_var(quant[6:])  # base variable
                 horv = np.mean(np.mean(result,0),0)
-                print('shape horv',np.shape(horv))
                 for iix in range(0,getattr(self, 'nx')):
                     for iiy in range(0,getattr(self, 'ny')):
                         result[iix,iiy,:] = result[iix,iiy,:] / horv[:]
@@ -1015,9 +1010,7 @@ class BifrostData(object):
                     derv = ['dxdn', 'dydn']
 
                 # 2D or close
-                print('b')
                 #var = cstagger.do(var, derv[0])
-                print('c')
                 if (getattr(self, 'n' + varsn[0]) <
                         5) or (getattr(self, 'n' + varsn[1]) < 5):
                     return np.zeros_like(var)
@@ -1149,6 +1142,167 @@ class BifrostData(object):
 
             return result
 
+        elif quant in CYCL_RES:
+            if self.params['do_hion'] == 1 and self.params['do_helium'] == 1:
+                posn = ( [pos for pos, char in enumerate(quant) if char == 'n'])
+                q2=quant[posn[-1]:]
+                var2=self.get_var(q2)
+                nel=self.get_var('hionne')
+                uni = bifrost_units()
+                if quant[:3] == 'nhe':
+                    mass = uni.msi_He
+                else:
+                    mass = uni.msi_p
+                return self.get_var('modb')*uni.usi_b * uni.QSI_ELECTRON.value * var2 \
+                        / nel / mass
+
+            else:
+                raise ValueError(('get_quantity: This variable is only '
+                                  'avaiable if do_hion and do_helium is true'))
+
+        elif quant in CROSTAB_QUANT:
+
+            uni=bifrost_units()
+
+            tg = self.get_var('tg')
+            elem = quant.split('_')
+            spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
+            spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
+
+            cross_tab = ''
+            crossunits = 2.8e-17
+            if spic1 == 'h':
+                if spic2 == 'h':
+                    cross_tab = 'p-H-elast.txt'
+                elif spic2 == 'he':
+                    cross_tab = 'p-He.txt'
+                elif spic2 == 'e':
+                    cross_tab = 'e-H.txt'
+                    crossunits = 1e-16
+                else:
+                    cross = uni.weightdic[spic2]/uni.weightdic['h']*uni.cross_p*np.ones(np.shape(tg))
+            elif spic1 == 'he':
+                if spic2 == 'h':
+                    cross_tab = 'p-H-elast.txt'
+                elif spic2 == 'he':
+                    cross_tab = 'He-He.txt'
+                    crossunits = 1e-16
+                elif spic2 == 'e':
+                    cross_tab = 'e-He.txt'
+                else:
+                    cross = uni.weightdic[spic2]/uni.weightdic['he']*uni.cross_he*np.ones(np.shape(tg))
+            elif spic1 == 'e':
+                if spic2 == 'h':
+                    cross_tab = 'e-H.txt'
+                elif spic2 == 'he':
+                    cross_tab = 'e-He.txt'
+            if cross_tab != '':
+                crossobj = cross_sect(cross_tab=[cross_tab])
+                cross = crossunits*crossobj.tab_interp(tg)
+            try:
+                return cross
+            except Exception:
+                print('(WWW) cross-section: wrong combination of species')
+
+        elif ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
+
+            uni=bifrost_units()
+
+            elem = quant.split('_')
+            spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
+            ion1 = ''.join([i for i in elem[0] if i.isdigit()])
+            spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
+            ion2 = ''.join([i for i in elem[1] if i.isdigit()])
+
+            spic1 = spic1[2:]
+            crossarr = self.get_var('%s_%s' % (spic1,spic2))
+            nspic2 = self.get_var('n%s-%s' % (spic2,ion2))
+
+            tg = self.get_var('tg')
+            awg1=uni.weightdic[spic1]*uni.AMU.value
+            awg2=uni.weightdic[spic2]*uni.AMU.value
+
+            scr1=np.sqrt(8.0*uni.KBOLTZMANN.value*tg/uni.pi)
+
+            return  crossarr*np.sqrt((awg1+awg2)/(awg1*awg2))*scr1*nspic2* \
+                (awg1/(awg1+awg1))
+
+        elif ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT:
+            if quant == 'nu_ni':
+                result = uni.m_h * self.get_var('nh-1') * self.get_var('nuh1_i') + \
+                        uni.m_he * self.get_var('nhe-1') * self.get_var('nuhe1_i')
+            else:
+                if quant[-2:] == '_i':
+                    lvl = '2'
+                else:
+                    lvl = '1'
+                elem = quant.split('_')
+                result = np.zeros(np.shape(self.r))
+                for ielem in elemlist:
+                    if elem[0][2:] != '%s%s' %(ielem,lvl):
+                        result += self.get_var('%s_%s%s' %(elem[0],ielem,lvl))
+                if self.params['do_helium'] == 1 and quant[-2:] == '_i':
+                    result += self.get_var('%s_%s' %(elem[0],'he3'))
+            return result
+
+        elif ''.join([i for i in quant if not i.isdigit()]) in IONP_QUANT:
+
+            uni=bifrost_units()
+
+            elem = quant.split('_')
+            spic = ''.join([i for i in elem[0] if not i.isdigit()])
+            lvl = ''.join([i for i in elem[0] if i.isdigit()])
+            if self.params['do_hion'] == 1 and spic[1:-1] == 'h':
+                if quant[0] == 'n':
+                    mass = 1.0
+                else:
+                    mass = uni.m_h
+                if lvl == '1':
+                    return mass * (self.get_var('n1') + \
+                        self.get_var('n2') + self.get_var('n3') +
+                        self.get_var('n4') + self.get_var('n5'))
+                else:
+                    return mass * self.get_var('n6')
+            elif self.params['do_helium'] == 1 and spic[1:-1] == 'he':
+                if quant[0] == 'n':
+                    mass = 1.0
+                else:
+                    mass = uni.m_he
+                if self.verbose:
+                    print('get_var: reading nhe%s' % lvl)
+                return mass * self.get_var('nhe%s' % lvl)
+
+            else:
+                tg = self.get_var('tg')
+                r = self.get_var('r')
+                nel = self.get_var('ne')/1e6  # 1e6 conversion from SI to cgs
+
+                if quant[0] == 'n':
+                    dens = False
+                else:
+                    dens = True
+                return ionpopulation(r,nel,tg,elem=spic[1:-1],lvl=lvl,dens=dens)
+        elif ((quant[:3] in MODULE_QUANT) or (
+                quant[-1] in MODULE_QUANT) or (
+                quant[-1] in SQUARE_QUANT and not quant in CYCL_RES)):
+            # Calculate module of vector quantity
+            if (quant[:3] in MODULE_QUANT):
+                q = quant[3:]
+            else:
+                q = quant[:-1]
+            if q == 'b':
+                if not self.do_mhd:
+                    raise ValueError("No magnetic field available.")
+            result = self.get_var(q + 'xc') ** 2
+            result += self.get_var(q + 'yc') ** 2
+            if not(quant[-1] in MODULE_QUANT):
+                result += self.get_var(q + 'zc') ** 2
+
+            if (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT):
+                return np.sqrt(result)
+            elif quant[-1] in SQUARE_QUANT:
+                return result
+
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
@@ -1183,19 +1337,18 @@ class BifrostData(object):
 
        tau = np.zeros((self.nx,self.ny,self.nz)) + 1.e-16
        xhmbf = np.zeros((self.nz))
-       const = (1.03526e-16 / uni.GRPH) / 1.0e6 * 2.9256e-17
+       const = (1.03526e-16 / uni.GRPH)  * 2.9256e-17 / 1e6
        for iix in range(self.nx):
            for iiy in range(self.ny):
                for iiz in range(self.nz):
                    xhmbf[iiz] = const * nel[iix,iiy,iiz] / \
                                 tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
                                 uni.EV_TO_ERG / uni.KBOLTZMANN.value / \
-                                tg[iix,iiy,iiz]) * rho[iix,iiy,iiz] / uni.GRPH
+                                tg[iix,iiy,iiz]) * rho[iix,iiy,iiz]
 
                for iiz in range(1,self.nz):
                    tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] \
                             + xhmbf[iiz-1]) * np.abs(self.dz1d[iiz]) * 1.0e8
-
        return tau
 
     def write_rh15d(self, outfile, desc=None, append=True,
@@ -1345,7 +1498,8 @@ class BifrostData(object):
         z = self.z[sz] * (-ul)
         # if Hion, get nH and ne directly
         if hion:
-            print('Getting hion data...')
+            if self.verbose:
+                print('Getting hion data...')
             ne = self.get_var('hionne')
             # slice and convert from cm^-3 to m^-3
             ne = ne[sx, sy, sz]
@@ -1566,6 +1720,7 @@ class bifrost_units():
     msi_p = mu * msi_H  # Mass per particle
     usi_tg = (msi_H / ksi_B) * usi_ee
     msi_e = const.m_e  # 9.1093897e-31
+    usi_b = u_b * 1e-4
 
     # Solar gravity
     gsun = 27400.0  # (cgs)
@@ -1608,6 +1763,31 @@ class bifrost_units():
     ergd2wd = 0.1
     GRPH = 2.27e-24
 
+    cross_p  = 1.59880e-14
+    cross_he = 9.10010e-17
+
+    di = 4.478007 # Dissociation energy of H2 [eV] from Barklem & Collet (2016)
+
+    atomdic = {'h':1, 'he':2, 'c':3, 'n':4, 'o':5, 'ne':6, 'na':7,
+               'mg':8, 'al':9, 'si':10, 's':11, 'k':12, 'ca':13, 'cr':14,
+               'fe':15, 'ni':16}
+    abnddic =  {'h':12.0, 'he':11.0, 'c':8.55, 'n':7.93, 'o':8.77, 'ne':8.51,
+                'na':6.18, 'mg':7.48, 'al':6.4, 'si':7.55, 's':5.21, 'k':5.05,
+                'ca':6.33, 'cr':5.47, 'fe':7.5, 'ni':5.08}
+    weightdic = {'h':1.008, 'he':4.003, 'c':12.01, 'n':14.01,
+                'o':16.00, 'ne':20.18, 'na':23.00, 'mg':24.32,
+                'al':26.97, 'si':28.06, 's':32.06, 'k':39.10,
+                'ca':40.08, 'cr':52.01, 'fe':55.85, 'ni':58.69}
+    xidic = {'h':13.595, 'he':24.580, 'c':11.256, 'n':14.529,
+            'o':13.614, 'ne':21.559, 'na':5.138, 'mg':7.644,
+            'al':5.984, 'si':8.149, 's':10.357, 'k':4.339,
+            'ca':6.111, 'cr':6.763, 'fe':7.896, 'ni':7.633}
+    u0dic = {'h':2., 'he':1., 'c':9.3, 'n':4., 'o':8.7 ,
+            'ne':1., 'na':2., 'mg':1., 'al':5.9, 'si':9.5 , 's':8.1,
+            'k':2.1, 'ca':1.2, 'cr':10.5, 'fe':26.9, 'ni':29.5}
+    u1dic = {'h':1., 'he':2., 'c':6., 'n':9.,  'o':4.,  'ne':5.,
+            'na':1., 'mg':2., 'al':1., 'si':5.7, 's':4.1, 'k':1.,
+            'ca':2.2, 'cr':7.2, 'fe':42.7, 'ni':10.5}
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
@@ -1624,6 +1804,7 @@ class Rhoeetab:
             tabfile = '%s/tabparam.in' % (fdir)
         self.param = self.read_tab_file(tabfile)
         # load table(s)
+        self.params['abund'] = 10**(self.params['abund'] -12.0)
         self.load_eos_table()
         if radtab:
             self.load_rad_table()
@@ -1704,7 +1885,7 @@ class Rhoeetab:
         return
 
     def get_table(self, out='ne', bine=None, order=1):
-        import scipy.ndimage as ndimage
+
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
                  'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab',
                  'ent': 'enttab'}
@@ -1744,7 +1925,7 @@ class Rhoeetab:
                 'opa'  : opacity
                 'temt' : thermal emission
         '''
-        import scipy.ndimage as ndimage
+
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
                  'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab',
                  'ent': 'enttab'}
@@ -1789,9 +1970,7 @@ class Rhoeetab:
         x = (np.log(ei) - self.lnei[0]) / self.dlnei
         y = (np.log(rho) - self.lnrho[0]) / self.dlnrho
         # interpolate quantity
-        print(np.shape(x))
-        print(np.shape(y))
-        print(np.shape(quant))
+
         result = ndimage.map_coordinates(
             quant, [x, y], order=order, mode='nearest')
         return (np.exp(result) if out != 'tg' else result)
@@ -1871,7 +2050,6 @@ class Opatab:
         '''
         Interpolates the opa table to same format as tg table.
         '''
-        import scipy.ndimage as ndimage
         self.load_opa1d_table()
         rhoeetab = Rhoeetab(fdir=self.fdir)
         tgTable = rhoeetab.get_table('tg')
@@ -1917,6 +2095,71 @@ class Opatab:
         if self.verbose:
             print('*** Read OPA table from ' + tabname)
 
+class cross_sect:
+
+    def __init__(self, cross_tab=None, fdir='.', big_endian=False, dtype='f4',
+                 verbose=True):
+        ''' Loads cross section tables and calculates collision frequencies and
+        ambipolar diffusion.
+        '''
+
+        self.fdir = fdir
+        self.dtype = dtype
+        self.verbose = verbose
+        self.big_endian = big_endian
+        # read table file and calculate parameters
+        cross_txt_list =['H-H-data2.txt','H-H2-data.txt','He-He.txt','e-H.txt',
+                        'e-He.txt','h2_molecule_bc.txt','h2_molecule_pj.txt',
+                        'p-H-elast.txt','p-He.txt','proton-h2-data.txt']
+        self.cross_tab_list = {}
+        counter = 0
+        if cross_tab is None:
+            for icross_txt in cross_txt_list:
+                os.path.isfile('%s/%s' % (fdir,icross_txt))
+                self.cross_tab_list[counter] = '%s/%s' % (fdir,icross_txt)
+                counter += 1
+        else:
+            for icross_txt in cross_tab:
+                os.path.isfile('%s/%s' % (fdir,icross_txt))
+                self.cross_tab_list[counter] = '%s/%s' % (fdir,icross_txt)
+                counter += 1
+        # load table(s)
+
+        self.load_cross_tables()
+
+    def load_cross_tables(self):
+        ''' Reads tabparam.in file, populates parameters. '''
+        uni = bifrost_units()
+        self.cross_tab = {}
+
+        for itab in range(len(self.cross_tab_list)):
+            self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab])
+            self.cross_tab[itab]['tg'] *= uni.EV_TO_K
+
+    def tab_interp(self, tg, itab=0, out='el', order=1):
+        ''' Interpolates the cross section tables in the simulated domain.
+            IN:
+                tg  : Temperature [K]
+                order: interpolation order (1: linear, 3: cubic)
+            OUT:
+                'se'  : Spin exchange cross section [a.u.]
+                'el'  : Integral Elastic cross section [a.u.]
+                'mt'  : momentum transfer cross section [a.u.]
+                'vi'  : viscosity cross section [a.u.]
+        '''
+
+        if out in ['se el vi mt'.split()] and not self.load_cross_tables:
+            raise ValueError("(EEE) tab_interp: EOS table not loaded!")
+
+        finterp = sp.interpolate.interp1d(self.cross_tab[itab]['tg'],
+                                        self.cross_tab[itab][out])
+        tgreg = tg * 1.0
+        max_temp = np.max(self.cross_tab[itab]['tg'])
+        tgreg[np.where(tg > max_temp)] = max_temp
+        min_temp = np.min(self.cross_tab[itab]['tg'])
+        tgreg[np.where(tg < min_temp)] = min_temp
+
+        return finterp(tgreg)
 
 ###########
 #  TOOLS  #
@@ -1926,6 +2169,7 @@ def read_idl_ascii(filename):
     li = 0
     params = {}
     # go through the file, add stuff to dictionary
+
     with open(filename) as fp:
         for line in fp:
             # ignore empty lines and comments
@@ -1948,8 +2192,24 @@ def read_idl_ascii(filename):
             if (value.find('"') >= 0):
                 # string type
                 value = value.strip('"')
+                try:
+                    if (value.find(' ') >= 0):
+                        value2 = np.array(value.split())
+                        if ((value2[0].upper().find('E') >= 0) or (value2[0].find('.') >= 0)):
+                            value = value2.astype(np.float)
+
+                except:
+                    value = value
             elif (value.find("'") >= 0):
                 value = value.strip("'")
+                try:
+                    if (value.find(' ') >= 0):
+                        value2 = np.array(value.split())
+                        if ((value2[0].upper().find('E') >= 0) or (value2[0].find('.') >= 0)):
+                            value = value2.astype(np.float)
+                except:
+                    value = value
+
             elif (value.lower() in ['.false.', '.true.']):
                 # bool type
                 value = False if value.lower() == '.false.' else True
@@ -1968,10 +2228,167 @@ def read_idl_ascii(filename):
                           'line %i, skipping' % li)
                     li += 1
                     continue
+
             params[key] = value
-            li += 1
+
     return params
 
+def ionpopulation(rho,nel,tg,elem='h',lvl='1',dens=True):
+
+    print('ionpopulation: reading species %s and level %s' % (elem,lvl))
+
+    uni = bifrost_units
+
+    totconst = 2.0*uni.pi*uni.M_ELECTRON.value*uni.k_B.value/uni.HPLANCK.value/uni.HPLANCK.value
+    abnd = np.zeros(len(uni.abnddic))
+    count=0
+
+    for ibnd in uni.abnddic.keys():
+        abnddic = 10**(uni.abnddic[ibnd]-12.0)
+        abnd[count] = abnddic*uni.weightdic[ibnd]*uni.AMU.value
+        count +=1
+
+    abnd         = abnd/np.sum(abnd)
+    phit         = (totconst*tg)**(1.5)*2.0/nel
+    kbtg         = uni.EV_TO_ERG/uni.k_B.value/tg
+    n1_n0        = phit*uni.u1dic[elem]/uni.u0dic[elem]*np.exp(-uni.xidic[elem]*kbtg)
+    c2           = abnd[uni.atomdic[elem]-1]*rho
+    ifracpos     = n1_n0/(1.0+n1_n0)
+
+    if dens:
+        if lvl == '1':
+            return (1.00-ifracpos)*c2
+        else:
+            return ifracpos*c2
+
+    else:
+        if lvl == '1':
+            return (1.00-ifracpos)*c2*(uni.u_r/(uni.weightdic[elem]*uni.AMU.value))
+        else:
+            return ifracpos*c2*(uni.u_r/(uni.weightdic[elem]*uni.AMU.value))
+
+def read_cross_txt(filename):
+    ''' Reads IDL-formatted (command style) ascii file into dictionary '''
+    li = 0
+    params = {}
+    count = 0
+    # go through the file, add stuff to dictionary
+    with open(filename) as fp:
+        for line in fp:
+            # ignore empty lines and comments
+            line = line.strip()
+            if len(line) < 1:
+                li += 1
+                continue
+            if line[0] == ';':
+                li += 1
+                continue
+            line = line.split(';')[0].split()
+            if (len(line) < 2):
+                print(('(WWW) read_params: line %i is invalid, skipping' % li))
+                li += 1
+                continue
+            # force lowercase because IDL is case-insensitive
+            temp = line[0].strip()
+            cross = line[1].strip()
+
+            # instead of the insecure 'exec', find out the datatypes
+            if ((temp.upper().find('E') >= 0) or (temp.find('.') >= 0)):
+                # float type
+                temp = float(temp)
+            else:
+                # int type
+                try:
+                    temp = int(temp)
+                except Exception:
+                    print('(WWW) read_idl_ascii: could not find datatype in '
+                          'line %i, skipping' % li)
+                    li += 1
+                    continue
+            if not 'tg' in params.keys():
+                params['tg'] = temp
+            else:
+                params['tg'] = np.append(params['tg'],temp)
+
+            if ((cross.upper().find('E') >= 0) or (cross.find('.') >= 0)):
+                # float type
+                cross = float(cross)
+            else:
+                # int type
+                try:
+                    cross = int(cross)
+                except Exception:
+                    print('(WWW) read_idl_ascii: could not find datatype in '
+                          'line %i, skipping' % li)
+                    li += 1
+                    continue
+            if not 'el' in params.keys():
+                params['el'] = cross
+            else:
+                params['el'] = np.append(params['el'],cross)
+
+            if len(line) > 2:
+                cross = line[2].strip()
+
+                if ((cross.upper().find('E') >= 0) or (cross.find('.') >= 0)):
+                    # float type
+                    cross = float(cross)
+                else:
+                    # int type
+                    try:
+                        cross = int(cross)
+                    except Exception:
+                        print('(WWW) read_idl_ascii: could not find datatype in '
+                              'line %i, skipping' % li)
+                        li += 1
+                        continue
+                if not 'mt' in params.keys():
+                    params['mt'] = cross
+                else:
+                    params['mt'] = np.append(params['mt'],cross)
+
+            if len(line) > 3:
+                cross = line[3].strip()
+
+                if ((cross.upper().find('E') >= 0) or (cross.find('.') >= 0)):
+                    # float type
+                    cross = float(cross)
+                else:
+                    # int type
+                    try:
+                        cross = int(cross)
+                    except Exception:
+                        print('(WWW) read_idl_ascii: could not find datatype in '
+                              'line %i, skipping' % li)
+                        li += 1
+                        continue
+                if not hasattr(params,'vi'):
+                    params['vi'] = cross
+                else:
+                    params['vi']=np.append(params['vi'],cross)
+
+            if len(line) > 4:
+                cross = line[4].strip()
+
+                if ((cross.upper().find('E') >= 0) or (cross.find('.') >= 0)):
+                    # float type
+                    cross = float(cross)
+                else:
+                    # int type
+                    try:
+                        cross = int(cross)
+                    except Exception:
+                        print('(WWW) read_idl_ascii: could not find datatype in '
+                              'line %i, skipping' % li)
+                        li += 1
+                        continue
+                if not hasattr(params,'se'):
+                    params['se'] = cross
+                else:
+                    params['se']=np.append(params['se'],cross)
+            li += 1
+
+    return params
 
 def subs2grph(subsfile):
     ''' From a subs.dat file, extract abundances and atomic masses to calculate
@@ -2001,8 +2418,6 @@ def ne_rt_table(rho, temp, order=1, tabfile=None):
         OUT: electron density (in g/cm^3)
         '''
     import os
-    import scipy.interpolate as interp
-    import scipy.ndimage as ndimage
     from scipy.io.idl import readsav
     print('DEPRECATION WARNING: this method is deprecated in favour'
           ' of the Rhoeetab class.')
