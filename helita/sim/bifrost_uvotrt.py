@@ -511,8 +511,8 @@ class UVOTRTData(BifrostData):
         iontab = pickle.load(filehandler)
         self.wvl0 = iontab.Gofnt['wvl']
         self.lambd = self.wvl0 / (
-            self.wvl * self.wvl0 / 1.0e13 + units.CLIGHT.value /
-                1.0e5 ) * units.CLIGHT.value / 1.0e5
+            self.wvl * self.wvl0 / 1.0e13 + units.clight.value /
+                1.0e5 ) * units.clight.value / 1.0e5
         self.ny2vel = self.wvl0 * 1.e-13
         self.wvldop = self.wvl * self.ny2vel
 
@@ -822,7 +822,7 @@ class UVOTRTData(BifrostData):
         else:
             ds = self.dz1d * units.u_l
 
-        nh = rho * units.u_r / units.GRPH
+        nh = rho * units.u_r / units.grph
 
         for ix in range(0, self.nx):
             for iy in range(0, self.ny):
@@ -857,7 +857,7 @@ class UVOTRTData(BifrostData):
         """
         # mem = np.memmap(data_dir + '/' + acontfile, dtype='float32')
 
-        CC = units.CLIGHT.value * units.CM_TO_M  # 2.99792458e8 m/s
+        cc = units.clight.value * units.cm_to_m  # 2.99792458e8 m/s
         CCA = CC * 1e10  # AA/s
         nspline = np.size(spline)
 
@@ -942,7 +942,7 @@ class UVOTRTData(BifrostData):
             ds = self.dy * units.u_l
         else:
             ds = self.dz1d * units.u_l
-        nh = rho * units.u_r / units.GRPH
+        nh = rho * units.u_r / units.grph
 
         for ix in range(0, self.nx):
             for iy in range(0, self.ny):
