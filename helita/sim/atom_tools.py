@@ -528,14 +528,14 @@ class atom_tools(object):
         '''
 
         units = bifrost_units()
-        TeV = Te * units.K_TO_EV
+        TeV = Te * units.k_to_ev
 
         g_ilv = float(self.params['lvl'][lo_lvl][1])
         g_jlv = float(self.params['lvl'][hi_lvl][1])
         dE = float(self.params['lvl'][hi_lvl][0]) - \
             float(self.params['lvl'][lo_lvl][0])
-        dE = dE * units.CLIGHT.value * units.HPLANCK.value
-        scr1 = dE / Te / units.KBOLTZMANN.value
+        dE = dE * units.clight.value * units.hplanck.value
+        scr1 = dE / Te / units.kboltzmann.value
 
         if ((threebody) is not False):
             if not hasattr(self, 'frec3bd'):
@@ -585,7 +585,7 @@ class atom_tools(object):
         formula
         '''
         units = bifrost_units()
-        TeV = Te * units.K_TO_EV
+        TeV = Te * units.k_to_ev
 
         if (GENCOL_KEY.lower() == 'atomic'):
             keylist = self.keyword_atomic
@@ -640,8 +640,8 @@ class atom_tools(object):
                 g_jlv = float(self.params['lvl'][hi_lvl][1])
 
                 for ishell in range(0, nshells):
-                    xj = phion[ishell] * units.EV_TO_ERG / \
-                        units.KBOLTZMANN.value / Te
+                    xj = phion[ishell] * units.ev_to_erg / \
+                        units.kboltzmann.value / Te
                     fac = np.exp(-xj) * sqrt(xj)
                     fxj = fac * (A[ishell] + B[ishell] * (1. + xj) + (
                         C[ishell] - xj * (A[ishell] + B[ishell] * (
@@ -701,8 +701,8 @@ class atom_tools(object):
 
                 dE = float(self.params['lvl'][hi_lvl][0]) - \
                     float(self.params['lvl'][lo_lvl][0])
-                dE = dE * units.CLIGHT * units.HPLANCK
-                scr1 = dE / Te / units.KBOLTZMANN.value
+                dE = dE * units.clight * units.hplanck
+                scr1 = dE / Te / units.kboltzmann.value
 
                 sqrtte = np.sqrt(Te)
                 cup = 0.
@@ -799,8 +799,8 @@ class atom_tools(object):
         '''
         dekt = float(self.params['lvl'][hi_lvl][0]) - \
             float(self.params['lvl'][lo_lvl][0])
-        dekt = dekt * units.CLIGHT.value * \
-            units.HPLANCK.value / Te / units.KBOLTZMANN.value
+        dekt = dekt * units.clight.value * \
+            units.hplanck.value / te / units.kboltzmann.value
 
         # Assuming nel in cgs. (For SI units would be 2.07e-22)
         saha = 2.07e-16 * nel * gst_lo / gst_hi * Te**(-1.5) * np.exp(dekt)
@@ -1289,7 +1289,7 @@ def pop_over_species_atomf(ntot, Te, atomfiles=None,
         print('Starting with atom', atomfiles[isp])
         atominfo = atom_tools(atom_file=atomfiles[isp])
         abund = np.array(10.0**atominfo.get_abund(Chianti=True))
-        atomweight = atominfo.get_atomweight() * units.AMU
+        atomweight = atominfo.get_atomweight() * units.amu
         n_species = np.zeros((np.shape(ntot)))
         n_species = ntot * (np.array(abund / totabund))
         atominfo.inv_pop_atomf(n_species, Te, niter=100,
