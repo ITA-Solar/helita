@@ -6,7 +6,6 @@ import os
 from glob import glob
 import numpy as np
 from . import cstagger
-import numba
 import scipy as sp
 from scipy.ndimage import map_coordinates
 from multiprocessing.dummy import Pool as ThreadPool
