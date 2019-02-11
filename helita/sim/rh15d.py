@@ -8,6 +8,7 @@ import numpy as np
 import xarray as xr
 import h5py
 from io import StringIO
+from astropy import units
 
 
 class Rh15dout:
@@ -310,35 +311,65 @@ class AtomFile:
         self.read_atom(filename, format)
 
     def read_atom(self, filename, format='RH'):
+        self.format = format.upper()
         data = []
         counter = 0
         with open(filename, 'r') as atom_file:
             for line in atom_file:
                 tmp = line.strip()
                 # clean up comments and blank lines
-                if len(tmp) == 0:
+                if not tmp:
                     continue
                 if tmp[0] in ['#', '*']:
                     continue
                 data.append(tmp)
-        self.element = data[0]
-        nlevel, nline, ncont, nfixed = np.array(data[1].split(), dtype='i')
+        self.element = data[counter]
+        counter += 1
+        if self.format == 'RH':
+            self.units = {'level_energies': units.Unit('J m / cm'),
+                          'line_wavelength': units.Unit('nm'),
+                          'line_stark': units.Unit('m'),
+                          'continua_photoionisation': units.Unit('m2'),
+                          'continua_wavelength': units.Unit('nm'),
+                          'collision_cross_sections': units.Unit('m3')}
+        elif self.format == 'MULTI':
+            self.units = {'level_energies': units.Unit('J m / cm'),
+                          'line_wavelength': units.Unit('Angstrom'),
+                          'line_stark': units.Unit('cm'),
+                          'continua_photoionisation': units.Unit('cm2'),
+                          'continua_wavelength': units.Unit('Angstrom'),
+                          'collision_cross_sections': units.Unit('cm3')}
+            self.abund = data[counter].split()[0]
+            self.atomic_weight = data[counter].split()[1]
+            counter += 1
+        else:
+            raise ValueError("Unsupported atom format " + format)
+        nlevel, nline, ncont, nfixed = np.array(data[counter].split(), dtype='i')
         self.nlevel = nlevel
         self.nline = nline
         self.ncont = ncont
         self.nfixed = nfixed
-        counter += 2
-
+        counter += 1
         # read levels
-        self.levels = read_atom_levels(data[counter:counter + nlevel])
+        self.levels = read_atom_levels(data[counter:counter + nlevel],
+                                       self.format)
         counter += nlevel
         # read lines
         tmp = StringIO('\n'.join(data[counter:counter + nline]))
-        data_type = [('level_start', 'i4'), ('level_end', 'i4'),
-                     ('f_value', 'f8'), ('type', 'U10'), ('nlambda', 'i'),
-                     ('symmetric', 'U10'), ('qcore', 'f8'), ('qwing', 'f8'),
-                     ('vdApprox', 'U10'), ('vdWaals', 'f8', (4,)),
-                     ('radiative_broadening', 'f8'), ('stark_broadening', 'f8')]
+        if self.format == "RH":
+            data_type = [('level_start', 'i4'), ('level_end', 'i4'),
+                         ('f_value', 'f8'), ('type', 'U10'), ('nlambda', 'i'),
+                         ('symmetric', 'U10'), ('qcore', 'f8'), ('qwing', 'f8'),
+                         ('vdApprox', 'U10'), ('vdWaals', 'f8', (4,)),
+                         ('radiative_broadening', 'f8'),
+                         ('stark_broadening', 'f8')]
+        elif self.format == "MULTI":
+            data_type = [('level_start', 'i4'), ('level_end', 'i4'),
+                         ('f_value', 'f8'), ('nlambda', 'i'),
+                         ('qwing', 'f8'), ('qcore', 'f8'), ('iw', 'i4'),
+                         ('radiative_broadening', 'f8'),
+                         ('vdWaals', 'f8', (1,)), ('stark_broadening', 'f8'),
+                         ('type', 'U10')]
         self.lines = np.genfromtxt(tmp, dtype=data_type)
         counter += nline
         # read continua
@@ -351,12 +382,31 @@ class AtomFile:
             result['level_end'] = int(line[1])
             result['edge_cross_section'] = float(line[2])
             result['nlambda'] = int(line[3])
-            result['wave_min'] = float(line[5])
-            if line[4].upper() == 'EXPLICIT':  # different for Multi?
+            if self.format == "RH":
+                result['wavelength_dependence'] = line[4].upper()
+                result['wave_min'] = float(line[5])
+            elif self.format == "MULTI":
+                if float(line[4]) > 0:
+                    result['wavelength_dependence'] = "HYDROGENIC"
+                else:
+                    result['wavelength_dependence'] = "EXPLICIT"
+            if result['wavelength_dependence'] == 'EXPLICIT':
                 tmp = '\n'.join(data[counter:counter + result['nlambda']])
                 counter += result['nlambda']
                 result['cross_section'] = np.genfromtxt(StringIO(tmp))
             self.continua.append(result)
+        # read fixed transitions
+        self.fixed_transitions = []
+        for _ in range(nfixed):
+            line = data[counter].split()
+            counter += 1
+            result = {}
+            result['level_start'] = int(line[0])
+            result['level_end'] = int(line[1])
+            result['strength'] = float(line[2])
+            result['trad'] = float(line[3])
+            result['trad_option'] = line[4]
+            self.fixed_transitions.append(result)
         # read collisions
         ### IN MULTI FORMAT COLLISIONS START WITH GENCOL
         ### Also in MULTI, must merge together lines that are written in
@@ -364,15 +414,41 @@ class AtomFile:
         self.collision_temperatures = []
         self.collision_tables = []
         # Keys for rates given as function of temperature
-        COLLISION_KEYS_TEMP = ['OMEGA', 'CE', 'CI', 'CP', 'CH', 'CH0', 'CH+',
-                               'CR']
+        COLLISION_KEYS_TEMP = ['OHMEGA', 'OMEGA', 'CE', 'CI', 'CP', 'CH',
+                               'CH0', 'CH+', 'CR', 'TEMP']
         # Keys for rates written as single line
         COLLISION_KEYS_LINE = ['AR85-CEA', 'AR85-CHP', 'AR85-CHH', 'SHULL82',
                                'BURGESS', 'SUMMERS']
         COLLISION_KEYS_OTHER = ['AR85-CDI', 'BADNELL']
+        ALL_KEYS = (COLLISION_KEYS_TEMP + COLLISION_KEYS_LINE +
+                        COLLISION_KEYS_OTHER)
+        SINGLE_KEYS = ['GENCOL', 'END']
+
+        if self.format == 'MULTI':   # merge lines in free FORMAT
+            collision_data = []
+            while counter < len(data):
+                line = data[counter]
+                key = data[counter].split()[0].upper().strip()
+                if key in ALL_KEYS:
+                    tmp = line
+                    while True:
+                        counter += 1
+                        key = data[counter].split()[0].upper().strip()
+                        if key in ALL_KEYS + SINGLE_KEYS:
+                            collision_data.append(tmp)
+                            break
+                        else:
+                            tmp += '  '  + data[counter]
+                elif key in SINGLE_KEYS:
+                    collision_data.append(line)
+                    counter += 1
+        else:
+            collision_data = data[counter:]
+
         unread_lines = False
-        while counter < len(data) - 1:
-            line = data[counter].split()
+        counter = 0
+        while counter < len(collision_data) - 1:
+            line = collision_data[counter].split()
             key = line[0].upper()
             result = {}
             if key == 'END':
@@ -384,10 +460,11 @@ class AtomFile:
             elif key in COLLISION_KEYS_TEMP:
                 assert self.collision_temperatures, ('No temperature block'
                          ' found before %s table' % (key))
+                ntemp = len(self.collision_temperatures[-1])
                 result = {'type': key, 'level_start': int(line[1]),
                           'level_end': int(line[2]),
                           'temp_index': len(self.collision_temperatures) - 1,
-                          'data': np.array(line[3:]).astype('d')}
+                          'data': np.array(line[3:3 + ntemp]).astype('d')}  # this will not work in MULTI
                 assert len(result['data']) == len(temp_tmp), ('Inconsistent '
                     'number of points between temperature and collision table')
             elif key in COLLISION_KEYS_LINE:
@@ -398,16 +475,25 @@ class AtomFile:
                               'level_end': int(line[2]),
                               'data': np.array(line[2:]).astype('f')}
             elif key in ["AR85-CDI", "BADNELL"]:
-                assert len(line) == 4, '%s must have exactly 3 arguments' % key
+                assert len(line) >= 4, '%s must have >3 elements' % key
                 result = {'type': key, 'level_start': int(line[1]),
-                          'level_end': int(line[2])}
+                              'level_end': int(line[2])}
                 if key == "BADNELL":
                     rows = 2
                 else:
                     rows = int(line[3])
-                tmp = data[counter + 1: counter + 1 + rows]
-                result['data'] = np.array([l.split() for l in tmp]).astype('d')
-                counter += rows
+                if self.format == 'MULTI':  # All values in one line
+                    tmp = np.array(line[4:]).astype('d')
+                    assert tmp.shape[0] % rows == 0, ('Inconsistent number of'
+                                                 ' data points for %s' % key)
+                    result['data'] = tmp.reshape((rows, tmp.shape[0] // rows))
+                    counter += 1
+                else:  # For RH, values written in matrix form
+                    tmp = data[counter + 1: counter + 1 + rows]
+                    result['data'] = np.array([l.split() for l in tmp]).astype('d')
+                    counter += rows
+            elif key == "GENCOL":
+                pass
             else:
                 unread_lines = True
 
@@ -419,15 +505,23 @@ class AtomFile:
             warnings.warn("Some lines in collision section were not understood",
                           RuntimeWarning)
 
-def read_atom_levels(data):
+def read_atom_levels(data, format='RH'):
     tmp = []
+    dtype=[('energy', 'f8'), ('g_factor', 'f8'),('label', '|U30'),
+           ('stage', 'i4'), ('level_no','i4')]
+    if format.upper() == "RH":
+        extra_cols = 2
+    elif format.upper() == "MULTI":
+        extra_cols = 1
+        dtype = dtype[:-1]
+    else:
+        raise ValueError("Format must be RH or MULTI")
     for line in data:
         buf = line.split("'")
         assert len(buf) == 3
-        tmp.append(tuple(buf[0].split() + [buf[1].strip()] + buf[2].split()[:2]))
-    return np.array(tmp, dtype=[('energy', 'f8'), ('g_factor', 'f8'),
-                                ('label', '|U30'), ('stage', 'i4'),
-                                ('level_no','i4')])
+        tmp.append(tuple(buf[0].split() +
+                    [buf[1].strip()] + buf[2].split()[:extra_cols]))
+    return np.array(tmp, dtype=dtype)
 
 
 def read_ncdf(inclass, infile):
