@@ -1,25 +1,18 @@
 """
 Set of utility programs for IRIS.
 """
-
 import os
-import numpy as np
 import re
 import io
+import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from glob import glob
 
-# for python 3.x, with python 2.x fallback
 # pylint: disable=F0401,E0611,E1103
-try:
-    from urllib.request import urlopen
-    from urllib.parse import urljoin, urlparse
-    from urllib.error import HTTPError, URLError
-except ImportError:
-    from urllib.parse import urljoin, urlparse
-    from urllib.request import urlopen
-    from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
+from urllib.parse import urljoin, urlparse
+from urllib.error import HTTPError, URLError
 
 
 def iris_timeline_parse(timeline_file):
