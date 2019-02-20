@@ -2,7 +2,6 @@
 Set of routines to read output from multi3d MPI (new version!)
 """
 from ..io.fio import fort_read
-from ..utils.waveconv import waveconv
 import numpy as np
 import os
 
@@ -246,6 +245,8 @@ class m3dprof:
         ''' Reads transition dependent output. This includes intensities
         (disk-centre, angle, jny), contribution functions, source functions,
         opacities.'''
+        from specutils.utils.wcs_utils import vac_to_air
+        from astropy import units as u
         self.lid = lid
         suffix = '%03i_%03i' % (self.irad[lid], self.jrad[lid])
         intfile = self.dir + '/iv_' + suffix  # disk-centre intensity
@@ -258,10 +259,8 @@ class m3dprof:
         # Construct wavelength scale, converted to air wavelengths
         self.wave = self.alamb[lid] * (1 - self.q[:self.nq[lid], lid] *
                                        self.qnorm / self.cc * 1e5)
-        # Better use waveconv_regner (though not the best), because it's the same
-        # that is used internally in lte.x
-        self.wave = waveconv_regner(
-            self.wave[::-1].astype('d'), mode='vac2air')
+        self.wave = vac_to_air(self.wave[::-1].astype('d') * u.angstrom,
+                               method='Ciddor1996').value
         # Convert to nm
         self.wave /= 10.
         if self.v1d:  # for 1D case, duplicate velocities

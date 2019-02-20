@@ -345,8 +345,9 @@ def rh_to_fits_level3(filelist, outfile, windows, window_desc, times=None,
         have common wavelengths.
     """
     from ..sim import rh15d
-    from ..utils import waveconv
+    from specutils.utils.wcs_utils import air_to_vac
     from astropy.io import fits as pyfits
+    from astropy import units as u
     nt = len(filelist)
     robj = rh15d.Rh15dout()
     robj.read_ray(filelist[0])
@@ -377,7 +378,8 @@ def rh_to_fits_level3(filelist, outfile, windows, window_desc, times=None,
         idx = (wave_full > wi) & (wave_full < wf)
         tmp = wave_full[idx]
         if air_conv:
-            tmp = waveconv(tmp, mode='air2vac')
+            # RH converts to air using Edlen (1966) method
+            tmp = air_to_vac(tmp * u.nm, method='edlen1966', scheme='iteration').value
         waves = np.append(waves, tmp)
         nwaves = np.append(nwaves, len(tmp))
         indices += idx
