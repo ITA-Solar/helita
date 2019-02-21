@@ -1280,7 +1280,8 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
         wavelengths.
     """
     import xdrlib
-    from ..utils.waveconv import waveconv
+    from specutils.utils.wcs_utils import air_to_vac
+    from astropy import units as u
     if new_wave is None:
         new_wave = np.arange(start, end, step)
         if None in [start, end, step]:
@@ -1295,7 +1296,9 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
                 keepers.append(w)
         new_wave = np.array(keepers)
     if air:
-        new_wave = waveconv(new_wave, mode='air2vac')
+        # RH uses Edlen (1966) to convert from vacuum to air
+        new_wave = air_to_vac(new_wave * u.nm, method='edlen1966',
+                              scheme='iteration').value
 
     # write file
     p = xdrlib.Packer()
