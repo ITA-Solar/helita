@@ -303,40 +303,50 @@ def bin_quantities(x, y, bins, func, *args, **kwargs):
 
 def peakdetect(y_axis, x_axis=None, lookahead=300, delta=0):
     """
-    Tiago: downloaded from https://gist.github.com/1178136
+    peakdetect(y_axis, x_axis=None, delta=0., lookahead=300)
+
+    Function for detecting local maximas and minimas in a signal.
+    Discovers peaks by searching for values which are surrounded by lower
+    or larger values for maximas and minimas respectively.
+
+    This is the pure python version. See utilsfast.peakdetect2 for a
+    much faster version in Cython.
+
+    Parameters
+    ----------
+    y_axis : 1-D ndarray or list
+        Array containg the signal over which to find peaks
+    x_axis : 1-D ndarray or list
+        Array whose values correspond to the y_axis array and is used
+        in the return to specify the postion of the peaks. If omitted an
+        index of the y_axis is used. (default: None)
+    lookahead : int, optional
+        Distance to look ahead from a peak candidate to determine if it
+        is the actual peak. '(sample / period) / f' where '4 >= f >= 1.25'
+        might be a good value.
+    delta : number, optional
+        Specifies a minimum difference between a peak and the following
+        points, before a peak may be considered a peak. Useful to hinder
+        the function from picking up false peaks towards to end of the
+        signal. To work well delta should be set to delta >= RMSnoise * 5.
+        (default: 0)
+        delta function causes a 20% decrease in speed, when omitted.
+        Correctly used it can double the speed of the function
+
+    Returns
+    -------
+    max_peaks, min_peaks : 2-D ndarrays
+        Two arrays containing the maxima and minima location. Each array
+        has a shape of (2, len(y_axis)). First dimension is for peak position
+        (first index) or peak value (second index). Second dimension is
+        for the number of peaks (maxima or minima).
+
+    Notes
+    -----
+    Downloaded and adapted from https://gist.github.com/1178136
 
     Converted from/based on a MATLAB script at:
     http://billauer.co.il/peakdet.html
-
-    function for detecting local maximas and minmias in a signal.
-    Discovers peaks by searching for values which are surrounded by lower
-    or larger values for maximas and minimas respectively
-
-    keyword arguments:
-    y_axis -- A list containg the signal over which to find peaks
-
-    x_axis -- (optional) A x-axis whose values correspond to the y_axis list
-        and is used in the return to specify the postion of the peaks. If
-        omitted an index of the y_axis is used. (default: None)
-
-    lookahead -- (optional) distance to look ahead from a peak candidate to
-        determine if it is the actual peak (default: 200)
-        '(sample / period) / f' where '4 >= f >= 1.25' might be a good value
-
-    delta -- (optional) this specifies a minimum difference between a peak and
-        the following points, before a peak may be considered a peak. Useful
-        to hinder the function from picking up false peaks towards to end of
-        the signal. To work well delta should be set to delta >= RMSnoise * 5.
-        (default: 0)
-            delta function causes a 20% decrease in speed, when omitted
-            Correctly used it can double the speed of the function
-
-    return -- two lists [max_peaks, min_peaks] containing the positive and
-        negative peaks respectively. Each cell of the lists contains a tupple
-        of: (position, peak_value)
-        to get the average peak value do: np.mean(max_peaks, 0)[1] on the
-        results to unpack one of the lists into x, y coordinates do:
-        x, y = zip(*tab)
     """
     max_peaks = []
     min_peaks = []

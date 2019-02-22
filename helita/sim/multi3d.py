@@ -6,6 +6,10 @@ import numpy as np
 
 
 class out3d:
+    '''
+    DEPRECATED
+    For Multi3d old old version
+    '''
     def __init__(self, dir='.', bswp=False, hdrlen=4):
         ''' Reads multi3d output data in out3d. '''
         self.read(dir, bswp, hdrlen)
@@ -192,7 +196,11 @@ class out3d:
 class m3dprof:
     def __init__(self, lid, dir='.', bswp=False, irc=8, angle=True,
                  contrib=False, o3dswp=False, v1d=False):
-        ''' Reads line profiles and contribution functions from multi3d '''
+        '''
+        DEPRECATED
+        Reads line profiles and contribution functions from multi3d,
+        old old version.
+        '''
         from specutils.utils.wcs_utils import vac_to_air
         from astropy import units as u
         self.bswp = bswp
