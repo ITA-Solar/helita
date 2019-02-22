@@ -48,7 +48,7 @@ def write_buf(intensity, outfile, wave=None, stokes=False):
 
 
 def write_from_rh(files, outfile, mode='im', stokes=False, waveidx=None,
-                  waveinterp=None, verbose=False):
+                  waveinterp=None, verbose=True):
     '''
     Writes crispex image cube from RH 1.5D netcdf output.
 
@@ -56,7 +56,6 @@ def write_from_rh(files, outfile, mode='im', stokes=False, waveidx=None,
 
     '''
     from . import lp
-    from ..utils.shell import progressbar
 
     # open first file to get some data
     dataset = xarray.open_dataset(files[0])
@@ -85,7 +84,14 @@ def write_from_rh(files, outfile, mode='im', stokes=False, waveidx=None,
     if mode.lower() == 'im':
         # write image cube
         print('writing image cube, %i files' % nt)
-        for i, f in enumerate(files):
+        iterator = enumerate(files)
+        if verbose:
+            try:
+                from tqdm import tqdm
+                iterator = tqdm(enumerate(files), total=len(files))
+            except ModuleNotFoundError:
+                pass
+        for i, f in iterator:
             dataset = xarray.open_dataset(f)
             for v in variables:
                 data = dataset[v].data
@@ -97,14 +103,19 @@ def write_from_rh(files, outfile, mode='im', stokes=False, waveidx=None,
                 lp.writeto('im_' + outfile, data, append=True,
                            extraheader=extrahd)
             dataset.close()
-            if verbose:
-                progressbar(i + 1, nt)
         print()
     elif mode.lower() == 'sp':
         # write spectral cube
         print('writing spectral cube, %i rows' % ny)
         isave = np.empty((nwave, nt, nx * ns), dtype=dtype)
-        for y in range(ny):
+        iterator = range(ny)
+        if verbose:
+            try:
+                from tqdm import tqdm
+                iterator = tqdm(range(ny))
+            except ModuleNotFoundError:
+                pass
+        for y in iterator:
             for i, f in enumerate(files):
                 dataset = xarray.open_dataset(f)
                 for j, v in enumerate(variables):
@@ -118,9 +129,6 @@ def write_from_rh(files, outfile, mode='im', stokes=False, waveidx=None,
                 dataset.close()
             lp.writeto('sp_' + outfile, isave, append=True,
                        extraheader=extrahd)
-            if verbose:
-                progressbar(y + 1, ny)
-        print()
 
 
 def sp_from_im(infile, outfile, nwave, maxmem=4, verbose=True):
@@ -135,7 +143,6 @@ def sp_from_im(infile, outfile, nwave, maxmem=4, verbose=True):
     '''
 
     from . import lp
-    from ..utils.shell import progressbar
 
     GB = 2**30
     nx, ny, ntl = lp.getheader(infile)[0]
@@ -149,7 +156,14 @@ def sp_from_im(infile, outfile, nwave, maxmem=4, verbose=True):
         raise MemoryError('sp_from_im: memory supplied for temporary arrays' +
                           ' (%i GB) not enough.' % (maxmem) +
                           ' Need at least %f.2 GB.' % (ntl * nx * ns * 4. / GB))
-    for i in range(ny / ninc + 1):
+    iterator = range(ny / ninc + 1)
+    if verbose:
+        try:
+            from tqdm import tqdm
+            iterator = tqdm(range(ny / ninc + 1))
+        except ModuleNotFoundError:
+            pass
+    for i in iterator:
         imc = lp.getdata(infile)
         isave = imc[:, i * ninc:(i + 1) * ninc]
         sy = isave.shape[1]
@@ -157,6 +171,3 @@ def sp_from_im(infile, outfile, nwave, maxmem=4, verbose=True):
             np.transpose(isave).reshape(nt, nwave, nx * sy), axes=(1, 0, 2))
         lp.writeto(outfile, isave, append=i != 0, extraheader='')
         imc.close()
-        if verbose:
-            progressbar(i + 1, ny / ninc + 1)
-    print()
