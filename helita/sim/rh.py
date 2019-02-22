@@ -1,38 +1,5 @@
 """
 Set of programs and tools to read the outputs from RH (Han's version)
-
- Currently the following outputs are supported:
-
- 1. Input data
- 2. Geometry
- 3. Atmosphere
- 4. Spectrum (no Stokes)
- 5. Ray      (no Stokes)
-
- These output files will have to be added later:
-
-  Atom (atom, collrate, damping, pops, radrate)
-  Flux
-  metals
-  molecule
-  opacity and brs (background opacity)
-
-
-  Other improvements needed:
-  * ray class, consistency for many rays
-  * read from arbitrary directory
-  * read contribution function
-  * memmap with XDR files
-  * GUI
-
- Way to read all the XDR files should be:
-
- Modify read_xdr_file so that it returns only xdata.
- Then, on each read_xxx, read the necessary header variables,
- rewind (xdata.set_position(0)), then read the variables in order.
- This allows the flexibility of derived datatypes, and appending to dictionary
- (e.g. as in readatmos for all the elements and etc.). It also allows one to
- read directly into attribute of the class (with setattr(self,'aa',<data>))
 """
 import os
 import sys
@@ -42,6 +9,43 @@ import numpy as np
 
 
 class Rhout:
+    """
+    Reads outputs from RH.
+
+    Currently the reading the following output files is supported:
+     - input.out
+     - geometry.out
+     - atmos.out
+     - spectrum.out (no Stokes)
+     - spectrum_XX (no Stokes, from solveray)
+     - brs.out
+     - J.dat
+     - opacity.out (no Stokes)
+
+    These output files are NOT supported:
+      - Atom (atom, collrate, damping, pops, radrate)
+      - Flux
+      - metals
+      - molecule
+
+    Parameters
+    ----------
+    fdir : str, optional
+        Directory with output files.
+    verbose : str, optional
+        If True, will print more details.
+
+    Notes
+    -----
+    In general,  the way to read all the XDR files should be:
+
+     Modify read_xdr_file so that it returns only xdata.
+     Then, on each read_xxx, read the necessary header variables,
+     rewind (xdata.set_position(0)), then read the variables in order.
+     This allows the flexibility of derived datatypes, and appending to dictionary
+     (e.g. as in readatmos for all the elements and etc.). It also allows one to
+     read directly into attribute of the class (with setattr(self,'aa',<data>))
+    """
     def __init__(self, fdir='.', verbose=True):
         ''' Reads all the output data from a RH run.'''
         self.verbose = verbose
@@ -64,7 +68,6 @@ class Rhout:
         for v in input_vars:
             self.input[v[0]] = read_xdr_var(data, v[1:])
         close_xdr(data, infile, verbose=self.verbose)
-        return
 
     def read_geometry(self, infile='geometry.out'):
         ''' Reads RH geometry.out file. '''
@@ -120,7 +123,6 @@ class Rhout:
         for v in geom_vars:
             self.geometry[v[0]] = read_xdr_var(data, v[1:])
         close_xdr(data, infile, verbose=self.verbose)
-        return
 
     def read_atmosphere(self, infile='atmos.out'):
         ''' Reads RH atmos.out file '''
@@ -183,7 +185,6 @@ class Rhout:
             for v in stokes_vars:
                 self.atmos[v[0]] = read_xdr_var(data, v[1:])
         close_xdr(data, infile, verbose=self.verbose)
-        return
 
     def read_spectrum(self, infile='spectrum.out'):
         ''' Reads RH spectrum.out file '''
@@ -226,7 +227,6 @@ class Rhout:
             else:
                 self.spec['as_rn'] = read_xdr_var(data, ('i', (nspect,)))
             close_xdr(data, 'asrs.out', verbose=self.verbose)
-        return
 
     def read_ray(self, infile='spectrum_1.00'):
         ''' Reads spectra for single ray files (e.g. mu=1). '''
@@ -277,7 +277,6 @@ class Rhout:
             self.ray_stokes_U = read_xdr_var(data, ('d', ishape))
             self.ray_stokes_V = read_xdr_var(data, ('d', ishape))
         close_xdr(data, infile, verbose=self.verbose)
-        return
 
     def read_brs(self, infile='brs.out'):
         ''' Reads the file with the background opacity record settings,
@@ -309,7 +308,6 @@ class Rhout:
             data, ('i', (nspect,))).astype('Bool')
         self.brs['backgrrecno'] = read_xdr_var(data, ('i', ishape))
         close_xdr(data, infile, verbose=self.verbose)
-        return
 
     def read_j(self, infile='J.dat'):
         ''' Reads the mean radiation field, for all wavelengths. '''
@@ -339,7 +337,6 @@ class Rhout:
             data_file.seek(i * rec_len)
             self.J[i] = read_file_var(data_file, ('d', ishape[1:]))
         data_file.close()
-        return
 
     def read_opacity(self, infile_line='opacity.out', infile_bg='background.dat',
                      imu=0):
@@ -412,7 +409,6 @@ class Rhout:
         self.scatt = scatt
         close_xdr(data_line, infile_line, verbose=False)
         file_bg.close()
-        return
 
     def get_contrib_imu(self, imu, type='total', op_file='opacity.out',
                         bg_file='background.dat', j_file='J.dat'):
@@ -487,6 +483,18 @@ class Rhout:
 
 
 class RhAtmos:
+    """
+    Reads input atmosphere from RH. Currently only 2D format supported.
+
+    Parameters
+    ----------
+    format : str, optional
+        Atmosphere format. Currently only '2D' (default) supported.
+    filename : str, optional
+        File to read.
+    verbose : str, optional
+        If True, will print more details.
+    """
     def __init__(self, format="2D", filename=None, verbose=True):
         ''' Reads RH input atmospheres. '''
         self.verbose = verbose
@@ -599,7 +607,6 @@ def close_xdr(buf, ofile='', verbose=False):
     except:  # .done() will raise error if data remaining
         if verbose:
             print(('(WWW) close_xdr: {0} not all data read!'.format(ofile)))
-    return
 
 
 def read_xdr_var(buf, var):
@@ -662,7 +669,7 @@ def read_file_var(buf, var):
         out = np.fromfile(buf, dtype=var[0], count=var[1][0])
     else:
         nitems = np.prod(var[1])
-        out = np.array(np.fromfile(bif, dtype=var[0], count=nitems)).\
+        out = np.array(np.fromfile(buf, dtype=var[0], count=nitems)).\
             reshape(var[1][::-1])
         out = np.transpose(out, list(range(len(var[1])))[::-1])
     return out
@@ -711,7 +718,7 @@ def get_contrib(z, mu, tau_in, S):
 
 
 def write_B(outfile, Bx, By, Bz):
-    ''' Writes a RH magnetic field size. Input B arrays can be any rank, as
+    ''' Writes a RH magnetic field file. Input B arrays can be any rank, as
         they will be flattened before write. Bx, By, Bz units should be T.'''
     if (Bx.shape != By.shape) or (By.shape != Bz.shape):
         raise TypeError('writeB: B arrays have different shapes!')
