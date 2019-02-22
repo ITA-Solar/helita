@@ -4,9 +4,11 @@ from math import exp
 
 
 def hist2d(x, y, nbins=30, norm=False, rx=0.08):
-    ''' Computes the 2D histogram of the data and the x,y coordinates
+    '''
+    Computes the 2D histogram of the data and the x,y coordinates
     of the middle of the bins. OPTIONS; nbins (number of bins), norm,
-    rx (range in x as % of the min/max, previous default 0.08).'''
+    rx (range in x as % of the min/max, previous default 0.08).
+    '''
     # Increments in x and y
     xinc = (np.max(x) - np.min(x)) / nbins
     yinc = (np.max(y) - np.min(y)) / nbins
@@ -69,48 +71,70 @@ def stat2d(x, y, x_range=None, nbins=10, percentiles=[25, 50, 75]):
     return xbins, q1, q2, q3
 
 
-def planck(w, T, units='cgs_AA'):
-    ''' Returns the Planck function for wavelength in nm and T in Kelvin.
-    Units depend on input:
+def planck(wavelength, temp, dist='wavelength'):
+    """
+    Calculates the Planck function, either per wavelength or per
+    frequency.
 
-    cgs_AA: erg s^-1 cm^-2 AA^-1 sr^-1
-    cgs_nm: erg s^-1 cm^-2 nm^-1 sr^-1
-    Hz    : J   s^-1 m^-2  Hz^-1 sr^-1
+    Parameters
+    ----------
+    wavelength : `Quantity` object (number or sequence, length units)
+        Wavelength(s) to calculate.
+    temp : `Quantity` object (number or sequence, temperature units)
+        Temperature(s) to calculate
+    dist: str, optional
+        How to calculate the distribution. Options are 'wavelength' (default),
+        or 'frequency'.
 
-    If using the brightness temperature units, then w must be a single value
-    (T can be an array).
+    Returns
+    -------
+    planck : `Quantity` object (number or sequence)
+        Planck distribution. Units are energy per time per area
+        per frequency (or wavelength) per solid angle.
 
-    For solid angle integrated one must multiply it by pi.'''
-    from scipy.constants import c, h, k
+    Notes
+    -----
+    For solid angle integrated one must multiply it by pi.
 
-    JOULE_TO_ERG = 1.e7
-    CM_TO_M = 1.e-2
-    NM_TO_M = 1.e-9
-    AA_TO_M = 1.e-10
-    if units in ['cgs_AA', 'cgs_nm']:
-        wave = w * 10.  # to AA
-        c /= AA_TO_M
-        h *= JOULE_TO_ERG
-        k *= JOULE_TO_ERG
-        iplanck = 2 * h * c**2 / wave**5 / (np.exp(h * c / (wave * k * T)) - 1)
-        # convert from AA-2 to cm-2
-        iplanck *= (1e8)**2
-        if units == 'cgs_nm':
-            iplanck *= 10.
-    elif units == 'Hz':
-        wave = w * NM_TO_M  # wave in m
-        iplanck = 2 * h * c / wave**3 / (np.exp(h * c / (wave * k * T)) - 1)
+    """
+    from astropy.constants import c, h, k_B
+    import astropy.units as u
+
+    wave = wavelength.to('nm')
+    if temp.shape and wave.shape:
+        temp = temp[:, np.newaxis]  # array broadcast when T and wave are arrays
+    if dist.lower() == 'wavelength':
+        iplanck = 2 * h * c**2 / wave**5 / (np.exp(h * c / (wave * k_B * temp)) - 1)
+        return (iplanck / u.sr).to('erg / (s cm2 Angstrom sr)')
+    elif dist.lower() == 'frequency':
+        iplanck = 2 * h * c / wave**3 / (np.exp(h * c / (wave * k_B * temp)) - 1)
+        return (iplanck / u.sr).to('W / (m2 Hz sr)')
     else:
-        raise ValueError('planck: invalid units (%s)' % units)
-    return iplanck
+        raise ValueError('invalid distribution ' % dist)
 
 
-def int2bt(inu, w):
-    ''' Converts from radiation intensity (in J s^-1 m^-2  Hz^-1 sr^-1 units)
-        to brightness temperature units (in K), at a given wavelength wave
-        (in nm). '''
-    from scipy.constants import c, h, k
-    return h * c / (w * 1e-9 * k * np.log(2 * h * c / (wave**3 * inu) + 1))
+def int2bt(inu, wave):
+    """
+    Converts radiation intensity to brightness temperature.
+
+    Parameters
+    ----------
+    inu : `Quantity` object (number or sequence)
+        Radiation intensity in units of energy per second per area
+        per frequency per solid angle.
+    wave: `Quantity` object (number or sequence)
+        Wavelength in length units
+
+    Returns
+    -------
+    brightness_temp : `Quantity` object (number or sequence)
+        Brightness temperature in SI units of temperature.
+    """
+    from astropy.constants import c, h, k_B
+    import astropy.units as u
+
+    bt = h * c / (wave * k_B * np.log(2 * h * c / (wave**3 * inu * u.rad**2) + 1))
+    return bt.si
 
 
 def trapz2d(z, x=None, y=None, dx=1., dy=1.):
@@ -497,6 +521,16 @@ def madmax(image):
     Proc. of the 10th NSO/SPO, 1989, 217, O. von der Luhe Ed.
 
     Adapted from madmax.pro.
+
+    Parameters
+    ----------
+    image : 2D array
+        Image data to calculate madmax filter.
+
+    Returns
+    -------
+    mad : 2D array
+        Filtered image.
     """
     from scipy import ndimage
 

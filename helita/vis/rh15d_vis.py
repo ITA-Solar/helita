@@ -9,6 +9,7 @@ from pkg_resources import resource_filename
 from ipywidgets import interact, fixed, Dropdown, IntSlider, FloatSlider
 from scipy.integrate.quadrature import cumtrapz
 from scipy.interpolate import interp1d
+from astropy import units as u
 from ..utils.utilsmath import planck, voigt
 
 
@@ -128,9 +129,9 @@ class SourceFunction:
             sf = obj.ray.source_function[0, 0, :, 0].dropna('height')
             height = obj.atmos.height_scale[0, 0].dropna(
                 'height') / 1e6  # in Mm
-            bplanck = planck(obj.ray.wavelength_selected[0],
-                             obj.atmos.temperature[0, 0].dropna('height'),
-                             units='Hz')
+            bplanck = planck(obj.ray.wavelength_selected[0] * u.nm,
+                             obj.atmos.temperature[0, 0].dropna('height') * u.K,
+                             dist='frequency').value
             fig, ax = plt.subplots()
             ax.plot(height, sf, 'b-', label=r'S$_\mathrm{total}$', lw=1)
             ax.set_yscale('log')
