@@ -1,14 +1,158 @@
-import  m3d_classes as mc
 import numpy as np
-class m3d:
+import scipy.io
 
+class Geometry:
+    """
+    class def for geometry
+    """
+    def __init__(self):
+        self.nx = -1
+        self.ny = -1
+        self.nz = -1
+        self.nmu = -1
+        self.x = None
+        self.y = None
+        self.z = None
+        self.mux = None
+        self.muy = None
+        self.muz = None
+        self.wmu= None
+
+
+class Atom:
+    """
+    class def for atom
+    """
+    def __init__(self):
+        self.nrad = -1
+        self.nrfix = -1
+        self.ncont = -1
+        self.nline = -1
+        self.nlevel = -1
+        self.id = None
+        self.crout = None
+        self.label = None
+        self.ion = None
+        self.ilin = None
+        self.icon = None
+        self.abnd = -1e10
+        self.awgt = -1e10
+        self.ev = None
+        self.g = None
+        self.n = None
+        self.nstar = None
+        self.totn = None
+        self.dopfac = None
+
+class Atmos:
+    """
+    class def for atmos
+    """
+    def __init__(self):
+        self.ne = None
+        self.tg = None
+        self.vx = None
+        self.vy = None
+        self.vz = None
+        self.r = None
+        self.nh = None
+        self.vturb = None
+        self.x500 = None
+
+
+class Spectrum:
+    """
+    class def for spectrum
+    """
+
+    def __init__(self):
+        self.nnu = -1
+        self.maxal = -1
+        self.maxac = -1
+        self.nu = None
+        self.wnu = None
+        self.ac = None
+        self.al = None
+        self.nac = None
+        self.nal = None
+
+
+class Cont:
+    """
+    class def for continuum
+    """
+    def __init__(self):
+        self.f_type = None
+        self.j = -1
+        self.i = -1
+        self.nnu = -1
+        self.ntrans = -1
+        self.ired = -1
+        self.iblue = -1
+        self.nu0 = -1.0
+        self.numax = -1.0
+        self.alpha0 = -1.0
+        self.alpha = None
+        self.nu = None
+        self.wnu = None
+
+
+class Line:
+    """
+    class def for spectral line
+    """
+
+    def __init__(self):
+
+        self.profile_type = None
+        self.ga = -1.0
+        self.gw = -1.0
+        self.gq = -1.0
+        self.lambda0 = -1.0
+        self.nu0 = -1.0
+        self.Aji = -1.0
+        self.Bji = -1.0
+        self.Bij = -1.0
+        self.f = -1.0
+        self.qmax = -1.0
+        self.Grat = -1.0
+        self.ntrans = -1
+        self.j = -1
+        self.i = -1
+        self.nnu = -1
+        self.ired = -1
+        self.iblue = -1
+        self.nu = None
+        self.q = None
+        self.wnu =None
+        self.wq = None
+        self.adamp = None
+
+
+class Default:
+    """
+    class to hold default transition info for IO
+    """
+    def __init__(self):
+        self.i = -1
+        self.j = -1
+        self.isline = False
+        self.iscont = False
+        self.kr = -1
+        self.nnu = -1
+        self.nu = None
+        self.l = None
+        self.dl = None
+        self.ired = -1
+        self.ff = -1
+        self.ang = -1
+
+
+class m3d:
     """
     class for reading and handling multi3d output
     """
-
-    ####################################################################
-
-    def __init__(self,inputfile=None,directory=None,printinfo=True):
+    def __init__(self, inputfile=None, directory=None, printinfo=True):
         """
         initializes object, default directory to look for files is ./
         default input options file name is multi3d.input
@@ -21,11 +165,11 @@ class m3d:
         self.outnnu    = -1
         self.outff     = -1
 
-        self.sp       = mc.Spectrum()
-        self.geometry = mc.Geometry()
-        self.atom     = mc.Atom()
-        self.atmos    = mc.Atmos()
-        self.d        = mc.Default()
+        self.sp       = Spectrum()
+        self.geometry = Geometry()
+        self.atom     = Atom()
+        self.atmos    = Atmos()
+        self.d        = Default()
 
         # set default values
         if inputfile == None:
@@ -40,7 +184,6 @@ class m3d:
                 self.directory+="/"
         self.printinfo = printinfo
 
-    ####################################################################
     def readall(self):
         """
         reads multi3d.input file and all the out_* files
@@ -52,22 +195,19 @@ class m3d:
         self.readatmos()
         self.readrtq()
 
-
-    ####################################################################
-
     def readinput(self):
 
         """
         reads input from self.inputfile into a dict.
         """
-
         fname = self.directory + self.inputfile
 
         try:
             lines = [line.strip() for line in open(fname)]
-            if self.printinfo: print "reading " + fname
+            if self.printinfo:
+                print("reading " + fname)
         except Exception as e:
-            print e
+            print(e)
             return
 
         list = []
@@ -115,20 +255,17 @@ class m3d:
         self.geometry.ny = self.theinput["ny"]
         self.geometry.nz = self.theinput["nz"]
 
-    ####################################################################
 
     def readpar(self):
         """
         reads the out_par file
         """
-
-        import scipy.io as scio
-        import numpy as np
         from collections import namedtuple
 
         fname = self.directory + "out_par"
-        f = scio.FortranFile(fname, 'r')
-        if self.printinfo: print "reading " + fname
+        f = scipy.io.FortranFile(fname, 'r')
+        if self.printinfo:
+            print("reading " + fname)
 
         # geometry struct
         self.geometry.nmu = int(f.read_ints( dtype = np.int32))
@@ -180,7 +317,7 @@ class m3d:
         self.sp.al.resize( [self.sp.nnu, self.atom.nline])
 
         # cont info
-        self.cont = [ mc.Cont() for i in xrange(self.atom.ncont)]
+        self.cont = [ Cont() for i in range(self.atom.ncont)]
 
         for c in self.cont:
 
@@ -203,7 +340,7 @@ class m3d:
 
 
         #line info
-        self.line = [ mc.Line() for i in xrange(self.atom.nline)]
+        self.line = [ Line() for i in range(self.atom.nline)]
         for l in self.line:
 
             l.profile_type = f.read_record( dtype='S72')[0].strip()
@@ -236,15 +373,11 @@ class m3d:
 
         f.close()
 
-    ####################################################################
 
     def readn(self):
         """
         reads populations as numpy memmap
         """
-
-        import numpy as np
-
         if self.theinput is None:
             self.readinput()
 
@@ -259,10 +392,11 @@ class m3d:
                       shape=(nx,ny,nz,nlevel),order='F')
         self.atom.nstar = np.memmap(fname, dtype='float32', mode='r',
                           shape=(nx,ny,nz,nlevel), offset=gs, order='F')
-        
+
         self.atom.ntot = np.memmap(fname, dtype='float32', mode='r',
                          shape=(nx,ny,nz) ,offset=gs*2, order='F' )
-        if self.printinfo: print "reading " + fname
+        if self.printinfo:
+            print("reading " + fname)
 
     ####################################################################
 
@@ -270,9 +404,6 @@ class m3d:
         """
         reads atmosphere as numpy memmap
         """
-
-        import numpy as np
-
         if self.theinput is None:
             self.readinput()
 
@@ -299,23 +430,18 @@ class m3d:
         #self.atmos.vturb = np.memmap(fname, dtype='float32', mode='r',
         #                             shape=s ,offset=gs*12, order='F' )
 
-        if self.printinfo: print "reading " + fname
-
-   ####################################################################
+        if self.printinfo:
+            print("reading " + fname)
 
     def readrtq(self):
         """
         reads out_rtq as numpy memmap
         """
-
-        import numpy as np
-
         if self.theinput is None:
             self.readinput()
 
         if self.sp is None:
             self.readpar()
-
 
         fname = self.directory + "out_rtq"
         nx,ny,nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
@@ -332,28 +458,23 @@ class m3d:
                                 shape=s ,offset=gs*i, order='F' )
             i+=1
 
-    ####################################################################
-
     def readnu(self):
         """
         reads the out_nu file
         """
-
-        import scipy.io as scio
-        import numpy as np
-
         fname = self.directory + "out_nu"
-        f = scio.FortranFile(fname, 'r')
-        if self.printinfo: print "reading " + fname
+        f = scipy.io.FortranFile(fname, 'r')
+        if self.printinfo:
+            print("reading " + fname)
 
         self.outnnu = int(f.read_ints( dtype = np.int32))
         self.outff = f.read_ints( dtype = np.int32)
 
-    ####################################################################
-
     def setdefault(self, i,j, fr=-1,ang=0):
 
-        from m3d_util import cc, CM_TO_AA
+        #from m3d_util import cc, CM_TO_AA
+        cc = 2.99792458e10 # Speed of light [cm/s]
+        CM_TO_AA =1e8
 
         self.d.i = i-1
         self.d.j = j-1
@@ -375,8 +496,8 @@ class m3d:
             self.d.dl = None
             self.d.ired = self.cont[self.d.kr].ired
         else:
-            print ('upper and lower level '+str(i)+','+str(j)+
-            ' are not connected with a radiative transition.')
+            print('upper and lower level '+str(i)+','+str(j)+
+                  ' are not connected with a radiative transition.')
             return
 
         if fr == -1:
@@ -386,14 +507,12 @@ class m3d:
 
         self.d.ang = ang
 
-        print 'default values set to:'
-        print ' i   =', self.d.i
-        print ' j   =', self.d.j
-        print ' kr  =', self.d.kr
-        print ' ff  =', self.d.ff
-        print ' ang =', self.d.ang
-
-    ####################################################################
+        print('default values set to:')
+        print(' i   =', self.d.i)
+        print(' j   =', self.d.j)
+        print(' kr  =', self.d.kr)
+        print(' ff  =', self.d.ff)
+        print(' ang =', self.d.ang)
 
     def readvar(self, var, all=False):
 
@@ -402,7 +521,7 @@ class m3d:
         allowed_names=['chi','ie','jnu','zt1','st','xt','cf','snu',
                        'chi_c','scatt','therm']
         if not var in allowed_names:
-            print "'"+var+"' is not an valid variable name."
+            print("'"+var+"' is not an valid variable name.")
             return -1
 
         mx = "{:+.2f}".format(self.theinput['muxout'][self.d.ang])
@@ -411,9 +530,9 @@ class m3d:
         mus= '_' + mx + '_' + my + '_' + mz
         fname = self.directory + var + mus + '_allnu'
         if os.path.exists(fname):
-            print 'reading from ' + fname
+            print('reading from ' + fname)
         else:
-            print fname + ' does not exist'
+            print(fname + ' does not exist')
             return -1
 
         sg=self.geometry
@@ -425,11 +544,11 @@ class m3d:
             elif self.d.ff == -1:
                 shape = (sg.nx, sg.ny, self.d.nnu)
                 offset = ( 4 * sg.nx * sg.ny
-                           * np.where(self.outff == self.d.ired)[0] )
+                           * np.where(self.outff == self.d.ired)[0] )[0]
             else:
                 shape = (sg.nx, sg.ny)
                 offset = ( 4 * sg.nx * sg.ny
-                           * np.where(self.outff == self.d.ff)[0] )
+                           * np.where(self.outff == self.d.ff)[0] )[0]
 
         else:
 
@@ -439,15 +558,13 @@ class m3d:
             elif self.d.ff == -1:
                 shape = (sg.nx, sg.ny, sg.nz, self.d.nnu)
                 offset = ( 4 * sg.nx * sg.ny * sg.nz
-                           * np.where(self.outff == self.d.ired)[0] )
+                           * np.where(self.outff == self.d.ired)[0] )[0]
             else:
                 shape = (sg.nx, sg.ny, sg.nz)
                 offset = ( 4 * sg.nx * sg.ny * sg.nz
-                           * np.where(self.outff == self.d.ff)[0] )
+                           * np.where(self.outff == self.d.ff)[0] )[0]
 
         thedata = np.memmap(fname,dtype='float32', mode='r',
                         shape=shape,order='F',offset=offset)
 
         return thedata
-
-    ####################################################################
