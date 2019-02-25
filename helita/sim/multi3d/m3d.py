@@ -1,5 +1,10 @@
+"""
+Set of routines to read and work with input and output from Multi3D
+"""
+import os
 import numpy as np
 import scipy.io
+
 
 class Geometry:
     """
@@ -16,7 +21,7 @@ class Geometry:
         self.mux = None
         self.muy = None
         self.muz = None
-        self.wmu= None
+        self.wmu = None
 
 
 class Atom:
@@ -64,7 +69,6 @@ class Spectrum:
     """
     class def for spectrum
     """
-
     def __init__(self):
         self.nnu = -1
         self.maxal = -1
@@ -101,9 +105,7 @@ class Line:
     """
     class def for spectral line
     """
-
     def __init__(self):
-
         self.profile_type = None
         self.ga = -1.0
         self.gw = -1.0
@@ -124,14 +126,14 @@ class Line:
         self.iblue = -1
         self.nu = None
         self.q = None
-        self.wnu =None
+        self.wnu = None
         self.wq = None
         self.adamp = None
 
 
-class Default:
+class Transition:
     """
-    class to hold default transition info for IO
+    class to hold transition info for IO
     """
     def __init__(self):
         self.i = -1
@@ -148,40 +150,37 @@ class Default:
         self.ang = -1
 
 
-class m3d:
+class Multi3dOut:
     """
-    class for reading and handling multi3d output
+    Reads and handles multi3d output
     """
     def __init__(self, inputfile=None, directory=None, printinfo=True):
         """
         initializes object, default directory to look for files is ./
         default input options file name is multi3d.input
         """
-
         self.inputfile = None
         self.directory = None
         self.printinfo = None
-        self.theinput  = None
-        self.outnnu    = -1
-        self.outff     = -1
-
-        self.sp       = Spectrum()
+        self.theinput = None
+        self.outnnu = -1
+        self.outff = -1
+        self.sp = Spectrum()
         self.geometry = Geometry()
-        self.atom     = Atom()
-        self.atmos    = Atmos()
-        self.d        = Default()
-
+        self.atom = Atom()
+        self.atmos = Atmos()
+        self.d = Transition()
+        self.inttype = np.int32
+        self.floattype = np.float64
         # set default values
-        if inputfile == None:
+        if inputfile is None:
             self.inputfile = "multi3d.input"
         else:
             self.inputfile = inputfile
-        if directory == None:
+        if directory is None:
             self.directory = "../run/output/"
         else:
             self.directory = directory
-            if self.directory[-1] is not "/":
-                self.directory+="/"
         self.printinfo = printinfo
 
     def readall(self):
@@ -196,12 +195,10 @@ class m3d:
         self.readrtq()
 
     def readinput(self):
-
         """
         reads input from self.inputfile into a dict.
         """
-        fname = self.directory + self.inputfile
-
+        fname = os.path.join(self.directory, self.inputfile)
         try:
             lines = [line.strip() for line in open(fname)]
             if self.printinfo:
@@ -209,47 +206,39 @@ class m3d:
         except Exception as e:
             print(e)
             return
-
-        list = []
-        #Remove IDL comments ;
+        tmp = []
+        # Remove IDL comments ;
         for line in lines:
             head, sep, tail = line.partition(';')
-            list.append(head)
-        #Remove blank lines
-        list = filter(None, list)
-
-        #Create a dic with keys and values from the input file
+            tmp.append(head)
+        # Remove blank lines
+        tmp = filter(None, tmp)
         self.theinput = dict()
 
-        for line in list:
-            head,sep,tail = line.partition("=")
+        for line in tmp:
+            head, sep, tail = line.partition("=")
             tail = tail.strip()
             head = head.strip()
-
-            #Checks which type the values are
+            # Checks which type the values are
             try:
-                # integer
                 int(tail)
                 tail = int(tail)
-            except:
+            except ValueError:
                 try:
-                    # float
                     float(tail)
                     tail = float(tail)
-                except:
-                    # string, remove first and last token, which are quotes
-                    tail=tail[1:-1]
-
+                except ValueError:
+                    # First and last tokens are quotes
+                    tail = tail[1:-1]
             # special items, multiple float values in a string
-            if(head == "muxout" or head == "muyout" or head == "muzout"):
-                temp=[]
+            if head in ["muxout", "muyout", "muzout"]:
+                temp = []
                 for item in tail.split():
                     temp.append(float(item))
                     self.theinput[head] = temp
             else:
                 # simple str
                 self.theinput[head] = tail
-
         # set xn,ny,nz here as they are now known
         self.geometry.nx = self.theinput["nx"]
         self.geometry.ny = self.theinput["ny"]
@@ -260,119 +249,95 @@ class m3d:
         """
         reads the out_par file
         """
-        from collections import namedtuple
-
-        fname = self.directory + "out_par"
+        fname = os.path.join(self.directory, "out_par")
         f = scipy.io.FortranFile(fname, 'r')
         if self.printinfo:
             print("reading " + fname)
-
         # geometry struct
-        self.geometry.nmu = int(f.read_ints( dtype = np.int32))
-        self.geometry.nx = int(f.read_ints( dtype = np.int32))
-        self.geometry.ny = int(f.read_ints( dtype = np.int32))
-        self.geometry.nz = int(f.read_ints( dtype = np.int32))
-
-        self.geometry.x = f.read_reals( dtype = np.float64)
-        self.geometry.y = f.read_reals( dtype = np.float64)
-        self.geometry.z = f.read_reals( dtype = np.float64)
-
-        self.geometry.mux = f.read_reals( dtype = np.float64)
-        self.geometry.muy = f.read_reals( dtype = np.float64)
-        self.geometry.muz = f.read_reals( dtype = np.float64)
-        self.geometry.wmu = f.read_reals( dtype = np.float64)
-
-        self.sp.nnu = int(f.read_ints( dtype = np.int32))
-        self.sp.maxac = int(f.read_ints( dtype = np.int32))
-        self.sp.maxal = int(f.read_ints( dtype = np.int32))
-
-        self.sp.nu = f.read_reals( dtype = np.float64)
-        self.sp.wnu = f.read_reals( dtype = np.float64)
-
+        self.geometry.nmu = int(f.read_ints(dtype=self.inttype))
+        self.geometry.nx = int(f.read_ints(dtype=self.inttype))
+        self.geometry.ny = int(f.read_ints(dtype=self.inttype))
+        self.geometry.nz = int(f.read_ints(dtype=self.inttype))
+        self.geometry.x = f.read_reals(dtype=self.floattype)
+        self.geometry.y = f.read_reals(dtype=self.floattype)
+        self.geometry.z = f.read_reals(dtype=self.floattype)
+        self.geometry.mux = f.read_reals(dtype=self.floattype)
+        self.geometry.muy = f.read_reals(dtype=self.floattype)
+        self.geometry.muz = f.read_reals(dtype=self.floattype)
+        self.geometry.wmu = f.read_reals(dtype=self.floattype)
+        self.sp.nnu = int(f.read_ints(dtype=self.inttype))
+        self.sp.maxac = int(f.read_ints(dtype=self.inttype))
+        self.sp.maxal = int(f.read_ints(dtype=self.inttype))
+        self.sp.nu = f.read_reals(dtype=self.floattype)
+        self.sp.wnu = f.read_reals(dtype=self.floattype)
         # next two need reform
-        self.sp.ac = f.read_ints( dtype = np.int32)
-        self.sp.al = f.read_ints( dtype = np.int32)
-        self.sp.nac = f.read_ints( dtype = np.int32)
-        self.sp.nal = f.read_ints( dtype = np.int32)
-
+        self.sp.ac = f.read_ints(dtype=self.inttype)
+        self.sp.al = f.read_ints(dtype=self.inttype)
+        self.sp.nac = f.read_ints(dtype=self.inttype)
+        self.sp.nal = f.read_ints(dtype=self.inttype)
         # atom struct
-        self.atom.nrad = int( f.read_ints( dtype = np.int32))
-        self.atom.nrfix = int( f.read_ints( dtype = np.int32))
-        self.atom.ncont = int( f.read_ints( dtype = np.int32))
-        self.atom.nline = int( f.read_ints( dtype = np.int32))
-        self.atom.nlevel = int( f.read_ints( dtype = np.int32))
-        ss=[self.atom.nlevel, self.atom.nlevel]
-        self.atom.id = (f.read_record( dtype='S20'))[0].strip()
-        self.atom.crout = (f.read_record( dtype='S20'))[0].strip()
-        self.atom.label = f.read_record( dtype='S20').tolist()
-        self.atom.ion = f.read_ints( dtype = np.int32)
-        self.atom.ilin = f.read_ints( dtype = np.int32).reshape(ss)
-        self.atom.icon = f.read_ints( dtype = np.int32).reshape(ss)
-        self.atom.abnd = f.read_reals( dtype = np.float64)[0]
-        self.atom.awgt = f.read_reals( dtype = np.float64)[0]
-        self.atom.ev = f.read_reals( dtype = np.float64)
-        self.atom.g = f.read_reals( dtype = np.float64)
-
-        self.sp.ac.resize( [self.sp.nnu, self.atom.ncont])
-        self.sp.al.resize( [self.sp.nnu, self.atom.nline])
+        self.atom.nrad = int(f.read_ints(dtype=self.inttype))
+        self.atom.nrfix = int(f.read_ints(dtype=self.inttype))
+        self.atom.ncont = int(f.read_ints(dtype=self.inttype))
+        self.atom.nline = int(f.read_ints(dtype=self.inttype))
+        self.atom.nlevel = int(f.read_ints(dtype=self.inttype))
+        ss = [self.atom.nlevel, self.atom.nlevel]
+        self.atom.id = (f.read_record(dtype='S20'))[0].strip()
+        self.atom.crout = (f.read_record(dtype='S20'))[0].strip()
+        self.atom.label = f.read_record(dtype='S20').tolist()
+        self.atom.ion = f.read_ints(dtype=self.inttype)
+        self.atom.ilin = f.read_ints(dtype=self.inttype).reshape(ss)
+        self.atom.icon = f.read_ints(dtype=self.inttype).reshape(ss)
+        self.atom.abnd = f.read_reals(dtype=self.floattype)[0]
+        self.atom.awgt = f.read_reals(dtype=self.floattype)[0]
+        self.atom.ev = f.read_reals(dtype=self.floattype)
+        self.atom.g = f.read_reals(dtype=self.floattype)
+        self.sp.ac.resize([self.sp.nnu, self.atom.ncont])
+        self.sp.al.resize([self.sp.nnu, self.atom.nline])
 
         # cont info
-        self.cont = [ Cont() for i in range(self.atom.ncont)]
-
+        self.cont = [Cont() for i in range(self.atom.ncont)]
         for c in self.cont:
-
-            c.bf_type = f.read_record( dtype='S20')[0].strip()
-
-            c.i      = int( f.read_ints( dtype = np.int32))
-            c.j      = int( f.read_ints( dtype = np.int32))
-            c.ntrans = int( f.read_ints( dtype = np.int32))
-            c.nnu    = int( f.read_ints( dtype = np.int32))
-            c.ired   = int( f.read_ints( dtype = np.int32))
-            c.iblue  = int( f.read_ints( dtype = np.int32))
-
-            c.nu0    = f.read_reals( dtype = np.float64)[0]
-            c.numax  = f.read_reals( dtype = np.float64)[0]
-            c.alpha0 = f.read_reals( dtype = np.float64)[0]
-            c.alpha  = f.read_reals( dtype = np.float64)[0]
-
-            c.nu     = f.read_reals( dtype = np.float64)
-            c.wnu    = f.read_reals( dtype = np.float64)
-
+            c.bf_type = f.read_record(dtype='S20')[0].strip()
+            c.i = int(f.read_ints(dtype=self.inttype))
+            c.j = int(f.read_ints(dtype=self.inttype))
+            c.ntrans = int(f.read_ints(dtype=self.inttype))
+            c.nnu = int(f.read_ints(dtype=self.inttype))
+            c.ired = int(f.read_ints(dtype=self.inttype))
+            c.iblue = int(f.read_ints(dtype=self.inttype))
+            c.nu0 = f.read_reals(dtype=self.floattype)[0]
+            c.numax = f.read_reals(dtype=self.floattype)[0]
+            c.alpha0 = f.read_reals(dtype=self.floattype)[0]
+            c.alpha = f.read_reals(dtype=self.floattype)[0]
+            c.nu = f.read_reals(dtype=self.floattype)
+            c.wnu = f.read_reals(dtype=self.floattype)
 
         #line info
-        self.line = [ Line() for i in range(self.atom.nline)]
+        self.line = [Line() for i in range(self.atom.nline)]
         for l in self.line:
-
-            l.profile_type = f.read_record( dtype='S72')[0].strip()
-
-            l.ga      = f.read_reals( dtype = np.float64)[0]
-            l.gw      = f.read_reals( dtype = np.float64)[0]
-            l.gq      = f.read_reals( dtype = np.float64)[0]
-            l.lambda0 = f.read_reals( dtype = np.float64)[0]
-
-
-            l.nu0     = f.read_reals( dtype = np.float64)[0]
-            l.Aji     = f.read_reals( dtype = np.float64)[0]
-            l.Bji     = f.read_reals( dtype = np.float64)[0]
-            l.Bij     = f.read_reals( dtype = np.float64)[0]
-            l.f       = f.read_reals( dtype = np.float64)[0]
-            l.qmax    = f.read_reals( dtype = np.float64)[0]
-            l.Grat    = f.read_reals( dtype = np.float64)[0]
-
-            l.ntrans = int( f.read_ints( dtype = np.int32))
-            l.j      = int( f.read_ints( dtype = np.int32))
-            l.i      = int( f.read_ints( dtype = np.int32))
-            l.nnu    = int( f.read_ints( dtype = np.int32))
-            l.ired   = int( f.read_ints( dtype = np.int32))
-            l.iblue  = int( f.read_ints( dtype = np.int32))
-
-            l.nu  = f.read_reals( dtype = np.float64)
-            l.q   = f.read_reals( dtype = np.float64)
-            l.wnu = f.read_reals( dtype = np.float64)
-            l.wq  = f.read_reals( dtype = np.float64)
-
+            l.profile_type = f.read_record(dtype='S72')[0].strip()
+            l.ga = f.read_reals(dtype=self.floattype)[0]
+            l.gw = f.read_reals(dtype=self.floattype)[0]
+            l.gq = f.read_reals(dtype=self.floattype)[0]
+            l.lambda0 = f.read_reals(dtype=self.floattype)[0]
+            l.nu0 = f.read_reals(dtype=self.floattype)[0]
+            l.Aji = f.read_reals(dtype=self.floattype)[0]
+            l.Bji = f.read_reals(dtype=self.floattype)[0]
+            l.Bij = f.read_reals(dtype=self.floattype)[0]
+            l.f = f.read_reals(dtype=self.floattype)[0]
+            l.qmax = f.read_reals(dtype=self.floattype)[0]
+            l.Grat = f.read_reals(dtype=self.floattype)[0]
+            l.ntrans = int(f.read_ints(dtype=self.inttype))
+            l.j = int(f.read_ints(dtype=self.inttype))
+            l.i = int(f.read_ints(dtype=self.inttype))
+            l.nnu = int(f.read_ints(dtype=self.inttype))
+            l.ired = int(f.read_ints(dtype=self.inttype))
+            l.iblue = int(f.read_ints(dtype=self.inttype))
+            l.nu = f.read_reals(dtype=self.floattype)
+            l.q = f.read_reals(dtype=self.floattype)
+            l.wnu = f.read_reals(dtype=self.floattype)
+            l.wq = f.read_reals(dtype=self.floattype)
         f.close()
-
 
     def readn(self):
         """
@@ -381,24 +346,19 @@ class m3d:
         if self.theinput is None:
             self.readinput()
 
-
-        fname = self.directory + "out_pop"
-        nlevel=self.atom.nlevel
-        nx,ny,nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
-
-        gs=nx*ny*nz*nlevel*4
-
+        fname = os.path.join(self.directory, "out_pop")
+        nlevel = self.atom.nlevel
+        nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
+        gs = nx * ny * nz * nlevel * 4
         self.atom.n = np.memmap(fname, dtype='float32', mode='r',
-                      shape=(nx,ny,nz,nlevel),order='F')
-        self.atom.nstar = np.memmap(fname, dtype='float32', mode='r',
-                          shape=(nx,ny,nz,nlevel), offset=gs, order='F')
+                                shape=(nx, ny, nz, nlevel), order='F')
+        self.atom.nstar = np.memmap(fname, dtype='float32', mode='r', order='F',
+                                    shape=(nx, ny, nz, nlevel), offset=gs, )
 
-        self.atom.ntot = np.memmap(fname, dtype='float32', mode='r',
-                         shape=(nx,ny,nz) ,offset=gs*2, order='F' )
+        self.atom.ntot = np.memmap(fname, dtype='float32', mode='r', order='F',
+                                   shape=(nx, ny, nz), offset=gs * 2)
         if self.printinfo:
             print("reading " + fname)
-
-    ####################################################################
 
     def readatmos(self):
         """
@@ -406,30 +366,27 @@ class m3d:
         """
         if self.theinput is None:
             self.readinput()
-
-        fname = self.directory + "out_atm"
+        fname = os.path.join(self.directory, "out_atm")
         nhl = 6
-        nx,ny,nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
-        s=(nx,ny,nz)
-        gs=nx*ny*nz*4
-
-        self.atmos.ne  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s, order='F')
-        self.atmos.tg  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s, offset=gs, order='F')
-        self.atmos.vx  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s ,offset=gs*2, order='F' )
-        self.atmos.vy  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s ,offset=gs*3, order='F' )
-        self.atmos.vz  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s ,offset=gs*4, order='F' )
+        nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
+        s = (nx, ny, nz)
+        gs = nx * ny * nz * 4
+        self.atmos.ne = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, order='F')
+        self.atmos.tg = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs, order='F')
+        self.atmos.vx = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs*2, order='F')
+        self.atmos.vy = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs*3, order='F')
+        self.atmos.vz = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs*4, order='F')
         self.atmos.rho = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s ,offset=gs*5, order='F' )
-        self.atmos.nh  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=(nx,ny,nz,nhl) ,offset=gs*6, order='F' )
+                                   shape=s, offset=gs*5, order='F')
+        self.atmos.nh = np.memmap(fname, dtype='float32', mode='r', order='F',
+                                  shape=(nx, ny, nz, nhl), offset=gs * 6)
         #self.atmos.vturb = np.memmap(fname, dtype='float32', mode='r',
         #                             shape=s ,offset=gs*12, order='F' )
-
         if self.printinfo:
             print("reading " + fname)
 
@@ -439,42 +396,39 @@ class m3d:
         """
         if self.theinput is None:
             self.readinput()
-
         if self.sp is None:
             self.readpar()
-
-        fname = self.directory + "out_rtq"
-        nx,ny,nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
-        s=(nx,ny,nz)
-        gs=nx*ny*nz*4
-
-        self.atmos.x500  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s, order='F')
-        self.atom.dopfac  = np.memmap(fname, dtype='float32', mode='r',
-                                   shape=s, offset=gs, order='F')
-        i=2
+        fname = os.path.join(self.directory, "out_rtq")
+        nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
+        s = (nx, ny, nz)
+        gs = nx * ny * nz * 4
+        self.atmos.x500 = np.memmap(fname, dtype='float32', mode='r',
+                                    shape=s, order='F')
+        self.atom.dopfac = np.memmap(fname, dtype='float32', mode='r',
+                                     shape=s, offset=gs, order='F')
+        i = 2
         for l in self.line:
             l.adamp = np.memmap(fname, dtype='float32', mode='r',
-                                shape=s ,offset=gs*i, order='F' )
-            i+=1
+                                shape=s, offset=gs * i, order='F')
+            i += 1
 
     def readnu(self):
         """
         reads the out_nu file
         """
-        fname = self.directory + "out_nu"
+        fname = os.path.join(self.directory, "out_nu")
         f = scipy.io.FortranFile(fname, 'r')
         if self.printinfo:
             print("reading " + fname)
+        self.outnnu = int(f.read_ints(dtype=self.inttype))
+        self.outff = f.read_ints(dtype=self.inttype)
 
-        self.outnnu = int(f.read_ints( dtype = np.int32))
-        self.outff = f.read_ints( dtype = np.int32)
-
-    def setdefault(self, i,j, fr=-1,ang=0):
-
-        #from m3d_util import cc, CM_TO_AA
+    def set_transition(self, i, j, fr=-1, ang=0):
+        """
+        Sets parameters of transition to read
+        """
         cc = 2.99792458e10 # Speed of light [cm/s]
-        CM_TO_AA =1e8
+        CM_TO_AA = 1e8
 
         self.d.i = i-1
         self.d.j = j-1
@@ -486,7 +440,8 @@ class m3d:
             self.d.nnu = self.line[self.d.kr].nnu
             self.d.nu = np.copy(self.line[self.d.kr].nu)
             self.d.l = cc / self.d.nu * CM_TO_AA
-            self.d.dl = cc * CM_TO_AA * (1.0/self.d.nu - 1.0/self.line[self.d.kr].nu0)
+            self.d.dl = cc * CM_TO_AA * (1.0 / self.d.nu -
+                                         1.0 / self.line[self.d.kr].nu0)
             self.d.ired = self.line[self.d.kr].ired
         elif self.d.iscont:
             self.d.kr = self.atom.icon[self.d.i, self.d.j] - 1
@@ -496,75 +451,63 @@ class m3d:
             self.d.dl = None
             self.d.ired = self.cont[self.d.kr].ired
         else:
-            print('upper and lower level '+str(i)+','+str(j)+
-                  ' are not connected with a radiative transition.')
-            return
-
+            raise RuntimeError('upper and lower level %i, %i are not connected'
+                               ' with a radiative transition.' % (i, j))
         if fr == -1:
-            self.d.ff=-1
+            self.d.ff = -1
         else:
-            self.d.ff = self.d.ired+fr
-
+            self.d.ff = self.d.ired + fr
         self.d.ang = ang
 
-        print('default values set to:')
+        print('transition parameters are set to:')
         print(' i   =', self.d.i)
         print(' j   =', self.d.j)
         print(' kr  =', self.d.kr)
         print(' ff  =', self.d.ff)
         print(' ang =', self.d.ang)
 
-    def readvar(self, var, all=False):
-
-        import os
-
-        allowed_names=['chi','ie','jnu','zt1','st','xt','cf','snu',
-                       'chi_c','scatt','therm']
-        if not var in allowed_names:
-            print("'"+var+"' is not an valid variable name.")
-            return -1
-
+    def readvar(self, var, all_vars=False):
+        """
+        Reads output variable
+        """
+        allowed_names = ['chi', 'ie', 'jnu', 'zt1', 'st', 'xt', 'cf', 'snu',
+                         'chi_c', 'scatt', 'therm']
+        if var.lower() not in allowed_names:
+            raise ValueError("%s is not an valid variable name, must be one"
+                             "of '%s.'" % (var, "', '".join(allowed_names)))
         mx = "{:+.2f}".format(self.theinput['muxout'][self.d.ang])
         my = "{:+.2f}".format(self.theinput['muyout'][self.d.ang])
         mz = "{:+.2f}".format(self.theinput['muzout'][self.d.ang])
-        mus= '_' + mx + '_' + my + '_' + mz
-        fname = self.directory + var + mus + '_allnu'
-        if os.path.exists(fname):
+        mus = '_' + mx + '_' + my + '_' + mz + '_allnu'
+        fname = os.path.join(self.directory, var + mus)
+        if os.path.isfile(fname):
             print('reading from ' + fname)
         else:
-            print(fname + ' does not exist')
-            return -1
-
-        sg=self.geometry
-
-        if var in ('ie','zt1'):
-            if all:
+            raise IOError('%s does not exist' % fname)
+        sg = self.geometry
+        if var in ('ie', 'zt1'):
+            if all_vars:
                 shape = (sg.nx, sg.ny, self.outnnu)
                 offset = 0
             elif self.d.ff == -1:
                 shape = (sg.nx, sg.ny, self.d.nnu)
-                offset = ( 4 * sg.nx * sg.ny
-                           * np.where(self.outff == self.d.ired)[0] )[0]
+                offset = (4 * sg.nx * sg.ny *
+                          np.where(self.outff == self.d.ired)[0])[0]
             else:
                 shape = (sg.nx, sg.ny)
-                offset = ( 4 * sg.nx * sg.ny
-                           * np.where(self.outff == self.d.ff)[0] )[0]
-
+                offset = (4 * sg.nx * sg.ny *
+                          np.where(self.outff == self.d.ff)[0])[0]
         else:
-
-            if all:
+            if all_vars:
                 shape = (sg.nx, sg.ny, sg.nz, self.outnnu)
                 offset = 0
             elif self.d.ff == -1:
                 shape = (sg.nx, sg.ny, sg.nz, self.d.nnu)
-                offset = ( 4 * sg.nx * sg.ny * sg.nz
-                           * np.where(self.outff == self.d.ired)[0] )[0]
+                offset = (4 * sg.nx * sg.ny * sg.nz *
+                          np.where(self.outff == self.d.ired)[0])[0]
             else:
                 shape = (sg.nx, sg.ny, sg.nz)
-                offset = ( 4 * sg.nx * sg.ny * sg.nz
-                           * np.where(self.outff == self.d.ff)[0] )[0]
-
-        thedata = np.memmap(fname,dtype='float32', mode='r',
-                        shape=shape,order='F',offset=offset)
-
-        return thedata
+                offset = (4 * sg.nx * sg.ny * sg.nz *
+                          np.where(self.outff == self.d.ff)[0])[0]
+        return np.memmap(fname, dtype='float32', mode='r',
+                         shape=shape, order='F', offset=offset)
