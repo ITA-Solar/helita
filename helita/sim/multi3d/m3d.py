@@ -4,6 +4,7 @@ Set of routines to read and work with input and output from Multi3D
 import os
 import numpy as np
 import scipy.io
+import astropy.units as u
 
 
 class Geometry:
@@ -93,7 +94,7 @@ class Cont:
         self.ntrans = -1
         self.ired = -1
         self.iblue = -1
-        self.nu0 = -1.0
+        self.nu0 = -1.0 * u.Hz
         self.numax = -1.0
         self.alpha0 = -1.0
         self.alpha = None
@@ -111,7 +112,7 @@ class Line:
         self.gw = -1.0
         self.gq = -1.0
         self.lambda0 = -1.0
-        self.nu0 = -1.0
+        self.nu0 = -1.0 * u.Hz
         self.Aji = -1.0
         self.Bji = -1.0
         self.Bij = -1.0
@@ -305,7 +306,7 @@ class Multi3dOut:
             c.nnu = int(f.read_ints(dtype=self.inttype))
             c.ired = int(f.read_ints(dtype=self.inttype))
             c.iblue = int(f.read_ints(dtype=self.inttype))
-            c.nu0 = f.read_reals(dtype=self.floattype)[0]
+            c.nu0 = f.read_reals(dtype=self.floattype)[0] * u.Hz
             c.numax = f.read_reals(dtype=self.floattype)[0]
             c.alpha0 = f.read_reals(dtype=self.floattype)[0]
             c.alpha = f.read_reals(dtype=self.floattype)[0]
@@ -320,7 +321,7 @@ class Multi3dOut:
             l.gw = f.read_reals(dtype=self.floattype)[0]
             l.gq = f.read_reals(dtype=self.floattype)[0]
             l.lambda0 = f.read_reals(dtype=self.floattype)[0]
-            l.nu0 = f.read_reals(dtype=self.floattype)[0]
+            l.nu0 = f.read_reals(dtype=self.floattype)[0] * u.Hz
             l.Aji = f.read_reals(dtype=self.floattype)[0]
             l.Bji = f.read_reals(dtype=self.floattype)[0]
             l.Bij = f.read_reals(dtype=self.floattype)[0]
@@ -427,8 +428,8 @@ class Multi3dOut:
         """
         Sets parameters of transition to read
         """
-        cc = 2.99792458e10 # Speed of light [cm/s]
-        CM_TO_AA = 1e8
+        from astropy.constants import c
+        cc = c.to('Angstrom / s')
 
         self.d.i = i-1
         self.d.j = j-1
@@ -438,16 +439,16 @@ class Multi3dOut:
         if self.d.isline:
             self.d.kr = self.atom.ilin[self.d.i, self.d.j] - 1
             self.d.nnu = self.line[self.d.kr].nnu
-            self.d.nu = np.copy(self.line[self.d.kr].nu)
-            self.d.l = cc / self.d.nu * CM_TO_AA
-            self.d.dl = cc * CM_TO_AA * (1.0 / self.d.nu -
-                                         1.0 / self.line[self.d.kr].nu0)
+            self.d.nu = np.copy(self.line[self.d.kr].nu) * u.Hz
+            self.d.l = (cc / self.d.nu).to('Angstrom')
+            self.d.dl = (cc * (1.0 / self.d.nu -
+                               1.0 / self.line[self.d.kr].nu0)).to('Angstrom')
             self.d.ired = self.line[self.d.kr].ired
         elif self.d.iscont:
             self.d.kr = self.atom.icon[self.d.i, self.d.j] - 1
             self.d.nnu = self.cont[self.d.kr].nnu
-            self.d.nu = np.copy(self.cont[self.d.kr].nu)
-            self.d.l = cc / self.d.nu * CM_TO_AA
+            self.d.nu = np.copy(self.cont[self.d.kr].nu) * u.Hz
+            self.d.l = (cc / self.d.nu).to('Angstrom')
             self.d.dl = None
             self.d.ired = self.cont[self.d.kr].ired
         else:
