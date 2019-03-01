@@ -3,6 +3,7 @@ set of tools to deal with Hinode observations
 """
 import os
 import numpy as np
+from pkg_resources import resource_filename
 
 
 def bfi_filter(wave, band='CAH', norm=True):
@@ -30,9 +31,10 @@ def bfi_filter(wave, band='CAH', norm=True):
     filt_names = {'CN': '3883', 'CAH': '3968', 'GBAND': '4305',
                   'BLUE': '4504', 'GREEN': '5550', 'RED': '6684'}
     if band not in list(filt_names.keys()):
-        raise ValueError
-    cfile = os.path.join(os.getenv('TIAGO_DATA'),
-                         'Hinode/BFI_filter_%s.txt' % filt_names[band])
+        msg = "Band name must be one of %s" % ', '.join(filt_names.keys())
+        raise(ValueError, "Invalid band. " + msg + ".")
+    cfile = resource_filename('helita',
+                              'data/BFI_filter_%s.txt' % filt_names[band])
     wave_filt, filt = np.loadtxt(cfile, unpack=True)
     f = interp.interp1d(wave_filt, filt, bounds_error=False, fill_value=0)
     wfilt = f(wave)

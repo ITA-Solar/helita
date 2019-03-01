@@ -6,9 +6,11 @@ import os
 
 
 class Multi_3dOut:
+    """
+    Class that reads and deals with output from multi_3d
+    """
     def __init__(self, outfile=None, basedir='.', atmosid='', length=4,
                  verbose=False, readall=False):
-        """ Class that reads and deals with output from multi_3d """
         self.verbose = verbose
         out3dfiles = ['cmass3d', 'dscal2', 'height3d', 'Iv3d', 'taulg3d',
                       'x3d', 'xnorm3d']
@@ -31,19 +33,16 @@ class Multi_3dOut:
                     self.read_c3d(f, length=length,
                                   mode=(os.path.split(f)[1].split('.' +
                                                                   atmosid)[0]))
-        return
 
     def check_basic(self):
         """
         Checks to see if basic input parameters have been read from out3d.
-
         """
         basic = ['nx', 'ny', 'ndep', 'mq', 'nrad', 'nqtot']
         for p in basic:
             if p not in dir(self):
                 raise ValueError('(EEE) %s has not been read. Make sure '
                                  'out3d was read.' % p)
-        return
 
     def read_out3d(self, outfile, length=4):
         """ Reads out3d file. """
@@ -116,18 +115,16 @@ class Multi_3dOut:
                 readon = False
         if self.verbose:
             print(('--- Read %s.' % outfile))
-        return
 
     def read_c3d(self, outfile, length=4, mode='n3d'):
         ''' Reads the 3D cube output file, like n3d or b3d. '''
         self.check_basic()
         self.nk = os.path.getsize(outfile) // (self.nxyz * 4)
         setattr(self, mode, np.memmap(outfile, dtype='Float32', mode='r',
-                                     order='F', shape=(self.nx, self.ny,
-                                                       self.ndep, self.nk)))
+                                      order='F', shape=(self.nx, self.ny,
+                                                        self.ndep, self.nk)))
         if self.verbose:
             print('--- Read ' + outfile)
-        return
 
 
 class Atmos3d:
@@ -197,12 +194,13 @@ class Atmos3d:
         file.close()
         return
 
+
     def write_rh15d(self, outfile, sx=None, sy=None, sz=None, desc=None):
         ''' Writes atmos into rh15d NetCDF format. '''
         from . import rh15d
         if not hasattr(self, 'rho'):
-            raise UnboundLocalError('(EEE) write_rh15d: present atmosphere has'
-                                    'no rho, cannot convert to rh15d format')
+            raise UnboundLocalError('Current atmosphere has no rho, '
+                                    'cannot convert to rh15d format.')
         # slicing and unit conversion
         if sx is None:
             sx = [0, self.nx, 1]
@@ -220,30 +218,56 @@ class Atmos3d:
         z = self.z[sz[0]:sz[1]:sz[2]] * 1e-2
         nh = rho / 2.380491e-24 * 1.e6       # from rho to nH in m^-3
         # write to file
-        rh15d.make_ncdf_atmos(outfile, temp, vz, ne, nh, z, append=False,
-                              desc=desc, snap=0)
-        return
+        rh15d.make_xarray_atmos(outfile, temp, vz, z, nH=nh, ne=ne,
+                                append=False, desc=desc, snap=0)
 
 
 def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
                  cmass=None, nh=None, id='Model', scale='height', logg=4.44,
-                 write_dscale=False, spherical=False, radius=6.96e5):
+                 write_dscale=False, spherical=False):
     """
-    Writes atmosphere in MULTI format.
+    Writes file with atmosphere in MULTI format.
 
-    'scale' defines type of file. Options are:
-    'height' - HEIGHT scale
-    'tau'    - TAU(5000) scale
-    'mass'  - column mass scale
+    Parameters
+    ----------
+    filename : str
+        Name of file to write.
+    temp : 1D array
+        Temperature in K.
+    ne : 1D array
+        Electron density per cm^-3
+    z : 1D array, optional
+        Height scale in km
+    logtau : 1D array, optional
+        Log of optical depth at 500 nm scale
+    vz : 1D array, optional
+        Line of sight velocity in km/s. Positive is upflow.
+    vturb : 1D array, optional
+        Turbulent velocity in km/s.
+    cmass : 1D array, optional
+        Column mass scale in g cm^-2
+    nh : 2D array, optional
+        Hydrogen populations per cm^-3. Shape must be (6, nheight),
+        so always 6 levels.
+    id : str, optional
+        Model ID string
+    scale : str, optional
+        Type of scale to use. Options are:
+            'height' - HEIGHT scale (default)
+            'tau'    - TAU(5000) scale
+            'mass'   - column mass scale
+        Must supply z, logtau, or cmass accordingly.
+    logg : float, optional
+        Log of gravity. Default is solar (4.44)
+    write_dscale : bool, optional
+        If True, will write DSCALE file.
+        Height scale in km
+    spherical : bool, optional
+        If True, will write model in spherical geometry
 
-    The following units must be used:
-        * Temp  [K]
-        * ne    [cm^-3]
-        * nh    [cm^-3]
-        * vz    [km/s]
-        * vturb [km/s]
-        * z     [km]
-        * cmass [gm cm^-2] (optional)
+    Returns
+    -------
+    None. Writes file to disk.
     """
     if scale.lower() == 'height':
         if z is None:
@@ -319,34 +343,45 @@ def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
             f.write('{0:15.6E}\n'.format(scl[i].astype('d')))
         f.close()
         print(('--- Wrote dscale to ' + filename + '.dscale'))
-    return
 
 
 def write_atmos3d(outfile, x, y, z, ne, temp, vz, vx=None, vy=None, rho=None,
                   big_endian=False, length=4, prec='Float32'):
     """
-    Writes atmos3d atmosphere (format of 'old' multi3d and multi_3d).
-    vx and vy are optional, if not specified zeros will be used. rho is
-    also optional, if not specified it will not be written at the end of the
-    file.
+    Writes file with atmos3d atmosphere (format of 'old' multi3d and multi_3d).
 
-    Input 3D arrays (ne, temp, vx, vy, vz, rho) must be in C order!
-    (shape = [nx, ny, nz]) They will be written in Fortran order
-    (shape=[nz,ny,nx])
+    Parameters
+    ----------
+    outfile : str
+        Name of file to write.
+    x, y, z : 1D arrays
+        Arrays with x, y, and z  scales in cm.
+    ne : 3D array, C order
+        Electron density per cm^-3. Shape must be (nx, ny, nz).
+    temp : 3D array, C order
+        Temperature in K. Shape must be (nx, ny, nz).
+    vz : 3D array, C order
+        Velocity in height axis in km/s. Positive is upflow.
+        Shape must be (nx, ny, nz).
+    vx : 3D array, C order, optional
+        Velocity in x axis in km/s. Shape must be (nx, ny, nz).
+        If not given, zeros will be used.
+    vy : 3D array, C order, optional
+        Velocity in y axis in km/s. Shape must be (nx, ny, nz).
+        If not given, zeros will be used.
+    rho : 3D array, C order, optional
+        Density in g cm^-3. Shape must be (nx, ny, nz).
+        If not given, zeros will be used.
+    big_endian : bool, optional
+        Endianness of output file. Default is False (little endian).
+    length : int, optional
+        Length of fortran format pad. Should be 4 (default) in most cases.
+    prec : str, optional
+        Precision ('Float32' or 'Float64')
 
-    IN:
-
-    x, y, z [cm]:     1D arrays
-    ne      [cm-3]:   3D array
-    temp    [K]:      3D array
-    vz      [km/s]:   3D array
-    vx, vy  [km/s]:   3D arrays, optional
-    rho     [g cm-3]: 3D array, optional
-    big_endian:       Boolean, if true will write in big endian
-    length:           length of fortran format pad. Should be 4 in most cases.
-    prec:             precision (Float32 or Float64)
-
-
+    Returns
+    -------
+    None. Writes file to disk.
     """
     import os
     from ..io.fio import fort_write
@@ -399,4 +434,3 @@ def write_atmos3d(outfile, x, y, z, ne, temp, vz, vx=None, vy=None, rho=None,
                    length=ll)
     f.close()
     print(('Wrote %s' % outfile))
-    return

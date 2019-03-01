@@ -78,7 +78,7 @@ class BifrostData(object):
         """
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
         self.auxvars = self.params['aux'].split()
-        if (self.do_mhd):
+        if self.do_mhd:
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
         if 'do_hion' in self.params:
@@ -665,11 +665,11 @@ class BifrostData(object):
         rho = self.r[sx, sy, sz]
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
-        vx = cstagger.xup(self.px)[sx, sy, sz]
+        vx = cstagger.xup(self.px)[sx, sy, sz] / rho
         vx *= uv
-        vy = cstagger.yup(self.py)[sx, sy, sz]
+        vy = cstagger.yup(self.py)[sx, sy, sz] / rho
         vy *= -uv
-        vz = cstagger.zup(self.pz)[sx, sy, sz]
+        vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         rho = rho * ur  # to cgs
         x = self.x[sx] * ul
@@ -706,7 +706,7 @@ class BifrostData(object):
         fout.vz[:] = vz
         fout.rho[:] = rho
         # write mesh?
-        if mesh is not None:
+        if mesh:
             fout2 = open(mesh, "w")
             fout2.write("%i\n" % nx)
             x.tofile(fout2, sep="  ", format="%11.5e")
@@ -899,23 +899,32 @@ class Rhoeetab:
         return quant
 
     def tab_interp(self, rho, ei, out='ne', bin=None, order=1):
-        ''' Interpolates the EOS/rad table for the required quantity in out.
+        '''
+        Interpolates the EOS/rad table for the required quantity in out.
 
-            IN:
-                rho  : density [g/cm^3]
-                ei   : internal energy [erg/g]
-                bin  : (optional) radiation bin number for bin parameters
-                order: interpolation order (1: linear, 3: cubic)
+        Parameters
+        ----------
+            rho  : ndarray
+                Density in g/cm^3
+            ei   : ndarray
+                Internal energy in erg/g
+            bin  : int, optional
+                Radiation bin number for bin parameters
+            order: int, optional
+                Interpolation order (1: linear, 3: cubic)
 
-            OUT:
-                depending on value of out:
-                'nel'  : electron density [cm^-3]
-                'tg'   : temperature [K]
-                'pg'   : gas pressure [dyn/cm^2]
-                'kr'   : Rosseland opacity [cm^2/g]
-                'eps'  : scattering probability
-                'opa'  : opacity
-                'temt' : thermal emission
+        Returns
+        -------
+        output : array
+            Same dimensions as input. Depeding on the selected option,
+            could be:
+            'nel'  : electron density [cm^-3]
+            'tg'   : temperature [K]
+            'pg'   : gas pressure [dyn/cm^2]
+            'kr'   : Rosseland opacity [cm^2/g]
+            'eps'  : scattering probability
+            'opa'  : opacity
+            'temt' : thermal emission
         '''
         import scipy.ndimage as ndimage
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
@@ -961,17 +970,17 @@ class Rhoeetab:
 
 
 class Opatab:
+    """
+    Class to loads opacity table and calculate the photoionization cross
+    sections given by anzer & heinzel apj 622: 714-721, 2005, march 20
+    they have big typos in their reported c's.... correct values to
+    be found in rumph et al 1994 aj, 107: 2108, june 1994
 
+    gaunt factors are set to 0.99 for h and 0.85 for heii,
+    which should be good enough for the purposes of this code
+    """
     def __init__(self, tabname=None, fdir='.', big_endian=False, dtype='f4',
                  verbose=True, lambd=100.0):
-        ''' Loads opacity table and calculates the photoionization cross
-        sections given by anzer & heinzel apj 622: 714-721, 2005, march 20
-        they have big typos in their reported c's.... correct values to
-        be found in rumph et al 1994 aj, 107: 2108, june 1994
-
-        gaunt factors are set to 0.99 for h and 0.85 for heii,
-        which should be good enough for the purposes of this code
-        '''
         self.fdir = fdir
         self.dtype = dtype
         self.verbose = verbose
@@ -982,7 +991,7 @@ class Opatab:
         self.dte = 0.1
         # read table file and calculate parameters
         if tabname is None:
-            tabname = '%s/ionization.dat' % (fdir)
+            tabname = os.path.join(fdir, 'ionization.dat')
         self.tabname = tabname
         # load table(s)
         self.load_opa_table()
@@ -1052,7 +1061,6 @@ class Opatab:
         If lambd is None, then looks at the current level for wavelength
         '''
         rhe = 0.1
-        epsilon = 1.e-20
         if lambd is not None:
             self.lambd = lambd
         self.tg_tab_interp()
@@ -1094,14 +1102,14 @@ def read_idl_ascii(filename):
         for line in fp:
             # ignore empty lines and comments
             line = line.strip()
-            if len(line) < 1:
+            if line:
                 li += 1
                 continue
             if line[0] == ';':
                 li += 1
                 continue
             line = line.split(';')[0].split('=')
-            if (len(line) != 2):
+            if len(line) != 2:
                 print(('(WWW) read_params: line %i is invalid, skipping' % li))
                 li += 1
                 continue
@@ -1109,18 +1117,18 @@ def read_idl_ascii(filename):
             key = line[0].strip().lower()
             value = line[1].strip()
             # instead of the insecure 'exec', find out the datatypes
-            if (value.find('"') >= 0):
+            if value.find('"') >= 0:
                 # string type
                 value = value.strip('"')
-            elif (value.find("'") >= 0):
+            elif value.find("'") >= 0:
                 value = value.strip("'")
-            elif (value.lower() in ['.false.', '.true.']):
+            elif value.lower() in ['.false.', '.true.']:
                 # bool type
                 value = False if value.lower() == '.false.' else True
-            elif (value.find('[') >= 0 and value.find(']') >= 0):
+            elif (value.find('[') >= 0) and (value.find(']') >= 0):
                 # list type
                 value = eval(value)
-            elif ((value.upper().find('E') >= 0) or (value.find('.') >= 0)):
+            elif (value.upper().find('E') >= 0) or (value.find('.') >= 0):
                 # float type
                 value = float(value)
             else:
@@ -1140,7 +1148,7 @@ def read_idl_ascii(filename):
 def subs2grph(subsfile):
     ''' From a subs.dat file, extract abundances and atomic masses to calculate
     grph, grams per hydrogen. '''
-    from scipy.constants import atomic_mass as amu
+    from astropy.constants import u as amu
 
     f = open(subsfile, 'r')
     nspecies = np.fromfile(f, count=1, sep=' ', dtype='i')[0]
@@ -1151,64 +1159,5 @@ def subs2grph(subsfile):
     # linear abundances
     ab = 10.**(ab - 12.)
     # mass in grams
-    am *= amu * 1.e3
+    am *= amu.value * 1.e3
     return np.sum(ab * am)
-
-
-def ne_rt_table(rho, temp, order=1, tabfile=None):
-    ''' Calculates electron density by interpolating the rho/temp table.
-        Based on Mats Carlsson's ne_rt_table.pro.
-
-        IN: rho (in g/cm^3),
-            temp (in K),
-
-        OPTIONAL: order (interpolation order 1: linear, 3: cubic),
-                  tabfile (path of table file)
-
-        OUT: electron density (in g/cm^3)
-
-        '''
-    import os
-    import scipy.interpolate as interp
-    import scipy.ndimage as ndimage
-    from scipy.io.idl import readsav
-    print('DEPRECATION WARNING: this method is deprecated in favour'
-          ' of the Rhoeetab class.')
-    if tabfile is None:
-        tabfile = 'ne_rt_table.idlsave'
-    # use table in default location if not found
-    if not os.path.isfile(tabfile) and \
-            os.path.isfile(os.getenv('TIAGO_DATA') + '/misc/' + tabfile):
-        tabfile = os.getenv('TIAGO_DATA') + '/misc/' + tabfile
-    tt = readsav(tabfile, verbose=False)
-    lgrho = np.log10(rho)
-    # warnings for values outside of table
-    tmin = np.min(temp)
-    tmax = np.max(temp)
-    ttmin = np.min(5040. / tt['theta_tab'])
-    ttmax = np.max(5040. / tt['theta_tab'])
-    lrmin = np.min(lgrho)
-    lrmax = np.max(lgrho)
-    tlrmin = np.min(tt['rho_tab'])
-    tlrmax = np.max(tt['rho_tab'])
-    if tmin < ttmin:
-        print(('(WWW) ne_rt_table: temperature outside table bounds. ' +
-               'Table Tmin=%.1f, requested Tmin=%.1f' % (ttmin, tmin)))
-    if tmax > ttmax:
-        print(('(WWW) ne_rt_table: temperature outside table bounds. ' +
-               'Table Tmax=%.1f, requested Tmax=%.1f' % (ttmax, tmax)))
-    if lrmin < tlrmin:
-        print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) min=%.2f, requested log(rho) min=%.2f' %
-               (tlrmin, lrmin)))
-    if lrmax > tlrmax:
-        print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) max=%.2f, requested log(rho) max=%.2f' %
-               (tlrmax, lrmax)))
-    # Approximate interpolation (bilinear/cubic interpolation) with ndimage
-    y = (5040. / temp - tt['theta_tab'][0]) / \
-        (tt['theta_tab'][1] - tt['theta_tab'][0])
-    x = (lgrho - tt['rho_tab'][0]) / (tt['rho_tab'][1] - tt['rho_tab'][0])
-    result = ndimage.map_coordinates(
-        tt['ne_rt_table'], [x, y], order=order, mode='nearest')
-    return 10**result * rho / tt['grph']

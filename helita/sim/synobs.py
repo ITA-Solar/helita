@@ -2,10 +2,11 @@
 Set of programs to degrade/convolve synthetic images/spectra to observational
 conditions
 """
-from scipy import ndimage, signal
+import math
+import os
 import scipy.interpolate as interp
 import numpy as np
-import math
+from scipy import ndimage, signal
 
 
 def spec_conv(spec, wave, conv_type='IRIS', ww=None, wpts=200, winterp='linear',
@@ -170,7 +171,7 @@ def img_conv(spec, wave, psf, psfx, conv_type='IRIS_MgII_core', xMm=16.5491,
 
     --Tiago, 20110820
     '''
-    from ..fitting import gaussian
+    from ..utils.fitting import gaussian
 
     if graph:
         import matplotlib.pyplot as p
@@ -250,17 +251,17 @@ def img_conv(spec, wave, psf, psfx, conv_type='IRIS_MgII_core', xMm=16.5491,
     return nspec
 
 
-def get_hinode_psf(wave, psfdir='/Users/tiago/data/Hinode/'):
+def get_hinode_psf(wave, psfdir='.'):
     """
     Gets the Hinode PSF (from Sven Wedemeyer's work) for a given
     wavelength in nm. Assumes Hinode's ideal PSF is on psfdir.
     Returns x scale (in arcsec), and psf (2D array, normalised).
     """
     from astropy.io import fits as pyfits
-    from ..math import voigt
+    from ..utils import utilsmath
     # Get ideal PSF
-    ipsf = pyfits.getdata('%s/hinode_ideal_psf_555nm.fits')
-    ix = pyfits.getdata('%s/hinode_ideal_psf_scale_555nm.fits')
+    ipsf = pyfits.getdata(os.path.join(psfdir, 'hinode_ideal_psf_555nm.fits'))
+    ix = pyfits.getdata(os.path.join(psfdir, 'hinode_ideal_psf_scale_555nm.fits'))
     # Scale ideal PSF to our wavelength and simulation pixels
     cwave = np.mean(wave)  # our wavelength
     ix *= cwave / 555.
@@ -302,7 +303,6 @@ def spectral_convolve(w):
     spec = f(nwave)
     result[i] = ndimage.gaussian_filter1d(spec, wsigma, axis=-1,
                                           mode='nearest')
-    return
 
 
 def spatial_convolve(w):
@@ -314,72 +314,6 @@ def spatial_convolve(w):
     '''
     i, im, psf = w
     result[:, :, i] = signal.fftconvolve(im, psf, mode='same')[50:-50, 50:-50]
-    return
-
-
-def atmos_conv(atmosfiles, xMm, psf, psfx, obs='IRIS_NUV', snapshots=None,
-               verbose=False, parallel=False):
-    """
-    Spatially convolves variables from RH input atmospheres with the
-    same method as imgspec_conv. Results are written in a new file.
-    So far, the only variables to be convolved and written are defined
-    in conv_var. snapshots can be a list of snapshot indices. If None,
-    default is to write all snapshots.
-    """
-    import os
-    import netCDF4
-    conv_var = ['temperature', 'velocity_z', 'electron_density', 'B_z']
-    copy_var = ['z', 'snapshot_number']
-    out_var = {}
-    for f in atmosfiles:
-        if not os.path.isfile(f):
-            print(('File %s not found, skipping.' % f))
-            continue
-        foutname = os.path.splitext(f)[0] + '_conv' + os.path.splitext(f)[1]
-        fin = netCDF4.Dataset(f, 'r')
-        fout = netCDF4.Dataset(foutname, 'w')
-        if snapshots is None:
-            snapshots = list(range(len(fin.dimensions['nt'])))
-        for v in conv_var:
-            if v not in fin.variables:
-                print(('Variable %s not found in input file, skipping.' % v))
-                continue
-            for s in snapshots:
-                buf = fin.variables[v][s].copy()
-                buf = var_conv(buf, xMm, psf, psfx, obs='iris_nuv',
-                               parallel=parallel)
-                try:
-                    out_var[v][s, :] = buf
-                except KeyError:
-                    try:
-                        out_var[v] = fout.createVariable(v, 'f4',
-                                                         dimensions=('nt', 'nx',
-                                                                     'ny', 'nz'))
-                        out_var[v][s, :] = buf
-                    except ValueError:
-                        fout.createDimension('nt', len(snapshots))
-                        fout.createDimension('nx', buf.shape[0])
-                        fout.createDimension('ny', buf.shape[1])
-                        fout.createDimension('nz', buf.shape[2])
-                        out_var[v] = fout.createVariable(v, 'f4',
-                                                         dimensions=('nt', 'nx',
-                                                                     'ny', 'nz'))
-                        out_var[v][s, :] = buf
-        for v in copy_var:
-            try:
-                out_var[v] = fout.createVariable(v, fin.variables[v].dtype,
-                                                 fin.variables[v].dimensions)
-            except:
-                out_var[v] = fout.variables[v]
-            for s in snapshots:
-                out_var[v][s] = fin.variables[v][s]
-        # Copy attributes
-        fout.description = fin.description + ' Spatially-convolved to %s' % obs
-        fout.has_B = fin.has_B
-        fout.close()
-        fin.close()
-        print(('Sucessfully wrote ' + foutname + '.'))
-    return
 
 
 def var_conv(var, xMm, psf, psfx, obs='iris_nuv', parallel=False,
