@@ -9,6 +9,7 @@ from pkg_resources import resource_filename
 from ipywidgets import interact, fixed, Dropdown, IntSlider, FloatSlider
 from scipy.integrate.quadrature import cumtrapz
 from scipy.interpolate import interp1d
+from astropy import units as u
 from ..utils.utilsmath import planck, voigt
 
 
@@ -128,9 +129,9 @@ class SourceFunction:
             sf = obj.ray.source_function[0, 0, :, 0].dropna('height')
             height = obj.atmos.height_scale[0, 0].dropna(
                 'height') / 1e6  # in Mm
-            bplanck = planck(obj.ray.wavelength_selected[0],
-                             obj.atmos.temperature[0, 0].dropna('height'),
-                             units='Hz')
+            bplanck = planck(obj.ray.wavelength_selected[0] * u.nm,
+                             obj.atmos.temperature[0, 0].dropna('height') * u.K,
+                             dist='frequency').value
             fig, ax = plt.subplots()
             ax.plot(height, sf, 'b-', label=r'S$_\mathrm{total}$', lw=1)
             ax.set_yscale('log')
@@ -271,153 +272,3 @@ class InputAtmosphere:
                         ax.flat[i].set_yscale("log")
                     else:
                         ax.flat[i].set_yscale("linear")
-
-
-def slab():
-    """
-    Displays a graphical widget to demonstrate radiative transfer
-    in a homogeneous slab. Based on IDL routine xslab.pro.
-    """
-    def _get_slab_intensity(i0, sf, tau_c, tau_l):
-        NPTS = 101
-        MAX_DX = 5.
-        x = np.arange(NPTS) - (NPTS - 1.) / 2
-        x *= MAX_DX / x.max()
-        tau = tau_c + tau_l * np.exp(-x * x)
-        extinc = np.exp(-tau)
-        return (x, float(i0) * extinc + float(sf) * (1. - extinc))
-
-    def _slab_plot():
-        x, intensity = _get_slab_intensity(10, 65, 0.5, 0.9)
-        fig, ax = plt.subplots()
-        ax.axhline(y=65, color='k', ls='--', lw=1, label='S')
-        ax.plot(x, intensity, 'b-', lw=1, label='I')
-        ax.axhline(y=10, color='k', ls=':', lw=1, label='I$_0$')
-        ax.set_ylim(-2, 102)
-        ax.legend(loc='upper right')
-        ax.set_title("Spectral line formation in homogeneous slab")
-        return ax
-
-    ax = _slab_plot()
-
-    style = {'description_width': 'initial'}
-    i0s = IntSlider(value=10, min=0, max=100, step=1, description='I$_0$')
-    sfs = IntSlider(value=65, min=0, max=100, step=1,
-                    description='Source Function', style=style)
-    tau_cs = FloatSlider(value=0.5, min=0., max=1., step=0.01,
-                         description=r'$\tau_{\mathrm{cont}}$')
-    tau_ls = FloatSlider(value=0.9, min=0., max=10., step=0.1,
-                         description=r'$\tau_{\mathrm{line}}$')
-
-    @interact(i0=i0s, sf=sfs, tau_c=tau_cs, tau_l=tau_ls)
-    def _slab_update(i0=10, sf=65, tau_c=0.5, tau_l=0.9):
-        x, intensity = _get_slab_intensity(i0, sf, tau_c, tau_l)
-        ax.lines[1].set_xdata(x)
-        ax.lines[1].set_ydata(intensity)
-        ax.lines[2].set_ydata([i0, i0])
-        ax.lines[0].set_ydata([sf, sf])
-
-
-def transp():
-    """
-    Displays a graphical widget to demonstrate spectral line formation in
-    a 1D model atmosphere. Based on IDL routine xtransp.pro.
-    """
-    def _get_profile(tau500, sf, a, mu, opa_cont, opa_line, xmax):
-        NPTS = 101
-        v = np.linspace(-float(xmax), xmax, NPTS)
-        a = 10. ** a
-        h = voigt(a, v)
-        xq = h * 10. ** opa_line + 10. ** opa_cont
-        tau500_cont = mu / 10. ** opa_cont
-        tau500_line = mu / xq.max()
-        f = interp1d(tau500, sf, bounds_error=False)
-        sf_cont = f(tau500_cont)[()]
-        sf_line = f(tau500_line)[()]
-        xq = xq[:, np.newaxis]
-        tmp = sf * np.exp(-xq * tau500 / mu) * xq * tau500
-        prof = np.log(10) / mu * np.trapz(tmp.T, np.log(tau500), axis=0)
-        return (v, h, xq, prof, tau500_cont, tau500_line, sf_cont, sf_line)
-
-    def _transp_plot():
-        tau500 = data['t_500_mg']
-        source_function = data['s_nu_mg']
-        tmp = _get_profile(tau500, source_function, -2.5, 1., 0., 6.44, 50)
-        v, h, xq, prof, tau500_cont, tau500_line, sf_cont, sf_line = tmp
-
-        fig = plt.figure(figsize=(7, 5))
-        ax = []
-        # Voigt profile plot
-        ax.append(fig.add_subplot(2, 2, 1))
-        ax[0].plot(v, h, lw=1)
-        ax[0].set_yscale("log")
-        ax[0].set_title("Voigt profile")
-        ax[0].set_xlabel(r"$\Delta\nu/\Delta\nu_0$")
-        # Opacity plot
-        ax.append(fig.add_subplot(2, 2, 2, sharex=ax[0]))
-        ax[1].plot(v, xq, lw=1)
-        ax[1].set_yscale("log")
-        ax[1].set_title(r"($\alpha_c$ + $\alpha_l$) / $\alpha_{500}$")
-        ax[1].set_xlabel(r"$\Delta\nu/\Delta\nu_0$")
-        # Intensity plot
-        ax.append(fig.add_subplot(2, 2, 3, sharex=ax[0]))
-        ax[2].plot(v, prof, lw=1)
-        ax[2].set_ylabel(r"I$_\nu$")
-        ax[2].set_xlabel(r"$\Delta\nu/\Delta\nu_0$")
-        ax[2].ticklabel_format(style='sci', scilimits=(0, 0), axis='y')
-        # Source function plot
-        ax.append(fig.add_subplot(2, 2, 4))
-        ax[3].plot(np.log10(tau500), source_function, lw=1)
-        ax[3].set_yscale("log")
-        ax[3].set_ylabel(r"S$_\nu$")
-        ax[3].set_xlabel(r"log($\tau_{500}$)")
-        ARROW = dict(facecolor='black', width=1., headwidth=5, headlength=6)
-        for tau, sf, label in zip([tau500_cont, tau500_line],
-                                  [sf_cont, sf_line], ['_c', '_l']):
-            ax[3].annotate(r'$\tau%s$=1' % label,
-                           xy=(np.log10(tau), sf),
-                           xytext=(np.log10(tau), sf / 0.19),
-                           arrowprops=ARROW, ha='center', va='top')
-        plt.tight_layout()
-        return ax
-
-    DATAFILE = resource_filename('helita', 'data/VAL3C_source_functions.npz')
-    data = np.load(DATAFILE)
-    ax = _transp_plot()
-
-    SOURCE_FUNCS = ['VAL3C Ca', 'VAL3C Mg', 'VAL3C LTE']
-    style = {'description_width': 'initial'}
-    sfs = Dropdown(value='VAL3C Mg', options=SOURCE_FUNCS,
-                   description='Source Function', style=style)
-    opa_cs = FloatSlider(value=0.5, min=0., max=6., step=0.05,
-                         description=r'$\chi_{\mathrm{cont}}$')
-    opa_ls = FloatSlider(value=6.44, min=0., max=7., step=0.05,
-                         description=r'$\chi_{\mathrm{line}}$')
-    mus = FloatSlider(value=1.00, min=0.001, max=1.001, step=0.05,
-                      description=r'$\mu$')
-
-    @interact(source=sfs, a=(-5., 0., 0.05), mu=mus, opa_cont=opa_cs,
-              opa_line=opa_ls, xmax=(1, 100, 1), continuous_update=False)
-    def _transp_update(source='VAL3C Mg', a=-2.5, mu=1., opa_cont=0.,
-                       opa_line=6.44, xmax=50):
-        key = source.split()[1].lower()
-        tau500 = data['t_500_' + key]
-        source_function = data['s_nu_' + key]
-        tmp = _get_profile(tau500, source_function, a, mu,
-                           opa_cont, opa_line, xmax)
-        v, h, xq, prof, tau500_cont, tau500_line, sf_cont, sf_line = tmp
-        ax[0].lines[0].set_xdata(v)
-        ax[0].lines[0].set_ydata(h)
-        ax[1].lines[0].set_xdata(v)
-        ax[1].lines[0].set_ydata(xq)
-        ax[2].lines[0].set_xdata(v)
-        ax[2].lines[0].set_ydata(prof)
-        ax[3].lines[0].set_xdata(np.log10(tau500))
-        ax[3].lines[0].set_ydata(source_function)
-        for i, tau, sf, label in zip([0, 1], [tau500_cont, tau500_line],
-                                     [sf_cont, sf_line], ['_c', '_l']):
-            ax[3].texts[i].xy = (np.log10(tau), sf)
-            ax[3].texts[i].set_position((np.log10(tau), sf / 0.19))
-        for a in ax:
-            a.relim()
-            a.autoscale_view(True, True, True)

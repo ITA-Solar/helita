@@ -3,12 +3,28 @@ import numpy as np
 
 
 class MuramAtmos:
+    """
+    Class to read MURaM atmosphere
+
+    Parameters
+    ----------
+    fdir : str, optional
+        Directory with snapshots.
+    template : str, optional
+        Template for snapshot number.
+    verbose : bool, optional
+        If True, will print more information.
+    dtype : str or numpy.dtype, optional
+        Datatype of read data.
+    big_endian : bool, optional
+        Endianness of output file. Default is False (little endian).
+    prim : bool, optional
+        Set to True if moments are written instead of velocities.
+    """
     def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-                 big_endian=False, prim=False,
-                 tabdir="/mn/stornext/u3/matsc/3d/run/cb24bih"):
+                 big_endian=False, prim=False):
         self.prim = prim
         self.fdir = fdir
-        self.tabdir = tabdir
         # endianness and data type
         if big_endian:
             self.dtype = '>' + dtype
@@ -140,18 +156,12 @@ class MuramAtmos:
         z = self.z[sz] * ul
         # convert from rho to H atoms
         nh = rho / (wght_per_h * ct.atomic_mass)  # from rho to nH
-        # interpolate ne from the EOS table
-        # print('ne interpolation...')
-        # eostab = Rhoeetab(fdir=self.tabdir)  # use directory from bifrost
-        # ei = self.ei[sx, sy, sz] / rho # ei in CGS, get ee (erg/g) used in table
-        # ne = eostab.tab_interp(rho, ei, order=1) / ul**3  # from cm^-3 to m^-3
         # description
         if desc is None:
             desc = 'MURAM shapshot sequence %s, sx=%s sy=%s sz=%s.' % \
                    (self.fdir, repr(sx), repr(sy), repr(sz))
         # write to file
         print('Write to file...')
-        rh15d.make_ncdf_atmos(outfile, temp, vz, nh, z, x=x, y=y, vx=vx,
-                              vy=vy, rho=rho, append=append, Bx=Bx, By=By,
-                              Bz=Bz, desc=desc, snap=self.snap)
-        return
+        rh15d.make_xarray_atmos(outfile, temp, vz, z, nH=nh, x=x, y=y, vx=vx,
+                                vy=vy, rho=rho, append=append, Bx=Bx, By=By,
+                                Bz=Bz, desc=desc, snap=self.snap)

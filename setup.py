@@ -13,7 +13,7 @@ except:
 
 NAME = "helita"
 PACKAGES = ["io", "obs", "sim", "utils"]
-VERSION = "0.8.1"
+VERSION = "0.9.0"
 
 ext = '.pyx' if USE_CYTHON else '.c'
 NUMPY_INC = numpy.get_include()
