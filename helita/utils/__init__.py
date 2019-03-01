@@ -2,8 +2,7 @@
 Various tools for math and physics calculations, and utility functions.
 """
 
-__all__ = ["congrid", "fitting", "shell", "utilsmath"]
+__all__ = ["congrid", "fitting", "shell", "radtrans", "utilsmath", "utilsfast"]
 
 from . import fitting
-from . import utilsmath
-from . import shell
+from . import utilsfast

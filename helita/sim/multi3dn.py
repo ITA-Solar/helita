@@ -42,7 +42,6 @@ class Multi3dAtmos:
         dtype = ["<", ">"][big_endian] + ["f4", "f8"][dp]
         ntot = nx * ny * nz * np.dtype(dtype).itemsize
         mm = mode
-        # bullshit fort_read with header/footer not needed here.
         self.ne = np.memmap(infile, dtype=dtype, mode=mm, offset=0,
                             shape=(nx, ny, nz), order="F")
         self.temp = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot,

@@ -113,7 +113,7 @@ def planck(wavelength, temp, dist='wavelength'):
         raise ValueError('invalid distribution ' % dist)
 
 
-def int2bt(inu, wave):
+def int_to_bt(inu, wave):
     """
     Converts radiation intensity to brightness temperature.
 
