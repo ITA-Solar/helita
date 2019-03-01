@@ -179,7 +179,7 @@ class Multi3dOut:
         else:
             self.inputfile = inputfile
         if directory is None:
-            self.directory = "../run/output/"
+            self.directory = "./"
         else:
             self.directory = directory
         self.printinfo = printinfo
