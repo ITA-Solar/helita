@@ -1,12 +1,14 @@
 """
 Set of routines to read output from multi3d MPI (new version!)
 """
-from ..io.fio import fort_read
-import numpy as np
 import os
+import numpy as np
 
 
 class Multi3dAtmos:
+    """
+    Class to read/write input atmosphere for Multi3D.
+    """
     def __init__(self, infile, nx, ny, nz, mode="r"):
         if os.path.isfile(infile) or (mode == "w+"):
             self.open_atmos(infile, nx, ny, nz, mode=mode)
@@ -35,7 +37,7 @@ class Multi3dAtmos:
         read_nh : bool, optional
             If True, will read/write hydrogen populations. Default is False.
         read_vturb : bool, optional
-            If True, will read/write turbulent velocity. Default is False.  
+            If True, will read/write turbulent velocity. Default is False.
         """
         dtype = ["<", ">"][big_endian] + ["f4", "f8"][dp]
         ntot = nx * ny * nz * np.dtype(dtype).itemsize
