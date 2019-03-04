@@ -188,7 +188,11 @@ def translate(data, z, mu, phi, dx=1, dy=1):
     None, data are modified in-place.
     """
     from math import acos, sin, cos
-    from .trnslt import trnslt
+    try:
+        from .trnslt import trnslt
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError('trnslt not found, helita probably installed'
+                                  ' without a fortran compiler!')
     assert data.shape[-1] == z.shape[0]
     assert data.flags['F_CONTIGUOUS']
     assert data.dtype == np.dtype("float32")
