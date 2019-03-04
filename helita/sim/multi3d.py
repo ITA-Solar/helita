@@ -154,15 +154,41 @@ class Transition:
 class Multi3dOut:
     """
     Reads and handles multi3d output
+
+    Parameters
+    ----------
+    inputfile : str, optional
+        Name of multi3d input file. Default is 'multi3d.input'
+    directory : str, optional
+        Directory with output files. Default is current directory.
+    printinfo : bool, optional
+        If True (default), will print more verbose output.
+
+    Examples
+    --------
+
+    >>> data = Multi3dOut(directory='./output')
+    >>> data.readall()
+
+    Now select transition (by upper / lower level):
+
+    >>> data.set_transition(3, 2)
+    >>> emergent_intensity = data.readvar('ie')
+    >>> source_function = data.readvar('snu')
+    >>> tau1_height = data.readvar('zt1')
+
+    Wavelength for the selected transition is saved in data.d.l, e.g.:
+
+    >>> plt.plot(data.d.l, emergent_intensity[0, 0])
     """
-    def __init__(self, inputfile=None, directory=None, printinfo=True):
+
+    def __init__(self, inputfile="multi3d.input", directory='./', printinfo=True):
         """
         initializes object, default directory to look for files is ./
         default input options file name is multi3d.input
         """
-        self.inputfile = None
-        self.directory = None
-        self.printinfo = None
+        self.inputfile = inputfile
+        self.directory = directory
         self.theinput = None
         self.outnnu = -1
         self.outff = -1
@@ -173,15 +199,6 @@ class Multi3dOut:
         self.d = Transition()
         self.inttype = np.int32
         self.floattype = np.float64
-        # set default values
-        if inputfile is None:
-            self.inputfile = "multi3d.input"
-        else:
-            self.inputfile = inputfile
-        if directory is None:
-            self.directory = "./"
-        else:
-            self.directory = directory
         self.printinfo = printinfo
 
     def readall(self):
@@ -460,12 +477,13 @@ class Multi3dOut:
             self.d.ff = self.d.ired + fr
         self.d.ang = ang
 
-        print('transition parameters are set to:')
-        print(' i   =', self.d.i)
-        print(' j   =', self.d.j)
-        print(' kr  =', self.d.kr)
-        print(' ff  =', self.d.ff)
-        print(' ang =', self.d.ang)
+        if self.printinfo:
+            print('transition parameters are set to:')
+            print(' i   =', self.d.i)
+            print(' j   =', self.d.j)
+            print(' kr  =', self.d.kr)
+            print(' ff  =', self.d.ff)
+            print(' ang =', self.d.ang)
 
     def readvar(self, var, all_vars=False):
         """
@@ -482,7 +500,8 @@ class Multi3dOut:
         mus = '_' + mx + '_' + my + '_' + mz + '_allnu'
         fname = os.path.join(self.directory, var + mus)
         if os.path.isfile(fname):
-            print('reading from ' + fname)
+            if self.printinfo:
+                print('reading from ' + fname)
         else:
             raise IOError('%s does not exist' % fname)
         sg = self.geometry
@@ -512,3 +531,60 @@ class Multi3dOut:
                           np.where(self.outff == self.d.ff)[0])[0]
         return np.memmap(fname, dtype='float32', mode='r',
                          shape=shape, order='F', offset=offset)
+
+
+class Multi3dAtmos:
+    """
+    Class to read/write input atmosphere for Multi3D.
+
+    Parameters
+    ----------
+    infile : str
+        Name of file to read.
+    nx, ny, nz : ints
+        Number of points in x, y, and z dimensions.
+    mode : str, optional
+        Access mode. Can be either 'r' (read), 'w' (write, deletes existing),
+        or 'w+' (write, update).
+    nhydr : int, optional
+        Number of hydrogen levels. Default is 6.
+    dp : bool, optional
+        If True, will write in double precision (float64). Otherwise,
+        will write in single precision (float32, default).
+    big_endian : bool, optional
+        Endianness of output file. Default is False (little endian).
+    read_nh : bool, optional
+        If True, will read/write hydrogen populations. Default is False.
+    read_vturb : bool, optional
+        If True, will read/write turbulent velocity. Default is False.
+    """
+    def __init__(self, infile, nx, ny, nz, mode='r', **kwargs):
+        if os.path.isfile(infile) or (mode == "w+"):
+            self.open_atmos(infile, nx, ny, nz, mode=mode, **kwargs)
+
+    def open_atmos(self, infile, nx, ny, nz, mode="r", nhydr=6, dp=False,
+                   big_endian=False, read_nh=False, read_vturb=False):
+        """Reads/writes multi3d atmosphere into parent object."""
+        dtype = ["<", ">"][big_endian] + ["f4", "f8"][dp]
+        ntot = nx * ny * nz * np.dtype(dtype).itemsize
+        mm = mode
+        self.ne = np.memmap(infile, dtype=dtype, mode=mm, offset=0,
+                            shape=(nx, ny, nz), order="F")
+        self.temp = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot,
+                              shape=(nx, ny, nz), order="F")
+        self.vx = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 2,
+                            shape=(nx, ny, nz), order="F")
+        self.vy = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 3,
+                            shape=(nx, ny, nz), order="F")
+        self.vz = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 4,
+                            shape=(nx, ny, nz), order="F")
+        self.rho = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 5,
+                             shape=(nx, ny, nz), order="F")
+        offset = ntot * 6
+        if read_nh:
+            self.nh = np.memmap(infile, dtype=dtype, mode=mm, offset=offset,
+                                shape=(nx, ny, nz, nhydr), order="F")
+            offset += ntot * nhydr
+        if read_vturb:
+            self.vturb = np.memmap(infile, dtype=dtype, mode=mm, order="F",
+                                   offset=offset, shape=(nx, ny, nz))
