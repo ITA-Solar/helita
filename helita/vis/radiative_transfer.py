@@ -173,7 +173,7 @@ class Transp():
                         xmax=xmax_slider, source=source_slider)
         controls = GridBox(children=[w.children[5], w.children[0],
                                      w.children[2], w.children[4],
-                                     w.children[4], w.children[1]],
+                                     w.children[3], w.children[1]],
                            layout=Layout(min_height='80px',
                                          min_width='600px',
                                          grid_template_rows='49% 49%',
