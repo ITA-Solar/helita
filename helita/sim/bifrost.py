@@ -1093,6 +1093,110 @@ class Opatab:
 ###########
 #  TOOLS  #
 ###########
+def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
+                       sx=slice(None), sz=slice(None), desc=None):
+    """
+    Reads a Bifrost 2D atmosphere are writes into RH 1.5D format,
+    with the time dimension written in the y dimension (to maximise
+    parallelism).
+
+    Parameters
+    ----------
+    snaps : list or 1D array
+        Numbers of snapshots to write.
+    outfile: str
+        Name of RH 1.5D atmosphere file to write.
+    file_root: str
+        Basename for bifrost files.
+    meshfile : str
+        Filename of mesh file (including full path).
+    writeB : bool, optional
+        If True, will also write magnetic field. Default is False.
+    sx, sz : slice object, optional
+        Slice objects for x and z dimensions, when not all points
+        are needed. E.g. use slice(None) for all points, slice(0, 100, 2)
+        for every second point up to 100.
+    desc : str
+        Description.
+    """
+    from . import rh15d
+    data = BifrostData(file_root, snap=snaps[0], meshfile=meshfile, fdir=fdir,
+                       ghost_analyse=False)
+    nz = len(data.z[sz])
+    nx = max(len(data.x[sx]), len(data.y[sx]))
+    ny = len(snaps)
+    tgas = np.empty((nx, ny, nz), dtype='f')
+    vz = np.empty_like(tgas)
+    if writeB:
+        Bz = np.empty_like(tgas)
+        Bx = np.empty_like(tgas)
+        By = np.empty_like(tgas)
+    else:
+        Bz = None
+        Bx = None
+        By = None
+    ne = np.empty_like(tgas, dtype='d')
+    hion = data.params['do_hion']
+    if hion:
+        nH = np.empty((6, ) + tgas.shape, dtype='f')
+    else:
+        nH = np.empty((1, ) + tgas.shape, dtype='f')
+
+    # unit conversion to SI
+    ul = data.params['u_l'] / 1.e2 # to metres
+    ur = data.params['u_r']        # to g/cm^3  (for ne_rt_table)
+    ut = data.params['u_t']        # to seconds
+    uv = ul / ut
+    ub = data.params['u_b'] * 1e-4 # to tgasesl
+    ue = data.params['u_ee']       # to erg/g
+
+    if not desc:
+        desc = 'BIFROST snapshot from 2D sequence %s, sx=%s sy=1 sz=%s.' % \
+                    (file_root, repr(sx), repr(sz))
+        if hion:
+            desc = 'hion ' + desc
+    x = data.x[sx] * ul
+    y = snaps
+    z = data.z[sz] * (-ul)
+
+    rdt = data.r.dtype
+    cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
+                          data.zdn.astype(rdt), data.dzidzup.astype(rdt),
+                          data.dzidzdn.astype(rdt))
+
+    for i, s in enumerate(snaps):
+        data.set_snap(s)
+        tgas[:, i] = np.squeeze(data.tg)[sx, sz]
+        rho = data.r[sx, sz]
+        vz[:, i] = np.squeeze(cstagger.zup(data.pz)[sx, sz] / rho) * (-uv)
+        if writeB:
+            Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
+            By[:, i] = np.squeeze(-data.by)[sx, sz] * ub
+            Bz[:, i] = np.squeeze(-data.bz)[sx, sz] * ub
+        rho = rho * ur   # to cgs
+        if hion:
+            ne[:, i] = np.squeeze(data.get_var('hionne'))[sx, sz] * 1.e6
+            for k in range(6):
+                tmp = np.squeeze(data.get_var('n%i' % (k + 1)))
+                nH[k, :, i] = tmp[sx, sz] * 1.e6
+        else:
+            ee = data.get_var('ee')[sx, sz]
+            ee = ee * ue
+            if os.access('%s/subs.dat' % fdir, os.R_OK):
+                grph = subs2grph('%s/subs.dat' % fdir)
+            else:
+                grph = 2.380491e-24
+            nH[0, :, i] = np.squeeze(rho) / grph * 1.e6   # from rho to nH in m^-3
+            # interpolate ne from the EOS table
+            print('ne interpolation...')
+            eostab = Rhoeetab(fdir=fdir)
+            ne[:, i] = np.squeeze(eostab.tab_interp(rho, ee, order=1)) * 1.e6
+
+    rh15d.make_xarray_atmos(outfile, tgas, vz, z, nH=nH, ne=ne, x=x, y=y,
+                            append=False, Bx=Bx, By=By, Bz=Bz, desc=desc,
+                            snap=snaps[0])
+
+
 def read_idl_ascii(filename):
     ''' Reads IDL-formatted (command style) ascii file into dictionary '''
     li = 0
