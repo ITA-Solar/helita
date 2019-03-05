@@ -199,7 +199,7 @@ class AtomFile:
         self.read_atom(filename, format)
 
     @staticmethod
-    def _read_atom_levels(data, format='RH'):
+    def read_atom_levels(data, format='RH'):
         """
         Reads levels part of atom file
         """
@@ -261,8 +261,8 @@ class AtomFile:
         self.nfixed = nfixed
         counter += 1
         # read levels
-        self.levels = _read_atom_levels(data[counter:counter + nlevel],
-                                        self.format)
+        self.levels = self.read_atom_levels(data[counter:counter + nlevel],
+                                             self.format)
         counter += nlevel
         # read lines
         tmp = StringIO('\n'.join(data[counter:counter + nline]))
