@@ -1,0 +1,55 @@
+site_name: Helita documentation
+site_url: https://ita-solar.github.io/helita/
+
+# Repository
+repo_name: ita-solar/helita
+repo_url: https://github.com/ita-solar/helita
+edit_uri: ""
+
+nav:
+    - Helita: index.md
+    - Installation: install.md
+    - Example usage: usage.md
+theme:
+    name: 'material'
+    palette:
+        primary: 'deep orange'
+        accent: 'teal'
+    favicon: 'images/favicon_flare.png'
+    logo:
+        icon: 'flare'
+
+# Customization
+extra:
+  social:
+    - type: github-alt
+      link: https://github.com/ITA-Solar
+    - type: globe
+      link: https://www.mn.uio.no/rocs/english/
+
+# Extensions
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - codehilite
+  - pymdownx.arithmatex
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:pymdownx.emoji.to_svg
+  - pymdownx.inlinehilite
+  - pymdownx.magiclink
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# For mathjax
+extra_javascript:
+  - 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-MML-AM_CHTML'
