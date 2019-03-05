@@ -7,7 +7,7 @@ from pkg_resources import resource_filename
 from scipy import interpolate as interp
 import bqplot.pyplot as plt
 from bqplot import LogScale
-from ipywidgets import (interactive, Layout, HBox, VBox, Box,
+from ipywidgets import (interactive, Layout, HBox, VBox, Box, GridBox,
                         IntSlider, FloatSlider, Dropdown, HTMLMath)
 from ..utils.utilsmath import voigt
 
@@ -75,28 +75,26 @@ class Transp():
 
     def _make_plot(self):
         plt.close(1)
-        margin = {'top': 25, 'bottom': 35, 'left': 35, 'right':25}
-        fig_layout = {'height': '100%', 'width': '100%'}
-        self.voigt_fig = plt.figure(1, title='Voigt profile',
-                                    fig_margin=margin, layout=fig_layout)
+        fig_margin = {'top': 25, 'bottom': 35, 'left': 35, 'right':25}
+        fig_layout = {'height': '100%', 'width': '100%' }
+        layout_args = {'fig_margin': fig_margin, 'layout': fig_layout,
+                       'max_aspect_ratio': 1.618}
+        self.voigt_fig = plt.figure(1, title='Voigt profile', **layout_args)
         self.voigt_plot = plt.plot(self.freq, self.h, scales={'y': LogScale()})
         plt.xlabel("Δν / ΔνD")
 
         plt.close(2)
-        self.abs_fig = plt.figure(2, title='(αᶜ + αˡ) / α₅₀₀',
-                                  fig_margin=margin, layout=fig_layout)
+        self.abs_fig = plt.figure(2, title='(αᶜ + αˡ) / α₅₀₀', **layout_args)
         self.abs_plot = plt.plot(self.freq, self.xq, scales={'y': LogScale()})
         plt.xlabel("Δν / ΔνD")
 
         plt.close(3)
-        self.int_fig = plt.figure(3, title='Intensity',
-                                  fig_margin=margin, layout=fig_layout)
+        self.int_fig = plt.figure(3, title='Intensity', **layout_args)
         self.int_plot = plt.plot(self.freq, self.prof, scales={'y': LogScale()})
         plt.xlabel("Δν / ΔνD")
 
         plt.close(4)
-        self.source_fig = plt.figure(4, title='Source Function',
-                                     fig_margin=margin, layout=fig_layout)
+        self.source_fig = plt.figure(4, title='Source Function', **layout_args)
         self.source_plot = plt.plot(np.log10(self.tau500), self.source_function,
                                     scales={'y': LogScale()})
         plt.xlabel("lg(τ₅₀₀)")
@@ -148,14 +146,14 @@ class Transp():
 
 
     def _make_widget(self):
-        fig = VBox([HBox([self.voigt_fig, self.abs_fig],
-                         layout=Layout(align_items='stretch', height='300px')),
-                    HBox([self.int_fig, self.source_fig],
-                         layout=Layout(height='300px'))])
-        # Revisit this when GridBox is available...
-        #fig = GridBox(children=[self.voigt_fig, self.abs_fig, self.int_fig, self.source_fig],
-        #              layout=Layout(grid_template_rows='50% 50%', grid_template_columns='50% 50%',
-        #                             grid_gap='0 px'))
+        fig = GridBox(children=[self.voigt_fig, self.abs_fig,
+                                self.int_fig, self.source_fig],
+                      layout=Layout(width='100%',
+                                    min_height='600px',
+                                    height='100%',
+                                    grid_template_rows='49% 49%',
+                                    grid_template_columns='49% 49%',
+                                    grid_gap='0px 0px'))
 
         a_slider = FloatSlider(min=-5, max=0., step=0.01, value=self.a,
                                description='lg(a)')
@@ -173,10 +171,20 @@ class Transp():
         w = interactive(self._update_plot, a=a_slider, opa_cont=opa_cont_slider,
                         opa_line=opa_line_slider, mu=mu_slider,
                         xmax=xmax_slider, source=source_slider)
-        controls = HBox([VBox([w.children[5], w.children[4]]),
-                         VBox([w.children[0], w.children[3]]),
-                         VBox([w.children[2], w.children[1]])])
-        self.widget = VBox([controls, fig])
+        controls = GridBox(children=[w.children[5], w.children[0],
+                                     w.children[2], w.children[4],
+                                     w.children[3], w.children[1]],
+                           layout=Layout(min_height='80px',
+                                         min_width='600px',
+                                         grid_template_rows='49% 49%',
+                                         grid_template_columns='31% 31% 31%',
+                                         grid_gap='10px'))
+        self.widget = GridBox(children=[controls, fig],
+                              layout=Layout(grid_template_rows='8% 90%',
+                                            width='100%',
+                                            min_height='650px',
+                                            height='100%',
+                                            grid_gap='10px'))
 
 
 def slab():

@@ -1,17 +1,8 @@
 """
 set of tools to deal with IRIS observations
 """
-import os
 import numpy as np
-
-# response file, with effective area calibration data
-if os.getenv("IRIS_RESPONSE"):
-    CDIR = os.getenv("IRIS_RESPONSE")
-elif os.getenv("SSW"):
-    CDIR = os.path.join(os.getenv("SSW"), "iris/response")
-else:
-    CDIR = ''
-CFILE = os.path.join(CDIR, "iris_sra_20130211.geny")
+from pkg_resources import resource_filename
 
 
 def si2dn(wave, band='NUV'):
@@ -25,13 +16,20 @@ def si2dn(wave, band='NUV'):
            Wavelengths of the observations in nm
     band : string, optional
            Band of the observations. At the moment only 'NUV' is supported.
+
+    Returns
+    -------
+    result : float
+             Conversion factor from W / (m2 Hz sr) to IRIS DN.
     """
     from scipy import constants as const
     from scipy import interpolate as interp
     from scipy.io.idl import readsav
     band = band.upper()
-    # wave *= 10. # from nm to AA
+    # File with IRIS effective area
+    CFILE = resource_filename('helita', 'data/iris_sra_20130211.geny')
     arcsec2sr = (2. * const.pi / 360. / 60.**2)**2
+    assert band == 'NUV', 'Only NUV band supported'
     dellambda = {'NUV': 25.46e-3}   # spectral pixel size
     eperph = {'NUV': 1.}          # electrons per photon (in CCD)
     resx = {'NUV': 1 / 3.}          # x resolution in arcsec
@@ -49,7 +47,7 @@ def si2dn(wave, band='NUV'):
     return iconv * effective_area * sr * dellambda[band] * eperph[band] / enph
 
 
-def add_iris_noise(wave, spec, exptime=1.):
+def add_iris_noise(spec, exptime=1.):
     """
     Adds realistic IRIS noise to Mg II spectra from RH, using an approximate
     recipe assuming that the counts/sec at 282.0 nm are as given in the
@@ -58,8 +56,6 @@ def add_iris_noise(wave, spec, exptime=1.):
 
     Parameters
     ----------
-    wave : 1-D array
-           Air wavelengths in nm
     spec : 3-D array
            Spectrum from RH (ideally spectrally and spatially convolved)
     exptime: float, optional
@@ -73,9 +69,7 @@ def add_iris_noise(wave, spec, exptime=1.):
     rh2cnts = 3500 / 2.6979319e-09  # ad hoc conversion from SI units to counts
     gain1 = 14.5                  # photon counts/DN, pristine gain
     gain2 = 16.0                  # gain measured with charge spreading
-    read_noise = 1.2            # DN
-    bias_level = 380.           # DN
-    dark_current = 4.5            # photon counts / sec
+    read_noise = 1.2              # DN
     spec_cts = spec.copy() * rh2cnts * (gain1 / gain2) * exptime
     # Add poisson noise. Parallelise this part?
     spec_cts = np.random.poisson(spec_cts)
@@ -108,6 +102,8 @@ def sj_filter(wave, band='IRIS_MGII_CORE', norm=True):
     """
     from scipy import interpolate as interp
     from scipy.io.idl import readsav
+    # File with IRIS effective area
+    CFILE = resource_filename('helita', 'data/iris_sra_20130211.geny')
     ea = readsav(CFILE).p0
     wave_filt = ea['lambda'][0]
     if band.upper() == 'IRIS_MGII_CORE':
@@ -286,6 +282,7 @@ def transpose_fits_level3(filename, outfile=None):
     Transposes an 'im' level 3 FITS file into 'sp' file
     (ie, transposed). INCOMPLETE, ONLY HEADER SO FAR.
     """
+    from astropy.io import fits as pyfits
     hdr_in = pyfits.getheader(filename)
     hdr_out = hdr_in.copy()
     (nx, ny, nz, nt) = [hdr_in['NAXIS*'][i] for i in range(1, 5)]
@@ -348,8 +345,9 @@ def rh_to_fits_level3(filelist, outfile, windows, window_desc, times=None,
         have common wavelengths.
     """
     from ..sim import rh15d
-    from ..utils import waveconv
+    from specutils.utils.wcs_utils import air_to_vac
     from astropy.io import fits as pyfits
+    from astropy import units as u
     nt = len(filelist)
     robj = rh15d.Rh15dout()
     robj.read_ray(filelist[0])
@@ -380,7 +378,8 @@ def rh_to_fits_level3(filelist, outfile, windows, window_desc, times=None,
         idx = (wave_full > wi) & (wave_full < wf)
         tmp = wave_full[idx]
         if air_conv:
-            tmp = waveconv(tmp, mode='air2vac')
+            # RH converts to air using Edlen (1966) method
+            tmp = air_to_vac(tmp * u.nm, method='edlen1966', scheme='iteration').value
         waves = np.append(waves, tmp)
         nwaves = np.append(nwaves, len(tmp))
         indices += idx

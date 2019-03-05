@@ -4,17 +4,6 @@ tools to deal with I/O on the shell
 import sys
 
 
-def progressbar(i, m):
-    ''' Draws a progress bar with = signs and percentage.
-        IN: i (step of the loop), m (max of the loop).'''
-    sys.stdout.write('\r')
-    sys.stdout.write("[%-30s] %d%%" %
-                     ('=' * int(round(i * 30. / m)), 100. * i / m))
-    sys.stdout.flush()
-    if i == m:
-        sys.stdout.write('\n')
-
-
 class Getch:
     """
     Multi-platform getch

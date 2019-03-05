@@ -135,7 +135,6 @@ def replace_nans(np.ndarray[DTYPEf_t, ndim=2] array, int max_iter, float tol,
                 replaced_old[l] = replaced_new[l]
     return filled
 
-#-----------------------------------------------------------------------------------------
 
 def sincinterp(np.ndarray[DTYPEi_t, ndim=2] image,
                np.ndarray[DTYPEf_t, ndim=2] x, np.ndarray[DTYPEf_t, ndim=2] y,

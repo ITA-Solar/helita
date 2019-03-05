@@ -11,6 +11,46 @@ from . import cstagger
 class BifrostData(object):
     """
     Reads data from Bifrost simulations in native format.
+
+    Parameters
+    ----------
+    file_root - string
+        Basename for all file names (without underscore!). Snapshot number
+        will be added afterwards, and directory will be added before.
+    snap - integer, optional
+        Snapshot number. If None, will read first snapshot in sequence.
+    meshfile - string, optional
+        File name (including full path) for file with mesh. If set
+        to None (default), a uniform mesh will be created.
+    fdir - string, optional
+        Directory where simulation files are. Must be a real path.
+    verbose - bool, optional
+        If True, will print out more diagnostic messages
+    dtype - string, optional
+        Data type for reading variables. Default is 32 bit float.
+    big_endian - string, optional
+        If True, will read variables in big endian. Default is False
+        (reading in little endian).
+    ghost_analyse - bool, optional
+        If True, will read data from ghost zones when this is saved
+        to files. Default is never to read ghost zones.
+
+    Examples
+    --------
+    This reads snapshot 383 from simulation "cb24bih", whose file
+    root is "cb24bih", and is found at directory /data/cb24bih:
+
+    >>> a = Bifrost.Data("cb24bih", snap=383, fdir="/data/cb24bih")
+
+    Scalar variables do not need de-staggering and are available as
+    memory map (only loaded to memory when needed), e.g.:
+
+    >>> a.r.shape
+    (504, 504, 496)
+
+    Composite variables need to be obtained by get_var():
+
+    >>> vx = a.get_var("ux")
     """
 
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
@@ -18,46 +58,6 @@ class BifrostData(object):
                  ghost_analyse=False):
         """
         Loads metadata and initialises variables.
-
-        Parameters
-        ----------
-        file_root - string
-            Basename for all file names. Snapshot number will be added
-            afterwards, and directory will be added before.
-        snap - integer, optional
-            Snapshot number. If None, will read first snapshot in sequence.
-        meshfile - string, optional
-            File name (including full path) for file with mesh. If set
-            to None (default), a uniform mesh will be created.
-        fdir - string, optional
-            Directory where simulation files are. Must be a real path.
-        verbose - bool, optional
-            If True, will print out more diagnostic messages
-        dtype - string, optional
-            Data type for reading variables. Default is 32 bit float.
-        big_endian - string, optional
-            If True, will read variables in big endian. Default is False
-            (reading in little endian).
-        ghost_analyse - bool, optional
-            If True, will read data from ghost zones when this is saved
-            to files. Default is never to read ghost zones.
-
-        Examples
-        --------
-        This reads snapshot 383 from simulation "cb24bih", whose file
-        root is "cb24bih_", and is found at directory /data/cb24bih:
-
-        >>> a = Bifrost.Data("cb24bih_", snap=383, fdir=""/data/cb24bih")
-
-        Scalar variables do not need de-staggering and are available as
-        memory map (only loaded to memory when needed), e.g.:
-
-        >>> a.r.shape
-        (504, 504, 496)
-
-        Composite variables need to be obtained by get_var():
-
-        >>> vx = a.get_var("ux")
         """
         self.fdir = fdir
         self.verbose = verbose
@@ -78,7 +78,7 @@ class BifrostData(object):
         """
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
         self.auxvars = self.params['aux'].split()
-        if (self.do_mhd):
+        if self.do_mhd:
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
         if 'do_hion' in self.params:
@@ -647,7 +647,7 @@ class BifrostData(object):
         -------
         None.
         """
-        from .multi3dn import Multi3dAtmos
+        from .multi3d import Multi3dAtmos
         # unit conversion to cgs and km/s
         ul = self.params['u_l']   # to cm
         ur = self.params['u_r']   # to g/cm^3  (for ne_rt_table)
@@ -665,11 +665,11 @@ class BifrostData(object):
         rho = self.r[sx, sy, sz]
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
-        vx = cstagger.xup(self.px)[sx, sy, sz]
+        vx = cstagger.xup(self.px)[sx, sy, sz] / rho
         vx *= uv
-        vy = cstagger.yup(self.py)[sx, sy, sz]
+        vy = cstagger.yup(self.py)[sx, sy, sz] / rho
         vy *= -uv
-        vz = cstagger.zup(self.pz)[sx, sy, sz]
+        vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         rho = rho * ur  # to cgs
         x = self.x[sx] * ul
@@ -706,7 +706,7 @@ class BifrostData(object):
         fout.vz[:] = vz
         fout.rho[:] = rho
         # write mesh?
-        if mesh is not None:
+        if mesh:
             fout2 = open(mesh, "w")
             fout2.write("%i\n" % nx)
             x.tofile(fout2, sep="  ", format="%11.5e")
@@ -899,23 +899,32 @@ class Rhoeetab:
         return quant
 
     def tab_interp(self, rho, ei, out='ne', bin=None, order=1):
-        ''' Interpolates the EOS/rad table for the required quantity in out.
+        '''
+        Interpolates the EOS/rad table for the required quantity in out.
 
-            IN:
-                rho  : density [g/cm^3]
-                ei   : internal energy [erg/g]
-                bin  : (optional) radiation bin number for bin parameters
-                order: interpolation order (1: linear, 3: cubic)
+        Parameters
+        ----------
+            rho  : ndarray
+                Density in g/cm^3
+            ei   : ndarray
+                Internal energy in erg/g
+            bin  : int, optional
+                Radiation bin number for bin parameters
+            order: int, optional
+                Interpolation order (1: linear, 3: cubic)
 
-            OUT:
-                depending on value of out:
-                'nel'  : electron density [cm^-3]
-                'tg'   : temperature [K]
-                'pg'   : gas pressure [dyn/cm^2]
-                'kr'   : Rosseland opacity [cm^2/g]
-                'eps'  : scattering probability
-                'opa'  : opacity
-                'temt' : thermal emission
+        Returns
+        -------
+        output : array
+            Same dimensions as input. Depeding on the selected option,
+            could be:
+            'nel'  : electron density [cm^-3]
+            'tg'   : temperature [K]
+            'pg'   : gas pressure [dyn/cm^2]
+            'kr'   : Rosseland opacity [cm^2/g]
+            'eps'  : scattering probability
+            'opa'  : opacity
+            'temt' : thermal emission
         '''
         import scipy.ndimage as ndimage
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
@@ -961,17 +970,17 @@ class Rhoeetab:
 
 
 class Opatab:
+    """
+    Class to loads opacity table and calculate the photoionization cross
+    sections given by anzer & heinzel apj 622: 714-721, 2005, march 20
+    they have big typos in their reported c's.... correct values to
+    be found in rumph et al 1994 aj, 107: 2108, june 1994
 
+    gaunt factors are set to 0.99 for h and 0.85 for heii,
+    which should be good enough for the purposes of this code
+    """
     def __init__(self, tabname=None, fdir='.', big_endian=False, dtype='f4',
                  verbose=True, lambd=100.0):
-        ''' Loads opacity table and calculates the photoionization cross
-        sections given by anzer & heinzel apj 622: 714-721, 2005, march 20
-        they have big typos in their reported c's.... correct values to
-        be found in rumph et al 1994 aj, 107: 2108, june 1994
-
-        gaunt factors are set to 0.99 for h and 0.85 for heii,
-        which should be good enough for the purposes of this code
-        '''
         self.fdir = fdir
         self.dtype = dtype
         self.verbose = verbose
@@ -982,7 +991,7 @@ class Opatab:
         self.dte = 0.1
         # read table file and calculate parameters
         if tabname is None:
-            tabname = '%s/ionization.dat' % (fdir)
+            tabname = os.path.join(fdir, 'ionization.dat')
         self.tabname = tabname
         # load table(s)
         self.load_opa_table()
@@ -1052,7 +1061,6 @@ class Opatab:
         If lambd is None, then looks at the current level for wavelength
         '''
         rhe = 0.1
-        epsilon = 1.e-20
         if lambd is not None:
             self.lambd = lambd
         self.tg_tab_interp()
@@ -1085,6 +1093,110 @@ class Opatab:
 ###########
 #  TOOLS  #
 ###########
+def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
+                       sx=slice(None), sz=slice(None), desc=None):
+    """
+    Reads a Bifrost 2D atmosphere are writes into RH 1.5D format,
+    with the time dimension written in the y dimension (to maximise
+    parallelism).
+
+    Parameters
+    ----------
+    snaps : list or 1D array
+        Numbers of snapshots to write.
+    outfile: str
+        Name of RH 1.5D atmosphere file to write.
+    file_root: str
+        Basename for bifrost files.
+    meshfile : str
+        Filename of mesh file (including full path).
+    writeB : bool, optional
+        If True, will also write magnetic field. Default is False.
+    sx, sz : slice object, optional
+        Slice objects for x and z dimensions, when not all points
+        are needed. E.g. use slice(None) for all points, slice(0, 100, 2)
+        for every second point up to 100.
+    desc : str
+        Description.
+    """
+    from . import rh15d
+    data = BifrostData(file_root, snap=snaps[0], meshfile=meshfile, fdir=fdir,
+                       ghost_analyse=False)
+    nz = len(data.z[sz])
+    nx = max(len(data.x[sx]), len(data.y[sx]))
+    ny = len(snaps)
+    tgas = np.empty((nx, ny, nz), dtype='f')
+    vz = np.empty_like(tgas)
+    if writeB:
+        Bz = np.empty_like(tgas)
+        Bx = np.empty_like(tgas)
+        By = np.empty_like(tgas)
+    else:
+        Bz = None
+        Bx = None
+        By = None
+    ne = np.empty_like(tgas, dtype='d')
+    hion = data.params['do_hion']
+    if hion:
+        nH = np.empty((6, ) + tgas.shape, dtype='f')
+    else:
+        nH = np.empty((1, ) + tgas.shape, dtype='f')
+
+    # unit conversion to SI
+    ul = data.params['u_l'] / 1.e2 # to metres
+    ur = data.params['u_r']        # to g/cm^3  (for ne_rt_table)
+    ut = data.params['u_t']        # to seconds
+    uv = ul / ut
+    ub = data.params['u_b'] * 1e-4 # to tgasesl
+    ue = data.params['u_ee']       # to erg/g
+
+    if not desc:
+        desc = 'BIFROST snapshot from 2D sequence %s, sx=%s sy=1 sz=%s.' % \
+                    (file_root, repr(sx), repr(sz))
+        if hion:
+            desc = 'hion ' + desc
+    x = data.x[sx] * ul
+    y = snaps
+    z = data.z[sz] * (-ul)
+
+    rdt = data.r.dtype
+    cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
+                          data.zdn.astype(rdt), data.dzidzup.astype(rdt),
+                          data.dzidzdn.astype(rdt))
+
+    for i, s in enumerate(snaps):
+        data.set_snap(s)
+        tgas[:, i] = np.squeeze(data.tg)[sx, sz]
+        rho = data.r[sx, sz]
+        vz[:, i] = np.squeeze(cstagger.zup(data.pz)[sx, sz] / rho) * (-uv)
+        if writeB:
+            Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
+            By[:, i] = np.squeeze(-data.by)[sx, sz] * ub
+            Bz[:, i] = np.squeeze(-data.bz)[sx, sz] * ub
+        rho = rho * ur   # to cgs
+        if hion:
+            ne[:, i] = np.squeeze(data.get_var('hionne'))[sx, sz] * 1.e6
+            for k in range(6):
+                tmp = np.squeeze(data.get_var('n%i' % (k + 1)))
+                nH[k, :, i] = tmp[sx, sz] * 1.e6
+        else:
+            ee = data.get_var('ee')[sx, sz]
+            ee = ee * ue
+            if os.access('%s/subs.dat' % fdir, os.R_OK):
+                grph = subs2grph('%s/subs.dat' % fdir)
+            else:
+                grph = 2.380491e-24
+            nH[0, :, i] = np.squeeze(rho) / grph * 1.e6   # from rho to nH in m^-3
+            # interpolate ne from the EOS table
+            print('ne interpolation...')
+            eostab = Rhoeetab(fdir=fdir)
+            ne[:, i] = np.squeeze(eostab.tab_interp(rho, ee, order=1)) * 1.e6
+
+    rh15d.make_xarray_atmos(outfile, tgas, vz, z, nH=nH, ne=ne, x=x, y=y,
+                            append=False, Bx=Bx, By=By, Bz=Bz, desc=desc,
+                            snap=snaps[0])
+
+
 def read_idl_ascii(filename):
     ''' Reads IDL-formatted (command style) ascii file into dictionary '''
     li = 0
@@ -1094,14 +1206,14 @@ def read_idl_ascii(filename):
         for line in fp:
             # ignore empty lines and comments
             line = line.strip()
-            if len(line) < 1:
+            if line:
                 li += 1
                 continue
             if line[0] == ';':
                 li += 1
                 continue
             line = line.split(';')[0].split('=')
-            if (len(line) != 2):
+            if len(line) != 2:
                 print(('(WWW) read_params: line %i is invalid, skipping' % li))
                 li += 1
                 continue
@@ -1109,18 +1221,18 @@ def read_idl_ascii(filename):
             key = line[0].strip().lower()
             value = line[1].strip()
             # instead of the insecure 'exec', find out the datatypes
-            if (value.find('"') >= 0):
+            if value.find('"') >= 0:
                 # string type
                 value = value.strip('"')
-            elif (value.find("'") >= 0):
+            elif value.find("'") >= 0:
                 value = value.strip("'")
-            elif (value.lower() in ['.false.', '.true.']):
+            elif value.lower() in ['.false.', '.true.']:
                 # bool type
                 value = False if value.lower() == '.false.' else True
-            elif (value.find('[') >= 0 and value.find(']') >= 0):
+            elif (value.find('[') >= 0) and (value.find(']') >= 0):
                 # list type
                 value = eval(value)
-            elif ((value.upper().find('E') >= 0) or (value.find('.') >= 0)):
+            elif (value.upper().find('E') >= 0) or (value.find('.') >= 0):
                 # float type
                 value = float(value)
             else:
@@ -1140,7 +1252,7 @@ def read_idl_ascii(filename):
 def subs2grph(subsfile):
     ''' From a subs.dat file, extract abundances and atomic masses to calculate
     grph, grams per hydrogen. '''
-    from scipy.constants import atomic_mass as amu
+    from astropy.constants import u as amu
 
     f = open(subsfile, 'r')
     nspecies = np.fromfile(f, count=1, sep=' ', dtype='i')[0]
@@ -1151,64 +1263,5 @@ def subs2grph(subsfile):
     # linear abundances
     ab = 10.**(ab - 12.)
     # mass in grams
-    am *= amu * 1.e3
+    am *= amu.value * 1.e3
     return np.sum(ab * am)
-
-
-def ne_rt_table(rho, temp, order=1, tabfile=None):
-    ''' Calculates electron density by interpolating the rho/temp table.
-        Based on Mats Carlsson's ne_rt_table.pro.
-
-        IN: rho (in g/cm^3),
-            temp (in K),
-
-        OPTIONAL: order (interpolation order 1: linear, 3: cubic),
-                  tabfile (path of table file)
-
-        OUT: electron density (in g/cm^3)
-
-        '''
-    import os
-    import scipy.interpolate as interp
-    import scipy.ndimage as ndimage
-    from scipy.io.idl import readsav
-    print('DEPRECATION WARNING: this method is deprecated in favour'
-          ' of the Rhoeetab class.')
-    if tabfile is None:
-        tabfile = 'ne_rt_table.idlsave'
-    # use table in default location if not found
-    if not os.path.isfile(tabfile) and \
-            os.path.isfile(os.getenv('TIAGO_DATA') + '/misc/' + tabfile):
-        tabfile = os.getenv('TIAGO_DATA') + '/misc/' + tabfile
-    tt = readsav(tabfile, verbose=False)
-    lgrho = np.log10(rho)
-    # warnings for values outside of table
-    tmin = np.min(temp)
-    tmax = np.max(temp)
-    ttmin = np.min(5040. / tt['theta_tab'])
-    ttmax = np.max(5040. / tt['theta_tab'])
-    lrmin = np.min(lgrho)
-    lrmax = np.max(lgrho)
-    tlrmin = np.min(tt['rho_tab'])
-    tlrmax = np.max(tt['rho_tab'])
-    if tmin < ttmin:
-        print(('(WWW) ne_rt_table: temperature outside table bounds. ' +
-               'Table Tmin=%.1f, requested Tmin=%.1f' % (ttmin, tmin)))
-    if tmax > ttmax:
-        print(('(WWW) ne_rt_table: temperature outside table bounds. ' +
-               'Table Tmax=%.1f, requested Tmax=%.1f' % (ttmax, tmax)))
-    if lrmin < tlrmin:
-        print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) min=%.2f, requested log(rho) min=%.2f' %
-               (tlrmin, lrmin)))
-    if lrmax > tlrmax:
-        print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) max=%.2f, requested log(rho) max=%.2f' %
-               (tlrmax, lrmax)))
-    # Approximate interpolation (bilinear/cubic interpolation) with ndimage
-    y = (5040. / temp - tt['theta_tab'][0]) / \
-        (tt['theta_tab'][1] - tt['theta_tab'][0])
-    x = (lgrho - tt['rho_tab'][0]) / (tt['rho_tab'][1] - tt['rho_tab'][0])
-    result = ndimage.map_coordinates(
-        tt['ne_rt_table'], [x, y], order=order, mode='nearest')
-    return 10**result * rho / tt['grph']

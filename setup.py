@@ -3,6 +3,7 @@ import numpy
 import setuptools
 from numpy.distutils.core import setup
 from numpy.distutils.extension import Extension
+from numpy.distutils import fcompiler
 
 
 try:  # do we have cython?
@@ -10,10 +11,11 @@ try:  # do we have cython?
     USE_CYTHON = True
 except:
     USE_CYTHON = False
+USE_FORTRAN = fcompiler.get_default_fcompiler()
 
 NAME = "helita"
-PACKAGES = ["io", "obs", "sim", "utils"]
-VERSION = "0.8.1"
+PACKAGES = ["data", "io", "obs", "sim", "utils", "vis"]
+VERSION = "0.9.0"
 
 ext = '.pyx' if USE_CYTHON else '.c'
 NUMPY_INC = numpy.get_include()
@@ -28,9 +30,10 @@ EXT_PACKAGES = {   # C and Fortran extensions
     "radtrans" : ["utils", [NUMPY_INC],
                   [os.path.join(NAME, "utils/radtrans" + ext)]],
     "utilsfast" : ["utils", [NUMPY_INC],
-                   [os.path.join(NAME, "utils/utilsfast" + ext)]],
-    "trnslt" : ["utils", [], [os.path.join(NAME, "utils/trnslt.f90")]],
+                   [os.path.join(NAME, "utils/utilsfast" + ext)]]
 }
+if USE_FORTRAN:
+    EXT_PACKAGES["trnslt"] = ["utils", [], [os.path.join(NAME, "utils/trnslt.f90")]]
 
 extensions = [
     Extension(
@@ -52,18 +55,18 @@ setup(
     url="http://%s.readthedocs.io" % NAME,
     keywords=['astronomy', 'astrophysics', 'solar physics', 'space', 'science'],
     classifiers=[
-          'Intended Audience :: Science/Research',
-          'License :: OSI Approved :: BSD License',
-          'Operating System :: OS Independent',
-          'Programming Language :: C',
-          'Programming Language :: Cython',
-          'Programming Language :: Python :: 3',
-          'Programming Language :: Python :: Implementation :: CPython',
-          'Topic :: Scientific/Engineering :: Astronomy',
-          'Topic :: Scientific/Engineering :: Physics'
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: BSD License',
+        'Operating System :: OS Independent',
+        'Programming Language :: C',
+        'Programming Language :: Cython',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Topic :: Scientific/Engineering :: Astronomy',
+        'Topic :: Scientific/Engineering :: Physics'
     ],
     packages=[NAME] + ["%s.%s" % (NAME, package) for package in PACKAGES],
-    package_data={'': ['*.pyx', '*.f'], '': ['data/*']},
+    package_data={'': ['*.pyx', '*.f90', 'data/*']},
     ext_modules=extensions,
     python_requires='>=2.7',
     use_2to3=False
