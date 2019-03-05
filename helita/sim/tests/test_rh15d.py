@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Tests for the rh15d module
+"""
 
-import pytest
 import numpy as np
 from helita.sim import rh15d
 
@@ -67,7 +69,7 @@ END
 """
 
 def test_read_atom_levels():
-    assert np.array_equal(rh15d.read_atom_levels(TEST_LEVELS, format='RH'),
+    assert np.array_equal(rh15d.AtomFile.read_atom_levels(TEST_LEVELS, format='RH'),
                           TEST_LEVELS_DATA)
 
 def test_AtomFile():
