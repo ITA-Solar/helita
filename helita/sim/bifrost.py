@@ -11,6 +11,46 @@ from . import cstagger
 class BifrostData(object):
     """
     Reads data from Bifrost simulations in native format.
+
+    Parameters
+    ----------
+    file_root - string
+        Basename for all file names (without underscore!). Snapshot number
+        will be added afterwards, and directory will be added before.
+    snap - integer, optional
+        Snapshot number. If None, will read first snapshot in sequence.
+    meshfile - string, optional
+        File name (including full path) for file with mesh. If set
+        to None (default), a uniform mesh will be created.
+    fdir - string, optional
+        Directory where simulation files are. Must be a real path.
+    verbose - bool, optional
+        If True, will print out more diagnostic messages
+    dtype - string, optional
+        Data type for reading variables. Default is 32 bit float.
+    big_endian - string, optional
+        If True, will read variables in big endian. Default is False
+        (reading in little endian).
+    ghost_analyse - bool, optional
+        If True, will read data from ghost zones when this is saved
+        to files. Default is never to read ghost zones.
+
+    Examples
+    --------
+    This reads snapshot 383 from simulation "cb24bih", whose file
+    root is "cb24bih", and is found at directory /data/cb24bih:
+
+    >>> a = Bifrost.Data("cb24bih", snap=383, fdir="/data/cb24bih")
+
+    Scalar variables do not need de-staggering and are available as
+    memory map (only loaded to memory when needed), e.g.:
+
+    >>> a.r.shape
+    (504, 504, 496)
+
+    Composite variables need to be obtained by get_var():
+
+    >>> vx = a.get_var("ux")
     """
 
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
@@ -18,46 +58,6 @@ class BifrostData(object):
                  ghost_analyse=False):
         """
         Loads metadata and initialises variables.
-
-        Parameters
-        ----------
-        file_root - string
-            Basename for all file names. Snapshot number will be added
-            afterwards, and directory will be added before.
-        snap - integer, optional
-            Snapshot number. If None, will read first snapshot in sequence.
-        meshfile - string, optional
-            File name (including full path) for file with mesh. If set
-            to None (default), a uniform mesh will be created.
-        fdir - string, optional
-            Directory where simulation files are. Must be a real path.
-        verbose - bool, optional
-            If True, will print out more diagnostic messages
-        dtype - string, optional
-            Data type for reading variables. Default is 32 bit float.
-        big_endian - string, optional
-            If True, will read variables in big endian. Default is False
-            (reading in little endian).
-        ghost_analyse - bool, optional
-            If True, will read data from ghost zones when this is saved
-            to files. Default is never to read ghost zones.
-
-        Examples
-        --------
-        This reads snapshot 383 from simulation "cb24bih", whose file
-        root is "cb24bih_", and is found at directory /data/cb24bih:
-
-        >>> a = Bifrost.Data("cb24bih_", snap=383, fdir=""/data/cb24bih")
-
-        Scalar variables do not need de-staggering and are available as
-        memory map (only loaded to memory when needed), e.g.:
-
-        >>> a.r.shape
-        (504, 504, 496)
-
-        Composite variables need to be obtained by get_var():
-
-        >>> vx = a.get_var("ux")
         """
         self.fdir = fdir
         self.verbose = verbose
@@ -647,7 +647,7 @@ class BifrostData(object):
         -------
         None.
         """
-        from .multi3dn import Multi3dAtmos
+        from .multi3d import Multi3dAtmos
         # unit conversion to cgs and km/s
         ul = self.params['u_l']   # to cm
         ur = self.params['u_r']   # to g/cm^3  (for ne_rt_table)
