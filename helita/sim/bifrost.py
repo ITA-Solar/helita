@@ -1206,7 +1206,7 @@ def read_idl_ascii(filename):
         for line in fp:
             # ignore empty lines and comments
             line = line.strip()
-            if line:
+            if not line:
                 li += 1
                 continue
             if line[0] == ';':
