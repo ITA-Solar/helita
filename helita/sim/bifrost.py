@@ -652,11 +652,11 @@ class BifrostData(object):
         if verbose:
             pbar.update()
             pbar.set_description("Getting hydrogen populations")
-        nh = self.get_hydrogen_pops(sx, sy, sz).to('1/m3').value
+        nh = self.get_hydrogen_pops(sx, sy, sz).to_value('1/m3')
         if verbose:
             pbar.update()
             pbar.set_description("Getting electron density")
-        ne = self.get_electron_density(sx, sy, sz).to('1/m3').value
+        ne = self.get_electron_density(sx, sy, sz).to_value('1/m3')
         if desc is None:
             desc = 'BIFROST snapshot from sequence %s, sx=%s sy=%s sz=%s.' % \
                    (self.file_root, repr(sx), repr(sy), repr(sz))
@@ -722,8 +722,8 @@ class BifrostData(object):
         x = self.x[sx] * ul
         y = self.y[sy] * ul
         z = self.z[sz] * (-ul)
-        nh = self.get_hydrogen_pops(sx, sy, sz).to('1/cm3').value
-        ne = self.get_electron_density(sx, sy, sz).to('1/cm3').value
+        nh = self.get_hydrogen_pops(sx, sy, sz).to_value('1/cm3')
+        ne = self.get_electron_density(sx, sy, sz).to_value('1/cm3')
         # write to file
         print('Write to file...')
         nx, ny, nz = temp.shape
@@ -1198,8 +1198,8 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
             Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
             By[:, i] = np.squeeze(-data.by)[sx, sz] * ub
             Bz[:, i] = np.squeeze(-data.bz)[sx, sz] * ub
-        ne[:, i] = np.squeeze(data.get_electron_density(sx=sx, sz=sz).to('1/m3').value)
-        nH[:, :, i] = np.squeeze(data.get_hydrogen_pops(sx=sx, sz=sz).to('1/m3').value)
+        ne[:, i] = np.squeeze(data.get_electron_density(sx=sx, sz=sz)).to_value('1/m3')
+        nH[:, :, i] = np.squeeze(data.get_hydrogen_pops(sx=sx, sz=sz)).to_value('1/m3')
 
     rh15d.make_xarray_atmos(outfile, tgas, vz, z, nH=nH, ne=ne, x=x, y=y,
                             append=False, Bx=Bx, By=By, Bz=Bz, desc=desc,
@@ -1278,7 +1278,7 @@ def calc_grph(abundances, atomic_weights):
     """
     from astropy.constants import u as amu
     linear_abundances = 10.**(abundances - 12.)
-    masses = atomic_weights * amu.to('g').value
+    masses = atomic_weights * amu.to_value('g')
     return np.sum(linear_abundances * masses)
 
 
