@@ -454,7 +454,7 @@ class BifrostData(object):
                 # ("get_var: could not read variable %s. Must be "
                 # "one of %s" % (var,
                 # (self.simple_vars + self.compvars + self.auxxyvars))))
-            val = self._get_quantity(var, *args, **kwargs)
+            val = self.get_quantity(var, *args, **kwargs)
 
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
 
