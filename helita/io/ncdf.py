@@ -5,7 +5,7 @@ NetCDF helper functions
 import os
 import struct
 import netCDF4 as nc
-
+import numpy as np
 
 def ncdf_info(filename):
     """
