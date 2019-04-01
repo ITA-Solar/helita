@@ -26,9 +26,46 @@ def sine(B, x):
     return B[0] * np.sin(2 * np.pi * B[1] * x + B[2]) + B[3]
 
 
-def gauss_lsq(x, y, verbose=False, itmax=200, iparams=[]):
-    ''' Performs a Gaussian least squares fit to the data,
-    with errors! Uses scipy odrpack, but for least squares.'''
+def gauss_lsq(x, y, weight_x=1., weight_y=1., verbose=False, itmax=200,
+              iparams=[]):
+    """
+    Performs a Gaussian least squares fit to the data,
+    with errors! Uses scipy odrpack, but for least squares.
+
+    Parameters
+    ----------
+    x : 1D array-like
+        Observed data, independent variable
+    y : 1D array-like
+        Observed data, dependent variable
+    weight_x: array-like, optional
+        Weights for independent variable. This is typically based on the errors,
+        if any. With errors, normal weights should be 1/err**2. If weight is a
+        scalar, the same weight will be used for all points and therefore its
+        value is irrelevant.
+    weight_y: array-like, optional.
+        Weights for independent variable. This is typically based on the errors,
+        if any. With errors, normal weights should be 1/err**2. For Poisson
+        weighing, should be 1/y.
+    verbose: boolean
+        If True, will print out more detailed information about the result.
+    itmax: integer, Optional
+        Maximum number of iterations, default is 200.
+    iparams: list, optional
+        Starting guess of Gaussian parameters. Optional but highly recommended
+        to use realistic values!
+
+    Returns
+    -------
+    output: tuple
+        Tuple with containing (coeff, err, itlim), where coeff are the fit
+        resulting coefficients (same order as Gaussian function above), err are
+        the errors on each coefficient, and itlim is the number of iterations.
+
+    Notes
+    -----
+    See documentation of scipy.odr.ordpack for more information.
+    """
 
     def _gauss_fjd(B, x):
         # Analytical derivative of gaussian with respect to x
@@ -45,13 +82,13 @@ def gauss_lsq(x, y, verbose=False, itmax=200, iparams=[]):
         return _ret
 
     # Centre data in mean(x) (makes better conditioned matrix)
-    mx = mean(x)
+    mx = np.mean(x)
     x2 = x - mx
     if not any(iparams):
-        iparams = array([x2[argmax(y)], np.std(y),
-                         np.sqrt(2 * np.pi) * np.std(y) * max(y), 1.])
+        iparams = np.array([x2[np.argmax(y)], np.std(y),
+                            np.sqrt(2 * np.pi) * np.std(y) * max(y), 1.])
     gauss = odr.Model(gaussian, fjacd=_gauss_fjd, fjacb=_gauss_fjb)
-    mydata = odr.Data(x2, y)
+    mydata = odr.Data(x2, y, wd=weight_x, we=weight_y)
     myodr = odr.ODR(mydata, gauss, beta0=iparams, maxit=itmax)
     # Set type of fit to least-squares:
     myodr.set_job(fit_type=2)
@@ -101,9 +138,9 @@ def double_gauss_lsq(x, y, verbose=False, itmax=200, iparams=[]):
     mx = mean(x)
     x2 = x - mx
     if not any(iparams):
-        iparams = array([x2[argmax(y)], np.std(y),
+        iparams = array([x2[np.argmax(y)], np.std(y),
                          np.sqrt(2 * np.pi) * np.std(y) * max(y),
-                         x2[argmax(y)], np.std(y),
+                         x2[np.argmax(y)], np.std(y),
                          np.sqrt(2 * np.pi) * np.std(y) * max(y), 1.])
     dgauss = odr.Model(double_gaussian, fjacd=_dgauss_fjd, fjacb=_dgauss_fjb)
     mydata = odr.Data(x2, y)
