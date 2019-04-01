@@ -48316,10 +48316,6 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_RuntimeError, __pyx_k_RuntimeError, sizeof(__pyx_k_RuntimeError), 0, 0, 1, 1},
   {&__pyx_n_s_TypeError, __pyx_k_TypeError, sizeof(__pyx_k_TypeError), 0, 0, 1, 1},
   {&__pyx_kp_s_Unable_to_convert_item_to_object, __pyx_k_Unable_to_convert_item_to_object, sizeof(__pyx_k_Unable_to_convert_item_to_object), 0, 0, 1, 0},
-<<<<<<< HEAD
-  {&__pyx_kp_s_Users_juanms_python_helita_heli, __pyx_k_Users_juanms_python_helita_heli, sizeof(__pyx_k_Users_juanms_python_helita_heli), 0, 0, 1, 0},
-=======
->>>>>>> origin/master
   {&__pyx_n_s_ValueError, __pyx_k_ValueError, sizeof(__pyx_k_ValueError), 0, 0, 1, 1},
   {&__pyx_n_s_View_MemoryView, __pyx_k_View_MemoryView, sizeof(__pyx_k_View_MemoryView), 0, 0, 1, 1},
   {&__pyx_kp_s__2, __pyx_k__2, sizeof(__pyx_k__2), 0, 0, 1, 0},
@@ -49319,17 +49315,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     xup(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__112 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__112)) __PYX_ERR(0, 18, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__112);
-  __Pyx_GIVEREF(__pyx_tuple__112);
-  __pyx_codeobj__113 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__112, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0xup, 18, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__113)) __PYX_ERR(0, 18, __pyx_L1_error)
-=======
   __pyx_tuple__121 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__121)) __PYX_ERR(0, 18, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__121);
   __Pyx_GIVEREF(__pyx_tuple__121);
   __pyx_codeobj__122 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__121, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0xup, 18, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__122)) __PYX_ERR(0, 18, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":79
  * @cython.boundscheck(False)
@@ -49338,17 +49327,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     yup(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__114 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__114)) __PYX_ERR(0, 79, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__114);
-  __Pyx_GIVEREF(__pyx_tuple__114);
-  __pyx_codeobj__115 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__114, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0yup, 79, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__115)) __PYX_ERR(0, 79, __pyx_L1_error)
-=======
   __pyx_tuple__123 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__123)) __PYX_ERR(0, 79, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__123);
   __Pyx_GIVEREF(__pyx_tuple__123);
   __pyx_codeobj__124 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__123, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0yup, 79, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__124)) __PYX_ERR(0, 79, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":140
  * @cython.boundscheck(False)
@@ -49357,17 +49339,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     zup(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__116 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__116)) __PYX_ERR(0, 140, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__116);
-  __Pyx_GIVEREF(__pyx_tuple__116);
-  __pyx_codeobj__117 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__116, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0zup, 140, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__117)) __PYX_ERR(0, 140, __pyx_L1_error)
-=======
   __pyx_tuple__125 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__125)) __PYX_ERR(0, 140, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__125);
   __Pyx_GIVEREF(__pyx_tuple__125);
   __pyx_codeobj__126 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__125, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0zup, 140, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__126)) __PYX_ERR(0, 140, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":185
  * @cython.boundscheck(False)
@@ -49376,17 +49351,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     xdn(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__118 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__118)) __PYX_ERR(0, 185, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__118);
-  __Pyx_GIVEREF(__pyx_tuple__118);
-  __pyx_codeobj__119 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__118, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0xdn, 185, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__119)) __PYX_ERR(0, 185, __pyx_L1_error)
-=======
   __pyx_tuple__127 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__127)) __PYX_ERR(0, 185, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__127);
   __Pyx_GIVEREF(__pyx_tuple__127);
   __pyx_codeobj__128 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__127, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0xdn, 185, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__128)) __PYX_ERR(0, 185, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":246
  * @cython.boundscheck(False)
@@ -49395,17 +49363,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     ydn(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__120 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__120)) __PYX_ERR(0, 246, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__120);
-  __Pyx_GIVEREF(__pyx_tuple__120);
-  __pyx_codeobj__121 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__120, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0ydn, 246, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__121)) __PYX_ERR(0, 246, __pyx_L1_error)
-=======
   __pyx_tuple__129 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__129)) __PYX_ERR(0, 246, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__129);
   __Pyx_GIVEREF(__pyx_tuple__129);
   __pyx_codeobj__130 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__129, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0ydn, 246, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__130)) __PYX_ERR(0, 246, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":307
  * @cython.boundscheck(False)
@@ -49414,17 +49375,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     zdn(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__122 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__122)) __PYX_ERR(0, 307, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__122);
-  __Pyx_GIVEREF(__pyx_tuple__122);
-  __pyx_codeobj__123 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__122, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0zdn, 307, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__123)) __PYX_ERR(0, 307, __pyx_L1_error)
-=======
   __pyx_tuple__131 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__131)) __PYX_ERR(0, 307, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__131);
   __Pyx_GIVEREF(__pyx_tuple__131);
   __pyx_codeobj__132 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__131, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0zdn, 307, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__132)) __PYX_ERR(0, 307, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":352
  * @cython.boundscheck(False)
@@ -49433,17 +49387,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     ddxup(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__124 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__124)) __PYX_ERR(0, 352, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__124);
-  __Pyx_GIVEREF(__pyx_tuple__124);
-  __pyx_codeobj__125 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__124, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0ddxup, 352, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__125)) __PYX_ERR(0, 352, __pyx_L1_error)
-=======
   __pyx_tuple__133 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__133)) __PYX_ERR(0, 352, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__133);
   __Pyx_GIVEREF(__pyx_tuple__133);
   __pyx_codeobj__134 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__133, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0ddxup, 352, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__134)) __PYX_ERR(0, 352, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":413
  * @cython.boundscheck(False)
@@ -49452,17 +49399,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     ddyup(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__126 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__126)) __PYX_ERR(0, 413, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__126);
-  __Pyx_GIVEREF(__pyx_tuple__126);
-  __pyx_codeobj__127 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__126, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0ddyup, 413, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__127)) __PYX_ERR(0, 413, __pyx_L1_error)
-=======
   __pyx_tuple__135 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__135)) __PYX_ERR(0, 413, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__135);
   __Pyx_GIVEREF(__pyx_tuple__135);
   __pyx_codeobj__136 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__135, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0ddyup, 413, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__136)) __PYX_ERR(0, 413, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":474
  * @cython.boundscheck(False)
@@ -49471,17 +49411,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     ddzup(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__128 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__128)) __PYX_ERR(0, 474, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__128);
-  __Pyx_GIVEREF(__pyx_tuple__128);
-  __pyx_codeobj__129 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__128, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0ddzup, 474, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__129)) __PYX_ERR(0, 474, __pyx_L1_error)
-=======
   __pyx_tuple__137 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__137)) __PYX_ERR(0, 474, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__137);
   __Pyx_GIVEREF(__pyx_tuple__137);
   __pyx_codeobj__138 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__137, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0ddzup, 474, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__138)) __PYX_ERR(0, 474, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":519
  * @cython.boundscheck(False)
@@ -49490,17 +49423,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__130 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__130)) __PYX_ERR(0, 519, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__130);
-  __Pyx_GIVEREF(__pyx_tuple__130);
-  __pyx_codeobj__131 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__130, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0ddxdn, 519, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__131)) __PYX_ERR(0, 519, __pyx_L1_error)
-=======
   __pyx_tuple__139 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__139)) __PYX_ERR(0, 519, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__139);
   __Pyx_GIVEREF(__pyx_tuple__139);
   __pyx_codeobj__140 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__139, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0ddxdn, 519, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__140)) __PYX_ERR(0, 519, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":580
  * @cython.boundscheck(False)
@@ -49509,17 +49435,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     ddydn(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__132 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__132)) __PYX_ERR(0, 580, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__132);
-  __Pyx_GIVEREF(__pyx_tuple__132);
-  __pyx_codeobj__133 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__132, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0ddydn, 580, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__133)) __PYX_ERR(0, 580, __pyx_L1_error)
-=======
   __pyx_tuple__141 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__141)) __PYX_ERR(0, 580, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__141);
   __Pyx_GIVEREF(__pyx_tuple__141);
   __pyx_codeobj__142 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__141, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0ddydn, 580, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__142)) __PYX_ERR(0, 580, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":641
  * @cython.boundscheck(False)
@@ -49528,17 +49447,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     ddzdn(np.ndarray[FLOAT_t, ndim=3] inarr)
  */
-<<<<<<< HEAD
-  __pyx_tuple__134 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__134)) __PYX_ERR(0, 641, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__134);
-  __Pyx_GIVEREF(__pyx_tuple__134);
-  __pyx_codeobj__135 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__134, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_pyx_fuse_0ddzdn, 641, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__135)) __PYX_ERR(0, 641, __pyx_L1_error)
-=======
   __pyx_tuple__143 = PyTuple_Pack(1, __pyx_n_s_inarr); if (unlikely(!__pyx_tuple__143)) __PYX_ERR(0, 641, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__143);
   __Pyx_GIVEREF(__pyx_tuple__143);
   __pyx_codeobj__144 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__143, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_pyx_fuse_0ddzdn, 641, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__144)) __PYX_ERR(0, 641, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":689
  * @cython.boundscheck(False)
@@ -49547,17 +49459,10 @@ static int __Pyx_InitCachedConstants(void) {
  *                      np.ndarray[FLOAT_t, ndim=1] r):
  *     ''' Auxiliary function for init_stagger. '''
  */
-<<<<<<< HEAD
-  __pyx_tuple__136 = PyTuple_Pack(10, __pyx_n_s_x, __pyx_n_s_n, __pyx_n_s_y, __pyx_n_s_o, __pyx_n_s_r, __pyx_n_s_c, __pyx_n_s_b, __pyx_n_s_t, __pyx_n_s_i, __pyx_n_s_j); if (unlikely(!__pyx_tuple__136)) __PYX_ERR(0, 689, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__136);
-  __Pyx_GIVEREF(__pyx_tuple__136);
-  __pyx_codeobj__137 = (PyObject*)__Pyx_PyCode_New(5, 0, 10, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__136, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_calc_stagger_inv, 689, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__137)) __PYX_ERR(0, 689, __pyx_L1_error)
-=======
   __pyx_tuple__145 = PyTuple_Pack(10, __pyx_n_s_x, __pyx_n_s_n, __pyx_n_s_y, __pyx_n_s_o, __pyx_n_s_r, __pyx_n_s_c, __pyx_n_s_b, __pyx_n_s_t, __pyx_n_s_i, __pyx_n_s_j); if (unlikely(!__pyx_tuple__145)) __PYX_ERR(0, 689, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__145);
   __Pyx_GIVEREF(__pyx_tuple__145);
   __pyx_codeobj__146 = (PyObject*)__Pyx_PyCode_New(5, 0, 10, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__145, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_calc_stagger_inv, 689, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__146)) __PYX_ERR(0, 689, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":718
  * @cython.boundscheck(False)
@@ -49566,17 +49471,10 @@ static int __Pyx_InitCachedConstants(void) {
  *                  np.ndarray[FLOAT_t, ndim=1] zdn,
  *                  np.ndarray[FLOAT_t, ndim=1] dzup,
  */
-<<<<<<< HEAD
-  __pyx_tuple__138 = PyTuple_Pack(16, __pyx_n_s_mz, __pyx_n_s_dx, __pyx_n_s_dy, __pyx_n_s_z, __pyx_n_s_zdn, __pyx_n_s_dzup, __pyx_n_s_dzdn, __pyx_n_s_i, __pyx_n_s_j, __pyx_n_s_k, __pyx_n_s_zh, __pyx_n_s_a, __pyx_n_s_iordl, __pyx_n_s_iordu, __pyx_n_s_dordl, __pyx_n_s_dordu); if (unlikely(!__pyx_tuple__138)) __PYX_ERR(0, 718, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__138);
-  __Pyx_GIVEREF(__pyx_tuple__138);
-  __pyx_codeobj__139 = (PyObject*)__Pyx_PyCode_New(7, 0, 16, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__138, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_init_stagger, 718, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__139)) __PYX_ERR(0, 718, __pyx_L1_error)
-=======
   __pyx_tuple__147 = PyTuple_Pack(16, __pyx_n_s_mz, __pyx_n_s_dx, __pyx_n_s_dy, __pyx_n_s_z, __pyx_n_s_zdn, __pyx_n_s_dzup, __pyx_n_s_dzdn, __pyx_n_s_i, __pyx_n_s_j, __pyx_n_s_k, __pyx_n_s_zh, __pyx_n_s_a, __pyx_n_s_iordl, __pyx_n_s_iordu, __pyx_n_s_dordl, __pyx_n_s_dordu); if (unlikely(!__pyx_tuple__147)) __PYX_ERR(0, 718, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__147);
   __Pyx_GIVEREF(__pyx_tuple__147);
   __pyx_codeobj__148 = (PyObject*)__Pyx_PyCode_New(7, 0, 16, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__147, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_init_stagger, 718, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__148)) __PYX_ERR(0, 718, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "helita/sim/cstagger.pyx":810
  *
@@ -49585,17 +49483,10 @@ static int __Pyx_InitCachedConstants(void) {
  *     """
  *     do(np.ndarray[FLOAT_t, ndim=3] inarr, operation='xup')
  */
-<<<<<<< HEAD
-  __pyx_tuple__140 = PyTuple_Pack(4, __pyx_n_s_inarr, __pyx_n_s_operation, __pyx_n_s_OPERATIONS, __pyx_n_s_func); if (unlikely(!__pyx_tuple__140)) __PYX_ERR(0, 810, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__140);
-  __Pyx_GIVEREF(__pyx_tuple__140);
-  __pyx_codeobj__141 = (PyObject*)__Pyx_PyCode_New(2, 0, 4, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__140, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_Users_juanms_python_helita_heli, __pyx_n_s_do, 810, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__141)) __PYX_ERR(0, 810, __pyx_L1_error)
-=======
   __pyx_tuple__149 = PyTuple_Pack(4, __pyx_n_s_inarr, __pyx_n_s_operation, __pyx_n_s_OPERATIONS, __pyx_n_s_func); if (unlikely(!__pyx_tuple__149)) __PYX_ERR(0, 810, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__149);
   __Pyx_GIVEREF(__pyx_tuple__149);
   __pyx_codeobj__150 = (PyObject*)__Pyx_PyCode_New(2, 0, 4, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__149, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_helita_sim_cstagger_pyx, __pyx_n_s_do, 810, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__150)) __PYX_ERR(0, 810, __pyx_L1_error)
->>>>>>> origin/master
 
   /* "View.MemoryView":285
  *         return self.name
