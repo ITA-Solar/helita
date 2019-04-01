@@ -8,7 +8,6 @@ from .bifrost import BifrostData, Rhoeetab
 from .bifrost import read_idl_ascii, subs2grph, bifrost_units
 from . import cstagger
 
-
 class EbysusData(BifrostData):
 
     """
@@ -180,7 +179,7 @@ class EbysusData(BifrostData):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
-        '''assert (mf_ispecies > 0 and mf_ispecies <= 28)'''
+
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
@@ -231,7 +230,6 @@ class EbysusData(BifrostData):
                 'WARNING: cstagger use has been turned off,',
                 'turn it back on with "dd.cstagop = True"')
 
-
         if ((snap is not None) and np.any(snap != self.snap)):
             self.set_snap(snap)
 
@@ -240,7 +238,7 @@ class EbysusData(BifrostData):
         elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
-        assert (self.mf_ispecies <= 28)
+        assert (mf_ispecies > 0 and mf_ispecies <= 28)
 
         # # check if already in memmory
         # if var in self.variables:
@@ -374,10 +372,7 @@ class EbysusData(BifrostData):
                 order=order,
                 offset=offset,
                 mode=mode,
-                shape=(
-                    self.nx,
-                    self.ny,
-                    self.nzb))
+                shape=(self.nx, self.ny, self.nzb))
         else:
             return np.memmap(
                 filename,
@@ -385,11 +380,7 @@ class EbysusData(BifrostData):
                 order=order,
                 offset=offset,
                 mode=mode,
-                shape=(
-                    self.nx,
-                    self.ny,
-                    self.nzb,
-                    mf_arr_size))
+                shape=(self.nx, self.ny, self.nzb, mf_arr_size))
 
     def _get_composite_mf_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -483,7 +474,7 @@ class EbysusData(BifrostData):
         except ValueError:
             if ((snap is not None) and any(snap != self.snap)):
                 self.set_snap(snap)
-                
+
         return value
 
 
