@@ -488,18 +488,18 @@ class Multi3dout:
                 temp = tail.split()
                 self.muxout = []
                 for i in range(len(temp)):
-                    temp_var = temp[i].replace("'", "")
-                    self.muxout.append("+" + temp[i].replace("'", ""))
+                    temp_var = str(temp[i]).replace("'", "")
+                    self.muxout.append("+" + str(temp[i]).replace("'", ""))
             elif(head == "muyout"):
                 temp = tail.split()
                 self.muyout = []
                 for i in range(len(temp)):
-                    self.muyout.append("+" + temp[i].replace("'", ""))
+                    self.muyout.append("+" + str(temp[i]).replace("'", ""))
             elif(head == "muzout"):
                 temp = tail.split()
                 self.muzout = []
                 for i in range(len(temp)):
-                    self.muzout.append("+" + temp[i].replace("'", ""))
+                    self.muzout.append("+" + str(temp[i]).replace("'", ""))
             else:
                 self.input[head] = tail
         try:
@@ -563,6 +563,7 @@ class Multi3dout:
         data = np.fromfile(fobj, dtype="int32", count=self.maxac * self.nnu)
         self.ac = data[0:self.maxac *
                        self.nnu].reshape((self.maxac, self.nnu), order="FORTRAN")
+        # Reading starts to be wrong from this point on
         _read_fort_rec(fobj)
         data = np.fromfile(fobj, dtype="int32", count=self.maxal * self.nnu)
         self.al = data[0:self.maxal *
@@ -583,10 +584,10 @@ class Multi3dout:
         self.nlevel = data[13]
         # Record crap from Fortran
         data = np.fromfile(fobj, dtype="a20", count=1)
-        self.id = data[0].replace(" ", "")
+        self.id = str(data[0]).replace(" ", "")
         _read_fort_rec(fobj)
         data = np.fromfile(fobj, dtype="a20", count=1)
-        self.crout = data[0].replace(" ", "")
+        self.crout = str(data[0]).replace(" ", "")
         _read_fort_rec(fobj)
         data = np.fromfile(fobj, dtype="a20", count=self.nlevel)
         self.label = [s.rstrip() for s in data]  # data.replace(" ", "")
