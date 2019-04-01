@@ -1444,15 +1444,10 @@ class BifrostData(object):
                 else:
                     mass = uni.m_h
                 if lvl == '1':
-<<<<<<< HEAD
-                    return mass * (self.get_var('n1') + \
-                        self.get_var('n2') + self.get_var('n3') +
-                        self.get_var('n4') + self.get_var('n5'))
-=======
+
                     return mass * (self.get_var('n1') +\
                                    self.get_var('n2') + self.get_var('n3') +\
                                    self.get_var('n4') + self.get_var('n5'))
->>>>>>> origin/master
                 else:
                     return mass * self.get_var('n6')
             elif self.params['do_helium'] == 1 and spic[1:-1] == 'he':
@@ -1467,22 +1462,16 @@ class BifrostData(object):
             else:
                 tg = self.get_var('tg')
                 r = self.get_var('r')
-<<<<<<< HEAD
-                nel = self.get_var('ne')/1e6  # 1e6 conversion from SI to cgs
-=======
                 nel = self.get_var('ne') / 1e6  # 1e6 conversion from SI to cgs
->>>>>>> origin/master
 
                 if quant[0] == 'n':
                     dens = False
                 else:
                     dens = True
-<<<<<<< HEAD
-                return ionpopulation(r,nel,tg,elem=spic[1:-1],lvl=lvl,dens=dens)
-=======
+
                 return ionpopulation(r, nel, tg, elem=spic[1:-1], lvl=lvl,
                                     dens=dens)
->>>>>>> origin/master
+
         elif ((quant[:3] in MODULE_QUANT) or (
                 quant[-1] in MODULE_QUANT) or (
                 quant[-1] in SQUARE_QUANT and not quant in CYCL_RES)):
@@ -1513,46 +1502,6 @@ class BifrostData(object):
                               '.' % (quant, repr(self.simple_vars))))
 
     def calc_tau(self):
-
-<<<<<<< HEAD
-       if not hasattr(self,'z'):
-          print('(WWW) get_tau needs the input z (height) in Mm (units of the code)')
-
-       # grph = 2.38049d-24 uni.GRPH
-       # bk = 1.38e-16 uni.KBOLTZMANN
-       uni = bifrost_units()
-       # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
-       if not hasattr(self,'ne'):
-           nel = self.get_var('ne')
-       else:
-           nel = self.ne
-
-       if not hasattr(self,'tg'):
-           tg = self.get_var('tg')
-       else:
-           tg = self.tg
-
-       if not hasattr(self,'r'):
-           rho = self.get_var('r') * uni.u_r
-       else:
-           rho = self.r * uni.u_r
-
-       tau = np.zeros((self.nx,self.ny,self.nz)) + 1.e-16
-       xhmbf = np.zeros((self.nz))
-       const = (1.03526e-16 / uni.GRPH)  * 2.9256e-17 / 1e6
-       for iix in range(self.nx):
-           for iiy in range(self.ny):
-               for iiz in range(self.nz):
-                   xhmbf[iiz] = const * nel[iix,iiy,iiz] / \
-                                tg[iix,iiy,iiz]**1.5 * np.exp(0.754e0 * \
-                                uni.ev_to_erg / uni.kboltzmann.value / \
-                                tg[iix,iiy,iiz]) * rho[iix,iiy,iiz]
-
-               for iiz in range(1,self.nz):
-                   tau[iix,iiy,iiz] = tau[iix,iiy,iiz-1] + 0.5 * (xhmbf[iiz] \
-                            + xhmbf[iiz-1]) * np.abs(self.dz1d[iiz]) * 1.0e8
-       return tau
-=======
         if not hasattr(self, 'z'):
             print('(WWW) get_tau needs the input z (height) in Mm (units of the code)')
 
@@ -1591,7 +1540,6 @@ class BifrostData(object):
                         (xhmbf[iiz] + xhmbf[iiz - 1]) *\
                         np.abs(self.dz1d[iiz]) * 1.0e8
         return tau
->>>>>>> origin/master
 
     def write_rh15d(self, outfile, desc=None, append=True,
                     sx=slice(None), sy=slice(None), sz=slice(None)):
