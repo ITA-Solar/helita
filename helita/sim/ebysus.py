@@ -238,7 +238,7 @@ class EbysusData(BifrostData):
         elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
-        assert (mf_ispecies > 0 and mf_ispecies <= 28)
+        assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
 
         # # check if already in memmory
         # if var in self.variables:
@@ -399,7 +399,7 @@ class EbysusData(BifrostData):
         elif var in self.compvars:
             return super(EbysusData, self)._get_composite_var(var)
         else:
-            return super(EbysusData, self)._get_quantity(var)
+            return super(EbysusData, self).get_quantity(var)
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, order='F',
