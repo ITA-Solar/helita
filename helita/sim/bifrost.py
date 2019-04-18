@@ -10,6 +10,8 @@ import scipy as sp
 from scipy.ndimage import map_coordinates
 from multiprocessing.dummy import Pool as ThreadPool
 import scipy.ndimage as ndimage
+import scipy.constants as const
+from astropy import constants as aconst
 
 class BifrostData(object):
     """
@@ -1866,8 +1868,7 @@ def cartesian2polar(x, y, grid, r, t, order=3):
 
 
 class bifrost_units():
-    import scipy.constants as const
-    from astropy import constants as aconst
+
     """
     bifrost_units.py
     Created by Mikolaj Szydlarski on 2017-01-20.
