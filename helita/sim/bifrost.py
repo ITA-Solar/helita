@@ -336,83 +336,10 @@ class BifrostData(object):
 
         for dim in ('iix', 'iiy', 'iiz'):
             if getattr(self, dim) is None:
-                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                setattr(self, dim, slice(None))
-            else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
-
-        snapLen = np.size(self.snap)
-        value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
-
-        for i in range(0, snapLen):
-            self.snapInd = i
-            self._set_snapvars()
-            self._init_vars()
-
-            value[:, :, :, i] = self.get_var(
-                var, self.snap[i], iix=self.iix, iiy=self.iiy, iiz=self.iiz)
-
-        return value
-
-
-    def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
-        """
-        Sets length of each dimension for get_var based on iix/iiy/iiz
-        ----------
-        iinum - int, list, or array
-            Slice to be taken from get_var quantity in that axis (iiaxis)
-        iiaxis - string
-            Axis from which the slice will be taken ('x', 'y', or 'z')
-        """
-        if iinum is None:
-            iinum = slice(None)
-
-        dim = 'ii' + iiaxis
-        setattr(self, dim, iinum)
-        setattr(self, iiaxis + 'Length', np.size(iinum))
-
-        if np.size(getattr(self, dim)) == 1:
-            if getattr(self, dim) == slice(None):
-                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-            else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
-                if indSize == 1:
-                    temp = np.asarray(getattr(self, dim))
-                    setattr(self, dim, temp.item())
-        else:
-            indSize = np.size(getattr(self, dim))
-            setattr(self, dim[2] + 'Length', indSize)
-            if indSize == 1:
-                temp = np.asarray(getattr(self, dim))
-                setattr(self, dim, temp.item())
-
-    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), *args, **kwargs):
-        """
-        Uses get_var to read a given variable from several snapshots
-        """
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
-
-        try:
-            if ((snap is not None) and (snap != self.snap)):
-                self.set_snap(snap)
-
-        except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
-
-        # lengths for dimensions of return array
-        self.xLength = 0
-        self.yLength = 0
-        self.zLength = 0
-
-        for dim in ('iix', 'iiy', 'iiz'):
-            if getattr(self, dim) is None:
-                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                if dim[2] == 'z':
+                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]+'b'))
+                else:
+                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
                 setattr(self, dim, slice(None))
             else:
                 indSize = np.size(getattr(self, dim))
@@ -449,7 +376,10 @@ class BifrostData(object):
 
         if np.size(getattr(self, dim)) == 1:
             if getattr(self, dim) == slice(None):
-                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                if dim[2] == 'z':
+                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]+'b'))
+                else:
+                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
