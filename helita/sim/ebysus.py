@@ -450,12 +450,15 @@ class EbysusData(BifrostData):
 
         for dim in ('iix', 'iiy', 'iiz'):
             if getattr(self, dim) is None:
-                setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                if dim[2] == 'z':
+                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]+'b'))
+                else:
+                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
                 setattr(self, dim, slice(None))
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
-
+        print(self.zLength,self.nzb)
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
