@@ -410,7 +410,7 @@ class EbysusData(BifrostData):
         self.iiz = iiz
 
         try:
-            if ((snap is not None) and (snap != self.snap)):
+            if ((snap is not None) and  any(snap != self.snap)):
                 self.set_snap(snap)
 
         except ValueError:
