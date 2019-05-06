@@ -342,9 +342,9 @@ class BifrostData(object):
             elif isnap == 0:
                 filename = filename + '.hion.snap'
             elif isnap > 0:
-                filename = '%s.hion_%s.snap' % (self.file_root, isnap)
+                filename = '%s.hion_%03d.snap' % (self.file_root, isnap)
                 if not os.path.isfile(filename):
-                    filename = '%s_.hion%s.snap' % (self.file_root, isnap)
+                    filename = '%s_.hion%03d.snap' % (self.file_root, isnap)
         else:
             raise ValueError(('_get_simple_var: could not find variable '
                               '%s. Available variables:' % (var) +
