@@ -35,18 +35,18 @@ class EbysusData(BifrostData):
 
         if (self.mf_epf):
             # add internal energy to basic snaps
-            self.snapvars.append('e')
+            #self.snapvars.append('e')
             # make distiction between different aux variable
             self.mf_e_file = self.file_root + '_mf_e'
         else:  # one energy for all fluid
-            if hasattr(self, 'with_electrons'):
-                if self.with_electrons:
-                    self.mf_e_file = self.file_root + '_mf_e'
-                    # JMS This must be properly done whenever is implemented
-                    self.snapevars.remove('ee')
-                    # JMS This must be properly done whenever is implemented
-                    self.snapvars.append('e')
             self.mhdvars.insert(0, 'e')
+            self.snapevars = []
+            
+        if hasattr(self, 'with_electrons'):
+            if self.with_electrons:
+                self.mf_e_file = self.file_root + '_mf_e'
+                # JMS This must be implemented
+                self.snapelvars=['r', 'px', 'py', 'pz', 'e']
 
         for var in (
                 self.varsmfe +
@@ -59,7 +59,7 @@ class EbysusData(BifrostData):
         #    if self.mf_total_nlevel == 1:
         #        self.snapvars.append('e')
 
-        self.simple_vars = self.snapvars + self.mhdvars + self.auxvars + \
+        self.simple_vars = self.snapvars + self.snapevars + self.mhdvars + self.auxvars + \
             self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
 
         self.auxxyvars = []
@@ -330,6 +330,10 @@ class EbysusData(BifrostData):
             idx = self.snapvars.index(var)
             fsuffix_a = '.snap'
             filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
+        elif var in self.snapevars and self.mf_ispecies > 0:
+            idx = self.snapevars.index(var)
+            fsuffix_a = '.snap'
+            filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
         elif var in self.snapevars and self.mf_ispecies < 0:
             idx = self.snapevars.index(var)
             filename = self.mf_e_file
