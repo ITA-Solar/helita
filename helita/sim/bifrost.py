@@ -1293,7 +1293,7 @@ class BifrostData(object):
 
             return const * nel.astype('Float64') * np.log(12.0 *
                 uni.pi * nel.astype('Float64') *
-                self.get_var('debye_ln').astype('Float64') + 1e-50) /
+                self.get_var('debye_ln').astype('Float64') + 1e-50) / \
                 (np.sqrt(tg.astype('Float64')**3) + 1.0e-20)
 
         elif quant in CROSTAB_QUANT:
