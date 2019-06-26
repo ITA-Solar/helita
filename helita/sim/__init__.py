@@ -4,13 +4,8 @@ and radiative transfer codes. Also includes routines for working
 with synthetic spectra.
 """
 
-<<<<<<< HEAD
 __all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d", "simtools",
            "synobs", "ebysus"]
-=======
-__all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
-           "simtools", "synobs"]
->>>>>>> ITA-Solar/master
 
 from . import bifrost
 from . import multi
