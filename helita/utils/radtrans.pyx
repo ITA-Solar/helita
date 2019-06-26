@@ -10,25 +10,27 @@ ctypedef np.float32_t DTYPE_t
 def piecewise_1D(np.ndarray[DTYPE_t, ndim=1] height,
                  np.ndarray[DTYPE_t, ndim=1] chi,
                  np.ndarray[DTYPE_t, ndim=1] S):
-    ''' Performs the piecewise quadratic integration of radiative transfer
-        equation in 1D. Always assumes radiation is travelling in direction
-        of increasing depth index. Boundary conditions are zero radiation
-        everywhere (no thermalised boundary cond.).
+    """
+    Performs the piecewise quadratic integration of radiative transfer
+    equation in 1D. Always assumes radiation is travelling in direction
+    of increasing depth index. Boundary conditions are zero radiation
+    everywhere (no thermalised boundary cond.).
 
-        Calling sequence
-        ----------------
-        I = piecewise_1D(height, chi, S)
+    Calling sequence
+    ----------------
+    I = piecewise_1D(height, chi, S)
 
-        Parameters
-        ----------
-        height, chi, S: height scale, absorption coefficient, source function.
-                        1D arrays, float32. Height and chi must have consistent
-                        units (typically m and m^-1, respectively).
+    Parameters
+    ----------
+    height, chi, S:  1D arrays, float32
+        height scale, absorption coefficient, source function. Height 
+        and chi must have consistent units (typically m and m^-1, respectively).
 
-        Returns
-        -------
-        I : (float) outgoing intensity.
-    '''
+    Returns
+    -------
+    I_upw : float
+        Outgoing intensity.
+    """
     cdef DTYPE_t dtau, dS, I_upw
     cdef int k, ndep
     ndep = len(chi)

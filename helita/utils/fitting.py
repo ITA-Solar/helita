@@ -47,8 +47,9 @@ def gauss_lsq(x, y, weight_x=1., weight_y=1., verbose=False, itmax=200,
         Weights for independent variable. This is typically based on the errors,
         if any. With errors, normal weights should be 1/err**2. For Poisson
         weighing, should be 1/y.
-    verbose: boolean
+    verbose: boolean or int
         If True, will print out more detailed information about the result.
+        If 2, will print out additional information.
     itmax: integer, Optional
         Maximum number of iterations, default is 200.
     iparams: list, optional
@@ -75,9 +76,9 @@ def gauss_lsq(x, y, weight_x=1., weight_y=1., verbose=False, itmax=200,
         gauss1 = gaussian(np.concatenate((B[:3], [0.])), x)
         # Analytical derivatives of gaussian with respect to parameters
         _ret = np.concatenate(((x - B[0]) / B[1]**2 * gauss1,
-                            ((B[0] - x)**2 - B[1]**2) / B[1]**3 * gauss1,
-                            gauss1 / B[2],
-                            np.ones(x.shape, float)))
+                               ((B[0] - x)**2 - B[1]**2) / B[1]**3 * gauss1,
+                               gauss1 / B[2],
+                               np.ones(x.shape, float)))
         _ret.shape = (4,) + x.shape
         return _ret
 
@@ -112,8 +113,27 @@ def gauss_lsq(x, y, weight_x=1., weight_y=1., verbose=False, itmax=200,
 
 
 def double_gauss_lsq(x, y, verbose=False, itmax=200, iparams=[]):
-    ''' Performs a double gaussian least squares fit to the data,
-    with errors! Uses scipy odrpack, but for least squares.'''
+    """
+    Performs a double Gaussian least squares fit to the data,
+    with errors! Uses scipy odrpack, but for least squares.
+
+    Parameters
+    ----------
+    x, y : 1-D arrays
+        Data to fit.
+    verbose: boolean or int
+        If True, will print out more detailed information about the result.
+        If 2, will print out additional information.
+    itmax : int, optional
+        Maximum number of iterations.
+
+    Returns
+    -------
+    coeff :  1-D array
+        Polynomial coefficients, lowest order first.
+    err :  1-D array
+        Standard error (1-sigma) on the coefficients.
+    """
 
     def _dgauss_fjd(B, x):
         # Analytical derivative of gaussian with respect to x
@@ -125,23 +145,23 @@ def double_gauss_lsq(x, y, verbose=False, itmax=200, iparams=[]):
         gauss1 = gaussian(np.concatenate((B[:3], [0.])), x)
         gauss2 = gaussian(np.concatenate((B[3:6], [0.])), x)
         _ret = np.concatenate(((x - B[0]) / B[1]**2 * gauss1,
-                            ((B[0] - x)**2 - B[1]**2) / B[1]**3 * gauss1,
-                            gauss1 / B[2],
-                            (x - B[3]) / B[4]**2 * gauss2,
-                            ((B[3] - x)**2 - B[4]**2) / B[4]**3 * gauss2,
-                            gauss2 / B[5],
-                            np.ones(x.shape, float)))
+                               ((B[0] - x)**2 - B[1]**2) / B[1]**3 * gauss1,
+                               gauss1 / B[2],
+                               (x - B[3]) / B[4]**2 * gauss2,
+                               ((B[3] - x)**2 - B[4]**2) / B[4]**3 * gauss2,
+                               gauss2 / B[5],
+                               np.ones(x.shape, float)))
         _ret.shape = (7,) + x.shape
         return _ret
 
     # Centre data in mean(x) (makes better conditioned matrix)
-    mx = mean(x)
+    mx = np.mean(x)
     x2 = x - mx
     if not any(iparams):
-        iparams = array([x2[np.argmax(y)], np.std(y),
-                         np.sqrt(2 * np.pi) * np.std(y) * max(y),
-                         x2[np.argmax(y)], np.std(y),
-                         np.sqrt(2 * np.pi) * np.std(y) * max(y), 1.])
+        iparams = np.array([x2[np.argmax(y)], np.std(y),
+                            np.sqrt(2 * np.pi) * np.std(y) * max(y),
+                            x2[np.argmax(y)], np.std(y),
+                            np.sqrt(2 * np.pi) * np.std(y) * max(y), 1.])
     dgauss = odr.Model(double_gaussian, fjacd=_dgauss_fjd, fjacb=_dgauss_fjb)
     mydata = odr.Data(x2, y)
     myodr = odr.ODR(mydata, dgauss, beta0=iparams, maxit=itmax)
@@ -168,22 +188,29 @@ def double_gauss_lsq(x, y, verbose=False, itmax=200, iparams=[]):
 
 
 def poly_lsq(x, y, n, verbose=False, itmax=200):
-    ''' Performs a polynomial least squares fit to the data,
+    """
+    Performs a polynomial least squares fit to the data,
     with errors! Uses scipy odrpack, but for least squares.
 
-    IN:
-       x,y (arrays) - data to fit
-       n (int)      - polinomial order
-       verbose      - can be 0,1,2 for different levels of output
-                      (False or True are the same as 0 or 1)
-       itmax (int)  - optional maximum number of iterations
+    Parameters
+    ----------
+    x, y : 1-D arrays
+        Data to fit.
+    n : int
+        Polynomial order
+    verbose : bool or int, optional
+        Can be 0,1,2 for different levels of output (False or True
+        are the same as 0 or 1)
+    itmax : int, optional
+        Maximum number of iterations.
 
-    OUT:
-       coeff -  polynomial coefficients, lowest order first
-       err   - standard error (1-sigma) on the coefficients
-
-    --Tiago, 20071114
-    '''
+    Returns
+    -------
+    coeff :  1-D array
+        Polynomial coefficients, lowest order first.
+    err :  1-D array
+        Standard error (1-sigma) on the coefficients.
+    """
     func = models.polynomial(n)
     mydata = odr.Data(x, y)
     myodr = odr.ODR(mydata, func, maxit=itmax)
@@ -204,28 +231,32 @@ def poly_lsq(x, y, n, verbose=False, itmax=200):
 
 
 def quad_lsq(x, y, verbose=False, itmax=200, iparams=[]):
-    ''' Method to compute a parabola fit, more handy as it fits for
+    """
+    Fits a parabola to the data, more handy as it fits for
     parabola parameters in the form y = B_0 * (x - B_1)**2 + B_2.
     This is computationally slower than poly_lsq, so beware of its usage
-    for time consuming operations.
+    for time consuming operations. Uses scipy odrpack, but for least squares.
 
-    IN:
-       x,y (arr)     - data to fit
-       n (int)       - polinomial order
-       verbose       - can be 0,1,2 for different levels of output
-                         (False or True are the same as 0 or 1)
-       itmax (int)   - optional maximum number of iterations.
-       iparams (arr) - optional initial parameters b0,b1,b2
+    Parameters
+    ----------
+    x, y : 1-D arrays
+        Data to fit.
+    verbose : bool or int, optional
+        Can be 0,1,2 for different levels of output (False or True
+        are the same as 0 or 1)
+    itmax : int, optional
+        Maximum number of iterations.
+    iparams : 1D array, optional
+        Initial parameters B_0, B_1, B_2.
 
-    OUT:
-       coeff -  polynomial coefficients, lowest order first
-       err   - standard error (1-sigma) on the coefficients
-
-
-    --Tiago, 20071115
-    '''
-
-    # Tiago's internal new definition of quadratic
+    Returns
+    -------
+    coeff :  1-D array
+        Parabola coefficients
+    err :  1-D array
+        Standard error (1-sigma) on the coefficients.
+    """
+    # Internal definition of quadratic
     def _quadratic(B, x):
         return B[0] * (x - B[1]) * (x - B[1]) + B[2]
 
@@ -234,8 +265,8 @@ def quad_lsq(x, y, verbose=False, itmax=200, iparams=[]):
 
     def _quad_fjb(B, x):
         _ret = np.concatenate((np.ones(x.shape, float),
-                            2 * B[0] * (B[1] - x),
-                            x * x - 2 * B[1] * x + B[1] * B[1],))
+                               2 * B[0] * (B[1] - x),
+                               x * x - 2 * B[1] * x + B[1] * B[1],))
         _ret.shape = (3,) + x.shape
         return _ret
 
@@ -266,24 +297,32 @@ def quad_lsq(x, y, verbose=False, itmax=200, iparams=[]):
 
 
 def circle_lsq(x, y, up=True, verbose=False, itmax=200, iparams=[]):
-    ''' Method to compute a circle fit, It fits for circle
-    parameters in the form y = B_2 +/- sqrt(B_0^2-(x-B_1)^2), the sign
+    """
+    Method to compute a (half) circle fit, It fits for circle
+    parameters in the form y = B_2 +/- sqrt(B_0^2 - (x - B_1)^2), the sign
     is negative if up is False.
 
-    IN:
-       x,y (arr)     - data to fit
-       n (int)       - polinomial order
-       verbose       - can be 0,1,2 for different levels of output
-                         (False or True are the same as 0 or 1)
-       itmax (int)   - optional maximum number of iterations.
-       iparams (arr) - optional initial parameters b0,b1,b2
+    Parameters
+    ----------
+    x, y : 1-D arrays
+        Data to fit.
+    up : bool, optional
+        Whether the half circle is up or down.
+    verbose : bool or int, optional
+        Can be 0,1,2 for different levels of output (False or True
+        are the same as 0 or 1)
+    itmax : int, optional
+        Maximum number of iterations.
+    iparams : 1D array, optional
+        Initial parameters B_0, B_1, B_2.
 
-    OUT:
-       coeff -  polynomial coefficients, lowest order first
-       err   - standard error (1-sigma) on the coefficients
-
-    --Tiago, 20080120
-    '''
+    Returns
+    -------
+    coeff :  1-D array
+        Parabola coefficients
+    err :  1-D array
+        Standard error (1-sigma) on the coefficients.
+    """
     # circle functions for B=r,x0,y0
     def circle_up(B, x):
         return B[2] + sqrt(B[0]**2 - (x - B[1])**2)
@@ -301,15 +340,15 @@ def circle_lsq(x, y, up=True, verbose=False, itmax=200, iparams=[]):
     # Derivative of function in respect to B[i]
     def circle_fjb_up(B, x):
         _ret = np.concatenate((B[0] / (sqrt(B[0]**2 - (x - B[1])**2)),
-                            - circle_fjd_up(B, x),
-                            np.ones(x.shape, float),))
+                               - circle_fjd_up(B, x),
+                               np.ones(x.shape, float),))
         _ret.shape = (3,) + x.shape
         return _ret
 
     def circle_fjb_dn(B, x):
         _ret = np.concatenate((B[0] / (sqrt(B[0]**2 - (x - B[1])**2)),
-                            - circle_fjd_dn(B, x),
-                            np.ones(x.shape, float),))
+                               - circle_fjd_dn(B, x),
+                               np.ones(x.shape, float),))
         _ret.shape = (3,) + x.shape
         return _ret
 

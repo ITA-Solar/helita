@@ -1,446 +1,590 @@
 """
-Set of routines to read output from multi3d
+Set of routines to read and work with input and output from Multi3D
 """
-from ..io.fio import fort_read, fort_write
-from ..utils.waveconv import waveconv
+import os
 import numpy as np
+import scipy.io
+import astropy.units as u
 
 
-class out3d:
-    def __init__(self, dir='.', bswp=False, hdrlen=4):
-        ''' Reads multi3d output data in out3d. '''
-        self.read(dir, bswp, hdrlen)
-        return
-
-    def read(self, dir, bswp, hdrlen):
-        ''' Reads out3d file '''
-        file = open(dir + '/out3d', 'r')
-        fort_read(file, 4, 'l', big_endian=bswp)  # Skip file types and sizes
-        nk, nrad, nline, nrfix, nmu, nx, ny, ndep = fort_read(file, 8, 'l',
-                                                              big_endian=bswp)
-        self.nk = nk
-        self.nrad = nrad
-        self.nline = nline
-        self.nrfix = nrfix
-        self.nmu = nmu
-        self.nx = nx
-        self.ny = ny
-        self.ndep = ndep
-        fort_read(file, 4, 'l', big_endian=bswp)
-        uu = fort_read(file, nx + ny + ndep, 'f', big_endian=bswp)
-        self.widthx = uu[:nx]
-        self.widthy = uu[nx:nx + ny]
-        self.height = uu[nx + ny:]
-        fort_read(file, 4, 'l', big_endian=bswp)
-        uu = fort_read(file, 4 * nmu, 'f', big_endian=bswp)
-        self.xmu = uu[:nmu]
-        self.ymu = uu[nmu:2 * nmu]
-        self.zmu = uu[2 * nmu:3 * nmu]
-        self.wmu = uu[3 * nmu:]
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.nq = fort_read(file, nrad, 'l', big_endian=bswp)
-        fort_read(file, 4, 'l', big_endian=bswp)
-        # Read directly to string
-        self.atomid = file.read(hdrlen * 3)[hdrlen:hdrlen * 2]
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.abnd, self.awgt, self.grph, self.qnorm = fort_read(
-            file, 4, 'f', big_endian=bswp)
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.ev = fort_read(file, nk, 'f', big_endian=bswp)
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.g = fort_read(file, nk, 'f', big_endian=bswp)
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.label = np.zeros(nk, dtype='S20')
-        file.read(hdrlen)
-        for i in range(nk):
-            self.label[i] = file.read(20)
-        file.read(hdrlen)
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.ion = fort_read(file, nk, 'l', big_endian=bswp)
-        fort_read(file, 4, 'l', big_endian=bswp)
-        uu = fort_read(file, nrad * 2, 'l', big_endian=bswp)
-        self.jrad = uu[:nrad]
-        self.irad = uu[nrad:]
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.krad = np.reshape(
-            fort_read(file, nk * nk, 'l', big_endian=bswp), (nk, nk))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        uu = fort_read(file, nrad * 5 + nline, 'f', big_endian=bswp)
-        self.f = uu[:nrad]
-        self.ga = uu[nrad:nrad * 2]
-        self.gw = uu[nrad * 2:nrad * 3]
-        self.gq = uu[nrad * 3:nrad * 4]
-        self.alamb = uu[nrad * 4:nrad * 5]
-        self.a = uu[nrad * 5:]
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.ktrans = fort_read(file, nrad, 'l', big_endian=bswp)
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.b = np.reshape(
-            fort_read(file, nk * nk, 'f', big_endian=bswp), (nk, nk))
-        if nrfix >= 1:
-            fort_read(file, 4, 'l', big_endian=bswp)
-            uu = fort_read(file, nrfix * 4, 'l', big_endian=bswp)
-            self.jfx = uu[:nrfix]
-            self.ifx = uu[nrfix:nrfix * 2]
-            self.ipho = uu[nrfix * 2:nrfix * 3]
-            self.itrad = uu[nrfix * 3:]
-            fort_read(file, 4, 'l', big_endian=bswp)
-            uu = fort_read(file, nrfix * 2, 'f', big_endian=bswp)
-            self.a0 = uu[:nrfix]
-            self.trad = uu[nrfix:]
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.dnyd = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                         big_endian=bswp), (ndep, ny, nx))
-        # Fix axis order to be the same as in IDL:
-        self.dnyd = np.transpose(self.dnyd, axes=(2, 1, 0))
-
-        self.adamp = np.zeros((nx, ny, ndep, nline), dtype='Float32')
-        for l in range(nline):
-            fort_read(file, 4, 'l', big_endian=bswp)
-            tmp = fort_read(file, nx * ny * ndep, 'f', big_endian=bswp)
-            self.adamp[:, :, :, l] = np.transpose(np.reshape(tmp, (ndep, ny, nx)),
-                                                  axes=(2, 1, 0))
-        self.n = np.zeros((nx, ny, ndep, nk), dtype='Float32')
-        for k in range(nk):
-            fort_read(file, 4, 'l', big_endian=bswp)
-            tmp = fort_read(file, nx * ny * ndep, 'f', big_endian=bswp)
-            self.n[:, :, :, k] = np.transpose(
-                np.reshape(tmp, (ndep, ny, nx)), axes=(2, 1, 0))
-        self.nstar = np.zeros((nx, ny, ndep, nk), dtype='Float32')
-        for k in range(nk):
-            fort_read(file, 4, 'l', big_endian=bswp)
-            tmp = fort_read(file, nx * ny * ndep, 'f', big_endian=bswp)
-            self.nstar[:, :, :, k] = np.transpose(np.reshape(tmp, (ndep, ny, nx)),
-                                                  axes=(2, 1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.totn = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                         big_endian=bswp), (ndep, ny, nx))
-        self.totn = np.transpose(self.totn, axes=(2, 1, 0))
-
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.q = np.reshape(fort_read(file, np.max(self.nq) * nrad, 'f',
-                                      big_endian=bswp), (nrad, np.max(self.nq)))
-        self.q = np.transpose(self.q, axes=(1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        uu = fort_read(file, nrad * 2, 'l', big_endian=bswp)
-        self.qmax = uu[:nrad]
-        self.q0 = uu[nrad:]
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.alfac = np.reshape(fort_read(file, np.max(self.nq) * (nrad - nline),
-                                          'f', big_endian=bswp),
-                                (nrad - nline, np.max(self.nq)))
-        self.alfac = np.transpose(self.alfac, axes=(1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.frq = np.reshape(fort_read(file, (np.max(self.nq) + 1) * (nrad - nline),
-                                        'f', big_endian=bswp),
-                              (nrad - nline, (np.max(self.nq) + 1)))
-        self.frq = np.transpose(self.frq, axes=(1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.ind = fort_read(file, nrad, 'l', big_endian=bswp)
-
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.temp = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                         big_endian=bswp), (ndep, ny, nx))
-        self.temp = np.transpose(self.temp, axes=(2, 1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.nne = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                        big_endian=bswp), (ndep, ny, nx))
-        self.nne = np.transpose(self.nne, axes=(2, 1, 0))
-        self.nh = np.zeros((nx, ny, ndep, 6), dtype='Float32')
-        for k in range(6):
-            fort_read(file, 4, 'l', big_endian=bswp)
-            tmp = fort_read(file, nx * ny * ndep, 'f', big_endian=bswp)
-            self.nh[:, :, :, k] = np.transpose(np.reshape(tmp, (ndep, ny, nx)),
-                                              axes=(2, 1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.rho = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                        big_endian=bswp), (ndep, ny, nx))
-        self.rho = np.transpose(self.rho, axes=(2, 1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.vx = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                       big_endian=bswp), (ndep, ny, nx))
-        self.vx = np.transpose(self.vx, axes=(2, 1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.vy = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                       big_endian=bswp), (ndep, ny, nx))
-        self.vy = np.transpose(self.vy, axes=(2, 1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        self.vz = np.reshape(fort_read(file, nx * ny * ndep, 'f',
-                                       big_endian=bswp), (ndep, ny, nx))
-        self.vz = np.transpose(self.vz, axes=(2, 1, 0))
-        fort_read(file, 4, 'l', big_endian=bswp)
-        ee, em, hh, cc, bk, uu, hce, hc2, hck, ek, pi = fort_read(
-            file, 11, 'f', big_endian=bswp)
-        self.ee = ee
-        self.em = em
-        self.hh = hh
-        self.cc = cc
-        self.bk = bk
-        self.uu = uu
-        self.hce = hce
-        self.hc2 = hc2
-        self.hck = hck
-        self.ek = ek
-        self.pi = pi
-        # Converting to km
-        self.height /= 1.e5
-        self.widthx /= 1.e5
-        self.widthy /= 1.e5
-        file.close()
-        return
+class Geometry:
+    """
+    class def for geometry
+    """
+    def __init__(self):
+        self.nx = -1
+        self.ny = -1
+        self.nz = -1
+        self.nmu = -1
+        self.x = None
+        self.y = None
+        self.z = None
+        self.mux = None
+        self.muy = None
+        self.muz = None
+        self.wmu = None
 
 
-class m3dprof:
-    def __init__(self, lid, dir='.', bswp=False, irc=8, angle=True,
-                 contrib=False, o3dswp=False, v1d=False):
-        ''' Reads line profiles and contribution functions from multi3d '''
-        self.bswp = bswp
-        self.v1d = v1d
-        self.irc = irc  # record length? parameter in init_const.f
-        if not o3dswp:
-            o3d = out3d(dir, self.bswp)
-        else:
-            o3d = out3d(dir, not self.bswp)
-        self.o3d = o3d
-        # Get transition id
-        let = [l for l in 'abcdefghijklmnopqrstuvwxyz']
-        if lid > o3d.nrad - 1:
-            print('(EEE) m3dprof: lid too high! (max %i)' % o3d.nrad)
+class Atom:
+    """
+    class def for atom
+    """
+    def __init__(self):
+        self.nrad = -1
+        self.nrfix = -1
+        self.ncont = -1
+        self.nline = -1
+        self.nlevel = -1
+        self.id = None
+        self.crout = None
+        self.label = None
+        self.ion = None
+        self.ilin = None
+        self.icon = None
+        self.abnd = -1e10
+        self.awgt = -1e10
+        self.ev = None
+        self.g = None
+        self.n = None
+        self.nstar = None
+        self.totn = None
+        self.dopfac = None
+
+class Atmos:
+    """
+    class def for atmos
+    """
+    def __init__(self):
+        self.ne = None
+        self.tg = None
+        self.vx = None
+        self.vy = None
+        self.vz = None
+        self.r = None
+        self.nh = None
+        self.vturb = None
+        self.x500 = None
+
+
+class Spectrum:
+    """
+    class def for spectrum
+    """
+    def __init__(self):
+        self.nnu = -1
+        self.maxal = -1
+        self.maxac = -1
+        self.nu = None
+        self.wnu = None
+        self.ac = None
+        self.al = None
+        self.nac = None
+        self.nal = None
+
+
+class Cont:
+    """
+    class def for continuum
+    """
+    def __init__(self):
+        self.f_type = None
+        self.j = -1
+        self.i = -1
+        self.nnu = -1
+        self.ntrans = -1
+        self.ired = -1
+        self.iblue = -1
+        self.nu0 = -1.0 * u.Hz
+        self.numax = -1.0
+        self.alpha0 = -1.0
+        self.alpha = None
+        self.nu = None
+        self.wnu = None
+
+
+class Line:
+    """
+    class def for spectral line
+    """
+    def __init__(self):
+        self.profile_type = None
+        self.ga = -1.0
+        self.gw = -1.0
+        self.gq = -1.0
+        self.lambda0 = -1.0
+        self.nu0 = -1.0 * u.Hz
+        self.Aji = -1.0
+        self.Bji = -1.0
+        self.Bij = -1.0
+        self.f = -1.0
+        self.qmax = -1.0
+        self.Grat = -1.0
+        self.ntrans = -1
+        self.j = -1
+        self.i = -1
+        self.nnu = -1
+        self.ired = -1
+        self.iblue = -1
+        self.nu = None
+        self.q = None
+        self.wnu = None
+        self.wq = None
+        self.adamp = None
+
+
+class Transition:
+    """
+    class to hold transition info for IO
+    """
+    def __init__(self):
+        self.i = -1
+        self.j = -1
+        self.isline = False
+        self.iscont = False
+        self.kr = -1
+        self.nnu = -1
+        self.nu = None
+        self.l = None
+        self.dl = None
+        self.ired = -1
+        self.ff = -1
+        self.ang = -1
+
+
+class Multi3dOut:
+    """
+    Reads and handles multi3d output
+
+    Parameters
+    ----------
+    inputfile : str, optional
+        Name of multi3d input file. Default is 'multi3d.input'
+    directory : str, optional
+        Directory with output files. Default is current directory.
+    printinfo : bool, optional
+        If True (default), will print more verbose output.
+
+    Examples
+    --------
+
+    >>> data = Multi3dOut(directory='./output')
+    >>> data.readall()
+
+    Now select transition (by upper / lower level):
+
+    >>> data.set_transition(3, 2)
+    >>> emergent_intensity = data.readvar('ie')
+    >>> source_function = data.readvar('snu')
+    >>> tau1_height = data.readvar('zt1')
+
+    Wavelength for the selected transition is saved in data.d.l, e.g.:
+
+    >>> plt.plot(data.d.l, emergent_intensity[0, 0])
+    """
+
+    def __init__(self, inputfile="multi3d.input", directory='./', printinfo=True):
+        """
+        initializes object, default directory to look for files is ./
+        default input options file name is multi3d.input
+        """
+        self.inputfile = inputfile
+        self.directory = directory
+        self.theinput = None
+        self.outnnu = -1
+        self.outff = -1
+        self.sp = Spectrum()
+        self.geometry = Geometry()
+        self.atom = Atom()
+        self.atmos = Atmos()
+        self.d = Transition()
+        self.inttype = np.int32
+        self.floattype = np.float64
+        self.printinfo = printinfo
+
+    def readall(self):
+        """
+        reads multi3d.input file and all the out_* files
+        """
+        self.readinput()
+        self.readpar()
+        self.readnu()
+        self.readn()
+        self.readatmos()
+        self.readrtq()
+
+    def readinput(self):
+        """
+        reads input from self.inputfile into a dict.
+        """
+        fname = os.path.join(self.directory, self.inputfile)
+        try:
+            lines = [line.strip() for line in open(fname)]
+            if self.printinfo:
+                print("reading " + fname)
+        except Exception as e:
+            print(e)
             return
-        self.nqf = o3d.nq[lid]
-        l1 = o3d.irad[lid]
-        l2 = o3d.jrad[lid]
-        suffix = let[l1 - 1] + let[l2 - 1]
-        imufile = dir + '/imu_' + suffix
-        intfile = dir + '/int_' + suffix
-        confile = dir + '/con_' + suffix
-        # Construct wavelength scale, converted to air wavelengths
-        self.wave = o3d.alamb[
-            lid] * (1 - o3d.q[:o3d.nq[lid], lid] * o3d.qnorm / o3d.cc * 1e5)
-        # Better use waveconv_regner (though not the best), because it's
-        # the same that is used internally in lte.x
-        self.wave = waveconv_regner(
-            self.wave[::-1].astype('d'), mode='vac2air')
-        # Convert to nm
-        self.wave /= 10.
-        if self.v1d:  # for 1D case, duplicate velocities
-            self.wave = np.concatenate((self.wave[:-1],
-                                       -(self.wave[::-1] - 2 * self.wave[-1])))
-        # Read several quantities
-        self.read_int(intfile)
-        if angle:   # angle-dependent intensities
-            self.read_imu(imufile)
-        if contrib:  # contribution functions
-            self.read_con(confile)
-        return
+        tmp = []
+        # Remove IDL comments ;
+        for line in lines:
+            head, sep, tail = line.partition(';')
+            tmp.append(head)
+        # Remove blank lines
+        tmp = filter(None, tmp)
+        self.theinput = dict()
 
-    def read_int(self, filename):
-        ''' Reads vertical (disk-centre) intensity '''
-        file = open(filename, 'r')
-        o3d = self.o3d
-        fort_read(file, 4, 'l', big_endian=self.bswp)
-        # swap nx with ny (to give same order as lte.x)
-        self.int_xy = np.transpose(np.reshape(fort_read(file,
-                                                o3d.nx * o3d.ny * self.nqf, 'f',
-                                                big_endian=self.bswp),
-                                   (o3d.ny, o3d.nx, self.nqf)), [1, 0, 2])
-        # Spatially averaged disk-centre intensity
-        self.int = np.mean(np.mean(self.int_xy, axis=0), axis=0)
-        if self.v1d:  # for 1D case, duplicate values
-            self.int = np.concatenate((self.int[::-1], self.int[1:]))
-        file.close()
-        return
-
-    def read_imu(self, filename):
-        ''' Reads mu-dependent intensity '''
-        # New definition, use indexing of [mu,nx,ny,nqf]:
-        o3d = self.o3d
-        self.rawangle = np.zeros((o3d.nmu, o3d.nx, o3d.ny, self.nqf))
-        file = open(filename, 'r')
-        if self.bswp:
-            dt = '>d'
-        else:
-            dt = '<d'
-        aa = np.fromfile(file, dt, self.nqf * o3d.nx *
-                        o3d.ny * o3d.nmu * self.irc / 2)
-        aa = np.transpose(np.reshape(aa, (o3d.nmu * self.irc / 2, o3d.ny,
-                                          o3d.nx, self.nqf)), axes=(3, 2, 1, 0))
-        # New definition, use indexing of [mu,nx,ny,nqf]
-        for i in range(o3d.nmu):
-            self.rawangle[i] = np.transpose(aa[:, ..., i * self.irc / 2],
-                                            axes=(1, 2, 0))
-        file.close()
-        # Now must average int into unique mu angles
-        self.mus = np.sort(np.array(list(set(o3d.zmu))))
-        # New definition, use indexing of [mu,nx,ny,nqf]
-        self.angle_xy = np.zeros((len(self.mus), o3d.nx, o3d.ny, self.nqf))
-        for i in range(len(self.mus)):
-            aa = self.rawangle[np.where(o3d.zmu == self.mus[i])[0], :, :, :]
-            self.angle_xy[i, :, :, :] = np.mean(aa, axis=0)
-        # Now get the spatially averaged mu-dependent profiles
-        self.angle = np.mean(np.mean(self.angle_xy, axis=1), axis=1)
-        if self.v1d:  # for 1D case, duplicate values
-            self.angle2 = np.zeros(
-                (self.angle.shape[0], self.angle.shape[1] * 2 - 1))
-            for i in range(len(self.mus)):
-                self.angle2[i] = np.concatenate(
-                    (self.angle[i, ::-1], self.angle[i, 1:]))
-            self.angle = self.angle2
-        return
-
-    def read_con(self, filename):
-        '''  Reads contribution functions:
-
-        self.contribi[nx,ny,nz,nqf] : contrib. function for intensity (mu=1)
-        self.contribi[nx,ny,nz,nz,nqf] : contrib. function for flux
-        self.contribr[nx,ny,nz,nz,nqf] : contrib. function for rel. intensity
-
-        and the spatially averaged and wavelength summed contrib. functions:
-
-        self.contrib_int[nz] : for intensity
-        self.contrib_flx[nz] : for flux
-        self.contrib_rel[nz] : for relative intensity
-
-        '''
-        file = open(filename, 'r')
-        o3d = self.o3d
-        fort_read(file, 4, 'l', big_endian=self.bswp)
-        fort_read(file, 4, 'l', big_endian=self.bswp)
-        self.contrbi = np.zeros((o3d.nx, o3d.ny, o3d.ndep, self.nqf))
-        self.contrbf = np.zeros((o3d.nx, o3d.ny, o3d.ndep, self.nqf))
-        self.contrbr = np.zeros((o3d.nx, o3d.ny, o3d.ndep, self.nqf))
-        for j in range(o3d.ny):
-            for i in range(o3d.nx):
-                fort_read(file, 4, 'l', big_endian=self.bswp)
-                uu = fort_read(file, 3 * self.nqf * o3d.ndep,
-                               'f', big_endian=self.bswp)
-                contrbi, contrbf, contrbr = np.reshape(
-                    uu, (3, self.nqf * o3d.ndep))
-                self.contrbi[i, j] = np.reshape(contrbi, (o3d.ndep, self.nqf))
-                self.contrbf[i, j] = np.reshape(contrbf, (o3d.ndep, self.nqf))
-                self.contrbr[i, j] = np.reshape(contrbr, (o3d.ndep, self.nqf))
-        # Spatially averaged and wavelength summed contribution functions
-        self.contrib_int = np.sum(
-            np.mean(np.mean(self.contrbi, axis=0), axis=0), axis=1)
-        self.contrib_flx = np.sum(
-            np.mean(np.mean(self.contrbf, axis=0), axis=0), axis=1)
-        self.contrib_rel = np.sum(
-            np.mean(np.mean(self.contrbr, axis=0), axis=0), axis=1)
-        file.close()
-        return
-
-    def read_xtra(self, filename, dim=[], dtype='d', it=1):
-        '''
-        Reads extra information written to filename. Use for testing
-        purposes (eg., read rotated source function datacubes). Dimensions
-        of the array are given in dim, data type in dtype. If quantity is
-        written for several iterations, then set it to the number of iterations
-        '''
-        file = open(filename, 'r')
-        if not dim:
-            raise ValueError
-        if it == 1:
-            dim = np.array(dim)[::-1]
-            xtra = np.reshape(fort_read(file, np.prod(dim), dtype,
-                                        big_endian=self.bswp), dim)
-            # Invert axes
-            xtra = np.transpose(xtra, axes=list(range(xtra.ndim))[::-1])
-        else:
-            xtra = np.empty((it,) + dim, dtype=dtype)
-            dim = np.array(dim)[::-1]
-            for i in range(it):
-                tmp = np.reshape(fort_read(file, np.prod(dim), dtype,
-                                           big_endian=self.bswp), dim)
-                xtra[i] = np.transpose(tmp, axes=list(range(tmp.ndim))[::-1])
-        file.close()
-        return xtra
-
-    def read_n(self, filename='n', it=None):
-        ''' Reads the population file n, for all the iterations.
-            Only useful for debug'''
-        if not os.path.isfile('olog'):
-            raise IOError('Could not find olog file. Check path?')
-        elif not os.path.isfile(filename):
-            raise IOError('Could not find n file. Check path?')
-        nx = self.o3d.nx
-        ny = self.o3d.ny
-        nz = self.o3d.ndep
-        nk = self.o3d.nk
-        if it is None:
-            it = read_iter('olog')
-        nf = open(filename, 'r')
-        print('--- Reading %i iterations from n file' % it)
-        self.fulln = np.empty(self.o3d.np.shape + (it,), dtype='Float64')
-        for i in range(it):
-            tmp = fort_read(nf, (nx + 1) * (ny + 1) * nz *
-                            nk, 'd', big_endian=self.bswp)
-            self.fulln[:, :, :, :, i] = np.transpose(np.reshape(tmp, (nk, nz, ny + 1, nx + 1)),
-                                                    axes=(3, 2, 1, 0))[:-1, :-1]
-        nf.close()
-        return
-
-
-############################################################################
-################               TOOLS                ########################
-############################################################################
-def params_equal(p1, p2, exclude=[None]):
-    ''' Checks if parameter dictionaries are the same
-    (given the exclude list). Returns True if they match, False otherwise.'''
-    for a in list(p1.keys()):
-        if a not in exclude:
+        for line in tmp:
+            head, sep, tail = line.partition("=")
+            tail = tail.strip()
+            head = head.strip()
+            # Checks which type the values are
             try:
-                if p1[a] != p2[a]:
-                    print('--- check_params: unmatching parameters:')
-                    print(a, p1[a], p2[a])
-                    return False
-            except ValueError:  # tweak for arrays
-                if p1[a].all() != p2[a].all():
-                    print('--- check_params: unmatching parameters:')
-                    print(a, p1[a], p2[a])
-                    return False
-    return True
+                int(tail)
+                tail = int(tail)
+            except ValueError:
+                try:
+                    float(tail)
+                    tail = float(tail)
+                except ValueError:
+                    # First and last tokens are quotes
+                    tail = tail[1:-1]
+            # special items, multiple float values in a string
+            if head in ["muxout", "muyout", "muzout"]:
+                temp = []
+                for item in tail.split():
+                    temp.append(float(item))
+                    self.theinput[head] = temp
+            else:
+                # simple str
+                self.theinput[head] = tail
+        # set xn,ny,nz here as they are now known
+        self.geometry.nx = self.theinput["nx"]
+        self.geometry.ny = self.theinput["ny"]
+        self.geometry.nz = self.theinput["nz"]
 
 
-def mkatom_sh(sh, sh1file, outfile):
-    ''' Builds a multi3d atom file for an arbitrary S_H, using an existing
-        atom file for S_H=1.
+    def readpar(self):
+        """
+        reads the out_par file
+        """
+        fname = os.path.join(self.directory, "out_par")
+        f = scipy.io.FortranFile(fname, 'r')
+        if self.printinfo:
+            print("reading " + fname)
+        # geometry struct
+        self.geometry.nmu = int(f.read_ints(dtype=self.inttype))
+        self.geometry.nx = int(f.read_ints(dtype=self.inttype))
+        self.geometry.ny = int(f.read_ints(dtype=self.inttype))
+        self.geometry.nz = int(f.read_ints(dtype=self.inttype))
+        self.geometry.x = f.read_reals(dtype=self.floattype)
+        self.geometry.y = f.read_reals(dtype=self.floattype)
+        self.geometry.z = f.read_reals(dtype=self.floattype)
+        self.geometry.mux = f.read_reals(dtype=self.floattype)
+        self.geometry.muy = f.read_reals(dtype=self.floattype)
+        self.geometry.muz = f.read_reals(dtype=self.floattype)
+        self.geometry.wmu = f.read_reals(dtype=self.floattype)
+        self.sp.nnu = int(f.read_ints(dtype=self.inttype))
+        self.sp.maxac = int(f.read_ints(dtype=self.inttype))
+        self.sp.maxal = int(f.read_ints(dtype=self.inttype))
+        self.sp.nu = f.read_reals(dtype=self.floattype)
+        self.sp.wnu = f.read_reals(dtype=self.floattype)
+        # next two need reform
+        self.sp.ac = f.read_ints(dtype=self.inttype)
+        self.sp.al = f.read_ints(dtype=self.inttype)
+        self.sp.nac = f.read_ints(dtype=self.inttype)
+        self.sp.nal = f.read_ints(dtype=self.inttype)
+        # atom struct
+        self.atom.nrad = int(f.read_ints(dtype=self.inttype))
+        self.atom.nrfix = int(f.read_ints(dtype=self.inttype))
+        self.atom.ncont = int(f.read_ints(dtype=self.inttype))
+        self.atom.nline = int(f.read_ints(dtype=self.inttype))
+        self.atom.nlevel = int(f.read_ints(dtype=self.inttype))
+        ss = [self.atom.nlevel, self.atom.nlevel]
+        self.atom.id = (f.read_record(dtype='S20'))[0].strip()
+        self.atom.crout = (f.read_record(dtype='S20'))[0].strip()
+        self.atom.label = f.read_record(dtype='S20').tolist()
+        self.atom.ion = f.read_ints(dtype=self.inttype)
+        self.atom.ilin = f.read_ints(dtype=self.inttype).reshape(ss)
+        self.atom.icon = f.read_ints(dtype=self.inttype).reshape(ss)
+        self.atom.abnd = f.read_reals(dtype=self.floattype)[0]
+        self.atom.awgt = f.read_reals(dtype=self.floattype)[0]
+        self.atom.ev = f.read_reals(dtype=self.floattype)
+        self.atom.g = f.read_reals(dtype=self.floattype)
+        self.sp.ac.resize([self.sp.nnu, self.atom.ncont])
+        self.sp.al.resize([self.sp.nnu, self.atom.nline])
 
-        IN: sh (float), sh1file (file with S_H=1), outfile
+        # cont info
+        self.cont = [Cont() for i in range(self.atom.ncont)]
+        for c in self.cont:
+            c.bf_type = f.read_record(dtype='S20')[0].strip()
+            c.i = int(f.read_ints(dtype=self.inttype))
+            c.j = int(f.read_ints(dtype=self.inttype))
+            c.ntrans = int(f.read_ints(dtype=self.inttype))
+            c.nnu = int(f.read_ints(dtype=self.inttype))
+            c.ired = int(f.read_ints(dtype=self.inttype))
+            c.iblue = int(f.read_ints(dtype=self.inttype))
+            c.nu0 = f.read_reals(dtype=self.floattype)[0] * u.Hz
+            c.numax = f.read_reals(dtype=self.floattype)[0]
+            c.alpha0 = f.read_reals(dtype=self.floattype)[0]
+            c.alpha = f.read_reals(dtype=self.floattype)[0]
+            c.nu = f.read_reals(dtype=self.floattype)
+            c.wnu = f.read_reals(dtype=self.floattype)
 
-    --Tiago, 20090424
-    '''
-    import os
+        #line info
+        self.line = [Line() for i in range(self.atom.nline)]
+        for l in self.line:
+            l.profile_type = f.read_record(dtype='S72')[0].strip()
+            l.ga = f.read_reals(dtype=self.floattype)[0]
+            l.gw = f.read_reals(dtype=self.floattype)[0]
+            l.gq = f.read_reals(dtype=self.floattype)[0]
+            l.lambda0 = f.read_reals(dtype=self.floattype)[0]
+            l.nu0 = f.read_reals(dtype=self.floattype)[0] * u.Hz
+            l.Aji = f.read_reals(dtype=self.floattype)[0]
+            l.Bji = f.read_reals(dtype=self.floattype)[0]
+            l.Bij = f.read_reals(dtype=self.floattype)[0]
+            l.f = f.read_reals(dtype=self.floattype)[0]
+            l.qmax = f.read_reals(dtype=self.floattype)[0]
+            l.Grat = f.read_reals(dtype=self.floattype)[0]
+            l.ntrans = int(f.read_ints(dtype=self.inttype))
+            l.j = int(f.read_ints(dtype=self.inttype))
+            l.i = int(f.read_ints(dtype=self.inttype))
+            l.nnu = int(f.read_ints(dtype=self.inttype))
+            l.ired = int(f.read_ints(dtype=self.inttype))
+            l.iblue = int(f.read_ints(dtype=self.inttype))
+            l.nu = f.read_reals(dtype=self.floattype)
+            l.q = f.read_reals(dtype=self.floattype)
+            l.wnu = f.read_reals(dtype=self.floattype)
+            l.wq = f.read_reals(dtype=self.floattype)
+        f.close()
 
-    fout = open(outfile, 'w')
-    s1 = '* COLLISIONAL EXCITATIONS AND IONIZATIONS BY HI (DRAWIN *   1.00000)'
-    s2 = '* COLLISIONAL IONIZATIONS BY HI (DRAWIN *   1.00000)'
-    act = False
-    for line in file(sh1file):
-        if line in [s1 + '\n', s2 + '\n']:
-            line = line[:-12] + ' %.3f )\n' % sh
-        if act:
-            # Multiply collision rates by S_H
-            uu = line.split()
-            line = '%4i%4i' % (int(uu[0]), int(uu[1]))
-            for i in range(len(uu) - 2):
-                line += ' %.2E' % (float(uu[2 + i]) * sh)
-            line += '\n'
-        if line[0] != '*' and (line.find('CH ') >= 0 or line.find('CHI') >= 0):
-            act = True
+    def readn(self):
+        """
+        reads populations as numpy memmap
+        """
+        if self.theinput is None:
+            self.readinput()
+
+        fname = os.path.join(self.directory, "out_pop")
+        nlevel = self.atom.nlevel
+        nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
+        gs = nx * ny * nz * nlevel * 4
+        self.atom.n = np.memmap(fname, dtype='float32', mode='r',
+                                shape=(nx, ny, nz, nlevel), order='F')
+        self.atom.nstar = np.memmap(fname, dtype='float32', mode='r', order='F',
+                                    shape=(nx, ny, nz, nlevel), offset=gs, )
+
+        self.atom.ntot = np.memmap(fname, dtype='float32', mode='r', order='F',
+                                   shape=(nx, ny, nz), offset=gs * 2)
+        if self.printinfo:
+            print("reading " + fname)
+
+    def readatmos(self):
+        """
+        reads atmosphere as numpy memmap
+        """
+        if self.theinput is None:
+            self.readinput()
+        fname = os.path.join(self.directory, "out_atm")
+        nhl = 6
+        nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
+        s = (nx, ny, nz)
+        gs = nx * ny * nz * 4
+        self.atmos.ne = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, order='F')
+        self.atmos.tg = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs, order='F')
+        self.atmos.vx = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs*2, order='F')
+        self.atmos.vy = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs*3, order='F')
+        self.atmos.vz = np.memmap(fname, dtype='float32', mode='r',
+                                  shape=s, offset=gs*4, order='F')
+        self.atmos.rho = np.memmap(fname, dtype='float32', mode='r',
+                                   shape=s, offset=gs*5, order='F')
+        self.atmos.nh = np.memmap(fname, dtype='float32', mode='r', order='F',
+                                  shape=(nx, ny, nz, nhl), offset=gs * 6)
+        #self.atmos.vturb = np.memmap(fname, dtype='float32', mode='r',
+        #                             shape=s ,offset=gs*12, order='F' )
+        if self.printinfo:
+            print("reading " + fname)
+
+    def readrtq(self):
+        """
+        reads out_rtq as numpy memmap
+        """
+        if self.theinput is None:
+            self.readinput()
+        if self.sp is None:
+            self.readpar()
+        fname = os.path.join(self.directory, "out_rtq")
+        nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
+        s = (nx, ny, nz)
+        gs = nx * ny * nz * 4
+        self.atmos.x500 = np.memmap(fname, dtype='float32', mode='r',
+                                    shape=s, order='F')
+        self.atom.dopfac = np.memmap(fname, dtype='float32', mode='r',
+                                     shape=s, offset=gs, order='F')
+        i = 2
+        for l in self.line:
+            l.adamp = np.memmap(fname, dtype='float32', mode='r',
+                                shape=s, offset=gs * i, order='F')
+            i += 1
+
+    def readnu(self):
+        """
+        reads the out_nu file
+        """
+        fname = os.path.join(self.directory, "out_nu")
+        f = scipy.io.FortranFile(fname, 'r')
+        if self.printinfo:
+            print("reading " + fname)
+        self.outnnu = int(f.read_ints(dtype=self.inttype))
+        self.outff = f.read_ints(dtype=self.inttype)
+
+    def set_transition(self, i, j, fr=-1, ang=0):
+        """
+        Sets parameters of transition to read
+        """
+        from astropy.constants import c
+        cc = c.to('Angstrom / s')
+
+        self.d.i = i-1
+        self.d.j = j-1
+        self.d.isline = self.atom.ilin[self.d.i, self.d.j] != 0
+        self.d.iscont = self.atom.icon[self.d.i, self.d.j] != 0
+
+        if self.d.isline:
+            self.d.kr = self.atom.ilin[self.d.i, self.d.j] - 1
+            self.d.nnu = self.line[self.d.kr].nnu
+            self.d.nu = np.copy(self.line[self.d.kr].nu) * u.Hz
+            self.d.l = (cc / self.d.nu).to('Angstrom')
+            self.d.dl = (cc * (1.0 / self.d.nu -
+                               1.0 / self.line[self.d.kr].nu0)).to('Angstrom')
+            self.d.ired = self.line[self.d.kr].ired
+        elif self.d.iscont:
+            self.d.kr = self.atom.icon[self.d.i, self.d.j] - 1
+            self.d.nnu = self.cont[self.d.kr].nnu
+            self.d.nu = np.copy(self.cont[self.d.kr].nu) * u.Hz
+            self.d.l = (cc / self.d.nu).to('Angstrom')
+            self.d.dl = None
+            self.d.ired = self.cont[self.d.kr].ired
         else:
-            act = False
-        fout.write(line)
-    fout.close()
-    print('*** Wrote S_H=%.3f in %s' % (sh, outfile))
-    return
+            raise RuntimeError('upper and lower level %i, %i are not connected'
+                               ' with a radiative transition.' % (i, j))
+        if fr == -1:
+            self.d.ff = -1
+        else:
+            self.d.ff = self.d.ired + fr
+        self.d.ang = ang
+
+        if self.printinfo:
+            print('transition parameters are set to:')
+            print(' i   =', self.d.i)
+            print(' j   =', self.d.j)
+            print(' kr  =', self.d.kr)
+            print(' ff  =', self.d.ff)
+            print(' ang =', self.d.ang)
+
+    def readvar(self, var, all_vars=False):
+        """
+        Reads output variable
+        """
+        allowed_names = ['chi', 'ie', 'jnu', 'zt1', 'st', 'xt', 'cf', 'snu',
+                         'chi_c', 'scatt', 'therm']
+        if var.lower() not in allowed_names:
+            raise ValueError("%s is not an valid variable name, must be one"
+                             "of '%s.'" % (var, "', '".join(allowed_names)))
+        mx = "{:+.2f}".format(self.theinput['muxout'][self.d.ang])
+        my = "{:+.2f}".format(self.theinput['muyout'][self.d.ang])
+        mz = "{:+.2f}".format(self.theinput['muzout'][self.d.ang])
+        mus = '_' + mx + '_' + my + '_' + mz + '_allnu'
+        fname = os.path.join(self.directory, var + mus)
+        if os.path.isfile(fname):
+            if self.printinfo:
+                print('reading from ' + fname)
+        else:
+            raise IOError('%s does not exist' % fname)
+        sg = self.geometry
+        if var in ('ie', 'zt1'):
+            if all_vars:
+                shape = (sg.nx, sg.ny, self.outnnu)
+                offset = 0
+            elif self.d.ff == -1:
+                shape = (sg.nx, sg.ny, self.d.nnu)
+                offset = (4 * sg.nx * sg.ny *
+                          np.where(self.outff == self.d.ired)[0])[0]
+            else:
+                shape = (sg.nx, sg.ny)
+                offset = (4 * sg.nx * sg.ny *
+                          np.where(self.outff == self.d.ff)[0])[0]
+        else:
+            if all_vars:
+                shape = (sg.nx, sg.ny, sg.nz, self.outnnu)
+                offset = 0
+            elif self.d.ff == -1:
+                shape = (sg.nx, sg.ny, sg.nz, self.d.nnu)
+                offset = (4 * sg.nx * sg.ny * sg.nz *
+                          np.where(self.outff == self.d.ired)[0])[0]
+            else:
+                shape = (sg.nx, sg.ny, sg.nz)
+                offset = (4 * sg.nx * sg.ny * sg.nz *
+                          np.where(self.outff == self.d.ff)[0])[0]
+        return np.memmap(fname, dtype='float32', mode='r',
+                         shape=shape, order='F', offset=offset)
 
 
-def read_iter(ologfile):
+class Multi3dAtmos:
     """
-    Hack to read how many iterations were runp. Parses olog to extract it.
+    Class to read/write input atmosphere for Multi3D.
+
+    Parameters
+    ----------
+    infile : str
+        Name of file to read.
+    nx, ny, nz : ints
+        Number of points in x, y, and z dimensions.
+    mode : str, optional
+        Access mode. Can be either 'r' (read), 'w' (write, deletes existing),
+        or 'w+' (write, update).
+    nhydr : int, optional
+        Number of hydrogen levels. Default is 6.
+    dp : bool, optional
+        If True, will write in double precision (float64). Otherwise,
+        will write in single precision (float32, default).
+    big_endian : bool, optional
+        Endianness of output file. Default is False (little endian).
+    read_nh : bool, optional
+        If True, will read/write hydrogen populations. Default is False.
+    read_vturb : bool, optional
+        If True, will read/write turbulent velocity. Default is False.
     """
-    it = 0
-    for line in file(ologfile):
-        if line[:17] == ' *******ITERATION':
-            it = int(line.split()[-1])
-    return it
+    def __init__(self, infile, nx, ny, nz, mode='r', **kwargs):
+        if os.path.isfile(infile) or (mode == "w+"):
+            self.open_atmos(infile, nx, ny, nz, mode=mode, **kwargs)
+
+    def open_atmos(self, infile, nx, ny, nz, mode="r", nhydr=6, dp=False,
+                   big_endian=False, read_nh=False, read_vturb=False):
+        """Reads/writes multi3d atmosphere into parent object."""
+        dtype = ["<", ">"][big_endian] + ["f4", "f8"][dp]
+        ntot = nx * ny * nz * np.dtype(dtype).itemsize
+        mm = mode
+        self.ne = np.memmap(infile, dtype=dtype, mode=mm, offset=0,
+                            shape=(nx, ny, nz), order="F")
+        self.temp = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot,
+                              shape=(nx, ny, nz), order="F")
+        self.vx = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 2,
+                            shape=(nx, ny, nz), order="F")
+        self.vy = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 3,
+                            shape=(nx, ny, nz), order="F")
+        self.vz = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 4,
+                            shape=(nx, ny, nz), order="F")
+        self.rho = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 5,
+                             shape=(nx, ny, nz), order="F")
+        offset = ntot * 6
+        if read_nh:
+            self.nh = np.memmap(infile, dtype=dtype, mode=mm, offset=offset,
+                                shape=(nx, ny, nz, nhydr), order="F")
+            offset += ntot * nhydr
+        if read_vturb:
+            self.vturb = np.memmap(infile, dtype=dtype, mode=mm, order="F",
+                                   offset=offset, shape=(nx, ny, nz))

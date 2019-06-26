@@ -33,7 +33,7 @@ cpdef xup(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -94,7 +94,7 @@ cpdef yup(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -154,7 +154,7 @@ cpdef zup(np.ndarray[FLOAT_t, ndim=3] inarr):
         Interpolated quantity. Same dtype as inarr.
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef FLOAT_t d
     cdef np.ndarray[FLOAT_t, ndim=2] zz = zupc
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
@@ -200,7 +200,7 @@ cpdef xdn(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -261,7 +261,7 @@ cpdef ydn(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -321,7 +321,7 @@ cpdef zdn(np.ndarray[FLOAT_t, ndim=3] inarr):
         Interpolated quantity. Same dtype as inarr.
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef FLOAT_t d
     cdef np.ndarray[FLOAT_t, ndim=2] zz = zdnc
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
@@ -367,7 +367,7 @@ cpdef ddxup(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t a = 300 / 281. / dxc, b = -50 / 843. / dxc, c = 6 / 1405. / dxc
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -428,7 +428,7 @@ cpdef ddyup(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t a = 300 / 281. / dxc, b = -50 / 843. / dxc, c = 6 / 1405. / dxc
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -488,7 +488,7 @@ cpdef ddzup(np.ndarray[FLOAT_t, ndim=3] inarr):
         Interpolated quantity. Same dtype as inarr.
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef FLOAT_t d
     cdef np.ndarray[FLOAT_t, ndim=2] zz = dzupc
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
@@ -534,7 +534,7 @@ cpdef ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t a = 300 / 281. / dxc, b = -50 / 843. / dxc, c = 6 / 1405. / dxc
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -595,7 +595,7 @@ cpdef ddydn(np.ndarray[FLOAT_t, ndim=3] inarr):
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
     cdef FLOAT_t a = 300 / 281. / dxc, b = -50 / 843. / dxc, c = 6 / 1405. / dxc
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
     inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
     if not inarr.flags["C_CONTIGUOUS"]:
@@ -655,7 +655,7 @@ cpdef ddzdn(np.ndarray[FLOAT_t, ndim=3] inarr):
         Interpolated quantity. Same dtype as inarr.
     """
     cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef int i, j, k, l, m=mx
+    cdef long i, j, k, l, m=mx
     cdef FLOAT_t d
     cdef np.ndarray[FLOAT_t, ndim=2] zz = dzdnc
     cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
@@ -693,7 +693,7 @@ def calc_stagger_inv(np.ndarray[FLOAT_t, ndim=1] x, int n, int y, int o,
     cdef FLOAT_t c[6]
     cdef FLOAT_t b[6]
     cdef FLOAT_t t
-    cdef int i, j
+    cdef long i, j
 
     for i in range(n+1): c[i] = 0.
     c[n] = -x[0]

@@ -124,7 +124,7 @@ def fzwrite(filename, np.ndarray inarr, header='', comp=True, slice=5):
         ds[i + 1] = s[i]
     # Compression ?
     if comp and type in [3,4]:
-        print '(WWW) fzwrite: type is float, not compressing!'
+        print('(WWW) fzwrite: type is float, not compressing!')
         comp = False
     # Make sure array is contiguous
     if not (<object>inarr).flags["C_CONTIGUOUS"]:

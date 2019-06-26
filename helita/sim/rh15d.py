@@ -8,6 +8,7 @@ import numpy as np
 import xarray as xr
 import h5py
 from io import StringIO
+from astropy import units
 
 
 class Rh15dout:
@@ -106,7 +107,8 @@ class HDF5Atmos:
 
     def write_multi(self, outfile, xi, yi, nti=0, writeB=False,
                     write_dscale=False, zcut=0, depth_optimise=False):
-        ''' Writes MULTI atmosphere file from a column of the 3D model,
+        '''
+        Writes MULTI atmosphere file from a column of the 3D model,
         in RH 1.5D HDF5 format. Also writes the binary XDR file with magnetic
         fields, if writeB is true.
         '''
@@ -131,8 +133,8 @@ class HDF5Atmos:
         else:
             raise ValueError("(EEE) write_multi: found %i hydrogen levels."
                              " For multi, need 6 or 1 " % self.params['nhydr'])
-        M_TO_CM3 = (100.)**3
-        M_TO_KM = 0.001
+        M_TO_CM3 = (units.m**-3).to('1 / cm3')
+        M_TO_KM = units.m.to('km')
         temp = self.temperature[nti, xi, yi, zcut:].copy()
         ne = self.electron_density[nti, xi, yi, zcut:].copy() / M_TO_CM3
         if len(self.z.shape) > 2:
@@ -166,8 +168,8 @@ class HDF5Atmos:
         ''' Writes atmosphere in multi_3d format (the same as the
             pre-Jorrit multi3d) '''
         from . import multi
-        ul = 1e2  # m to cm
-        uv = 1e-3  # m/s to km/s
+        ul = units.m.to('cm')
+        uv = (units.m / units.s).to('km / s')
         # slicing and unit conversion
         if sx is None:
             sx = [0, self.nx, 1]
@@ -198,123 +200,10 @@ class HDF5Atmos:
                             big_endian=big_endian)
 
 
-class NcdfAtmos:
-    def __init__(self, infile):
-        self.file = read_ncdf(self, infile)
-        self.closed = False
-
-    def close(self):
-        try:
-            self.file.close()
-            self.closed = True
-        except RuntimeError:
-            print('(WWW) NcdfAtmos: input file already closed.')
-
-    def read(self, infile):
-        if not self.closed:
-            self.close()
-        self.file = read_ncdf(self, infile)
-
-    def write_multi(self, outfile, xi, yi, nti=0, writeB=False, write_dscale=False,
-                    zcut=0, depth_optimise=False):
-        ''' Writes MULTI atmosphere file from a column of the 3D model,
-        in RH 1.5D ncdf format. Also writes the binary XDR file with magnetic
-        fields, if writeB is true.
-        '''
-        from .multi import watmos_multi
-        from .rh import write_B
-        writeB = writeB and self.params['has_B']
-        # if only total H available, will have to use rhpy (which is sometimes
-        # risky...)
-        if self.params['nhydr'] == 1:
-            try:
-                import rhpy
-            except ImportError:
-                raise ValueError("This function depents on rhpy, which is not"
-                                 " installed in this system.")
-            nh = rhpy.nh_lte(self.temperature[nti, xi, yi, zcut:].astype('Float64'),
-                             self.electron_density[
-                                   nti, xi, yi, zcut:].astype('Float64'),
-                             self.hydrogen_populations[
-                                   nti, 0, xi, yi, zcut:].astype('Float64'))
-        elif self.params['nhydr'] == 6:
-            nh = self.hydrogen_populations[nti, :, xi, yi, zcut:]
-        else:
-            raise ValueError("(EEE) write_multi: found %i hydrogen levels."
-                             " For multi, need 6 or 1 " % self.params['nhydr'])
-        M_TO_CM3 = (100.)**3
-        M_TO_KM = 0.001
-        temp = self.temperature[nti, xi, yi, zcut:].copy()
-        ne = self.electron_density[nti, xi, yi, zcut:].copy() / M_TO_CM3
-        if len(self.z.shape) > 2:
-            self.z = self.z[:, xi, yi]
-        z = self.z[nti, zcut:].copy() * M_TO_KM * 1.e5    # in cm
-        vz = self.velocity_z[nti, xi, yi, zcut:].copy() * M_TO_KM
-        nh = nh / M_TO_CM3
-        if writeB:
-            bx = self.B_x[nti, xi, yi, zcut:].copy()
-            by = self.B_y[nti, xi, yi, zcut:].copy()
-            bz = self.B_z[nti, xi, yi, zcut:].copy()
-        else:
-            bx = by = bz = None
-        if depth_optimise:
-            rho = self.hydrogen_populations[
-                nti, 0, xi, yi, zcut:] * 2.380491e-24 / M_TO_CM3
-            res = depth_optim(z, temp, ne, vz, rho, nh=nh, bx=bx, by=by, bz=bz)
-            z, temp, ne, vz, rho, nh = res[:6]
-            if writeB:
-                bx, by, bz = res[6:]
-        watmos_multi(outfile, temp, ne, z * 1e-5, vz=vz, nh=nh,
-                     write_dscale=write_dscale,
-                     id='%s txy-slice: (t,x,y) = (%i,%i,%i)' %
-                     (self.params['description'], nti, xi, yi))
-        if writeB:
-            write_B('%s.B' % outfile, bx, by, bz)
-            print(('--- Wrote magnetic field to %s.B' % outfile))
-
-    def write_multi_3d(self, outfile, nti=0, sx=None, sy=None, sz=None,
-                       big_endian=False):
-        ''' Writes atmosphere in multi_3d format (the same as the
-            pre-Jorrit multi3d) '''
-        from . import multi
-        ul = 1e2  # m to cm
-        uv = 1e-3  # m/s to km/s
-        # slicing and unit conversion
-        if sx is None:
-            sx = [0, self.nx, 1]
-        if sy is None:
-            sy = [0, self.ny, 1]
-        if sz is None:
-            sz = [0, self.nz, 1]
-        if self.params['nhydr'] > 1:
-            nh = np.mean(self.hydrogen_populations[nti, :, sx[0]:sx[1]:sx[2],
-                                                   sy[0]:sy[1]:sy[2],
-                                                   sz[0]:sz[1]:sz[2]], axis=1) / (ul**3)
-        else:
-            nh = self.hydrogen_populations[nti, 0, sx[0]:sx[1]:sx[2],
-                                           sy[0]:sy[1]:sy[2],
-                                           sz[0]:sz[1]:sz[2]] / (ul**3)
-        rho = nh * 2.380491e-24  # nH to rho [g cm-3]
-        x = self.x[sx[0]:sx[1]:sx[2]] * ul
-        y = self.y[sy[0]:sy[1]:sy[2]] * ul
-        z = self.z[nti, sz[0]:sz[1]:sz[2]] * ul
-        ne = self.electron_density[nti, sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
-                                   sz[0]:sz[1]:sz[2]] / (ul**3)
-        temp = self.temperature[nti, sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
-                                sz[0]:sz[1]:sz[2]]
-        vz = self.velocity_z[nti, sx[0]:sx[1]:sx[2], sy[0]:sy[1]:sy[2],
-                             sz[0]:sz[1]:sz[2]] * uv
-        # write to file
-        multi.write_atmos3d(outfile, x, y, z, ne, temp, vz, rho=rho,
-                            big_endian=big_endian)
-
-
-#############################################################################
-###   TOOLS                                                               ###
-#############################################################################
 class DataHolder:
     def __init__(self):
         pass
+
 
 class AtomFile:
     """
@@ -330,36 +219,88 @@ class AtomFile:
     def __init__(self, filename, format='RH'):
         self.read_atom(filename, format)
 
+    @staticmethod
+    def read_atom_levels(data, format='RH'):
+        """
+        Reads levels part of atom file
+        """
+        tmp = []
+        dtype=[('energy', 'f8'), ('g_factor', 'f8'),('label', '|U30'),
+               ('stage', 'i4'), ('level_no','i4')]
+        if format.upper() == "RH":
+            extra_cols = 2
+        elif format.upper() == "MULTI":
+            extra_cols = 1
+            dtype = dtype[:-1]
+        else:
+            raise ValueError("Format must be RH or MULTI")
+        for line in data:
+            buf = line.split("'")
+            assert len(buf) == 3
+            tmp.append(tuple(buf[0].split() +
+                        [buf[1].strip()] + buf[2].split()[:extra_cols]))
+        return np.array(tmp, dtype=dtype)
+
     def read_atom(self, filename, format='RH'):
+        self.format = format.upper()
         data = []
         counter = 0
         with open(filename, 'r') as atom_file:
             for line in atom_file:
                 tmp = line.strip()
                 # clean up comments and blank lines
-                if len(tmp) == 0:
+                if not tmp:
                     continue
                 if tmp[0] in ['#', '*']:
                     continue
                 data.append(tmp)
-        self.element = data[0]
-        nlevel, nline, ncont, nfixed = np.array(data[1].split(), dtype='i')
+        self.element = data[counter]
+        counter += 1
+        if self.format == 'RH':
+            self.units = {'level_energies': units.Unit('J m / cm'),
+                          'line_wavelength': units.Unit('nm'),
+                          'line_stark': units.Unit('m'),
+                          'continua_photoionisation': units.Unit('m2'),
+                          'continua_wavelength': units.Unit('nm'),
+                          'collision_cross_sections': units.Unit('m3')}
+        elif self.format == 'MULTI':
+            self.units = {'level_energies': units.Unit('J m / cm'),
+                          'line_wavelength': units.Unit('Angstrom'),
+                          'line_stark': units.Unit('cm'),
+                          'continua_photoionisation': units.Unit('cm2'),
+                          'continua_wavelength': units.Unit('Angstrom'),
+                          'collision_cross_sections': units.Unit('cm3')}
+            self.abund = data[counter].split()[0]
+            self.atomic_weight = data[counter].split()[1]
+            counter += 1
+        else:
+            raise ValueError("Unsupported atom format " + format)
+        nlevel, nline, ncont, nfixed = np.array(data[counter].split(), dtype='i')
         self.nlevel = nlevel
         self.nline = nline
         self.ncont = ncont
         self.nfixed = nfixed
-        counter += 2
-
+        counter += 1
         # read levels
-        self.levels = read_atom_levels(data[counter:counter + nlevel])
+        self.levels = self.read_atom_levels(data[counter:counter + nlevel],
+                                             self.format)
         counter += nlevel
         # read lines
         tmp = StringIO('\n'.join(data[counter:counter + nline]))
-        data_type = [('level_start', 'i4'), ('level_end', 'i4'),
-                     ('f_value', 'f8'), ('type', 'U10'), ('nlambda', 'i'),
-                     ('symmetric', 'U10'), ('qcore', 'f8'), ('qwing', 'f8'),
-                     ('vdApprox', 'U10'), ('vdWaals', 'f8', (4,)),
-                     ('radiative_broadening', 'f8'), ('stark_broadening', 'f8')]
+        if self.format == "RH":
+            data_type = [('level_start', 'i4'), ('level_end', 'i4'),
+                         ('f_value', 'f8'), ('type', 'U10'), ('nlambda', 'i'),
+                         ('symmetric', 'U10'), ('qcore', 'f8'), ('qwing', 'f8'),
+                         ('vdApprox', 'U10'), ('vdWaals', 'f8', (4,)),
+                         ('radiative_broadening', 'f8'),
+                         ('stark_broadening', 'f8')]
+        elif self.format == "MULTI":
+            data_type = [('level_start', 'i4'), ('level_end', 'i4'),
+                         ('f_value', 'f8'), ('nlambda', 'i'),
+                         ('qwing', 'f8'), ('qcore', 'f8'), ('iw', 'i4'),
+                         ('radiative_broadening', 'f8'),
+                         ('vdWaals', 'f8', (1,)), ('stark_broadening', 'f8'),
+                         ('type', 'U10')]
         self.lines = np.genfromtxt(tmp, dtype=data_type)
         counter += nline
         # read continua
@@ -372,12 +313,31 @@ class AtomFile:
             result['level_end'] = int(line[1])
             result['edge_cross_section'] = float(line[2])
             result['nlambda'] = int(line[3])
-            result['wave_min'] = float(line[5])
-            if line[4].upper() == 'EXPLICIT':  # different for Multi?
+            if self.format == "RH":
+                result['wavelength_dependence'] = line[4].upper()
+                result['wave_min'] = float(line[5])
+            elif self.format == "MULTI":
+                if float(line[4]) > 0:
+                    result['wavelength_dependence'] = "HYDROGENIC"
+                else:
+                    result['wavelength_dependence'] = "EXPLICIT"
+            if result['wavelength_dependence'] == 'EXPLICIT':
                 tmp = '\n'.join(data[counter:counter + result['nlambda']])
                 counter += result['nlambda']
                 result['cross_section'] = np.genfromtxt(StringIO(tmp))
             self.continua.append(result)
+        # read fixed transitions
+        self.fixed_transitions = []
+        for _ in range(nfixed):
+            line = data[counter].split()
+            counter += 1
+            result = {}
+            result['level_start'] = int(line[0])
+            result['level_end'] = int(line[1])
+            result['strength'] = float(line[2])
+            result['trad'] = float(line[3])
+            result['trad_option'] = line[4]
+            self.fixed_transitions.append(result)
         # read collisions
         ### IN MULTI FORMAT COLLISIONS START WITH GENCOL
         ### Also in MULTI, must merge together lines that are written in
@@ -385,15 +345,41 @@ class AtomFile:
         self.collision_temperatures = []
         self.collision_tables = []
         # Keys for rates given as function of temperature
-        COLLISION_KEYS_TEMP = ['OMEGA', 'CE', 'CI', 'CP', 'CH', 'CH0', 'CH+',
-                               'CR']
+        COLLISION_KEYS_TEMP = ['OHMEGA', 'OMEGA', 'CE', 'CI', 'CP', 'CH',
+                               'CH0', 'CH+', 'CR', 'TEMP']
         # Keys for rates written as single line
         COLLISION_KEYS_LINE = ['AR85-CEA', 'AR85-CHP', 'AR85-CHH', 'SHULL82',
                                'BURGESS', 'SUMMERS']
         COLLISION_KEYS_OTHER = ['AR85-CDI', 'BADNELL']
+        ALL_KEYS = (COLLISION_KEYS_TEMP + COLLISION_KEYS_LINE +
+                        COLLISION_KEYS_OTHER)
+        SINGLE_KEYS = ['GENCOL', 'END']
+
+        if self.format == 'MULTI':   # merge lines in free FORMAT
+            collision_data = []
+            while counter < len(data):
+                line = data[counter]
+                key = data[counter].split()[0].upper().strip()
+                if key in ALL_KEYS:
+                    tmp = line
+                    while True:
+                        counter += 1
+                        key = data[counter].split()[0].upper().strip()
+                        if key in ALL_KEYS + SINGLE_KEYS:
+                            collision_data.append(tmp)
+                            break
+                        else:
+                            tmp += '  '  + data[counter]
+                elif key in SINGLE_KEYS:
+                    collision_data.append(line)
+                    counter += 1
+        else:
+            collision_data = data[counter:]
+
         unread_lines = False
-        while counter < len(data) - 1:
-            line = data[counter].split()
+        counter = 0
+        while counter < len(collision_data) - 1:
+            line = collision_data[counter].split()
             key = line[0].upper()
             result = {}
             if key == 'END':
@@ -405,10 +391,11 @@ class AtomFile:
             elif key in COLLISION_KEYS_TEMP:
                 assert self.collision_temperatures, ('No temperature block'
                          ' found before %s table' % (key))
+                ntemp = len(self.collision_temperatures[-1])
                 result = {'type': key, 'level_start': int(line[1]),
                           'level_end': int(line[2]),
                           'temp_index': len(self.collision_temperatures) - 1,
-                          'data': np.array(line[3:]).astype('d')}
+                          'data': np.array(line[3:3 + ntemp]).astype('d')}  # this will not work in MULTI
                 assert len(result['data']) == len(temp_tmp), ('Inconsistent '
                     'number of points between temperature and collision table')
             elif key in COLLISION_KEYS_LINE:
@@ -419,16 +406,25 @@ class AtomFile:
                               'level_end': int(line[2]),
                               'data': np.array(line[2:]).astype('f')}
             elif key in ["AR85-CDI", "BADNELL"]:
-                assert len(line) == 4, '%s must have exactly 3 arguments' % key
+                assert len(line) >= 4, '%s must have >3 elements' % key
                 result = {'type': key, 'level_start': int(line[1]),
-                          'level_end': int(line[2])}
+                              'level_end': int(line[2])}
                 if key == "BADNELL":
                     rows = 2
                 else:
                     rows = int(line[3])
-                tmp = data[counter + 1: counter + 1 + rows]
-                result['data'] = np.array([l.split() for l in tmp]).astype('d')
-                counter += rows
+                if self.format == 'MULTI':  # All values in one line
+                    tmp = np.array(line[4:]).astype('d')
+                    assert tmp.shape[0] % rows == 0, ('Inconsistent number of'
+                                                 ' data points for %s' % key)
+                    result['data'] = tmp.reshape((rows, tmp.shape[0] // rows))
+                    counter += 1
+                else:  # For RH, values written in matrix form
+                    tmp = data[counter + 1: counter + 1 + rows]
+                    result['data'] = np.array([l.split() for l in tmp]).astype('d')
+                    counter += rows
+            elif key == "GENCOL":
+                pass
             else:
                 unread_lines = True
 
@@ -440,62 +436,6 @@ class AtomFile:
             warnings.warn("Some lines in collision section were not understood",
                           RuntimeWarning)
 
-def read_atom_levels(data):
-    tmp = []
-    for line in data:
-        buf = line.split("'")
-        assert len(buf) == 3
-        tmp.append(tuple(buf[0].split() + [buf[1].strip()] + buf[2].split()[:2]))
-    return np.array(tmp, dtype=[('energy', 'f8'), ('g_factor', 'f8'),
-                                ('label', '|U30'), ('stage', 'i4'),
-                                ('level_no','i4')])
-
-
-def read_ncdf(inclass, infile):
-    ''' DEPRECATED. Use read_hdf5 instead.
-        Reads NetCDF file into inclass, instance of any class.
-        Variables are read into class attributes, dimensions and attributes
-        are read into params dictionary. '''
-    from warnings import warn
-    import netCDF4 as nc
-    warn("Please use read_hdf5 instead", DeprecationWarning)
-    # internal attributes of NetCDF groups
-    ncdf_internals = dir(nc.Dataset)
-    if not os.path.isfile(infile):
-        raise IOError('read_ncdf: File %s not found' % infile)
-    f = nc.Dataset(infile, mode='r')
-    if 'params' not in dir(inclass):
-        inclass.params = {}
-    # add dimensions as attributes
-    for d in list(f.dimensions.keys()):
-        inclass.params[d] = len(f.dimensions[d])
-    # add attributes
-    attrs = [a for a in dir(f) if a not in ncdf_internals]
-    for att in attrs:
-        inclass.params[att] = getattr(f, att)
-    # add variables
-    for v in list(f.variables.keys()):
-        vname = v.replace(' ', '_')    # sanitise string for spaces
-        setattr(inclass, vname, f.variables[v])
-    # Now do the same for all groups
-    for group in list(f.groups.keys()):
-        gname = group.replace(' ', '_')  # sanitise string for spaces
-        setattr(inclass, gname, DataHolder())
-        cur_group = f.groups[group]
-        cur_class = getattr(inclass, gname)
-        # add variables
-        for v in list(cur_group.variables.keys()):
-            vname = v.replace(' ', '_')  # sanitise string for spaces
-            setattr(cur_class, vname, cur_group.variables[v])
-        # add dimensions as attributes
-        for d in list(cur_group.dimensions.keys()):
-            inclass.params[d] = len(cur_group.dimensions[d])
-        # add attributes
-        attrs = [a for a in dir(cur_group) if a not in ncdf_internals]
-        for att in attrs:
-            inclass.params[att] = getattr(cur_group, att)
-    return f
-
 
 def read_hdf5(inclass, infile):
     """
@@ -503,7 +443,6 @@ def read_hdf5(inclass, infile):
     Variables are read into class attributes, dimensions and attributes
     are read into params dictionary.
     """
-    import h5py
     if not os.path.isfile(infile):
         raise IOError('read_hdf5: File %s not found' % infile)
     f = h5py.File(infile, mode='r')
@@ -534,6 +473,7 @@ def read_hdf5(inclass, infile):
     return f
 
 
+<<<<<<< HEAD
 def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
                     Bx=None, rho=None, ne=None, vx=None, vy=None, desc=None,
                     snap=None, boundary=[1, 0], comp=False, complev=2,
@@ -966,6 +906,8 @@ def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
     return
 
 
+=======
+>>>>>>> ITA-Solar/master
 def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=None,
                       Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
                       desc=None, snap=None, boundary=None, append=False):
@@ -1027,16 +969,16 @@ def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=No
         If True, will append to existing file (if any).
     """
     data = {'temperature': [T, 'K'],
-            'velocity_z': [vz, 'm s^-1'],
-            'velocity_y': [vy, 'm s^-1'],
-            'velocity_x': [vx, 'm s^-1'],
-            'electron_density': [ne, 'm^-3'],
-            'hydrogen_populations': [nH, 'm^-3'],
-            'density': [rho, 'kg m^-3'],
+            'velocity_z': [vz, 'm / s'],
+            'velocity_y': [vy, 'm / s'],
+            'velocity_x': [vx, 'm / s'],
+            'electron_density': [ne, '1 / m3'],
+            'hydrogen_populations': [nH, '1 / m3'],
+            'density': [rho, 'kg / m3'],
             'B_x': [Bx, 'T'],
             'B_y': [By, 'T'],
             'B_z': [Bz, 'T'],
-            'velocity_turbulent': [vturb, 'm s^-1'],
+            'velocity_turbulent': [vturb, 'm / s'],
             'x': [x, 'm'],
             'y': [y, 'm'],
             'z': [z, 'm']}
@@ -1119,13 +1061,14 @@ def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
     """
     from scipy.integrate import cumtrapz
     import scipy.interpolate as interp
+    import astropy.constants as const
     ndep = len(height)
     # calculate optical depth from H-bf only
     taumax = 100
-    grph = 2.26e-24
+    grph = 2.26e-24   # grams per hydrogen atom
     crhmbf = 2.9256e-17
-    ee = 1.602189E-12
-    bk = 1.380662E-16
+    ee = constants.e.si.value * 1e7
+    bk = constants.k_B.cgs.value
     xhbf = 1.03526e-16 * ne * crhmbf / temp**1.5 * \
         np.exp(0.754 * ee / bk / temp) * rho / grph
     tau = np.concatenate(([0.], cumtrapz(xhbf, -height)))
@@ -1196,7 +1139,7 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
         wavelengths.
     """
     import xdrlib
-    from ..utils.waveconv import waveconv
+    from specutils.utils.wcs_utils import air_to_vac
     if new_wave is None:
         new_wave = np.arange(start, end, step)
         if None in [start, end, step]:
@@ -1211,7 +1154,9 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
                 keepers.append(w)
         new_wave = np.array(keepers)
     if air:
-        new_wave = waveconv(new_wave, mode='air2vac')
+        # RH uses Edlen (1966) to convert from vacuum to air
+        new_wave = air_to_vac(new_wave * units.nm, method='edlen1966',
+                              scheme='iteration').value
 
     # write file
     p = xdrlib.Packer()
@@ -1222,7 +1167,6 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
     f.write(p.get_buffer())
     f.close()
     print(("Wrote %i wavelengths to file." % nw))
-    return
 
 
 def read_wave_file(infile):
@@ -1231,8 +1175,13 @@ def read_wave_file(infile):
 
     Parameters
     ----------
-    infile - string
+    infile : str
         Name of wavelength file to read.
+
+    Returns
+    -------
+    wave : array
+        Wavelength from file.
     """
     import xdrlib
     import io
