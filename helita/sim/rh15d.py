@@ -12,53 +12,33 @@ from astropy import units
 
 
 class Rh15dout:
-    def __init__(self, fdir='.', verbose=True):
+    """
+    Class to load and manipulate output from RH 1.5D.
+    """
+    def __init__(self, fdir='.', verbose=True, autoread=True):
         self.files = []
         self.params = {}
         self.verbose = verbose
         self.fdir = fdir
-        OUTFILE_FUNC = {"output_aux": self.read_aux,
-                        "output_indata": self.read_indata,
-                        "output_ray": self.read_ray,
-                        "output_spectrum": self.read_spectrum}
-        for outfile, func in OUTFILE_FUNC.items():
-            if (os.path.isfile("%s/%s.ncdf" % (self.fdir, outfile)) or
-                os.path.isfile("%s/%s.hdf5" % (self.fdir, outfile))):
-                func()
+        if autoread:
+            for outfile in ["output_aux", "output_indata"]:
+                OUTFILE = os.path.join(self.fdir, "%s.hdf5" % (outfile))
+                self.read_groups(OUTFILE)
+            RAYFILE = os.path.join(self.fdir, "output_ray.hdf5")
+            self.read_ray(RAYFILE)
 
-    def read_aux(self, infile=None):
-        ''' Reads Aux file. '''
-        if infile is None:
-            infile = '%s/output_aux.hdf5' % self.fdir
-            if not os.path.isfile(infile):  # See if netCDF file exists
-                infile = os.path.splitext(infile)[0] + '.ncdf'
+    def read_groups(self, infile):
+        ''' Reads indata file, group by group. '''
+        if not os.path.isfile(infile):   # See if netCDF file exists
+            infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
             return
-        self.files.append(read_hdf5(self, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_indata(self, infile=None):
-        ''' Reads indata file. '''
-        if infile is None:
-            infile = '%s/output_indata.hdf5' % self.fdir
-            if not os.path.isfile(infile):  # See if netCDF file exists
-                infile = os.path.splitext(infile)[0] + '.ncdf'
-        if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
-        self.files.append(read_hdf5(self, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_spectrum(self, infile=None):
-        ''' Reads spectrum file. '''
-        if infile is None:
-            infile = '%s/output_spectrum.ncdf' % self.fdir
-        self.spectrum = DataHolder()
-        self.files.append(read_hdf5(self.spectrum, infile))
+        f = h5py.File(infile, "r")
+        GROUPS = [g for g in f.keys() if type(f[g]) == h5py._hl.group.Group]
+        f.close()
+        for g in GROUPS:
+            setattr(self, g, xr.open_dataset(infile, group=g, autoclose=True))
+            self.files.append(getattr(self, g))
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
@@ -69,26 +49,25 @@ class Rh15dout:
             if not os.path.isfile(infile):  # See if netCDF file exists
                 infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
-            if self.verbose:
-                print('File %s not found, skipping.' % infile)
-        self.ray = DataHolder()
-        self.files.append(read_hdf5(self.ray, infile))
-        if self.verbose:
-            print(('--- Read %s file.' % infile))
-
-    def read_J(self, infile='scratch/J.dat.hdf5'):
-        ''' Reads angle averaged intensity file '''
-        self.files.append(read_hdf5(self, infile))
+            return
+        self.ray = xr.open_dataset(infile, autoclose=True)
+        self.files.append(self.ray)
         if self.verbose:
             print(('--- Read %s file.' % infile))
 
     def close(self):
-        ''' Closes the open NetCDF files '''
+        ''' Closes the open files '''
         for f in self.files:
             f.close()
 
+    def __del__(self):
+        self.close()
+
 
 class HDF5Atmos:
+    """
+    Class to load and manipulate RH 1.5D input atmosphere files in HDF5.
+    """
     def __init__(self, infile):
         self.file = read_hdf5(self, infile)
         self.closed = False
@@ -451,7 +430,10 @@ def read_hdf5(inclass, infile):
     # add attributes
     attrs = [a for a in f.attrs]
     for att in f.attrs:
-        inclass.params[att] = f.attrs[att]
+        try:
+            inclass.params[att] = f.attrs[att]
+        except OSError:  # catch errors where h5py cannot read UTF-8 strings
+            pass
     # add variables and groups
     for element in f:
         name = element.replace(' ', '_')    # sanitise string for spaces
@@ -473,441 +455,6 @@ def read_hdf5(inclass, infile):
     return f
 
 
-<<<<<<< HEAD
-def make_ncdf_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
-                    Bx=None, rho=None, ne=None, vx=None, vy=None, desc=None,
-                    snap=None, boundary=[1, 0], comp=False, complev=2,
-                    append=False):
-    """
-    Creates NetCDF input file for rh15d.
-
-        IN:
-           outfile:  string name of destination. If file exists it will be wiped.
-           T:        Temperature. Its shape will determine the output dimensions
-           vz:       Same shape as T. In m/s.
-           ne:       Same shape as T. In m-3. Optional.
-           nH:       Shape [6, shape.T]. In m-3.
-           z:        Same shape as last index of T. In m.
-           x:        Same shape as first index of T. In m.
-           y:        Same shape as second index of T. In m.
-           snap:     Snapshot number(s)
-           Bx, By, Bz: same shape as T. In T.
-           rho, vx, vy: same shape as T. Optional.
-           desc:     Description string
-           boundary: Tuple with [bottom, top] boundary conditions. Key is:
-                     0: Zero, 1: Thermalised, 2: Reflective.
-           append:   if True, will append to existing file (if any).
-           comp:     if false, compress file.
-           complev:  compression level.
-    """
-    import os
-    import netCDF4 as nc
-
-    mode = ['w', 'a']
-    if (append and not os.path.isfile(outfile)):
-        append = False
-    rootgrp = nc.Dataset(outfile, mode[append], format='NETCDF4')
-    complev = 2
-    nt = 1
-    if nH.shape == T.shape:
-        nhydr = 1
-    else:
-        nhydr = nH.shape[0]
-    idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
-    T = T[idx]
-    if ne is not None:
-        ne = ne[idx]
-    nH = nH[idx]
-    vz = vz[idx]
-    z = z[idx]
-    if Bz is not None:
-        Bx = Bx[idx]
-        By = By[idx]
-        Bz = Bz[idx]
-    if rho is not None:
-        rho = rho[idx]
-    if vx is not None:
-        vx = vx[idx]
-    if vy is not None:
-        vy = vy[idx]
-    if len(T.shape) != 4:
-        raise ValueError('Invalid shape for T')
-    if snap is None:
-        snap = np.arange(nt, dtype='i4')
-    # for a new file, create dimensions and variables
-    if not append:
-        rootgrp.createDimension('nt', None)  # create unlimited dimension
-        rootgrp.createDimension('nx', T.shape[-3])
-        rootgrp.createDimension('ny', T.shape[-2])
-        rootgrp.createDimension('nz', T.shape[-1])
-        rootgrp.createDimension('nhydr', nhydr)
-        T_var = rootgrp.createVariable('temperature', 'f4',
-                                       ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                       least_significant_digit=1,
-                                       complevel=complev)
-        vz_var = rootgrp.createVariable('velocity_z', 'f4',
-                                        ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                        least_significant_digit=1,
-                                        complevel=complev)
-        if ne is not None:
-            ne_var = rootgrp.createVariable('electron_density', 'f8',
-                                            ('nt', 'nx', 'ny', 'nz'),
-                                            zlib=comp, complevel=complev)
-            ne_var.units = 'm^-3'
-        nh_var = rootgrp.createVariable('hydrogen_populations', 'f4',
-                                        ('nt', 'nhydr', 'nx', 'ny', 'nz'),
-                                        zlib=comp, complevel=complev)
-        x_var = rootgrp.createVariable('x', 'f4', ('nx',))
-        y_var = rootgrp.createVariable('y', 'f4', ('ny',))
-        z_var = rootgrp.createVariable('z', 'f4', ('nt', 'nz'))
-        nt_var = rootgrp.createVariable('snapshot_number', 'i4', ('nt',))
-        T_var.units = 'K'
-        vz_var.units = 'm s^-1'
-        nh_var.units = 'm^-3'
-        z_var.units = 'm'
-        x_var.units = 'm'
-        y_var.units = 'm'
-        if Bz is not None:
-            bx_var = rootgrp.createVariable('B_x', 'f4',
-                                            ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                            least_significant_digit=5,
-                                            complevel=complev)
-            by_var = rootgrp.createVariable('B_y', 'f4',
-                                            ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                            least_significant_digit=5,
-                                            complevel=complev)
-            bz_var = rootgrp.createVariable('B_z', 'f4',
-                                            ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                            least_significant_digit=5,
-                                            complevel=complev)
-            bx_var.units = 'T'
-            by_var.units = 'T'
-            bz_var.units = 'T'
-        if rho is not None:
-            rho_var = rootgrp.createVariable('density', 'f4',
-                                             ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                             least_significant_digit=5,
-                                             complevel=complev)
-            rho_var.units = 'kg m^-3'
-        if vx is not None:
-            vx_var = rootgrp.createVariable('velocity_x', 'f4',
-                                            ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                            least_significant_digit=5,
-                                            complevel=complev)
-            vx_var.units = 'm s^-1'
-        if vy is not None:
-            vy_var = rootgrp.createVariable('velocity_y', 'f4',
-                                            ('nt', 'nx', 'ny', 'nz'), zlib=comp,
-                                            least_significant_digit=5,
-                                            complevel=complev)
-            vy_var.units = 'm s^-1'
-        if desc is None:
-            rootgrp.description = \
-                "BIFROST snapshot"
-        else:
-            rootgrp.description = desc
-        if boundary is None:
-            rootgrp.boundary_top = 0
-            rootgrp.boundary_bottom = 1
-        else:
-            rootgrp.boundary_top = boundary[1]
-            rootgrp.boundary_bottom = boundary[0]
-        if Bz is None:
-            rootgrp.has_B = 0
-        else:
-            rootgrp.has_B = 1
-        nt = [0, nt]
-    else:
-        # get variables
-        T_var = rootgrp.variables['temperature']
-        vz_var = rootgrp.variables['velocity_z']
-        nh_var = rootgrp.variables['hydrogen_populations']
-        nt_var = rootgrp.variables['snapshot_number']
-        x_var = rootgrp.variables['x']
-        y_var = rootgrp.variables['y']
-        z_var = rootgrp.variables['z']
-        if ne is not None:
-            ne_var = rootgrp.variables['electron_density']
-        if Bz is not None:
-            bx_var = rootgrp.variables['B_x']
-            by_var = rootgrp.variables['B_y']
-            bz_var = rootgrp.variables['B_z']
-        if rho is not None:
-            rho_var = rootgrp.variables['density']
-        if vx is not None:
-            vx_var = rootgrp.variables['velocity_x']
-        if vy is not None:
-            vy_var = rootgrp.variables['velocity_y']
-        nti = len(rootgrp.dimensions['nt'])
-        nt = [nti, nti + nt]
-    T_var[nt[0]:nt[1]] = T
-    vz_var[nt[0]:nt[1]] = vz
-    nh_var[nt[0]:nt[1], :nhydr] = nH
-    if ne is not None:
-        ne_var[nt[0]:nt[1]] = ne
-    if Bz is not None:
-        bx_var[nt[0]:nt[1]] = Bx
-        by_var[nt[0]:nt[1]] = By
-        bz_var[nt[0]:nt[1]] = Bz
-    if rho is not None:
-        rho_var[nt[0]:nt[1]] = rho
-    if vx is not None:
-        vx_var[nt[0]:nt[1]] = vx
-    if vy is not None:
-        vy_var[nt[0]:nt[1]] = vy
-    x_var[:] = x
-    y_var[:] = y
-    z_var[nt[0]:nt[1]] = z
-    nt_var[nt[0]:nt[1]] = snap
-    rootgrp.close()
-    return
-
-
-def make_hdf5_atmos(outfile, T, vz, nH, z, x=None, y=None, Bz=None, By=None,
-                    Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
-                    desc=None, snap=None, boundary=[1, 0], comp=None,
-                    complev=None, append=False):
-    """
-    Creates HDF5 input file for RH 1.5D.
-
-    Parameters
-    ----------
-    outfile : string
-        Name of destination. If file exists it will be wiped.
-    T : n-D array
-        Temperature in K. Its shape will determine the output
-        dimensions (can be 1D, 2D, or 3D).
-    vz : n-D array
-        Line of sight velocity in m/s. Same shape as T.
-    nH : n-D array
-        Hydrogen populations in m^-3. Shape is [nhydr, shape.T] where
-        nydr can be 1 (total number of protons) or more (level populations).
-    z : n-D array
-        Height in m. Can have same shape as T (different height scale
-        for each column) or be only 1D (same height for all columns).
-    ne : n-D array, optional
-        Electron density in m^-3. Same shape as T.
-    rho : n-D array, optional
-        Density in kg / m^-3. Same shape as T.
-    vx : n-D array, optional
-        x velocity in m/s. Same shape as T. Not in use by RH 1.5D.
-    vy : n-D array, optional
-        y velocity in m/s. Same shape as T. Not in use by RH 1.5D.
-    vturb : n-D array, optional
-        Turbulent velocity (Microturbulence) in km/s. Not usually needed
-        for MHD models, and should only be used when a depth dependent
-        microturbulence is needed (constant microturbulence can be added
-        in RH).
-    Bx : n-D array, optional
-        Magnetic field in x dimension, in Tesla. Same shape as T.
-    By : n-D array, optional
-        Magnetic field in y dimension, in Tesla. Same shape as T.
-    Bz : n-D array, optional
-        Magnetic field in z dimension, in Tesla. Same shape as T.
-    x : 1-D array, optional
-        Grid distances in m. Same shape as first index of T.
-    y : 1-D array, optional
-        Grid distances in m. Same shape as second index of T.
-    x : 1-D array, optional
-        Grid distances in m. Same shape as first index of T.
-    snap : array-like, optional
-        Snapshot number(s).
-    desc : string, optional
-        Description of file
-    boundary : Tuple, optional
-        Tuple with [bottom, top] boundary conditions. Options are:
-        0: Zero, 1: Thermalised, 2: Reflective.
-    append : boolean, optional
-        If True, will append to existing file (if any).
-    comp : string, optional
-        Options are: None (default), 'gzip', 'szip', 'lzf'.
-    complev : integer or tuple, optional
-        Compression level. Integer for 'gzip', 2-tuple for szip.
-    """
-    import os
-    import datetime
-    import h5py
-    mode = ['w', 'a']
-    if (append and not os.path.isfile(outfile)):
-        append = False
-    rootgrp = h5py.File(outfile, mode=mode[append])
-    if nH.shape == T.shape:
-        nhydr = 1
-    else:
-        nhydr = nH.shape[0]
-    idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
-    T = T[idx]
-    if ne is not None:
-        ne = ne[idx]
-    nH = nH[idx]
-    vz = vz[idx]
-    z = z[idx]
-    if Bz is not None:
-        Bx = Bx[idx]
-        By = By[idx]
-        Bz = Bz[idx]
-    if rho is not None:
-        rho = rho[idx]
-    if vx is not None:
-        vx = vx[idx]
-    if vy is not None:
-        vy = vy[idx]
-    if vturb is not None:
-        vturb = vturb[idx]
-    if len(T.shape) != 4:
-        raise ValueError('Invalid shape for T')
-    nt = T.shape[0]
-    if snap is None:
-        snap = np.arange(nt, dtype='i4')
-    if not append:
-        # for a new file, create datasets
-        max_dims = (None,) + T.shape[1:] # time is unlimited dimension
-        rootgrp.attrs["nx"] = T.shape[-3]
-        rootgrp.attrs["ny"] = T.shape[-2]
-        rootgrp.attrs["nz"] = T.shape[-1]
-        rootgrp.attrs["nhydr"] = nhydr
-        T_var = rootgrp.create_dataset("temperature", dtype="f4",
-                                       shape=T.shape, maxshape=max_dims,
-                                       fletcher32=True, compression=comp,
-                                       compression_opts=complev)
-        vz_var = rootgrp.create_dataset("velocity_z", dtype="f4",
-                                        shape=T.shape, maxshape=max_dims,
-                                        fletcher32=True, compression=comp,
-                                        compression_opts=complev)
-        nh_var = rootgrp.create_dataset("hydrogen_populations", dtype="f4",
-                                shape=(nt, nhydr,) + T.shape[1:],
-                                maxshape=(None, nhydr) + T.shape[1:],
-                                fletcher32=True, compression=comp,
-                                compression_opts=complev)
-        if ne is not None:
-            ne_var = rootgrp.create_dataset("electron_density", dtype="f8",
-                                            shape=T.shape, maxshape=max_dims,
-                                            fletcher32=True, compression=comp,
-                                            compression_opts=complev)
-            ne_var.attrs["units"] = 'm^-3'
-        x_var = rootgrp.create_dataset("x", dtype="f4", shape=(T.shape[1],))
-        y_var = rootgrp.create_dataset("y", dtype="f4", shape=(T.shape[2],))
-        z_var = rootgrp.create_dataset("z", dtype="f4", shape=(nt, T.shape[3]),
-                                       maxshape=(None, T.shape[3]))
-        nt_var = rootgrp.create_dataset("snapshot_number", dtype="i4",
-                                        shape=(nt,))
-        T_var.attrs["units"] = 'K'
-        vz_var.attrs["units"] = 'm s^-1'
-        nh_var.attrs["units"] = 'm^-3'
-        z_var.attrs["units"] = 'm'
-        x_var.attrs["units"] = 'm'
-        y_var.attrs["units"] = 'm'
-        if Bz is not None:
-            bx_var = rootgrp.create_dataset("B_x", dtype="f4",
-                                            shape=T.shape, maxshape=max_dims,
-                                            fletcher32=True, compression=comp,
-                                            compression_opts=complev)
-            by_var = rootgrp.create_dataset("B_y", dtype="f4",
-                                            shape=T.shape, maxshape=max_dims,
-                                            fletcher32=True, compression=comp,
-                                            compression_opts=complev)
-            bz_var = rootgrp.create_dataset("B_z", dtype="f4",
-                                            shape=T.shape, maxshape=max_dims,
-                                            fletcher32=True, compression=comp,
-                                            compression_opts=complev)
-            bx_var.attrs["units"] = 'T'
-            by_var.attrs["units"] = 'T'
-            bz_var.attrs["units"] = 'T'
-        if rho is not None:
-            rho_var = rootgrp.create_dataset("density", dtype="f4",
-                                             shape=T.shape, maxshape=max_dims,
-                                             fletcher32=True, compression=comp,
-                                             compression_opts=complev)
-            rho_var.attrs["units"] = 'kg m^-3'
-        if vx is not None:
-            vx_var = rootgrp.create_dataset("velocity_x", dtype="f4",
-                                            shape=T.shape, maxshape=max_dims,
-                                            fletcher32=True, compression=comp,
-                                            compression_opts=complev)
-            vx_var.attrs["units"] = 'm s^-1'
-        if vy is not None:
-            vy_var = rootgrp.create_dataset("velocity_y", dtype="f4",
-                                            shape=T.shape, maxshape=max_dims,
-                                            fletcher32=True, compression=comp,
-                                            compression_opts=complev)
-            vy_var.attrs["units"] = 'm s^-1'
-        if vturb is not None:
-            vt_var = rootgrp.create_dataset("velocity_turbulent", dtype="f4",
-                                            shape=T.shape, maxshape=max_dims,
-                                            fletcher32=True, compression=comp,
-                                            compression_opts=complev)
-            vt_var.attrs["units"] = 'm s^-1'
-        if desc is None:
-            rootgrp.attrs["description"] = ("Created with make_hdf5_atmos "
-                                            "on %s" % datetime.datetime.now())
-        else:
-            rootgrp.attrs["description"] = desc
-        if boundary is None:
-            rootgrp.attrs["boundary_top"] = 0
-            rootgrp.attrs["boundary_bottom"] = 1
-        else:
-            rootgrp.attrs["boundary_top"] = boundary[1]
-            rootgrp.attrs["boundary_bottom"] = boundary[0]
-        if Bz is None:
-            rootgrp.attrs["has_B"] = 0
-        else:
-            rootgrp.attrs["has_B"] = 1
-        nt = [0, nt]
-    else:
-        # get variables
-        T_var = rootgrp['temperature']
-        vz_var = rootgrp['velocity_z']
-        nh_var = rootgrp['hydrogen_populations']
-        nt_var = rootgrp['snapshot_number']
-        x_var = rootgrp['x']
-        y_var = rootgrp['y']
-        z_var = rootgrp['z']
-        if ne is not None:
-            ne_var = rootgrp['electron_density']
-        if Bz is not None:
-            bx_var = rootgrp['B_x']
-            by_var = rootgrp['B_y']
-            bz_var = rootgrp['B_z']
-        if rho is not None:
-            rho_var = rootgrp['density']
-        if vx is not None:
-            vx_var = rootgrp['velocity_x']
-        if vy is not None:
-            vy_var = rootgrp['velocity_y']
-        if vturb is not None:
-            vt_var = rootgrp['velocity_turbulent']
-        nti = int(rootgrp.attrs['nt'])
-        nt = [nti, nti + nt]
-    T_var[nt[0]:nt[1]] = T
-    vz_var[nt[0]:nt[1]] = vz
-    nh_var[nt[0]:nt[1], :nhydr] = nH
-    if ne is not None:
-        ne_var[nt[0]:nt[1]] = ne
-    if Bz is not None:
-        bx_var[nt[0]:nt[1]] = Bx
-        by_var[nt[0]:nt[1]] = By
-        bz_var[nt[0]:nt[1]] = Bz
-    if rho is not None:
-        rho_var[nt[0]:nt[1]] = rho
-    if vx is not None:
-        vx_var[nt[0]:nt[1]] = vx
-    if vy is not None:
-        vy_var[nt[0]:nt[1]] = vy
-    if vturb is not None:
-        vt_var[nt[0]:nt[1]] = vturb
-    if x is not None:
-        x_var[:] = x
-    if y is not None:
-        y_var[:] = y
-    z_var[nt[0]:nt[1]] = z
-    nt_var[nt[0]:nt[1]] = snap
-    rootgrp.attrs['nt'] = z_var.shape[0]
-    rootgrp.close()
-    return
-
-
-=======
->>>>>>> ITA-Solar/master
 def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=None,
                       Bx=None, rho=None, ne=None, vx=None, vy=None, vturb=None,
                       desc=None, snap=None, boundary=None, append=False):
@@ -1099,8 +646,10 @@ def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
     result = [nheight, ntemp, nne, nvz, nrho]
     if nh is not None:
         for k in range(nh.shape[0]):
-            nh[k] = np.exp(interp.splev(nheight, interp.splrep(height[::-1],
-                                                               np.log(nh[k, ::-1]), k=3, s=0), der=0))
+            nh[k] = np.exp(interp.splev(nheight,
+                                        interp.splrep(height[::-1],
+                                                      np.log(nh[k, ::-1]), k=3,
+                                                      s=0), der=0))
         result += [nh]
     if bx is not None:
         nbx = interp.splev(nheight, interp.splrep(
