@@ -4,8 +4,8 @@ Set of programs to read and interact with output from Multifluid/multispecies
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab
-from .bifrost import read_idl_ascii, subs2grph, bifrost_units
+from .bifrost import BifrostData, Rhoeetab, Bifrost_units
+from .bifrost import read_idl_ascii, subs2grph 
 from . import cstagger
 
 class EbysusData(BifrostData):
@@ -41,7 +41,7 @@ class EbysusData(BifrostData):
         else:  # one energy for all fluid
             self.mhdvars.insert(0, 'e')
             self.snapevars = []
-            
+
         if hasattr(self, 'with_electrons'):
             if self.with_electrons:
                 self.mf_e_file = self.file_root + '_mf_e'

@@ -9,7 +9,6 @@ from . import cstagger
 import scipy as sp
 from scipy.ndimage import map_coordinates
 from multiprocessing.dummy import Pool as ThreadPool
-import scipy.ndimage as ndimage
 
 class BifrostData(object):
     """
@@ -37,6 +36,14 @@ class BifrostData(object):
     ghost_analyse - bool, optional
         If True, will read data from ghost zones when this is saved
         to files. Default is never to read ghost zones.
+    cstagop - bool, optional
+        Use true only if data is too big to load. Danger:
+        it will do quantity operations without correcting the stagger mesh.
+    lowbus  - bool, optional
+        Use true only if data is too big to load. It will do slow but
+        cstagger operations if need it layer by layer using threads.
+    numThreads - integer, optional
+        number of threads for certain operations that uses parallelization.
 
     Examples
     --------
@@ -320,7 +327,19 @@ class BifrostData(object):
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     order='F', mode='r', *args, **kwargs):
         """
-        Uses get_var to read a given variable from several snapshots
+        Allows to read a given variable as a function of time.
+        Parameters
+        ----------
+            var - string
+                Name of the variable to read. Must be Bifrost internal names.
+            snap - array of integers
+                Snapshot numbers to read.
+            iix -- integer or array of integers, optional
+                reads yz slizes.
+            iiy -- integer or array of integers, optional
+                reads xz slizes.
+            iiz -- integer or array of integers, optional
+                reads xy slizes.
         """
         self.iix = iix
         self.iiy = iiy
@@ -628,108 +647,142 @@ class BifrostData(object):
             Array with the dimensions of the simulation.
         Notes
         -----
-        Not all possibilities for quantities are shown here. But there are
-        a few main categories:
-        - DERIV_QUANT: allows to calculate derivatives of any variable.
-                       It must start with d followed with the varname and
-                       ending with dxdn etc, e.g., 'dbxdxdn'
-        - CENTRE_QUANT: allows to center any vector. It must end with xc
-                        etc, e.g., 'ixc',
-        - MODULE_QUANT: allows to calculate the module of any vector.
-                        It must start with 'mod' followed with the root
-                        letter of varname, e.g., 'modb'
-        - GRADVECT_QUANT: allows to calculate decompose the vector field.
-                     i.e., it calculates the divergence, rotation and shear.
-                     It must start with div, rot or she followed with the
-                     root letter of the varname, e.g., 'divb' or 'rotbx'
-        - SQUARE_QUANT: allows to calculate the squared modules for any
-                        vector. It must end with 2 after the root lelter
-                        of the varname, e.g. 'u2'.
+        All possibilities for quantities are described in the dictionary
+        "description", e.g.:
+
+        >>>dd.get_quantity('')
+
+        >>>dd.description.keys()
+
+        >>>dd.description['DERIV']
         """
         quant = quant.lower()
-        DERIV_DESC = 'Spatial derivative (Bifrost units). It must start \n' + \
-            'with d and end with:'
+        self.description = {}
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
-        CENTRE_DESC = 'Allows to center any vector (Bifrost units). \n' + \
-            'It must end with:'
+        self.description['DERIV'] = ('Spatial derivative (Bifrost units).'
+                        'It must start with d and end with: ' +
+                        ', '.join(DERIV_QUANT))
+
         CENTRE_QUANT = ['xc', 'yc', 'zc']
-        MODULE_DESC = 'Module (starting with mod) or horizontal \n' + \
-            '(ending with h) \n component of vectors (Bifrost units)'
+        self.description['CENTRE'] = ('Allows to center any vector(Bifrost'
+                                ' units). It must end with ' +
+                                ', '.join(CENTRE_QUANT))
+
         MODULE_QUANT = ['mod', 'h']  # This one must be called the last
-        HORVAR_DESC = 'Horizontal average (Bifrost units). Starting with:'
+        self.description['MODULE'] = ('Module (starting with mod) or horizontal'
+            '(ending with h) component of vectors (Bifrost units)')
+
         HORVAR_QUANT = ['horvar']
-        GRADVECT_DESC = 'vectorial derivative opeartions (Bifrost units).\n' +\
-            'The following show divergence, rotational, shear,\n' + \
-            'ratio of the divergence with the maximum of the abs\n' + \
-            'of each spatial derivative, with the sum of the\n' + \
-            'absolute of each spatial derivative, with horizontal\n' + \
-            'averages of the absolute of each spatial derivative\n' + \
-            'respectively when starting with:'
+        self.description['HORVAR'] = ('Horizontal average (Bifrost units).'
+                    ' Starting with: ' + ', '.join(HORVAR_QUANT))
+
         GRADVECT_QUANT = ['div', 'rot', 'she', 'chkdiv', 'chbdiv', 'chhdiv']
-        GRADSCAL_DESC = 'Gradient of a scalar (Bifrost units) starts with:'
+        self.description['GRADVECT'] = ('vectorial derivative opeartions'
+            '(Bifrost units).'
+            'The following show divergence, rotational, shear, ratio of the'
+            'divergence with the maximum of the abs of each spatial derivative,'
+            'with the sum of the absolute of each spatial derivative, with'
+            'horizontal averages of the absolute of each spatial derivative'
+            'respectively when starting with: ' + ', '.join(GRADVECT_QUANT))
+
         GRADSCAL_QUANT = ['gra']
-        SQUARE_DESC = 'Square of a variable (Bifrost units) ends with:'
+        self.description['GRADSCAL'] = ('Gradient of a scalar (Bifrost units)'
+                ' starts with: ' + ', '.join(GRADSCAL_QUANT))
+
         SQUARE_QUANT = ['2']  # This one must be called the towards the last
-        RATIO_DESC = 'Ratio of two variables (Bifrost units) have in between:'
+        self.description['SQUARE'] = ('Square of a variable (Bifrost units)'
+                ' ends with: ' + ', '.join(SQUARE_QUANT))
+
         RATIO_QUANT = 'rat'
-        EOSTAB_DESC = 'Variables from EOS table. All of them are in cgs\n' + \
-            'except ne which is in SI. The electron density \n' + \
-            '[m^-3], temperature [K], pressure [dyn/cm^2],\n' + \
-            'Rosseland opacity [cm^2/g], scattering probability,\n' + \
-            'opacity, thermal emission and entropy are as follows:'
+        self.description['RATIO'] = ('Ratio of two variables (Bifrost units)'
+                'have in between: ' + ', '.join(RATIO_QUANT))
+
         EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
-        TAU_DESC = 'tau at 500 is:'
+        self.description['EOSTAB'] = ('Variables from EOS table. All of them'
+            'are in cgs except ne which is in SI. The electron density'
+            '[m^-3], temperature [K], pressure [dyn/cm^2], Rosseland opacity'
+            '[cm^2/g], scattering probability, opacity, thermal emission and'
+            'entropy are as follows: ' + ', '.join(EOSTAB_QUANT))
+
         TAU_QUANT = 'tau'
-        PROJ_DESC = 'Projected vectors (Bifrost units). Parallel and \n' + \
-            'perpendicular have in the middle the following:'
+        self.description['TAU'] = ('tau at 500 is: ' + ', '.join(TAU_QUANT))
+
         PROJ_QUANT = ['par', 'per']
-        CURRENT_DESC = 'Calculates currents (bifrost units) or\n' + \
-            'rotational components of the velocity as follows'
+        self.description['PROJ'] = ('Projected vectors (Bifrost units).'
+            ' Parallel and perpendicular have in the middle the following: ' +
+            ', '.join(PROJ_QUANT))
+
         CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
-        FLUX_DESC = 'Poynting flux, Flux emergence, and Poynting flux \n' +\
-            'from "horizontal" motions'
+        self.description['CURRENT'] = ('Calculates currents (bifrost units) or'
+            'rotational components of the velocity as follows ' +
+            ', '.join(CURRENT_QUANT))
+
         FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
                       'pfwy', 'pfwz']
-        PLASMA_DESC = 'Plasma beta, alfven velocity (and its components),\n' +\
-            'sound speed, entropy, kinetic energy flux\n' +\
-            '(and its components), magnetic and sonic Mach number\n' +\
-            'pressure scale height, and each component of the\n' +\
-            'total energy flux (if applicable, Bifrost units)'
+        self.description['FLUX'] = ('Poynting flux, Flux emergence, and'
+            'Poynting flux from "horizontal" motions: ' +
+            ', '.join(FLUX_QUANT))
+
         PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                         'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
                         'kz']
-        WAVE_DESC = 'Alfven, fast and longitudinal wave components \n' +\
-            '(Bifrost units)'
+        self.description['PLASMA'] = ('Plasma beta, alfven velocity (and its'
+            'components), sound speed, entropy, kinetic energy flux'
+            '(and its components), magnetic and sonic Mach number'
+            'pressure scale height, and each component of the total energy'
+            'flux (if applicable, Bifrost units): ' +
+            ', '.join(PLASMA_QUANT))
+
         WAVE_QUANT = ['alf', 'fast', 'long']
-        CYCL_RES_DESC = 'Resonant cyclotron frequencies (only for \n' +\
-            'do_helium) are (SI):'
+        self.description['WAVE'] = ('Alfven, fast and longitudinal wave'
+            'components (Bifrost units): ' + ', '.join(WAVE_QUANT))
+
         CYCL_RES = ['n6nhe2', 'n6nhe3', 'nhe2nhe3']
+        self.description['CYCL_RES'] = ('Resonant cyclotron frequencies'
+            '(only for do_helium) are (SI units): ' + ', '.join(CYCL_RES))
+
         elemlist = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's',
                     'k', 'ca', 'cr', 'fe', 'ni']
-        GYROF_DESC = 'gyro freqency are (in ...):'
         GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
-        DEBYE_LN_DESC = 'Debye length in ... units:'
+        self.description['GYROF'] = ('gyro freqency are (Hz): ' +
+            ', '.join(GYROF_QUANT))
+
         DEBYE_LN_QUANT = ['debye_ln']
-        COULOMB_COL_DESC = 'Coulomb collision frequency in ... units:'
+        self.description['DEBYE'] = ('Debye length in ... units:',
+            ', '.join(DEBYE_LN_QUANT))
+
         COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
-        CROSTAB_DESC = 'Cross section between species (in cgs):'
+        self.description['COULOMB_COL'] = ('Coulomb collision frequency in Hz'
+            'units: ' + ', '.join(COULOMB_COL_QUANT))
+
         CROSTAB_QUANT = ['h_' + clist for clist in elemlist]
         for iel in elemlist:
             CROSTAB_QUANT = CROSTAB_QUANT + [
                 iel + '_' + clist for clist in elemlist]
-        COLFRE_DESC = 'Collision frequency (elastic and charge exchange)\n' +\
-            'between different species in (cgs):'
+        self.description['CROSTAB'] = ('Cross section between species'
+            '(in cgs): ' + ', '.join(CROSTAB_QUANT))
+
         COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_QUANT]
-        COLFRI_DESC = 'Collision frequency (elastic and charge exchange)\n' +\
-            'between fluids in (cgs):'
+        self.description['COLFRE'] = ('Collision frequency (elastic and charge'
+            'exchange) between different species in (cgs): ' +
+            ', '.join(COLFRE_QUANT))
+
         COLFRI_QUANT = ['nu_ni', 'nu_en', 'nu_ei']
         COLFRI_QUANT = COLFRI_QUANT + \
             ['nu' + clist + '_i' for clist in elemlist]
         COLFRI_QUANT = COLFRI_QUANT + \
             ['nu' + clist + '_n' for clist in elemlist]
-        IONP_DESC = 'densities for specific ionized species as follow (in SI):'
+        self.description['COLFRI'] = ('Collision frequency (elastic and charge'
+            'exchange) between fluids in (cgs): ' + ', '.join(COLFRI_QUANT))
+
         IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
         IONP_QUANT = IONP_QUANT + ['r' + clist + '-' for clist in elemlist]
+        self.description['IONP'] = ('densities for specific ionized species as'
+            'follow (in SI): ' + ', '.join(IONP_QUANT))
+
+        if (quant == ''):
+            help(self.get_quantity)
+            return -1
 
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
@@ -1235,7 +1288,7 @@ class BifrostData(object):
                 q2 = quant[posn[-1]:]
                 var2 = self.get_var(q2)
                 nel = self.get_var('hionne')
-                uni = bifrost_units()
+                uni = Bifrost_units()
                 if quant[:3] == 'nhe':
                     mass = uni.msi_he
                 else:
@@ -1249,7 +1302,7 @@ class BifrostData(object):
 
         elif quant in DEBYE_LN_QUANT:
 
-            uni = bifrost_units()
+            uni = Bifrost_units()
 
             tg = self.get_var('tg')
             part = np.copy(self.get_var('ne'))
@@ -1267,7 +1320,7 @@ class BifrostData(object):
                 part.astype('Float64') + 1.0e-20))
 
         elif ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
-            uni = bifrost_units()
+            uni = Bifrost_units()
             if quant == 'gfe':
                 return self.get_var('modb') * uni.usi_b * \
                     uni.qsi_electron.value / (uni.msi_e)
@@ -1279,7 +1332,7 @@ class BifrostData(object):
                     (uni.weightdic[quant[2:-1]] * uni.amusi.value)
 
         elif quant in COULOMB_COL_QUANT:
-            uni = bifrost_units()
+            uni = Bifrost_units()
 
             iele = np.where(COULOMB_COL_QUANT == quant)
             tg = self.get_var('tg')
@@ -1298,7 +1351,7 @@ class BifrostData(object):
 
         elif quant in CROSTAB_QUANT:
 
-            uni = bifrost_units()
+            uni = Bifrost_units()
 
             tg = self.get_var('tg')
             elem = quant.split('_')
@@ -1309,31 +1362,31 @@ class BifrostData(object):
             crossunits = 2.8e-17
             if spic1 == 'h':
                 if spic2 == 'h':
-                    cross_tab = 'p-H-elast.txt'
+                    cross_tab = 'p-h-elast.txt'
                 elif spic2 == 'he':
-                    cross_tab = 'p-He.txt'
+                    cross_tab = 'p-he.txt'
                 elif spic2 == 'e':
-                    cross_tab = 'e-H.txt'
+                    cross_tab = 'e-h.txt'
                     crossunits = 1e-16
                 else:
                     cross = uni.weightdic[spic2] / uni.weightdic['h'] * \
                         uni.cross_p * np.ones(np.shape(tg))
             elif spic1 == 'he':
                 if spic2 == 'h':
-                    cross_tab = 'p-H-elast.txt'
+                    cross_tab = 'p-h-elast.txt'
                 elif spic2 == 'he':
-                    cross_tab = 'He-He.txt'
+                    cross_tab = 'he-he.txt'
                     crossunits = 1e-16
                 elif spic2 == 'e':
-                    cross_tab = 'e-He.txt'
+                    cross_tab = 'e-he.txt'
                 else:
                     cross = uni.weightdic[spic2] / uni.weightdic['he'] * \
                         uni.cross_he * np.ones(np.shape(tg))
             elif spic1 == 'e':
                 if spic2 == 'h':
-                    cross_tab = 'e-H.txt'
+                    cross_tab = 'e-h.txt'
                 elif spic2 == 'he':
-                    cross_tab = 'e-He.txt'
+                    cross_tab = 'e-he.txt'
             if cross_tab != '':
                 crossobj = cross_sect(cross_tab=[cross_tab])
                 cross = crossunits * crossobj.tab_interp(tg)
@@ -1347,7 +1400,7 @@ class BifrostData(object):
 
         elif ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
 
-            uni = bifrost_units()
+            uni = Bifrost_units()
 
             elem = quant.split('_')
             spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
@@ -1416,7 +1469,7 @@ class BifrostData(object):
 
         elif ''.join([i for i in quant if not i.isdigit()]) in IONP_QUANT:
 
-            uni = bifrost_units()
+            uni = Bifrost_units()
 
             elem = quant.split('_')
             spic = ''.join([i for i in elem[0] if not i.isdigit()])
@@ -1481,7 +1534,7 @@ class BifrostData(object):
                               'calculate quantity %s. Note that simple_var '
                               'available variables are: %s.\nIn addition, '
                               'get_quantity can read others computed variables'
-                              ' see e.g. self._get_quantity? for guidance'
+                              ' see e.g. help(self.get_quantity) for guidance'
                               '.' % (quant, repr(self.simple_vars))))
 
     def calc_tau(self):
@@ -1490,7 +1543,7 @@ class BifrostData(object):
 
         # grph = 2.38049d-24 uni.GRPH
         # bk = 1.38e-16 uni.KBOLTZMANN
-        uni = bifrost_units()
+        uni = Bifrost_units()
         # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
         if not hasattr(self, 'ne'):
             nel = self.get_var('ne')
@@ -1627,7 +1680,7 @@ class BifrostData(object):
         if 'do_hion' in self.params:
             if self.params['do_hion'][self.snapInd] > 0:
                 hion = True
-        if self.verbose:
+        if verbose:
             pbar.set_description("Slicing and unit conversion")
         temp = self.tg[sx, sy, sz]
         rho = self.r[sx, sy, sz]
@@ -1720,23 +1773,8 @@ class BifrostData(object):
         x = self.x[sx] * ul
         y = self.y[sy] * ul
         z = self.z[sz] * (-ul)
-        # if Hion, get nH and ne directly
-        if hion:
-            if self.verbose:
-                print('Getting hion data...')
-            ne = self.get_var('hionne')
-            # slice and convert from cm^-3 to m^-3
-            ne = ne[sx, sy, sz]
-            ne = ne * 1.e6
-            # read hydrogen populations (they are saved in cm^-3)
-            nh = np.empty((6,) + temp.shape, dtype='Float32')
-            for k in range(6):
-                nv = self.get_var('n%i' % (k + 1))
-                nh[k] = nv[sx, sy, sz]
-            nh = nh * 1.e6
-        else:
-            nh = self.get_hydrogen_pops(sx, sy, sz).to_value('1/cm3')
-            ne = self.get_electron_density(sx, sy, sz).to_value('1/cm3')
+        nh = self.get_hydrogen_pops(sx, sy, sz).to_value('1/cm3')
+        ne = self.get_electron_density(sx, sy, sz).to_value('1/cm3')
         # write to file
         print('Write to file...')
         nx, ny, nz = temp.shape
@@ -1758,8 +1796,7 @@ class BifrostData(object):
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
-
-class create_new_br_files():
+class Create_new_br_files:
     def write_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
                    dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
         """
@@ -1854,6 +1891,10 @@ class create_new_br_files():
 
 
 def polar2cartesian(r, t, grid, x, y, order=3):
+    '''
+    Converts polar grid to cartesian grid
+    '''
+
 
     X, Y = np.meshgrid(x, y)
 
@@ -1874,6 +1915,9 @@ def polar2cartesian(r, t, grid, x, y, order=3):
 
 
 def cartesian2polar(x, y, grid, r, t, order=3):
+    '''
+    Converts cartesian grid to polar grid
+    '''
 
     R, T = np.meshgrid(r, t)
 
@@ -1895,55 +1939,11 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     return map_coordinates(grid, np.array([new_ix, new_iy]),
                            order=order).reshape(new_x.shape)
 
-
-def polar2cartesian(r, t, grid, x, y, order=3):
-
-    X, Y = np.meshgrid(x, y)
-
-    new_r = np.sqrt(X * X + Y * Y)
-    new_t = np.arctan2(X, Y)
-
-    ir = sp.interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
-    it = sp.interpolate.interp1d(t, np.arange(len(t)))
-
-    new_ir = ir(new_r.ravel())
-    new_it = it(new_t.ravel())
-
-    new_ir[new_r.ravel() > r.max()] = len(r) - 1
-    new_ir[new_r.ravel() < r.min()] = 0
-
-    return map_coordinates(grid, np.array([new_ir, new_it]),
-                           order=order).reshape(new_r.shape)
-
-
-def cartesian2polar(x, y, grid, r, t, order=3):
-
-    R, T = np.meshgrid(r, t)
-
-    new_x = R * np.cos(T)
-    new_y = R * np.sin(T)
-
-    ix = sp.interpolate.interp1d(x, np.arange(len(x)), bounds_error=False)
-    iy = sp.interpolate.interp1d(y, np.arange(len(y)), bounds_error=False)
-
-    new_ix = ix(new_x.ravel())
-    new_iy = iy(new_y.ravel())
-
-    new_ix[new_x.ravel() > x.max()] = len(x) - 1
-    new_ix[new_x.ravel() < x.min()] = 0
-
-    new_iy[new_y.ravel() > y.max()] = len(y) - 1
-    new_iy[new_y.ravel() < y.min()] = 0
-
-    return map_coordinates(grid, np.array([new_ix, new_iy]),
-                           order=order).reshape(new_x.shape)
-
-
-class bifrost_units():
+class Bifrost_units():
     import scipy.constants as const
     from astropy import constants as aconst
     """
-    bifrost_units.py
+    Bifrost_units.py
     Created by Mikolaj Szydlarski on 2017-01-20.
     Copyright (c) 2014, ITA UiO - All rights reserved.
     """
@@ -2108,28 +2108,9 @@ class Rhoeetab:
             print(('*** Read EOS table from ' + eostabfile))
 
     def load_ent_table(self, eostabfile=None):
-        ''' Generates Entropy table from EOS table '''
-        self.enttab = np.zeros((self.params['neibin'], self.params['nrhobin']))
-        for irho in range(1, self.params['nrhobin']):
-            dinvrho = (1.0 / np.exp(self.lnrho[irho]) - 1.0 / np.exp(
-                self.lnrho[irho - 1]))
-
-            self.enttab[0, irho] = self.enttab[0, irho - 1] + 1.0 / \
-                self.tgt[0, irho] * np.exp(self.lnpg[0, irho]) * dinvrho
-
-            for iei in range(1, self.params['neibin']):
-                dei = np.exp(self.lnei[iei]) - np.exp(self.lnei[iei - 1])
-                self.enttab[iei, irho] = self.enttab[iei - 1, irho] + 1.0 / \
-                    self.tgt[iei, irho] * dei
-        for iei in range(1, self.params['neibin']):
-            dei = np.exp(self.lnei[iei]) - np.exp(self.lnei[iei - 1])
-            self.enttab[iei, 0] = self.enttab[iei - 1, 0] + \
-                1.0 / self.tgt[iei, 0] * dei
-
-        self.enttab = np.log(self.enttab - np.min(self.enttab) - 5.0e8)
-
-    def load_ent_table(self, eostabfile=None):
-        ''' Generates Entropy table from EOS table '''
+        '''
+        Generates Entropy table from Bifrost EOS table
+        '''
         self.enttab = np.zeros((self.params['neibin'], self.params['nrhobin']))
         for irho in range(1, self.params['nrhobin']):
             dinvrho = (1.0 / np.exp(self.lnrho[irho]) - 1.0 / np.exp(
@@ -2265,7 +2246,7 @@ class Rhoeetab:
         y = (np.log(rho) - self.lnrho[0]) / self.dlnrho
         # interpolate quantity
 
-        result = ndimage.map_coordinates(
+        result = map_coordinates(
             quant, [x, y], order=order, mode='nearest')
         return (np.exp(result) if out != 'tg' else result)
 
@@ -2280,7 +2261,7 @@ class Opatab:
     gaunt factors are set to 0.99 for h and 0.85 for heii,
     which should be good enough for the purposes of this code
     """
-    def __init__(self, tabname=None, fdir='.', big_endian=False, dtype='f4',
+    def __init__(self, tabname=None, fdir='.',  dtype='f4',
                  verbose=True, lambd=100.0):
         self.fdir = fdir
         self.dtype = dtype
@@ -2351,9 +2332,9 @@ class Opatab:
         # translate to table coordinates
         x = (np.log10(tgTable) - self.teinit) / self.dte
         # interpolate quantity
-        self.ionh = ndimage.map_coordinates(self.ionh1d, [x], order=order)
-        self.ionhe = ndimage.map_coordinates(self.ionhe1d, [x], order=order)
-        self.ionhei = ndimage.map_coordinates(self.ionhei1d, [x], order=order)
+        self.ionh = map_coordinates(self.ionh1d, [x], order=order)
+        self.ionhe = map_coordinates(self.ionhe1d, [x], order=order)
+        self.ionhei = map_coordinates(self.ionhei1d, [x], order=order)
 
     def h_he_absorb(self, lambd=None):
         '''
@@ -2390,22 +2371,42 @@ class Opatab:
             print('*** Read OPA table from ' + tabname)
 
 
-class cross_sect:
+class Cross_sect:
+    """
+    Reads data from Bifrost collisional cross section tables.
 
-    def __init__(self, cross_tab=None, fdir='.', big_endian=False, dtype='f4',
-                 verbose=True):
-        ''' Loads cross section tables and calculates collision frequencies and
+    Parameters
+    ----------
+    cross_tab - string or array of strings
+        File names of the ascii cross table files.
+    fdir - string, optional
+        Directory where simulation files are. Must be a real path.
+    verbose - bool, optional
+        If True, will print out more diagnostic messages
+    dtype - string, optional
+        Data type for reading variables. Default is 32 bit float.
+
+    Examples
+    --------
+    This reads snapshot 383 from simulation "cb24bih", whose file
+    root is "cb24bih", and is found at directory /data/cb24bih:
+
+    >>> a = cross_sect(['h-h-data2.txt','h-h2-data.txt'], fdir="/data/cb24bih")
+
+    """
+    def __init__(self, cross_tab=None, fdir='.', dtype='f4', verbose=True):
+        '''
+        Loads cross section tables and calculates collision frequencies and
         ambipolar diffusion.
         '''
 
         self.fdir = fdir
         self.dtype = dtype
         self.verbose = verbose
-        self.big_endian = big_endian
         # read table file and calculate parameters
-        cross_txt_list = ['H-H-data2.txt', 'H-H2-data.txt', 'He-He.txt',
-                          'e-H.txt', 'e-He.txt', 'h2_molecule_bc.txt',
-                          'h2_molecule_pj.txt', 'p-H-elast.txt', 'p-He.txt',
+        cross_txt_list = ['h-h-data2.txt', 'h-h2-data.txt', 'he-he.txt',
+                          'e-h.txt', 'e-he.txt', 'h2_molecule_bc.txt',
+                          'h2_molecule_pj.txt', 'p-h-elast.txt', 'p-he.txt',
                           'proton-h2-data.txt']
         self.cross_tab_list = {}
         counter = 0
@@ -2424,8 +2425,10 @@ class cross_sect:
         self.load_cross_tables()
 
     def load_cross_tables(self):
-        ''' Reads tabparam.in file, populates parameters. '''
-        uni = bifrost_units()
+        '''
+        collects the information in the cross table files.
+        '''
+        uni = Bifrost_units()
         self.cross_tab = {}
 
         for itab in range(len(self.cross_tab_list)):
@@ -2623,7 +2626,7 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     print('ionpopulation: reading species %s and level %s' % (elem, lvl))
 
-    uni = bifrost_units
+    uni = Bifrost_units
 
     totconst = 2.0 * uni.pi * uni.m_electron.value * uni.k_b.value / \
         uni.hplanck.value / uni.hplanck.value
@@ -2827,65 +2830,7 @@ def subs2grph(subsfile):
     ab = np.fromfile(f, count=nspecies, sep=' ', dtype='f')
     am = np.fromfile(f, count=nspecies, sep=' ', dtype='f')
     f.close()
-    # linear abundances
-    ab = 10.**(ab - 12.)
-    # mass in grams
-    am *= amu * 1.e3
-    return np.sum(ab * am)
-
-
-def ne_rt_table(rho, temp, order=1, tabfile=None):
-    ''' Calculates electron density by interpolating the rho/temp table.
-        Based on Mats Carlsson's ne_rt_table.pro.
-        IN: rho (in g/cm^3),
-            temp (in K),
-        OPTIONAL: order (interpolation order 1: linear, 3: cubic),
-                  tabfile (path of table file)
-        OUT: electron density (in g/cm^3)
-        '''
-    import os
-    from scipy.io.idl import readsav
-    print('DEPRECATION WARNING: this method is deprecated in favour'
-          ' of the Rhoeetab class.')
-    if tabfile is None:
-        tabfile = 'ne_rt_table.idlsave'
-    # use table in default location if not found
-    if not os.path.isfile(tabfile) and \
-            os.path.isfile(os.getenv('TIAGO_DATA') + '/misc/' + tabfile):
-        tabfile = os.getenv('TIAGO_DATA') + '/misc/' + tabfile
-    tt = readsav(tabfile, verbose=False)
-    lgrho = np.log10(rho)
-    # warnings for values outside of table
-    tmin = np.min(temp)
-    tmax = np.max(temp)
-    ttmin = np.min(5040. / tt['theta_tab'])
-    ttmax = np.max(5040. / tt['theta_tab'])
-    lrmin = np.min(lgrho)
-    lrmax = np.max(lgrho)
-    tlrmin = np.min(tt['rho_tab'])
-    tlrmax = np.max(tt['rho_tab'])
-    if tmin < ttmin:
-        print(('(WWW) ne_rt_table: temperature outside table bounds. ' +
-               'Table Tmin=%.1f, requested Tmin=%.1f' % (ttmin, tmin)))
-    if tmax > ttmax:
-        print(('(WWW) ne_rt_table: temperature outside table bounds. ' +
-               'Table Tmax=%.1f, requested Tmax=%.1f' % (ttmax, tmax)))
-    if lrmin < tlrmin:
-        print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) min=%.2f, requested log(rho) min=%.2f' %
-               (tlrmin, lrmin)))
-    if lrmax > tlrmax:
-        print(('(WWW) ne_rt_table: log density outside of table bounds. ' +
-               'Table log(rho) max=%.2f, requested log(rho) max=%.2f' %
-               (tlrmax, lrmax)))
-    # Approximate interpolation (bilinear/cubic interpolation) with ndimage
-    y = (5040. / temp - tt['theta_tab'][0]) / \
-        (tt['theta_tab'][1] - tt['theta_tab'][0])
-    x = (lgrho - tt['rho_tab'][0]) / (tt['rho_tab'][1] - tt['rho_tab'][0])
-    result = ndimage.map_coordinates(
-        tt['ne_rt_table'], [x, y], order=order, mode='nearest')
-    return 10**result * rho / tt['grph']
-
+    return calc_grph(ab, am)
 
 def threadQuantity(task, numThreads, *args):
     # split arg arrays
