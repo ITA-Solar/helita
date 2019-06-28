@@ -480,9 +480,9 @@ class BifrostData(object):
             self.set_snap(snap)
 
         if var in self.simple_vars:  # is variable already loaded?
+            val = self._get_simple_var(var, *args, **kwargs)
             if self.verbose:
                 print('(get_var): reading simple ', np.shape(val))
-            val = self._get_simple_var(var, *args, **kwargs)
         elif var in self.auxxyvars:
             val = self._get_simple_var_xy(var, *args, **kwargs)
         elif var in self.compvars:  # add to variable list
