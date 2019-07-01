@@ -4,10 +4,11 @@ and radiative transfer codes. Also includes routines for working
 with synthetic spectra.
 """
 
-__all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
-           "simtools", "synobs"]
+__all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d", "simtools",
+           "synobs", "ebysus"]
 
 from . import bifrost
 from . import multi
 from . import muram
 from . import rh
+from . import ebysus
