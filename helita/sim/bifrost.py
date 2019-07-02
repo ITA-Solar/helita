@@ -105,7 +105,7 @@ class BifrostData(object):
         if 'do_hion' in self.params:
             if self.params['do_hion'][self.snapInd] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
-                                 'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
+                                 'n2', 'n3', 'n4', 'n5', 'n6', 'nh2']
                 self.hion = True
         if 'do_helium' in self.params:
             if self.params['do_helium'][self.snapInd] > 0:
