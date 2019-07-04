@@ -1309,7 +1309,7 @@ class BifrostData(object):
                 return self.get_var('modb') * uni.usi_b * \
                     uni.qsi_electron.value * \
                     (ion - 1.0) / \
-                    (uni.weightdic[quant[2:-1]] * uni.amusi.value)
+                    (uni.weightdic[quant[2:-1]] * uni.amusi)
 
         elif quant in COULOMB_COL_QUANT:
             uni = Bifrost_units()
@@ -1321,7 +1321,7 @@ class BifrostData(object):
 
             const = (uni.pi * uni.qsi_electron.value ** 4 /
                      ((4.0 * uni.pi * uni.permsi)**2 *
-                     np.sqrt(uni.weightdic[elem] * uni.amusi.value *
+                     np.sqrt(uni.weightdic[elem] * uni.amusi *
                              (2.0 * uni.ksi_b.value) ** 3) + 1.0e-20))
 
             return (const * nel.astype('Float64') *
@@ -1389,8 +1389,8 @@ class BifrostData(object):
             nspic2 = self.get_var('n%s-%s' % (spic2, ion2))
 
             tg = self.get_var('tg')
-            awg1 = uni.weightdic[spic1] * uni.amu.value
-            awg2 = uni.weightdic[spic2] * uni.amu.value
+            awg1 = uni.weightdic[spic1] * uni.amu
+            awg2 = uni.weightdic[spic2] * uni.amu
 
             scr1 = np.sqrt(8.0 * uni.kboltzmann.value * tg / uni.pi)
 
@@ -1968,7 +1968,7 @@ class Bifrost_units(object):
         self.u_te = self.u_e / self.u_t * self.u_l               # Box therm. em. [erg/(s ster cm2)]
         self.mu = 0.8
         self.u_n = 3.00e+10                  # Denisty number n_0 * 1/cm^3
-        self.k_b = aconst.k_B.to('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
+        self.k_b = aconst.k_B.to('erg/K').value  # 1.380658E-16 Boltzman's cst. [erg/K]
         self.m_h = const.m_n / const.gram  # 1.674927471e-24
         self.m_he = 6.65e-24
         self.m_p = self.mu * self.m_h   # Mass per particle
@@ -1986,7 +1986,7 @@ class Bifrost_units(object):
         self.usi_ee = self.usi_u**2
         self.usi_e = self.usi_r * self.usi_ee
         self.usi_te = self.usi_e / self.u_t * self.usi_l            # Box therm. em. [J/(s ster m2)]
-        self.ksi_b = aconst.k_B.to('J/K')  # 1.380658E-23 Boltzman's cst. [J/K]
+        self.ksi_b = aconst.k_B.to('J/K') .value # 1.380658E-23 Boltzman's cst. [J/K]
         self.msi_h = const.m_n  # 1.674927471e-27
         self.msi_he = 6.65e-27
         self.msi_p = self.mu * self.msi_h  # Mass per particle
@@ -1998,20 +1998,20 @@ class Bifrost_units(object):
         self.gsun = 27400.0  # (cgs)
 
         # --- physical constants and other useful quantities
-        self.clight = aconst.c.to('cm/s')  # 2.99792458E+10 Speed of light [cm/s]
-        self.hplanck = aconst.h.to('erg s')  # 6.6260755E-27 Planck's constant [erg s]
-        self.kboltzmann = aconst.k_B.to('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
-        self.amu = aconst.u.to('g')  # 1.6605402E-24 Atomic mass unit [g]
-        self.amusi = aconst.u.to('kg')  # 1.6605402E-27 Atomic mass unit [kg]
-        self.m_electron = aconst.m_e.to('g')  # 9.1093897E-28 Electron mass [g]
+        self.clight = aconst.c.to('cm/s').value  # 2.99792458E+10 Speed of light [cm/s]
+        self.hplanck = aconst.h.to('erg s').value  # 6.6260755E-27 Planck's constant [erg s]
+        self.kboltzmann = aconst.k_B.to('erg/K').value  # 1.380658E-16 Boltzman's cst. [erg/K]
+        self.amu = aconst.u.to('g').value  # 1.6605402E-24 Atomic mass unit [g]
+        self.amusi = aconst.u.to('kg').value  # 1.6605402E-27 Atomic mass unit [kg]
+        self.m_electron = aconst.m_e.to('g').value  # 9.1093897E-28 Electron mass [g]
         self.q_electron = 4.80325E-10    # Electron charge [esu]
         self.qsi_electron = aconst.e  # 1.6021765e-19 Electron charge [C]
-        self.rbohr = aconst.a0.to('cm')  # 5.29177349e-9 bohr radius [cm]
+        self.rbohr = aconst.a0.to('cm').value  # 5.29177349e-9 bohr radius [cm]
         self.e_rydberg = 2.1798741e-11  # ion. pot. hydrogen [erg]
         self.eh2diss = 4.478          # H2 dissociation energy [eV]
         self.pie2_mec = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
         # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
-        self.stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)')
+        self.stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)').value
         self.mion = self.m_h            # Ion mass [g]
         self.r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
 
@@ -2630,7 +2630,7 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     print('ionpopulation: reading species %s and level %s' % (elem, lvl))
 
-    uni = Bifrost_units
+    uni = Bifrost_units()
 
     totconst = 2.0 * uni.pi * uni.m_electron.value * uni.k_b.value / \
         uni.hplanck.value / uni.hplanck.value
@@ -2639,7 +2639,7 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     for ibnd in uni.abnddic.keys():
         abnddic = 10**(uni.abnddic[ibnd] - 12.0)
-        abnd[count] = abnddic * uni.weightdic[ibnd] * uni.amu.value
+        abnd[count] = abnddic * uni.weightdic[ibnd] * uni.amu
         count += 1
 
     abnd = abnd / np.sum(abnd)
@@ -2659,10 +2659,10 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
     else:
         if lvl == '1':
             return (1.0 - ifracpos) * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                                       uni.amu.value))
+                                                       uni.amu))
         else:
             return ifracpos * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                               uni.amu.value))
+                                               uni.amu))
 
 
 def read_cross_txt(filename):
