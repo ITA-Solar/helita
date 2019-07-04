@@ -105,7 +105,7 @@ class BifrostData(object):
         if 'do_hion' in self.params:
             if self.params['do_hion'][self.snapInd] > 0:
                 self.hionvars = ['hionne', 'hiontg', 'n1',
-                                 'n2', 'n3', 'n4', 'n5', 'n6', 'fion', 'nh2']
+                                 'n2', 'n3', 'n4', 'n5', 'n6', 'nh2']
                 self.hion = True
         if 'do_helium' in self.params:
             if self.params['do_helium'][self.snapInd] > 0:
@@ -630,7 +630,7 @@ class BifrostData(object):
             return self.get_var('e') / self.get_var('r')
         elif var == 's':   # entropy?
             return np.log(self.get_var(
-                'p', *args, **kwargs)) - self.params['gamma'] * np.log(
+                'p', *args, **kwargs)) - self.params['gamma'][self.snapInd] * np.log(
                 self.get_var('r', *args, **kwargs))
 
     def get_quantity(self, quant, *args, **kwargs):
@@ -1249,7 +1249,7 @@ class BifrostData(object):
                 result = np.abs(cstagger.do(cstagger.do(
                     uperbVect[0], 'ddxdn'), 'xup') + cstagger.do(cstagger.do(
                         uperbVect[1], 'ddydn'), 'yup') + cstagger.do(
-                            cstagger.do(uperbVect[2], 'ddzdn'), 'zup'))
+                            cstagger.do(uperbVect[2], 'ddzdn'), 'zup')) 
 
             else:
                 dot1 = self.get_var('uparb')
@@ -1575,13 +1575,14 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
+        uni = Bifrost_units()
         if self.hion:
             ne = self.get_var('hionne')[sx, sy, sz]
         else:
             ee = self.get_var('ee')[sx, sy, sz]
-            ee = ee * self.params['u_ee']
+            ee = ee * uni.u_ee
             eostab = Rhoeetab(fdir=self.fdir)
-            rho = self.r[sx, sy, sz] * self.params['u_r']   # to cm^-3
+            rho = self.r[sx, sy, sz] * uni.u_r   # to cm^-3
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
@@ -1597,6 +1598,7 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
+        uni = Bifrost_units()
         if self.hion:
             shape = [6, ]
             # calculate size of slices to determine array shape
@@ -1610,9 +1612,9 @@ class BifrostData(object):
                 nv = self.get_var('n%i' % (k + 1))
                 nh[k] = nv[sx, sy, sz]
         else:
-            rho = self.r[sx, sy, sz] * self.params['u_r']
+            rho = self.r[sx, sy, sz] * uni.u_r
             subsfile = os.path.join(self.fdir, 'subs.dat')
-            tabfile = os.path.join(self.fdir, self.params['tabinputfile'].strip())
+            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
             tabparams = []
             if os.access(tabfile, os.R_OK):
                 tabparams = read_idl_ascii(tabfile)
