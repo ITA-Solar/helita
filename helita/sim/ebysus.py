@@ -19,7 +19,8 @@ class EbysusData(BifrostData):
         super(EbysusData, self).__init__(*args, **kwargs)
 
     def _set_snapvars(self):
-        if os.path.exists('mf.io'):
+
+        if os.path.exists('%s.io' % self.file_root):
             self.snaprvars = ['r']
             self.snappvars = ['px', 'py', 'pz']
         else:
@@ -64,7 +65,7 @@ class EbysusData(BifrostData):
         #    if self.mf_total_nlevel == 1:
         #        self.snapvars.append('e')
 
-        if os.path.exists('mf.io'):
+        if os.path.exists('%s.io' % self.file_root):
             self.simple_vars = self.snaprvars + self.snappvars + \
                 self.snapevars + self.mhdvars + self.auxvars + \
                 self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
@@ -122,16 +123,16 @@ class EbysusData(BifrostData):
         """
         Initialises variable (common for all fluid)
         """
-        self.mf_common_file = (self.file_root + '_mf_common')
-        if os.path.exists('mf.io'):
-            self.mfr_file = (self.file_root + '_mfr_%02i_%02i')
-            self.mfp_file = (self.file_root + '_mfp_%02i_%02i')
+        self.mf_common_file = (self.root_name + '_mf_common')
+        if os.path.exists('%s.io' % self.file_root):
+            self.mfr_file = (self.root_name + '_mfr_%02i_%02i')
+            self.mfp_file = (self.root_name + '_mfp_%02i_%02i')
         else:
-            self.mf_file = (self.file_root + '_mf_%02i_%02i')
-        self.mfe_file = (self.file_root + '_mfe_%02i_%02i')
-        self.mfc_file = (self.file_root + '_mfc_%02i_%02i')
-        self.mm_file = (self.file_root + '_mm_%02i_%02i')
-        self.mf_e_file = (self.file_root + '_mf_e')
+            self.mf_file = (self.root_name + '_mf_%02i_%02i')
+        self.mfe_file = (self.root_name + '_mfe_%02i_%02i')
+        self.mfc_file = (self.root_name + '_mfc_%02i_%02i')
+        self.mm_file = (self.root_name + '_mm_%02i_%02i')
+        self.mf_e_file = (self.root_name + '_mf_e')
 
         self.variables = {}
 
@@ -336,58 +337,66 @@ class EbysusData(BifrostData):
             fsuffix_b = ''
 
         mf_arr_size = 1
-        if os.path.exists('mf.io'):
+        if os.path.exists('%s.io' % self.file_root):
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
                     var in ['bx', 'by', 'bz']):
                 idx = self.mhdvars.index(var)
                 fsuffix_a = '.snap'
-                dirvars = 'mf.io/mf_common/'
+                dirvars = '%s.io/mf_common/' % self.file_root
                 filename = self.mf_common_file
             elif var in self.snaprvars and self.mf_ispecies > 0:
                 idx = self.snaprvars.index(var)
                 fsuffix_a = '.snap'
-                dirvars = 'mf.io/mf_%02i_%02i/mfr/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_%02i_%02i/mfr/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfr_file % (self.mf_ispecies, self.mf_ilevel)
             elif var in self.snappvars and self.mf_ispecies > 0:
                 idx = self.snappvars.index(var)
                 fsuffix_a = '.snap'
-                dirvars = 'mf.io/mf_%02i_%02i/mfp/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_%02i_%02i/mfp/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfp_file % (self.mf_ispecies, self.mf_ilevel)
             elif var in self.snapevars and self.mf_ispecies > 0:
                 idx = self.snapevars.index(var)
                 fsuffix_a = '.snap'
-                dirvars = 'mf.io/mf_%02i_%02i/mfe/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_%02i_%02i/mfe/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
             elif var in self.snapevars and self.mf_ispecies < 0:
                 idx = self.snapevars.index(var)
                 filename = self.mf_e_file
-                dirvars = 'mf.io/mf_e/'
+                dirvars = '%s.io/mf_e/'
                 fsuffix_a = '.snap'
             elif var in self.auxvars:
                 idx = self.auxvars.index(var)
                 fsuffix_a = '.aux'
-                dirvars = 'mf.io/mf_common/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_common/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.file_root
             elif var in self.varsmf:
                 idx = self.varsmf.index(var)
                 fsuffix_a = '.aux'
-                dirvars = 'mf.io/mf_%02i_%02i/mfa/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_%02i_%02i/mfa/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
             elif var in self.varsmm:
                 idx = self.varsmm.index(var)
                 fsuffix_a = '.aux'
-                dirvars = 'mf.io/mf_%02i_%02i/mm/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_%02i_%02i/mm/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
                 mf_arr_size = self.mf_total_nlevel
             elif var in self.varsmfe:
                 idx = self.varsmfe.index(var)
                 fsuffix_a = '.aux'
-                dirvars = 'mf.io/mf_%02i_%02i/mfe/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_%02i_%02i/mfe/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
             elif var in self.varsmfc:
                 idx = self.varsmfc.index(var)
                 fsuffix_a = '.aux'
-                dirvars = 'mf.io/mf_%02i_%02i/mfc/' % (self.mf_ispecies, self.mf_ilevel)
+                dirvars = '%s.io/mf_%02i_%02i/mfc/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
         else:
             dirvars = ''
@@ -532,7 +541,7 @@ class EbysusData(BifrostData):
             else:
                 indSize = np.size(getattr(self, dim))
                 setattr(self, dim[2] + 'Length', indSize)
-        print(self.zLength,self.nzb)
+
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
