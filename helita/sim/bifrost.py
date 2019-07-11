@@ -77,6 +77,7 @@ class BifrostData(object):
         self.lowbus = lowbus
         self.numThreads = numThreads
         self.file_root = os.path.join(self.fdir, file_root)
+        self.root_name = file_root
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
         self.cstagop = cstagop
