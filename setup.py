@@ -43,8 +43,8 @@ extensions = [
     for pname, pprop in EXT_PACKAGES.items()
 ]
 
-if USE_CYTHON:
-    extensions = cythonize(extensions)
+if USE_CYTHON:  # Always compile for Python 3 (v2 no longer supported)
+    extensions = cythonize(extensions, compiler_directives={'language_level' : "3"})
 
 setup(
     name=NAME,

@@ -36,29 +36,30 @@ cdef inline np.ndarray c2npy(uint8_t *data, int type, int size,int nd, int *ds):
     return result
 
 
-def fzread(filename,verbose=False):
-    ''' fzread(filename,verbose=False)
+def fzread(filename, verbose=False):
+    """fzread(filename,verbose=False)
 
     Reads ANA formatted files (compressed and uncompressed). Now can read
     arbitrary sizes and all supported datatypes.
 
     Parameters
     ----------
-    filename : string with file to open
-    verbose  : if True displays some extra information
+    filename : string
+        Name of file to open
+    verbose : bool, optional
+        If True displays some extra information
 
     Returns
     -------
     (result,header) : (ndarray with data, string with header)
+    """
 
-    --Tiago, 20090605
-    '''
-
-    cdef char *header
+    cdef char *hdr
     cdef int nd, type,*ds, size
     cdef uint8_t *data
 
-    data = ana_fzread(filename, &ds, &nd, &header, &type, &size)
+    data = ana_fzread(str.encode(filename), &ds, &nd, &hdr, &type, &size)
+    header = hdr.decode()
     if not data:
         raise IOError('fzread: could not get data.')
     if verbose:
@@ -68,7 +69,7 @@ def fzread(filename,verbose=False):
         print('*** Header: \n', header)
     if type in range(6):
         # convert from c array to numpy
-        result = c2npy(data,type,size,nd,ds)
+        result = c2npy(data, type, size, nd, ds)
     else:
         raise ValueError('fzread: type must be between 0-5, got %i' % type)
     return result, header
@@ -93,8 +94,6 @@ def fzwrite(filename, np.ndarray inarr, header='', comp=True, slice=5):
     Returns
     -------
     None
-
-    --Tiago, 20090605
     '''
     cdef int nd = inarr.ndim
     cdef int *ds,type
@@ -130,12 +129,12 @@ def fzwrite(filename, np.ndarray inarr, header='', comp=True, slice=5):
     if not (<object>inarr).flags["C_CONTIGUOUS"]:
         inarr = inarr.copy('C')
     # Check if we can write
-    f = open(filename,'w')
+    f = open(filename, 'w')
     f.close()
     # Write
     if comp:
-        ana_fcwrite(<uint8_t *>inarr.data, filename, ds, nd, hd,type, sl)
+        ana_fcwrite(<uint8_t *>inarr.data, str.encode(filename), ds, nd, hd,type, sl)
     else:
-        ana_fzwrite(<uint8_t *>inarr.data, filename, ds, nd, hd, type)
+        ana_fzwrite(<uint8_t *>inarr.data, str.encode(filename), ds, nd, hd, type)
     free(ds)
     return
