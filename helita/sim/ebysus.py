@@ -575,7 +575,7 @@ def write_mfr(rootname,inputdata,mf_ispecies,mf_ilevel):
     if not os.path.exists(directory):
         os.makedirs(directory)
     data = np.memmap(directory+'/%s_mfr_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,1))
-    data[:,:,:,0] = inputdata
+    data[...,0] = inputdata
     data.flush()
 
 def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
@@ -584,9 +584,9 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
     if not os.path.exists(directory):
         os.makedirs(directory)
     data = np.memmap(directory+'/%s_mfp_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
-    data[:,:,:,0] = inputdatax
-    data[:,:,:,1] = inputdatay
-    data[:,:,:,2] = inputdataz
+    data[...,0] = inputdatax
+    data[...,1] = inputdatay
+    data[...,2] = inputdataz
     data.flush()
 
 def write_mfe(rootname,inputdata,mf_ispecies,mf_ilevel):
@@ -595,7 +595,7 @@ def write_mfe(rootname,inputdata,mf_ispecies,mf_ilevel):
     if not os.path.exists(directory):
         os.makedirs(directory)
     data = np.memmap(directory+'/%s_mfe_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,1))
-    data[:,:,:,0] = inputdata
+    data[...,0] = inputdata
     data.flush()
 
 def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
@@ -603,17 +603,17 @@ def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
     nx, ny, nz = inputdatax.shape
     if not os.path.exists(directory):
         os.makedirs(directory)
-    if inputdatae == None:
+    if np.any(inputdatae) == None:
         data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
-        data[:,:,:,0] = inputdatax
-        data[:,:,:,1] = inputdatay
-        data[:,:,:,2] = inputdataz
+        data[...,0] = inputdatax
+        data[...,1] = inputdatay
+        data[...,2] = inputdataz
     else:
         data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,4))
-        data[:,:,:,0] = inputdatae
-        data[:,:,:,1] = inputdatax
-        data[:,:,:,2] = inputdatay
-        data[:,:,:,3] = inputdataz
+        data[...,0] = inputdatae
+        data[...,1] = inputdatax
+        data[...,2] = inputdatay
+        data[...,3] = inputdataz
     data.flush()
 
 def write_mf_e(rootname,inputdata):
@@ -622,7 +622,7 @@ def write_mf_e(rootname,inputdata):
     if not os.path.exists(directory):
         os.makedirs(directory)
     data = np.memmap(directory+'/%s_mf_e.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,1))
-    data[:,:,:,0] = inputdata
+    data[...,0] = inputdata
     data.flush()
 
 def read_mftab_ascii(filename):
