@@ -77,6 +77,7 @@ class BifrostData(object):
         self.lowbus = lowbus
         self.numThreads = numThreads
         self.file_root = os.path.join(self.fdir, file_root)
+        self.root_name = file_root
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
         self.cstagop = cstagop
@@ -138,7 +139,7 @@ class BifrostData(object):
         if snap is None:
             try:
                 tmp = sorted(glob("%s*idl" % self.file_root))[0]
-                snap = int(tmp.split(self.file_root + '_')[1].split(".idl")[0])
+                snap = int(tmp.split(self.file_root + '_')[-1].split(".idl")[0])
             except IndexError:
                 try:
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
@@ -629,9 +630,9 @@ class BifrostData(object):
         elif var == 'ee':   # internal energy
             return self.get_var('e') / self.get_var('r')
         elif var == 's':   # entropy?
-            return np.log(self.get_var(
-                'p', *args, **kwargs)) - self.params['gamma'] * np.log(
-                self.get_var('r', *args, **kwargs))
+            return np.log(self.get_var('p', *args, **kwargs)) - \
+                self.params['gamma'][self.snapInd] * np.log(
+                    self.get_var('r', *args, **kwargs))
 
     def get_quantity(self, quant, *args, **kwargs):
         """
@@ -1177,9 +1178,10 @@ class BifrostData(object):
                     else:
                         return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
                 elif quant == 'cs':
-                    return np.sqrt(self.params['gamma'][0] * var / self.get_var('r'))
+                    return np.sqrt(self.params['gamma'][self.snapInd] *
+                            var / self.get_var('r'))
                 elif quant == 's':
-                    return (np.log(var) - self.params['gamma'][0] *
+                    return (np.log(var) - self.params['gamma'][self.snapInd] *
                             np.log(self.get_var('r')))
                 elif quant == 'beta':
                     return 2 * var / self.get_var('b2')
@@ -1275,7 +1277,7 @@ class BifrostData(object):
                 else:
                     mass = uni.msi_p
                 return self.get_var('modb') * uni.usi_b *  \
-                    uni.qsi_electron.value * var2 / nel / mass
+                    uni.qsi_electron * var2 / nel / mass
 
             else:
                 raise ValueError(('get_quantity: This variable is only '
@@ -1295,21 +1297,21 @@ class BifrostData(object):
                 part += 4.0 * self.get_var('nhe3')
             # check units of n
 
-            return np.sqrt(uni.permsi / uni.qsi_electron.value**2 /
-                           (uni.ksi_b.value * tg.astype('Float64') *
+            return np.sqrt(uni.permsi / uni.qsi_electron**2 /
+                           (uni.ksi_b * tg.astype('Float64') *
                            part.astype('Float64') + 1.0e-20))
 
         elif ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
             uni = Bifrost_units()
             if quant == 'gfe':
                 return self.get_var('modb') * uni.usi_b * \
-                    uni.qsi_electron.value / (uni.msi_e)
+                    uni.qsi_electron / (uni.msi_e)
             else:
                 ion = float(''.join([i for i in quant if i.isdigit()]))
                 return self.get_var('modb') * uni.usi_b * \
-                    uni.qsi_electron.value * \
+                    uni.qsi_electron * \
                     (ion - 1.0) / \
-                    (uni.weightdic[quant[2:-1]] * uni.amusi.value)
+                    (uni.weightdic[quant[2:-1]] * uni.amusi)
 
         elif quant in COULOMB_COL_QUANT:
             uni = Bifrost_units()
@@ -1319,10 +1321,10 @@ class BifrostData(object):
             nel = np.copy(self.get_var('ne'))
             elem = quant.replace('coucol', '')
 
-            const = (uni.pi * uni.qsi_electron.value ** 4 /
+            const = (uni.pi * uni.qsi_electron ** 4 /
                      ((4.0 * uni.pi * uni.permsi)**2 *
-                     np.sqrt(uni.weightdic[elem] * uni.amusi.value *
-                             (2.0 * uni.ksi_b.value) ** 3) + 1.0e-20))
+                     np.sqrt(uni.weightdic[elem] * uni.amusi *
+                             (2.0 * uni.ksi_b) ** 3) + 1.0e-20))
 
             return (const * nel.astype('Float64') *
                    np.log(12.0 * uni.pi * nel.astype('Float64') *
@@ -1389,10 +1391,10 @@ class BifrostData(object):
             nspic2 = self.get_var('n%s-%s' % (spic2, ion2))
 
             tg = self.get_var('tg')
-            awg1 = uni.weightdic[spic1] * uni.amu.value
-            awg2 = uni.weightdic[spic2] * uni.amu.value
+            awg1 = uni.weightdic[spic1] * uni.amu
+            awg2 = uni.weightdic[spic2] * uni.amu
 
-            scr1 = np.sqrt(8.0 * uni.kboltzmann.value * tg / uni.pi)
+            scr1 = np.sqrt(8.0 * uni.kboltzmann * tg / uni.pi)
 
             return crossarr * np.sqrt((awg1 + awg2) / (awg1 * awg2)) *\
                 scr1 * nspic2 * (awg1 / (awg1 + awg1))
@@ -1553,7 +1555,7 @@ class BifrostData(object):
                 for iiz in range(self.nz):
                     xhmbf[iiz] = const * nel[iix, iiy, iiz] / \
                         tg[iix, iiy, iiz]**1.5 * np.exp(0.754e0 *
-                        uni.ev_to_erg / uni.kboltzmann.value /
+                        uni.ev_to_erg / uni.kboltzmann /
                         tg[iix, iiy, iiz]) * rho[iix, iiy, iiz]
 
                 for iiz in range(1, self.nz):
@@ -1575,13 +1577,14 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
+        uni = Bifrost_units()
         if self.hion:
             ne = self.get_var('hionne')[sx, sy, sz]
         else:
             ee = self.get_var('ee')[sx, sy, sz]
-            ee = ee * self.params['u_ee']
+            ee = ee * self.uni.u_ee
             eostab = Rhoeetab(fdir=self.fdir)
-            rho = self.r[sx, sy, sz] * self.params['u_r']   # to cm^-3
+            rho = self.r[sx, sy, sz] * uni.u_r   # to cm^-3
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
@@ -1597,6 +1600,7 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
+        uni = Bifrost_units()
         if self.hion:
             shape = [6, ]
             # calculate size of slices to determine array shape
@@ -1610,9 +1614,10 @@ class BifrostData(object):
                 nv = self.get_var('n%i' % (k + 1))
                 nh[k] = nv[sx, sy, sz]
         else:
-            rho = self.r[sx, sy, sz] * self.params['u_r']
+            rho = self.r[sx, sy, sz] * uni.u_r
             subsfile = os.path.join(self.fdir, 'subs.dat')
-            tabfile = os.path.join(self.fdir, self.params['tabinputfile'].strip())
+            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][
+                            self.snapInd].strip())
             tabparams = []
             if os.access(tabfile, os.R_OK):
                 tabparams = read_idl_ascii(tabfile)
@@ -1923,121 +1928,142 @@ def cartesian2polar(x, y, grid, r, t, order=3):
                            order=order).reshape(new_x.shape)
 
 
-class Bifrost_units():
-    import scipy.constants as const
-    from astropy import constants as aconst
+class Bifrost_units(object):
     """
     Bifrost_units.py
     Created by Mikolaj Szydlarski on 2017-01-20.
+    Modified by Martinez-Sykora 2019-7-10
     Copyright (c) 2014, ITA UiO - All rights reserved.
     """
+    def __init__(self,filename='mhd.in'):
+        import scipy.constants as const
+        from astropy import constants as aconst
+        if os.path.isfile(filename):
+            self.params = read_idl_ascii(filename)
+            try:
+                self.u_l = self.params['u_l']
+                self.u_t = self.params['u_t']
+                self.u_r = self.params['u_r']
+                # --- ideal gas
+                self.gamma = self.params['gamma']
 
-    u_l = 1e8
-    u_t = 1e2
-    u_r = 1e-7
-    u_u = u_l / u_t
-    u_p = u_r * (u_l / u_t)**2          # Pressure [dyne/cm2]
-    u_kr = 1 / (u_r * u_l)               # Rosseland opacity [cm2/g]
-    u_ee = u_u**2
-    u_e = u_r * u_ee
-    u_te = u_e / u_t * u_l               # Box therm. em. [erg/(s ster cm2)]
-    mu = 0.8
-    u_n = 3.00e+10                  # Denisty number n_0 * 1/cm^3
-    k_b = aconst.k_B.to('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
-    m_h = const.m_n / const.gram  # 1.674927471e-24
-    m_he = 6.65e-24
-    m_p = mu * m_h   # Mass per particle
-    m_e = const.m_e / const.gram  # 9.1093897E-28
-    u_tg = (m_h / k_b) * u_ee
-    u_tge = (m_e / k_b) * u_ee
-    pi = const.pi
-    u_b = u_u * np.sqrt(4. * pi * u_r)
+            except:
+                print('(WWW) the filename does not have u_l, u_t and u_r.'
+                    ' Default Solar Bifrost units has been selected')
+                self.u_l = 1.0e8
+                self.u_t = 1.0e2
+                self.u_r = 1.0e-7
+                # --- ideal gas
+                self.gamma = self.params['gamma']
+        else:
+            print('(WWW) selected filename is not available.'
+                ' Default Solar Bifrost units has been selected')
+            self.u_l = 1.0e8
+            self.u_t = 1.0e2
+            self.u_r = 1.0e-7
+            # --- ideal gas
+            self.gamma = self.params['gamma']
 
-    usi_l = u_l * const.centi  # 1e6
-    usi_r = u_r * const.gram  # 1e-4
-    usi_u = usi_l / u_t
-    usi_p = usi_r * (usi_l / u_t)**2       # Pressure [N/m2]
-    usi_kr = 1 / (usi_r * usi_l)            # Rosseland opacity [m2/kg]
-    usi_ee = usi_u**2
-    usi_e = usi_r * usi_ee
-    usi_te = usi_e / u_t * usi_l            # Box therm. em. [J/(s ster m2)]
-    ksi_b = aconst.k_B.to('J/K')  # 1.380658E-23 Boltzman's cst. [J/K]
-    msi_h = const.m_n  # 1.674927471e-27
-    msi_he = 6.65e-27
-    msi_p = mu * msi_h  # Mass per particle
-    usi_tg = (msi_h / ksi_b) * usi_ee
-    msi_e = const.m_e  # 9.1093897e-31
-    usi_b = u_b * 1e-4
+        self.u_u = self.u_l / self.u_t
+        self.u_p = self.u_r * (self.u_l / self.u_t)**2          # Pressure [dyne/cm2]
+        self.u_kr = 1 / (self.u_r * self.u_l)               # Rosseland opacity [cm2/g]
+        self.u_ee = self.u_u**2
+        self.u_e = self.u_r * self.u_ee
+        self.u_te = self.u_e / self.u_t * self.u_l               # Box therm. em. [erg/(s ster cm2)]
+        self.mu = 0.8
+        self.u_n = 3.00e+10                  # Denisty number n_0 * 1/cm^3
+        self.k_b = aconst.k_B.to('erg/K').value  # 1.380658E-16 Boltzman's cst. [erg/K]
+        self.m_h = const.m_n / const.gram  # 1.674927471e-24
+        self.m_he = 6.65e-24
+        self.m_p = self.mu * self.m_h   # Mass per particle
+        self.m_e = const.m_e / const.gram  # 9.1093897E-28
+        self.u_tg = (self.m_h / self.k_b) * self.u_ee
+        self.u_tge = (self.m_e / self.k_b) * self.u_ee
+        self.pi = const.pi
+        self.u_b = self.u_u * np.sqrt(4. * self.pi * self.u_r)
 
-    # Solar gravity
-    gsun = 27400.0  # (cgs)
 
-    # --- ideal gas
-    gamma = 1.667
+        self.usi_l = self.u_l * const.centi  # 1e6
+        self.usi_r = self.u_r * const.gram  # 1e-4
+        self.usi_u = self.usi_l / self.u_t
+        self.usi_p = self.usi_r * (self.usi_l / self.u_t)**2       # Pressure [N/m2]
+        self.usi_kr = 1 / (self.usi_r * self.usi_l)            # Rosseland opacity [m2/kg]
+        self.usi_ee = self.usi_u**2
+        self.usi_e = self.usi_r * self.usi_ee
+        self.usi_te = self.usi_e / self.u_t * self.usi_l            # Box therm. em. [J/(s ster m2)]
+        self.ksi_b = aconst.k_B.to('J/K') .value # 1.380658E-23 Boltzman's cst. [J/K]
+        self.msi_h = const.m_n  # 1.674927471e-27
+        self.msi_he = 6.65e-27
+        self.msi_p = self.mu * self.msi_h  # Mass per particle
+        self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
+        self.msi_e = const.m_e  # 9.1093897e-31
+        self.usi_b = self.u_b * 1e-4
 
-    # --- physical constants and other useful quantities
-    clight = aconst.c.to('cm/s')  # 2.99792458E+10 Speed of light [cm/s]
-    hplanck = aconst.h.to('erg s')  # 6.6260755E-27 Planck's constant [erg s]
-    kboltzmann = aconst.k_B.to('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
-    amu = aconst.u.to('g')  # 1.6605402E-24 Atomic mass unit [g]
-    amusi = aconst.u.to('kg')  # 1.6605402E-27 Atomic mass unit [kg]
-    m_electron = aconst.m_e.to('g')  # 9.1093897E-28 Electron mass [g]
-    q_electron = 4.80325E-10    # Electron charge [esu]
-    qsi_electron = aconst.e  # 1.6021765e-19 Electron charge [C]
-    rbohr = aconst.a0.to('cm')  # 5.29177349e-9 bohr radius [cm]
-    e_rydberg = 2.1798741e-11  # ion. pot. hydrogen [erg]
-    eh2diss = 4.478          # H2 dissociation energy [eV]
-    pie2_mec = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
-    # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
-    stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)')
-    mion = m_h            # Ion mass [g]
-    r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
+        # Solar gravity
+        self.gsun = 27400.0  # (cgs)
 
-    # --- Unit conversions
-    ev_to_erg = const.eV / const.erg  # 1.60217733e-12 one electronvolt [erg]
-    ev_to_j = const.eV  # 1.60217733e-19 one electronvolt [j]
-    nm_to_m = const.nano  # 1.0e-09
-    cm_to_m = const.centi  # 1.0e-02
-    km_to_m = const.kilo  # 1.0e+03
-    erg_to_joule = const.erg  # 1.0e-07
-    g_to_kg = const.gram  # 1.0e-03
-    micron_to_nm = 1.0e+03
-    megabarn_to_m2 = 1.0e-22
-    atm_to_pa = const.atm  # 1.0135e+05 atm to pascal (n/m^2)
-    dyne_cm2_to_pascal = 0.1
-    k_to_ev = 8.621738E-5    # KtoeV
-    ev_to_k = 11604.50520    # eVtoK
-    ergd2wd = 0.1
-    grph = 2.27e-24
-    permsi = 8.85e-12  # Permitivitty in vacuum (F/m)
-    cross_p = 1.59880e-14
-    cross_he = 9.10010e-17
+        # --- physical constants and other useful quantities
+        self.clight = aconst.c.to('cm/s').value  # 2.99792458E+10 Speed of light [cm/s]
+        self.hplanck = aconst.h.to('erg s').value  # 6.6260755E-27 Planck's constant [erg s]
+        self.kboltzmann = aconst.k_B.to('erg/K').value  # 1.380658E-16 Boltzman's cst. [erg/K]
+        self.amu = aconst.u.to('g').value  # 1.6605402E-24 Atomic mass unit [g]
+        self.amusi = aconst.u.to('kg').value  # 1.6605402E-27 Atomic mass unit [kg]
+        self.m_electron = aconst.m_e.to('g').value  # 9.1093897E-28 Electron mass [g]
+        self.q_electron = 4.80325E-10    # Electron charge [esu]
+        self.qsi_electron = aconst.e  # 1.6021765e-19 Electron charge [C]
+        self.rbohr = aconst.a0.to('cm').value  # 5.29177349e-9 bohr radius [cm]
+        self.e_rydberg = 2.1798741e-11  # ion. pot. hydrogen [erg]
+        self.eh2diss = 4.478          # H2 dissociation energy [eV]
+        self.pie2_mec = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
+        # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
+        self.stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)').value
+        self.mion = self.m_h            # Ion mass [g]
+        self.r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
 
-    # Dissociation energy of H2 [eV] from Barklem & Collet (2016)
-    di = 4.478007
+        # --- Unit conversions
+        self.ev_to_erg = const.eV / const.erg  # 1.60217733e-12 one electronvolt [erg]
+        self.ev_to_j = const.eV  # 1.60217733e-19 one electronvolt [j]
+        self.nm_to_m = const.nano  # 1.0e-09
+        self.cm_to_m = const.centi  # 1.0e-02
+        self.km_to_m = const.kilo  # 1.0e+03
+        self.erg_to_joule = const.erg  # 1.0e-07
+        self.g_to_kg = const.gram  # 1.0e-03
+        self.micron_to_nm = 1.0e+03
+        self.megabarn_to_m2 = 1.0e-22
+        self.atm_to_pa = const.atm  # 1.0135e+05 atm to pascal (n/m^2)
+        self.dyne_cm2_to_pascal = 0.1
+        self.k_to_ev = 8.621738E-5    # KtoeV
+        self.ev_to_k = 11604.50520    # eVtoK
+        self.ergd2wd = 0.1
+        self.grph = 2.27e-24
+        self.permsi = 8.85e-12  # Permitivitty in vacuum (F/m)
+        self.cross_p = 1.59880e-14
+        self.cross_he = 9.10010e-17
 
-    atomdic = {'h': 1, 'he': 2, 'c': 3, 'n': 4, 'o': 5, 'ne': 6, 'na': 7,
-               'mg': 8, 'al': 9, 'si': 10, 's': 11, 'k': 12, 'ca': 13,
-               'cr': 14, 'fe': 15, 'ni': 16}
-    abnddic = {'h': 12.0, 'he': 11.0, 'c': 8.55, 'n': 7.93, 'o': 8.77,
-               'ne': 8.51, 'na': 6.18, 'mg': 7.48, 'al': 6.4, 'si': 7.55,
-               's': 5.21, 'k': 5.05, 'ca': 6.33, 'cr': 5.47, 'fe': 7.5,
-               'ni': 5.08}
-    weightdic = {'h': 1.008, 'he': 4.003, 'c': 12.01, 'n': 14.01,
-                 'o': 16.00, 'ne': 20.18, 'na': 23.00, 'mg': 24.32,
-                 'al': 26.97, 'si': 28.06, 's': 32.06, 'k': 39.10,
-                 'ca': 40.08, 'cr': 52.01, 'fe': 55.85, 'ni': 58.69}
-    xidic = {'h': 13.595, 'he': 24.580, 'c': 11.256, 'n': 14.529,
-             'o': 13.614, 'ne': 21.559, 'na': 5.138, 'mg': 7.644,
-             'al': 5.984, 'si': 8.149, 's': 10.357, 'k': 4.339,
-             'ca': 6.111, 'cr': 6.763, 'fe': 7.896, 'ni': 7.633}
-    u0dic = {'h': 2., 'he': 1., 'c': 9.3, 'n': 4., 'o': 8.7,
-             'ne': 1., 'na': 2., 'mg': 1., 'al': 5.9, 'si': 9.5, 's': 8.1,
-             'k': 2.1, 'ca': 1.2, 'cr': 10.5, 'fe': 26.9, 'ni': 29.5}
-    u1dic = {'h': 1., 'he': 2., 'c': 6., 'n': 9.,  'o': 4.,  'ne': 5.,
-             'na': 1., 'mg': 2., 'al': 1., 'si': 5.7, 's': 4.1, 'k': 1.,
-             'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
+        # Dissociation energy of H2 [eV] from Barklem & Collet (2016)
+        self.di = 4.478007
 
+        self.atomdic = {'h': 1, 'he': 2, 'c': 3, 'n': 4, 'o': 5, 'ne': 6, 'na': 7,
+                   'mg': 8, 'al': 9, 'si': 10, 's': 11, 'k': 12, 'ca': 13,
+                   'cr': 14, 'fe': 15, 'ni': 16}
+        self.abnddic = {'h': 12.0, 'he': 11.0, 'c': 8.55, 'n': 7.93, 'o': 8.77,
+                   'ne': 8.51, 'na': 6.18, 'mg': 7.48, 'al': 6.4, 'si': 7.55,
+                   's': 5.21, 'k': 5.05, 'ca': 6.33, 'cr': 5.47, 'fe': 7.5,
+                   'ni': 5.08}
+        self.weightdic = {'h': 1.008, 'he': 4.003, 'c': 12.01, 'n': 14.01,
+                     'o': 16.00, 'ne': 20.18, 'na': 23.00, 'mg': 24.32,
+                     'al': 26.97, 'si': 28.06, 's': 32.06, 'k': 39.10,
+                     'ca': 40.08, 'cr': 52.01, 'fe': 55.85, 'ni': 58.69}
+        self.xidic = {'h': 13.595, 'he': 24.580, 'c': 11.256, 'n': 14.529,
+                 'o': 13.614, 'ne': 21.559, 'na': 5.138, 'mg': 7.644,
+                 'al': 5.984, 'si': 8.149, 's': 10.357, 'k': 4.339,
+                 'ca': 6.111, 'cr': 6.763, 'fe': 7.896, 'ni': 7.633}
+        self.u0dic = {'h': 2., 'he': 1., 'c': 9.3, 'n': 4., 'o': 8.7,
+                 'ne': 1., 'na': 2., 'mg': 1., 'al': 5.9, 'si': 9.5, 's': 8.1,
+                 'k': 2.1, 'ca': 1.2, 'cr': 10.5, 'fe': 26.9, 'ni': 29.5}
+        self.u1dic = {'h': 1., 'he': 2., 'c': 6., 'n': 9.,  'o': 4.,  'ne': 5.,
+                 'na': 1., 'mg': 2., 'al': 1., 'si': 5.7, 's': 4.1, 'k': 1.,
+                 'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
@@ -2608,21 +2634,21 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     print('ionpopulation: reading species %s and level %s' % (elem, lvl))
 
-    uni = Bifrost_units
+    uni = Bifrost_units()
 
-    totconst = 2.0 * uni.pi * uni.m_electron.value * uni.k_b.value / \
-        uni.hplanck.value / uni.hplanck.value
+    totconst = 2.0 * uni.pi * uni.m_electron * uni.k_b / \
+        uni.hplanck / uni.hplanck
     abnd = np.zeros(len(uni.abnddic))
     count = 0
 
     for ibnd in uni.abnddic.keys():
         abnddic = 10**(uni.abnddic[ibnd] - 12.0)
-        abnd[count] = abnddic * uni.weightdic[ibnd] * uni.amu.value
+        abnd[count] = abnddic * uni.weightdic[ibnd] * uni.amu
         count += 1
 
     abnd = abnd / np.sum(abnd)
     phit = (totconst * tg)**(1.5) * 2.0 / nel
-    kbtg = uni.ev_to_erg / uni.k_b.value / tg
+    kbtg = uni.ev_to_erg / uni.k_b / tg
     n1_n0 = phit * uni.u1dic[elem] / uni.u0dic[elem] * np.exp(
         - uni.xidic[elem] * kbtg)
     c2 = abnd[uni.atomdic[elem] - 1] * rho
@@ -2637,10 +2663,10 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
     else:
         if lvl == '1':
             return (1.0 - ifracpos) * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                                       uni.amu.value))
+                                                       uni.amu))
         else:
             return ifracpos * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                               uni.amu.value))
+                                               uni.amu))
 
 
 def read_cross_txt(filename):
