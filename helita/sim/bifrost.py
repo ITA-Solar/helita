@@ -1269,15 +1269,24 @@ class BifrostData(object):
             if self.hion and self.heion:
                 posn = ([pos for pos, char in enumerate(quant) if char == 'n'])
                 q2 = quant[posn[-1]:]
-                var2 = self.get_var(q2)
-                nel = self.get_var('hionne')
-                uni = Bifrost_units()
-                if quant[:3] == 'nhe':
-                    mass = uni.msi_he
+                q1 = quant[:posn[-1]]
+                if self.hion:
+                    nel = self.get_var('hionne')
                 else:
-                    mass = uni.msi_p
-                return self.get_var('modb') * uni.usi_b *  \
-                    uni.qsi_electron * var2 / nel / mass
+                    nel = self.get_var('nel')
+                var2 = self.get_var(q2)
+                var1 = self.get_var(q1)
+                z1= 1.0
+                z2= float(quant[-1])
+                uni = Bifrost_units()
+                if q1[:3] == 'n6':
+                    omega1 = self.get_var('gfh2')
+                else:
+                    omega1 = self.get_var('gf'+q1[1:])
+                omega2 = self.get_var('gf'+q2[1:])
+                return (z1 * var1 * omega2 + z2 * var2 * omega1) / nel
+                                #self.get_var('modb') * uni.usi_b *  \
+                    #uni.qsi_electron * var2 / nel / mass
 
             else:
                 raise ValueError(('get_quantity: This variable is only '
@@ -2010,7 +2019,7 @@ class Bifrost_units(object):
         self.amusi = aconst.u.to('kg').value  # 1.6605402E-27 Atomic mass unit [kg]
         self.m_electron = aconst.m_e.to('g').value  # 9.1093897E-28 Electron mass [g]
         self.q_electron = 4.80325E-10    # Electron charge [esu]
-        self.qsi_electron = aconst.e  # 1.6021765e-19 Electron charge [C]
+        self.qsi_electron = aconst.e.value  # 1.6021765e-19 Electron charge [C]
         self.rbohr = aconst.a0.to('cm').value  # 5.29177349e-9 bohr radius [cm]
         self.e_rydberg = 2.1798741e-11  # ion. pot. hydrogen [erg]
         self.eh2diss = 4.478          # H2 dissociation energy [eV]
