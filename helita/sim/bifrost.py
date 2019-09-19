@@ -2919,13 +2919,15 @@ def threadQuantity_z(task, numThreads, *args):
     return result
 
 def find_first_match(name, path,incl_path=False):
-     '''
-     This will find the first match
-     incl_root: boolean, if true will add full path, otherwise, the name.
-     '''
-     os.chdir(path)
-     for file in glob(name):
-         if incl_path:
-             return os.path.join(dirs, file)
-         else:
-             return file
+    '''
+    This will find the first match,
+    name : string, e.g., 'patern*'
+    incl_root: boolean, if true will add full path, otherwise, the name.
+    path : sring, e.g., '.'
+    '''
+    os.chdir(path)
+    for file in glob(name):
+        if incl_path:
+            return os.path.join(path, file)
+        else:
+            return file
