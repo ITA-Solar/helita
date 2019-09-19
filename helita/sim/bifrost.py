@@ -8,6 +8,7 @@ from glob import glob
 import numpy as np
 from . import cstagger
 import scipy as sp
+from scipy import interpolate
 from scipy.ndimage import map_coordinates
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -1897,8 +1898,8 @@ def polar2cartesian(r, t, grid, x, y, order=3):
     new_r = np.sqrt(X * X + Y * Y)
     new_t = np.arctan2(X, Y)
 
-    ir = sp.interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
-    it = sp.interpolate.interp1d(t, np.arange(len(t)))
+    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
+    it = interpolate.interp1d(t, np.arange(len(t)))
 
     new_ir = ir(new_r.ravel())
     new_it = it(new_t.ravel())
@@ -1920,8 +1921,8 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     new_x = R * np.cos(T)
     new_y = R * np.sin(T)
 
-    ix = sp.interpolate.interp1d(x, np.arange(len(x)), bounds_error=False)
-    iy = sp.interpolate.interp1d(y, np.arange(len(y)), bounds_error=False)
+    ix = interpolate.interp1d(x, np.arange(len(x)), bounds_error=False)
+    iy = interpolate.interp1d(y, np.arange(len(y)), bounds_error=False)
 
     new_ix = ix(new_x.ravel())
     new_iy = iy(new_y.ravel())
@@ -2480,7 +2481,7 @@ class Cross_sect:
         if out in ['se el vi mt'.split()] and not self.load_cross_tables:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
 
-        finterp = sp.interpolate.interp1d(self.cross_tab[itab]['tg'],
+        finterp = interpolate.interp1d(self.cross_tab[itab]['tg'],
                                           self.cross_tab[itab][out])
         tgreg = tg * 1.0
         max_temp = np.max(self.cross_tab[itab]['tg'])
@@ -2654,7 +2655,7 @@ def read_idl_ascii(filename):
 def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     print('ionpopulation: reading species %s and level %s' % (elem, lvl))
-
+    fdir = '.'
     try:
         tmp = find_first_match("*.idl", fdir)
     except IndexError:
