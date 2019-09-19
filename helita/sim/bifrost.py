@@ -90,8 +90,20 @@ class BifrostData(object):
             self.dtype = '<' + dtype
         self.hion = False
         self.heion = False
-
         self.set_snap(snap)
+        try:
+            tmp = find_first_match("%s*_*idl" % file_root, fdir)
+        except IndexError:
+            try:
+                tmp = find_first_match("%s*idl.scr" % file_root, fdir)
+            except IndexError:
+                try:
+                    tmp = find_first_match("mhd.in", fdir)
+                except IndexError:
+                    raise ValueError(("(EEE) init: no .idl or mhd.in files "
+                                    "found"))
+
+        self.uni = Bifrost_units(filename=tmp,fdir=fdir)
 
     def _set_snapvars(self):
         """
@@ -138,7 +150,7 @@ class BifrostData(object):
         """
         if snap is None:
             try:
-                tmp = sorted(glob("%s*idl" % self.file_root))[0]
+                tmp = sorted(glob("%s*_*idl" % self.file_root))[0]
                 snap = int(tmp.split(self.file_root + '_')[-1].split(".idl")[0])
             except IndexError:
                 try:
@@ -1278,7 +1290,6 @@ class BifrostData(object):
                 var1 = self.get_var(q1)
                 z1= 1.0
                 z2= float(quant[-1])
-                uni = Bifrost_units()
                 if q1[:3] == 'n6':
                     omega1 = self.get_var('gfh2')
                 else:
@@ -1293,9 +1304,6 @@ class BifrostData(object):
                                   'avaiable if do_hion and do_helium is true'))
 
         elif quant in DEBYE_LN_QUANT:
-
-            uni = Bifrost_units()
-
             tg = self.get_var('tg')
             part = np.copy(self.get_var('ne'))
             # We are assuming a single charge state:
@@ -1306,42 +1314,38 @@ class BifrostData(object):
                 part += 4.0 * self.get_var('nhe3')
             # check units of n
 
-            return np.sqrt(uni.permsi / uni.qsi_electron**2 /
-                           (uni.ksi_b * tg.astype('Float64') *
+            return np.sqrt(self.uni.permsi / self.uni.qsi_electron**2 /
+                           (self.uni.ksi_b * tg.astype('Float64') *
                            part.astype('Float64') + 1.0e-20))
 
         elif ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
-            uni = Bifrost_units()
             if quant == 'gfe':
-                return self.get_var('modb') * uni.usi_b * \
-                    uni.qsi_electron / (uni.msi_e)
+                return self.get_var('modb') * self.uni.usi_b * \
+                    self.uni.qsi_electron / (self.uni.msi_e)
             else:
                 ion = float(''.join([i for i in quant if i.isdigit()]))
-                return self.get_var('modb') * uni.usi_b * \
-                    uni.qsi_electron * \
+                return self.get_var('modb') * self.uni.usi_b * \
+                    self.uni.qsi_electron * \
                     (ion - 1.0) / \
-                    (uni.weightdic[quant[2:-1]] * uni.amusi)
+                    (self.uni.weightdic[quant[2:-1]] * self.uni.amusi)
 
         elif quant in COULOMB_COL_QUANT:
-            uni = Bifrost_units()
-
             iele = np.where(COULOMB_COL_QUANT == quant)
             tg = self.get_var('tg')
             nel = np.copy(self.get_var('ne'))
             elem = quant.replace('coucol', '')
 
-            const = (uni.pi * uni.qsi_electron ** 4 /
-                     ((4.0 * uni.pi * uni.permsi)**2 *
-                     np.sqrt(uni.weightdic[elem] * uni.amusi *
-                             (2.0 * uni.ksi_b) ** 3) + 1.0e-20))
+            const = (self.uni.pi * self.uni.qsi_electron ** 4 /
+                     ((4.0 * self.uni.pi * self.uni.permsi)**2 *
+                     np.sqrt(self.uni.weightdic[elem] * self.uni.amusi *
+                             (2.0 * self.uni.ksi_b) ** 3) + 1.0e-20))
 
             return (const * nel.astype('Float64') *
-                   np.log(12.0 * uni.pi * nel.astype('Float64') *
+                   np.log(12.0 * self.uni.pi * nel.astype('Float64') *
                    self.get_var('debye_ln').astype('Float64') + 1e-50) /
                    (np.sqrt(tg.astype('Float64')**3) + 1.0e-20))
 
         elif quant in CROSTAB_QUANT:
-            uni = Bifrost_units()
             tg = self.get_var('tg')
             elem = quant.split('_')
             spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
@@ -1357,8 +1361,8 @@ class BifrostData(object):
                     cross_tab = 'e-h.txt'
                     crossunits = 1e-16
                 else:
-                    cross = uni.weightdic[spic2] / uni.weightdic['h'] * \
-                        uni.cross_p * np.ones(np.shape(tg))
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
+                        self.uni.cross_p * np.ones(np.shape(tg))
             elif spic1 == 'he':
                 if spic2 == 'h':
                     cross_tab = 'p-h-elast.txt'
@@ -1368,8 +1372,8 @@ class BifrostData(object):
                 elif spic2 == 'e':
                     cross_tab = 'e-he.txt'
                 else:
-                    cross = uni.weightdic[spic2] / uni.weightdic['he'] * \
-                        uni.cross_he * np.ones(np.shape(tg))
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] * \
+                        self.uni.cross_he * np.ones(np.shape(tg))
             elif spic1 == 'e':
                 if spic2 == 'h':
                     cross_tab = 'e-h.txt'
@@ -1379,15 +1383,14 @@ class BifrostData(object):
                 crossobj = Cross_sect(cross_tab=[cross_tab])
                 cross = crossunits * crossobj.tab_interp(tg)
             else:
-                cross = uni.weightdic[spic2] / uni.weightdic['h'] * \
-                    uni.cross_p * np.ones(np.shape(tg))
+                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
+                    self.uni.cross_p * np.ones(np.shape(tg))
             try:
                 return cross
             except Exception:
                 print('(WWW) cross-section: wrong combination of species')
 
         elif ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
-            uni = Bifrost_units()
 
             elem = quant.split('_')
             spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
@@ -1400,19 +1403,19 @@ class BifrostData(object):
             nspic2 = self.get_var('n%s-%s' % (spic2, ion2))
 
             tg = self.get_var('tg')
-            awg1 = uni.weightdic[spic1] * uni.amu
-            awg2 = uni.weightdic[spic2] * uni.amu
+            awg1 = self.uni.weightdic[spic1] * self.uni.amu
+            awg2 = self.uni.weightdic[spic2] * self.uni.amu
 
-            scr1 = np.sqrt(8.0 * uni.kboltzmann * tg / uni.pi)
+            scr1 = np.sqrt(8.0 * self.uni.kboltzmann * tg / self.uni.pi)
 
             return crossarr * np.sqrt((awg1 + awg2) / (awg1 * awg2)) *\
                 scr1 * nspic2 * (awg1 / (awg1 + awg1))
 
         elif ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT:
             if quant == 'nu_ni':
-                result = uni.m_h * self.get_var('nh-1') * \
+                result = self.uni.m_h * self.get_var('nh-1') * \
                     self.get_var('nuh1_i') + \
-                    uni.m_he * self.get_var('nhe-1') * self.get_var('nuhe1_i')
+                    self.uni.m_he * self.get_var('nhe-1') * self.get_var('nuhe1_i')
             elif quant == 'nu_ei':
                 if self.hion:
                     nel = self.get_var('hionne')
@@ -1455,9 +1458,6 @@ class BifrostData(object):
             return result
 
         elif ''.join([i for i in quant if not i.isdigit()]) in IONP_QUANT:
-
-            uni = Bifrost_units()
-
             elem = quant.split('_')
             spic = ''.join([i for i in elem[0] if not i.isdigit()])
             lvl = ''.join([i for i in elem[0] if i.isdigit()])
@@ -1465,7 +1465,7 @@ class BifrostData(object):
                 if quant[0] == 'n':
                     mass = 1.0
                 else:
-                    mass = uni.m_h
+                    mass = self.uni.m_h
                 if lvl == '1':
 
                     return mass * (self.get_var('n1') +
@@ -1477,7 +1477,7 @@ class BifrostData(object):
                 if quant[0] == 'n':
                     mass = 1.0
                 else:
-                    mass = uni.m_he
+                    mass = self.uni.m_he
                 if self.verbose:
                     print('get_var: reading nhe%s' % lvl)
                 return mass * self.get_var('nhe%s' % lvl)
@@ -1539,7 +1539,6 @@ class BifrostData(object):
 
         # grph = 2.38049d-24 uni.GRPH
         # bk = 1.38e-16 uni.KBOLTZMANN
-        uni = Bifrost_units()
         # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
         if not hasattr(self, 'ne'):
             nel = self.get_var('ne')
@@ -1552,19 +1551,19 @@ class BifrostData(object):
             tg = self.tg
 
         if not hasattr(self, 'r'):
-            rho = self.get_var('r') * uni.u_r
+            rho = self.get_var('r') * self.uni.u_r
         else:
-            rho = self.r * uni.u_r
+            rho = self.r * self.uni.u_r
 
         tau = np.zeros((self.nx, self.ny, self.nz)) + 1.e-16
         xhmbf = np.zeros((self.nz))
-        const = (1.03526e-16 / uni.grph) * 2.9256e-17 / 1e6
+        const = (1.03526e-16 / self.uni.grph) * 2.9256e-17 / 1e6
         for iix in range(self.nx):
             for iiy in range(self.ny):
                 for iiz in range(self.nz):
                     xhmbf[iiz] = const * nel[iix, iiy, iiz] / \
                         tg[iix, iiy, iiz]**1.5 * np.exp(0.754e0 *
-                        uni.ev_to_erg / uni.kboltzmann /
+                        self.uni.ev_to_erg / self.uni.kboltzmann /
                         tg[iix, iiy, iiz]) * rho[iix, iiy, iiz]
 
                 for iiz in range(1, self.nz):
@@ -1586,14 +1585,13 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
-        uni = Bifrost_units()
         if self.hion:
             ne = self.get_var('hionne')[sx, sy, sz]
         else:
             ee = self.get_var('ee')[sx, sy, sz]
             ee = ee * self.uni.u_ee
             eostab = Rhoeetab(fdir=self.fdir)
-            rho = self.r[sx, sy, sz] * uni.u_r   # to cm^-3
+            rho = self.r[sx, sy, sz] * self.uni.u_r   # to cm^-3
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
@@ -1609,7 +1607,6 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
-        uni = Bifrost_units()
         if self.hion:
             shape = [6, ]
             # calculate size of slices to determine array shape
@@ -1623,7 +1620,7 @@ class BifrostData(object):
                 nv = self.get_var('n%i' % (k + 1))
                 nh[k] = nv[sx, sy, sz]
         else:
-            rho = self.r[sx, sy, sz] * uni.u_r
+            rho = self.r[sx, sy, sz] * self.uni.u_r
             subsfile = os.path.join(self.fdir, 'subs.dat')
             tabfile = os.path.join(self.fdir, self.params['tabinputfile'][
                             self.snapInd].strip())
@@ -1673,6 +1670,8 @@ class BifrostData(object):
             except ModuleNotFoundError:
                 verbose = False
         # unit conversion to SI
+        # Comment to Tiago, params['units'] is hard coded. I
+        # strongly recoment to use Bifrost_units.
         ul = self.params['u_l'][self.snapInd] / 1.e2  # to metres
         # to g/cm^3  (for ne_rt_table)
         ur = self.params['u_r'][self.snapInd]
@@ -1944,11 +1943,11 @@ class Bifrost_units(object):
     Modified by Martinez-Sykora 2019-7-10
     Copyright (c) 2014, ITA UiO - All rights reserved.
     """
-    def __init__(self,filename='mhd.in'):
+    def __init__(self,filename='mhd.in',fdir='./'):
         import scipy.constants as const
         from astropy import constants as aconst
-        if os.path.isfile(filename):
-            self.params = read_idl_ascii(filename)
+        if os.path.isfile(os.path.join(fdir,filename)):
+            self.params = read_idl_ascii(os.path.join(fdir,filename))
             try:
                 self.u_l = self.params['u_l']
                 self.u_t = self.params['u_t']
@@ -1971,7 +1970,7 @@ class Bifrost_units(object):
             self.u_t = 1.0e2
             self.u_r = 1.0e-7
             # --- ideal gas
-            self.gamma = self.params['gamma']
+            self.gamma = 1.667
 
         self.u_u = self.u_l / self.u_t
         self.u_p = self.u_r * (self.u_l / self.u_t)**2          # Pressure [dyne/cm2]
@@ -2088,6 +2087,19 @@ class Rhoeetab:
         if tabfile is None:
             tabfile = '%s/tabparam.in' % (fdir)
         self.param = self.read_tab_file(tabfile)
+        try:
+            tmp = find_first_match("*idl", fdir)
+        except IndexError:
+            try:
+                tmp = find_first_match("*idl.scr", fdir)
+            except IndexError:
+                try:
+                    tmp = find_first_match("mhd.in", fdir)
+                except IndexError:
+                    tmp = ''
+                    print("(WWW) init: no .idl or mhd.in files found." +
+                          "Units set to 'standard' Bifrost units.")
+        self.uni = Bifrost_units(filename=tmp,fdir=fdir)
         # load table(s)
         self.params['abund'] = 10**(self.params['abund'] - 12.0)
         self.load_eos_table()
@@ -2643,7 +2655,19 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     print('ionpopulation: reading species %s and level %s' % (elem, lvl))
 
-    uni = Bifrost_units()
+    try:
+        tmp = find_first_match("*.idl", fdir)
+    except IndexError:
+        try:
+            tmp = find_first_match("*idl.scr", fdir)
+        except IndexError:
+            try:
+                tmp = find_first_match("mhd.in", fdir)
+            except IndexError:
+                tmp = ''
+                print("(WWW) init: no .idl or mhd.in files found." +
+                      "Units set to 'standard' Bifrost units.")
+    uni = Bifrost_units(filename=tmp)
 
     totconst = 2.0 * uni.pi * uni.m_electron * uni.k_b / \
         uni.hplanck / uni.hplanck
@@ -2893,3 +2917,15 @@ def threadQuantity_z(task, numThreads, *args):
     pool = ThreadPool(processes=numThreads)
     result = np.concatenate(pool.starmap(task, zip(*args)), axis=2)
     return result
+
+def find_first_match(name, path,incl_path=False):
+     '''
+     This will find the first match
+     incl_root: boolean, if true will add full path, otherwise, the name.
+     '''
+     os.chdir(path)
+     for file in glob(name):
+         if incl_path:
+             return os.path.join(dirs, file)
+         else:
+             return file
