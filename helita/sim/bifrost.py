@@ -136,16 +136,22 @@ class BifrostData(object):
         snap - integer or array
             Number of simulation snapshot to load.
         """
+        print( glob("%s.idl" % self.file_root))
         if snap is None:
-            try:
-                tmp = sorted(glob("%s*idl" % self.file_root))[0]
-                snap = int(tmp.split(self.file_root + '_')[-1].split(".idl")[0])
-            except IndexError:
+            tmp = sorted(glob("%s*idl" % self.file_root))[0]
+            snap_string = tmp.split(self.file_root + '_')[-1].split(".idl")[0]
+            if snap_string.isdigit(): 
+                snap = int(snap_string)
+            else: 
                 try:
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
                     snap = -1
                 except IndexError:
-                    raise ValueError(("(EEE) set_snap: snapshot not defined "
+                    try:
+                        tmp = glob("%s.idl" % self.file_root)
+                        snap = 0
+                    except IndexError:
+                        raise ValueError(("(EEE) set_snap: snapshot not defined "
                                       "and no .idl files found"))
         self.snap = snap
         if np.size(snap) > 1:
@@ -153,7 +159,10 @@ class BifrostData(object):
             for num in snap:
                 self.snap_str.append('_%03i' % int(num))
         else:
-            self.snap_str = '_%03i' % snap
+            if snap == 0:
+                self.snap_str = ''
+            else: 
+                self.snap_str = '_%03i' % snap
         self.snapInd = 0
 
         self._read_params()
