@@ -152,7 +152,12 @@ class BifrostData(object):
         if snap is None:
             try:
                 tmp = sorted(glob("%s*_*idl" % self.file_root))[0]
-                snap = int(tmp.split(self.file_root + '_')[-1].split(".idl")[0])
+                snap_string = tmp.split(self.file_root + '_')[-1].split(".idl")[0]
+                if snap_string.isdigit():
+                    snap = int(tmp.split(self.file_root + '_')[-1].split(".idl")[0])
+                else:
+                    tmp = glob("%s.idl" % self.file_root)
+                    snap = 0
             except IndexError:
                 try:
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
@@ -166,7 +171,10 @@ class BifrostData(object):
             for num in snap:
                 self.snap_str.append('_%03i' % int(num))
         else:
-            self.snap_str = '_%03i' % snap
+            if snap == 0:
+                self.snap_str = ''
+            else:
+                self.snap_str = '_%03i' % snap
         self.snapInd = 0
 
         self._read_params()
@@ -2102,7 +2110,6 @@ class Rhoeetab:
                           "Units set to 'standard' Bifrost units.")
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
         # load table(s)
-        self.params['abund'] = 10**(self.params['abund'] - 12.0)
         self.load_eos_table()
         if radtab:
             self.load_rad_table()
