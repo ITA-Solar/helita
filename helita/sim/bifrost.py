@@ -93,7 +93,7 @@ class BifrostData(object):
         self.heion = False
         self.set_snap(snap)
         try:
-            tmp = find_first_match("%s*_*idl" % file_root, fdir)
+            tmp = find_first_match("%s*idl" % file_root, fdir)
         except IndexError:
             try:
                 tmp = find_first_match("%s*idl.scr" % file_root, fdir)
@@ -103,7 +103,6 @@ class BifrostData(object):
                 except IndexError:
                     raise ValueError(("(EEE) init: no .idl or mhd.in files "
                                     "found"))
-
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
 
     def _set_snapvars(self):
@@ -149,7 +148,6 @@ class BifrostData(object):
         snap - integer or array
             Number of simulation snapshot to load.
         """
-        print( glob("%s.idl" % self.file_root))
         if snap is None:
             try:
                 tmp = sorted(glob("%s*_*idl" % self.file_root))[0]
@@ -1960,6 +1958,7 @@ class Bifrost_units(object):
     def __init__(self,filename='mhd.in',fdir='./'):
         import scipy.constants as const
         from astropy import constants as aconst
+
         if os.path.isfile(os.path.join(fdir,filename)):
             self.params = read_idl_ascii(os.path.join(fdir,filename))
             try:
