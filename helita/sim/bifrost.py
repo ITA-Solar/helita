@@ -80,6 +80,7 @@ class BifrostData(object):
         self.file_root = os.path.join(self.fdir, file_root)
         self.root_name = file_root
         self.meshfile = meshfile
+        print(meshfile)
         self.ghost_analyse = ghost_analyse
         self.cstagop = cstagop
         self.lowbus = lowbus
@@ -252,9 +253,11 @@ class BifrostData(object):
         """
         Reads mesh file
         """
+        print(meshfile)
         if meshfile is None:
             meshfile = os.path.join(
                 self.fdir, self.params['meshfile'][self.snapInd].strip())
+        print(meshfile)
         if os.path.isfile(meshfile):
             f = open(meshfile, 'r')
             for p in ['x', 'y', 'z']:
@@ -1881,6 +1884,8 @@ class Create_new_br_files:
                                              getattr(self, 'd' + p),
                                              getattr(self, 'n' + p)))
             else:
+                if (len(locals()[p]) < 1):
+                    raise ValueError("(EEE): "+p+" axis has length zero")
                 setattr(self, 'n' + p, len(locals()[p]))
             if getattr(self, 'n' + p) > 1:
                 xmdn = __xxdn(getattr(self, p))
