@@ -104,6 +104,10 @@ class EbysusData(BifrostData):
         except KeyError:
             raise KeyError('read_params: could not find mf_epf in idl file!')
         try:
+            self.mf_nspecies = self.params['mf_nspecies'][self.snapInd]
+        except KeyError:
+            raise KeyError('read_params: could not find mf_nspecies in idl file!')
+        try:
             self.with_electrons = self.params['mf_electrons'][self.snapInd]
         except KeyError:
             raise KeyError(
@@ -447,7 +451,6 @@ class EbysusData(BifrostData):
 
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize * mf_arr_size
-
         if (mf_arr_size == 1):
             return np.memmap(
                 filename,
@@ -570,6 +573,10 @@ class EbysusData(BifrostData):
 
 
 def write_mfr(rootname,inputdata,mf_ispecies,mf_ilevel):
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
     directory = '%s.io/mf_%02i_%02i/mfr' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -579,6 +586,10 @@ def write_mfr(rootname,inputdata,mf_ispecies,mf_ilevel):
     data.flush()
 
 def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
     directory = '%s.io/mf_%02i_%02i/mfp' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdatax.shape
     if not os.path.exists(directory):
@@ -590,6 +601,10 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
     data.flush()
 
 def write_mfe(rootname,inputdata,mf_ispecies,mf_ilevel):
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
     directory = '%s.io/mf_%02i_%02i/mfe' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -624,6 +639,37 @@ def write_mf_e(rootname,inputdata):
     data = np.memmap(directory+'/%s_mf_e.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,1))
     data[...,0] = inputdata
     data.flush()
+
+def printi(fdir='./',rootname=''):
+    dd=EbysusData(rootname,fdir=fdir,verbose=False)
+    itime =2
+    nspecies=len(dd.mf_tabparam['SPECIES'])
+    from at_tools import atom_tools as at
+    for ispecies in range(0,nspecies):
+        aa=at.atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2])
+        nlevels=len(aa.params['lvl'])
+        print('reading %s'%dd.mf_tabparam['SPECIES'][ispecies][2])
+        for ilevel in range(1,nlevels+1):
+            print('ilv = %i'%ilevel)
+            r=dd.get_var('r',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_r']
+            print('dens=%6.2E,%6.2E g/cm3'%(np.min(r),np.max(r)))
+            ux=dd.get_var('ux',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('ux=%6.2E,%6.2E km/s'%(np.min(ux),np.max(ux)))
+            uy=dd.get_var('uy',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('uy=%6.2E,%6.2E km/s'%(np.min(uy),np.max(uy)))
+            uz=dd.get_var('uz',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('uz=%6.2E,%6.2E km/s'%(np.min(uz),np.max(uz)))
+            tg=dd.get_var('mfe_tg',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1)
+            print('tg=%6.2E,%6.2E K'%(np.min(tg),np.max(tg)))
+            ener=dd.get_var('e',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_e']
+            print('e=%6.2E,%6.2E erg'%(np.min(ener),np.max(ener)))
+
+    bx=dd.get_var('bx',itime) * dd.params['u_b']
+    print('bx=%5.2E G'%np.max(bx))
+    by=dd.get_var('by',itime) * dd.params['u_b']
+    print('by=%5.2E G'%np.max(by))
+    bz=dd.get_var('bz',itime) * dd.params['u_b']
+    print('bz=%5.2E G'%np.max(bz))
 
 def read_mftab_ascii(filename):
     '''
