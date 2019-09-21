@@ -80,7 +80,6 @@ class BifrostData(object):
         self.file_root = os.path.join(self.fdir, file_root)
         self.root_name = file_root
         self.meshfile = meshfile
-        print(meshfile)
         self.ghost_analyse = ghost_analyse
         self.cstagop = cstagop
         self.lowbus = lowbus
@@ -253,11 +252,9 @@ class BifrostData(object):
         """
         Reads mesh file
         """
-        print(meshfile)
         if meshfile is None:
             meshfile = os.path.join(
                 self.fdir, self.params['meshfile'][self.snapInd].strip())
-        print(meshfile)
         if os.path.isfile(meshfile):
             f = open(meshfile, 'r')
             for p in ['x', 'y', 'z']:
@@ -2924,7 +2921,6 @@ def threadQuantity_z(task, numThreads, *args):
     args = list(args)
 
     for index in range(np.shape(args)[0]):
-        print(len(np.shape(args[index])))
         if len(np.shape(args[index])) == 3:
             args[index] = np.array_split(args[index], numThreads, axis=2)
         else:
