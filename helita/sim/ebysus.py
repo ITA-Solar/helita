@@ -566,6 +566,8 @@ class EbysusData(BifrostData):
 
         return value
 
+    def get_nspecies(self):
+        return len(self.mf_tabparam['SPECIES'])
 
 ###########
 #  TOOLS  #
@@ -640,35 +642,34 @@ def write_mf_e(rootname,inputdata):
     data[...,0] = inputdata
     data.flush()
 
-def printi(fdir='./',rootname=''):
-    dd=EbysusData(rootname,fdir=fdir,verbose=False)
-    itime =2
-    nspecies=len(dd.mf_tabparam['SPECIES'])
+def printi(fdir='./',rootname='',it=1):
     from at_tools import atom_tools as at
+    dd=EbysusData(rootname,fdir=fdir,verbose=False)
+    nspecies=len(dd.mf_tabparam['SPECIES'])
     for ispecies in range(0,nspecies):
         aa=at.atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2])
         nlevels=len(aa.params['lvl'])
         print('reading %s'%dd.mf_tabparam['SPECIES'][ispecies][2])
         for ilevel in range(1,nlevels+1):
             print('ilv = %i'%ilevel)
-            r=dd.get_var('r',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_r']
+            r=dd.get_var('r',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_r']
             print('dens=%6.2E,%6.2E g/cm3'%(np.min(r),np.max(r)))
-            ux=dd.get_var('ux',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            ux=dd.get_var('ux',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
             print('ux=%6.2E,%6.2E km/s'%(np.min(ux),np.max(ux)))
-            uy=dd.get_var('uy',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            uy=dd.get_var('uy',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
             print('uy=%6.2E,%6.2E km/s'%(np.min(uy),np.max(uy)))
-            uz=dd.get_var('uz',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            uz=dd.get_var('uz',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
             print('uz=%6.2E,%6.2E km/s'%(np.min(uz),np.max(uz)))
-            tg=dd.get_var('mfe_tg',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1)
+            tg=dd.get_var('mfe_tg',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1)
             print('tg=%6.2E,%6.2E K'%(np.min(tg),np.max(tg)))
-            ener=dd.get_var('e',itime,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_e']
+            ener=dd.get_var('e',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_e']
             print('e=%6.2E,%6.2E erg'%(np.min(ener),np.max(ener)))
 
-    bx=dd.get_var('bx',itime) * dd.params['u_b']
+    bx=dd.get_var('bx',it) * dd.params['u_b']
     print('bx=%5.2E G'%np.max(bx))
-    by=dd.get_var('by',itime) * dd.params['u_b']
+    by=dd.get_var('by',it) * dd.params['u_b']
     print('by=%5.2E G'%np.max(by))
-    bz=dd.get_var('bz',itime) * dd.params['u_b']
+    bz=dd.get_var('bz',it) * dd.params['u_b']
     print('bz=%5.2E G'%np.max(bz))
 
 def read_mftab_ascii(filename):
