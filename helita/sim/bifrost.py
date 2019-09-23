@@ -150,14 +150,14 @@ class BifrostData(object):
         """
         if snap is None:
             try:
-                tmp = sorted(glob("%s*_*idl" % self.file_root))[0]
+                tmp = sorted(glob("%s*idl" % self.file_root))[0]
                 snap_string = tmp.split(self.file_root + '_')[-1].split(".idl")[0]
                 if snap_string.isdigit():
-                    snap = int(tmp.split(self.file_root + '_')[-1].split(".idl")[0])
+                    snap = int(snap_string)
                 else:
                     tmp = glob("%s.idl" % self.file_root)
                     snap = 0
-            except IndexError:
+            except:
                 try:
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
                     snap = -1
@@ -2938,9 +2938,13 @@ def find_first_match(name, path,incl_path=False):
     incl_root: boolean, if true will add full path, otherwise, the name.
     path : sring, e.g., '.'
     '''
+    originalpath=os.getcwd()
     os.chdir(path)
     for file in glob(name):
         if incl_path:
+            os.chdir(originalpath)
             return os.path.join(path, file)
         else:
+            os.chdir(originalpath)
             return file
+    os.chdir(originalpath)
