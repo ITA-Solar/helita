@@ -288,7 +288,8 @@ class EbysusData(BifrostData):
             elif (( mf_ilevel is not None) and (mf_jlevel != self.mf_jlevel)):
                 self.set_mfj(mf_jspecies, mf_jlevel)
 
-        assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
+        # This should not be here because mf_ispecies < 0 is for electrons.
+        #assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
 
         # # check if already in memmory
         # if var in self.variables:
@@ -402,7 +403,7 @@ class EbysusData(BifrostData):
             elif var in self.snapevars and self.mf_ispecies < 0:
                 idx = self.snapevars.index(var)
                 filename = self.mf_e_file
-                dirvars = '%s.io/mf_e/'
+                dirvars = '%s.io/mf_e/'% self.file_root
                 fsuffix_a = '.snap'
             elif var in self.auxvars:
                 idx = self.auxvars.index(var)
