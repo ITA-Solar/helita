@@ -566,12 +566,14 @@ class EbysusData(BifrostData):
         self.iiz = iiz
 
         try:
-            if ((snap is not None) and  any(snap != self.snap)):
-                self.set_snap(snap)
-
+            if (snap is not None):
+                if (np.size(snap) == np.size(self.snap)):
+                    if (any(snap != self.snap)):
+                        self.set_snap(snap)
+                else:
+                    self.set_snap(snap)
         except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
+            print('WWW: snap has to be a numpy.arrange parameter')
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:

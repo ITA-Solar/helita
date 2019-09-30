@@ -378,12 +378,14 @@ class BifrostData(object):
         self.iiz = iiz
 
         try:
-            if ((snap is not None) and (snap != self.snap)):
-                self.set_snap(snap)
-
+            if (snap is not None):
+                if (np.size(snap) == np.size(self.snap)):
+                    if (any(snap != self.snap)):
+                        self.set_snap(snap)
+                else:
+                    self.set_snap(snap)
         except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
+            print('WWW: snap has to be a numpy.arrange parameter')
 
         # lengths for dimensions of return array
         self.xLength = 0
