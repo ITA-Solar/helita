@@ -1330,6 +1330,7 @@ class BifrostData(object):
                       np.sqrt(self.uni.weightdic[elem] * self.uni.amusi *
                              (2.0 * self.uni.ksi_b) ** 3) + 1.0e-20))
 
+
             return (const * nel.astype('Float64') *
                     np.log(12.0 * self.uni.pi * nel.astype('Float64') *
                     self.get_var('debye_ln').astype('Float64') + 1e-50) /
@@ -1395,8 +1396,8 @@ class BifrostData(object):
             tg = self.get_var('tg')
             awg1 = self.uni.weightdic[spic1] * self.uni.amu
             awg2 = self.uni.weightdic[spic2] * self.uni.amu
-
             scr1 = np.sqrt(8.0 * self.uni.kboltzmann * tg / self.uni.pi)
+
 
             return crossarr * np.sqrt((awg1 + awg2) / (awg1 * awg2)) *\
                 scr1 * nspic2 * (awg1 / (awg1 + awg1))
@@ -1575,6 +1576,7 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
+        uni = Bifrost_units()
         if self.hion:
             ne = self.get_var('hionne')[sx, sy, sz]
         else:
@@ -1597,6 +1599,7 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
+        uni = Bifrost_units()
         if self.hion:
             shape = [6, ]
             # calculate size of slices to determine array shape

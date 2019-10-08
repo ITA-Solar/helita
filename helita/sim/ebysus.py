@@ -742,7 +742,7 @@ def printi(fdir='./',rootname='',it=1):
     print('by=%5.2E G'%np.max(by))
     bz=dd.get_var('bz',it) * dd.params['u_b']
     print('bz=%5.2E G'%np.max(bz))
-
+    
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary
