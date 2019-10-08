@@ -1576,7 +1576,6 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
-        uni = Bifrost_units()
         if self.hion:
             ne = self.get_var('hionne')[sx, sy, sz]
         else:
@@ -1599,7 +1598,6 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
-        uni = Bifrost_units()
         if self.hion:
             shape = [6, ]
             # calculate size of slices to determine array shape
