@@ -1351,7 +1351,7 @@ class BifrostData(object):
                     cross_tab = 'e-h.txt'
                     crossunits = 1e-16
                 else:
-                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] *
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
                         self.uni.cross_p * np.ones(np.shape(tg))
             elif spic1 == 'he':
                 if spic2 == 'h':
@@ -1362,7 +1362,7 @@ class BifrostData(object):
                 elif spic2 == 'e':
                     cross_tab = 'e-he.txt'
                 else:
-                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] *
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] * \
                         self.uni.cross_he * np.ones(np.shape(tg))
             elif spic1 == 'e':
                 if spic2 == 'h':
@@ -1373,7 +1373,7 @@ class BifrostData(object):
                 crossobj = Cross_sect(cross_tab=[cross_tab])
                 cross = crossunits * crossobj.tab_interp(tg)
             else:
-                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] *
+                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
                     self.uni.cross_p * np.ones(np.shape(tg))
             try:
                 return cross
