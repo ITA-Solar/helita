@@ -7,9 +7,10 @@ import warnings
 from glob import glob
 import numpy as np
 from . import cstagger
-import scipy as sp
+from scipy import interpolate
 from scipy.ndimage import map_coordinates
 from multiprocessing.dummy import Pool as ThreadPool
+
 
 class BifrostData(object):
     """
@@ -90,8 +91,19 @@ class BifrostData(object):
             self.dtype = '<' + dtype
         self.hion = False
         self.heion = False
-
         self.set_snap(snap)
+        try:
+            tmp = find_first_match("%s*idl" % file_root, fdir)
+        except IndexError:
+            try:
+                tmp = find_first_match("%s*idl.scr" % file_root, fdir)
+            except IndexError:
+                try:
+                    tmp = find_first_match("mhd.in", fdir)
+                except IndexError:
+                    raise ValueError(("(EEE) init: no .idl or mhd.in files "
+                                    "found"))
+        self.uni = Bifrost_units(filename=tmp,fdir=fdir)
 
     def _set_snapvars(self):
         """
@@ -139,13 +151,22 @@ class BifrostData(object):
         if snap is None:
             try:
                 tmp = sorted(glob("%s*idl" % self.file_root))[0]
-                snap = int(tmp.split(self.file_root + '_')[-1].split(".idl")[0])
-            except IndexError:
+                snap_string = tmp.split(self.file_root + '_')[-1].split(".idl")[0]
+                if snap_string.isdigit():
+                    snap = int(snap_string)
+                else:
+                    tmp = glob("%s.idl" % self.file_root)
+                    snap = 0
+            except:
                 try:
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
                     snap = -1
                 except IndexError:
-                    raise ValueError(("(EEE) set_snap: snapshot not defined "
+                    try:
+                        tmp = glob("%s.idl" % self.file_root)
+                        snap = 0
+                    except IndexError:
+                        raise ValueError(("(EEE) set_snap: snapshot not defined "
                                       "and no .idl files found"))
         self.snap = snap
         if np.size(snap) > 1:
@@ -153,7 +174,10 @@ class BifrostData(object):
             for num in snap:
                 self.snap_str.append('_%03i' % int(num))
         else:
-            self.snap_str = '_%03i' % snap
+            if snap == 0:
+                self.snap_str = ''
+            else:
+                self.snap_str = '_%03i' % snap
         self.snapInd = 0
 
         self._read_params()
@@ -354,12 +378,14 @@ class BifrostData(object):
         self.iiz = iiz
 
         try:
-            if ((snap is not None) and (snap != self.snap)):
-                self.set_snap(snap)
-
+            if snap is not None:
+                if np.size(snap) == np.size(self.snap):
+                    if any(snap != self.snap):
+                        self.set_snap(snap)
+                else:
+                    self.set_snap(snap)
         except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
+            print('WWW: snap has to be a numpy.arrange parameter')
 
         # lengths for dimensions of return array
         self.xLength = 0
@@ -430,8 +456,8 @@ class BifrostData(object):
                 temp = np.asarray(getattr(self, dim))
                 setattr(self, dim, temp.item())
 
-    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), *args, **kwargs):
+    def get_var(self, var, snap=None, *args, iix=slice(None), iiy=slice(None),
+                iiz=slice(None), **kwargs):
         """
         Reads a variable from the relevant files.
 
@@ -662,7 +688,7 @@ class BifrostData(object):
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
         self.description['DERIV'] = ('Spatial derivative (Bifrost units). '
                                      'It must start with d and end with: '
-                                      ', '.join(DERIV_QUANT))
+                                     ', '.join(DERIV_QUANT))
 
         CENTRE_QUANT = ['xc', 'yc', 'zc']
         self.description['CENTRE'] = ('Allows to center any vector(Bifrost'
@@ -675,7 +701,7 @@ class BifrostData(object):
 
         HORVAR_QUANT = ['horvar']
         self.description['HORVAR'] = ('Horizontal average (Bifrost units).'
-                    ' Starting with: ' + ', '.join(HORVAR_QUANT))
+                                      ' Starting with: ' + ', '.join(HORVAR_QUANT))
 
         GRADVECT_QUANT = ['div', 'rot', 'she', 'chkdiv', 'chbdiv', 'chhdiv']
         self.description['GRADVECT'] = ('vectorial derivative opeartions '
@@ -781,16 +807,16 @@ class BifrostData(object):
         self.description['IONP'] = ('densities for specific ionized species as'
             'follow (in SI): ' + ', '.join(IONP_QUANT))
 
-        if (quant == ''):
+        if quant == '':
             help(self.get_quantity)
             return -1
 
-        if (np.size(self.snap) > 1):
+        if np.size(self.snap) > 1:
             currSnap = self.snap[self.snapInd]
         else:
             currSnap = self.snap
 
-        if (RATIO_QUANT in quant):
+        if RATIO_QUANT in quant:
             # Calculate module of vector quantity
             q = quant[:quant.find(RATIO_QUANT)]
             if q[0] == 'b':
@@ -832,16 +858,16 @@ class BifrostData(object):
                         output = np.zeros_like(var)
                         if axis != 'z':
                             for iiz in range(self.nz):
-                                output[:, :, iiz] = np.reshape(cstagger.do(
-                                    var[:, :, iiz].reshape(
-                                        (self.nx, self.ny, 1)),
-                                    'd' + quant[-4:]), (self.nx, self.ny))
+                                output[:, :, iiz] = np.reshape(
+                                   cstagger.do(var[:, :, iiz].reshape((self.nx, self.ny, 1)),
+                                               'd' + quant[-4:]),
+                                   (self.nx, self.ny))
                         else:
                             for iiy in range(self.ny):
-                                output[:, iiy, :] = np.reshape(cstagger.do(
-                                    var[:, iiy, :].reshape(
-                                        (self.nx, 1, self.nz)),
-                                    'd' + quant[-4:]), (self.nx, self.nz))
+                                output[:, iiy, :] = np.reshape(
+                                   cstagger.do(var[:, iiy, :].reshape((self.nx, 1, self.nz)),
+                                               'd' + quant[-4:]),
+                                   (self.nx, self.nz))
 
                         return output
                     else:
@@ -886,8 +912,7 @@ class BifrostData(object):
                         if transf[1][0] != 'z':
                             for iiz in range(self.nz):
                                 output[:, :, iiz] = np.reshape(cstagger.do(
-                                    output[:, :, iiz].reshape(
-                                        (self.nx, self.ny, 1)),
+                                    output[:, :, iiz].reshape((self.nx, self.ny, 1)),
                                     transf[1]), (self.nx, self.ny))
                         else:
                             for iiy in range(self.ny):
@@ -919,10 +944,8 @@ class BifrostData(object):
                         return cstagger.do(var, transf[0])
 
         elif quant[:6] in GRADVECT_QUANT or quant[:3] in GRADVECT_QUANT:
-
             if quant[:3] == 'chk':
                 q = quant[6:]  # base variable
-
                 if getattr(self, 'nx') < 5:  # 2D or close
                     varx = np.zeros_like(self.r)
                 else:
@@ -937,16 +960,14 @@ class BifrostData(object):
                     varz = self.get_var('d' + q + 'zdzup')
                 else:
                     varz = np.zeros_like(varx)
-
                 return np.abs(varx + vary + varx) / (np.maximum(
                     np.abs(varx), np.abs(vary), np.abs(varz)) + 1.0e-20)
 
-            if quant[:3] == 'chb':
+            elif quant[:3] == 'chb':
                 q = quant[6:]  # base variable
                 varx = self.get_var(q + 'x')
                 vary = self.get_var(q + 'y')
                 varz = self.get_var(q + 'z')
-
                 if getattr(self, 'nx') < 5:  # 2D or close
                     result = np.zeros_like(varx)
                 else:
@@ -961,12 +982,11 @@ class BifrostData(object):
                 return np.abs(result / (np.sqrt(
                     varx * varx + vary * vary + varz * varz) + 1.0e-20))
 
-            if quant[:3] == 'chh':
+            elif quant[:3] == 'chh':
                 q = quant[6:]  # base variable
                 varx = self.get_var(q + 'x')
                 vary = self.get_var(q + 'y')
                 varz = self.get_var(q + 'z')
-
                 if getattr(self, 'nx') < 5:  # 2D or close
                     result = np.zeros_like(varx)
                 else:
@@ -984,7 +1004,7 @@ class BifrostData(object):
                                 varz[:, :, iiz]**2)))
                 return result
 
-            if quant[:3] == 'div':  # divergence of vector quantity
+            elif quant[:3] == 'div':  # divergence of vector quantity
                 q = quant[3:]  # base variable
                 if getattr(self, 'nx') < 5:  # 2D or close
                     result = np.zeros_like(self.r)
@@ -995,7 +1015,7 @@ class BifrostData(object):
                 if getattr(self, 'nz') > 5:
                     result += self.get_var('d' + q + 'zdzup')
 
-            if quant[:3] == 'rot' or quant[:3] == 'she':
+            elif quant[:3] == 'rot' or quant[:3] == 'she':
                 q = quant[3:-1]  # base variable
                 qaxis = quant[-1]
                 if qaxis == 'x':
@@ -1008,7 +1028,7 @@ class BifrostData(object):
                             result -= self.get_var('d' + q + 'ydzup')
                         else:  # shear
                             result += self.get_var('d' + q + 'ydzup')
-                if qaxis == 'y':
+                elif qaxis == 'y':
                     if getattr(self, 'nz') < 5:  # 2D or close
                         result = np.zeros_like(self.r)
                     else:
@@ -1018,7 +1038,7 @@ class BifrostData(object):
                             result -= self.get_var('d' + q + 'zdxup')
                         else:  # shear
                             result += self.get_var('d' + q + 'zdxup')
-                if qaxis == 'z':
+                elif qaxis == 'z':
                     if getattr(self, 'nx') < 5:  # 2D or close
                         result = np.zeros_like(self.r)
                     else:
@@ -1028,7 +1048,6 @@ class BifrostData(object):
                             result -= self.get_var('d' + q + 'xdyup')
                         else:  # shear
                             result += self.get_var('d' + q + 'xdyup')
-
             return result
 
         elif quant[:3] in GRADSCAL_QUANT:
@@ -1085,30 +1104,25 @@ class BifrostData(object):
             # projects v1 onto v2
             v1 = quant[0]
             v2 = quant[4]
-
             x_a = self.get_var(v1 + 'xc', self.snap)
             y_a = self.get_var(v1 + 'yc', self.snap)
             z_a = self.get_var(v1 + 'zc', self.snap)
             x_b = self.get_var(v2 + 'xc', self.snap)
             y_b = self.get_var(v2 + 'yc', self.snap)
             z_b = self.get_var(v2 + 'zc', self.snap)
-
             # can be used for threadQuantity() or as is
             def proj_task(x1, y1, z1, x2, y2, z2):
-
                 v2Mag = np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2)
                 v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
                 parScal = x1 * v2x + y1 * v2y + z1 * v2z
                 parX, parY, parZ = parScal * v2x, parScal * v2y, parScal * v2z
                 result = np.abs(parScal)
-
                 if quant[1:4] == 'per':
                     perX = x1 - parX
                     perY = y1 - parY
                     perZ = z1 - parZ
                     v1Mag = np.sqrt(perX**2 + perY**2 + perZ**2)
                     result = v1Mag
-
                 return result
 
             if self.numThreads > 1:
@@ -1179,7 +1193,7 @@ class BifrostData(object):
                         return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
                 elif quant == 'cs':
                     return np.sqrt(self.params['gamma'][self.snapInd] *
-                            var / self.get_var('r'))
+                                   var / self.get_var('r'))
                 elif quant == 's':
                     return (np.log(var) - self.params['gamma'][self.snapInd] *
                             np.log(self.get_var('r')))
@@ -1223,16 +1237,13 @@ class BifrostData(object):
             by = self.get_var('byc')
             bz = self.get_var('bzc')
             bMag = np.sqrt(bx**2 + by**2 + bz**2)
-            bx, by, bz = bx / bMag, by / bMag, bz / bMag
-            # b is already centered
-
+            bx, by, bz = bx / bMag, by / bMag, bz / bMag  # b is already centered
             # unit vector of b
             unitB = np.stack((bx, by, bz))
 
             if quant == 'alf':
                 uperb = self.get_var('uperb')
                 uperbVect = uperb * unitB
-
                 # cross product (uses cstagger bc no variable gets uperbVect)
                 curlX = (cstagger.do(cstagger.do(uperbVect[2], 'ddydn'), 'yup') -
                          cstagger.do(cstagger.do(uperbVect[1], 'ddzdn'), 'zup'))
@@ -1243,7 +1254,6 @@ class BifrostData(object):
                 curl = np.stack((curlX, curlY, curlZ))
                 # dot product
                 result = np.abs((unitB * curl).sum(0))
-
             elif quant == 'fast':
                 uperb = self.get_var('uperb')
                 uperbVect = uperb * unitB
@@ -1252,7 +1262,6 @@ class BifrostData(object):
                     uperbVect[0], 'ddxdn'), 'xup') + cstagger.do(cstagger.do(
                         uperbVect[1], 'ddydn'), 'yup') + cstagger.do(
                             cstagger.do(uperbVect[2], 'ddzdn'), 'zup'))
-
             else:
                 dot1 = self.get_var('uparb')
                 grad = np.stack((cstagger.do(cstagger.do(dot1, 'ddxdn'),
@@ -1260,79 +1269,74 @@ class BifrostData(object):
                                                  dot1, 'ddydn'), 'yup'),
                                  cstagger.do(cstagger.do(dot1, 'ddzdn'),
                                              'zup')))
-
                 result = np.abs((unitB * grad).sum(0))
-
             return result
 
         elif quant in CYCL_RES:
             if self.hion and self.heion:
                 posn = ([pos for pos, char in enumerate(quant) if char == 'n'])
                 q2 = quant[posn[-1]:]
-                var2 = self.get_var(q2)
-                nel = self.get_var('hionne')
-                uni = Bifrost_units()
-                if quant[:3] == 'nhe':
-                    mass = uni.msi_he
+                q1 = quant[:posn[-1]]
+                if self.hion:
+                    nel = self.get_var('hionne')
                 else:
-                    mass = uni.msi_p
-                return self.get_var('modb') * uni.usi_b *  \
-                    uni.qsi_electron * var2 / nel / mass
-
+                    nel = self.get_var('nel')
+                var2 = self.get_var(q2)
+                var1 = self.get_var(q1)
+                z1= 1.0
+                z2= float(quant[-1])
+                if q1[:3] == 'n6':
+                    omega1 = self.get_var('gfh2')
+                else:
+                    omega1 = self.get_var('gf'+q1[1:])
+                omega2 = self.get_var('gf'+q2[1:])
+                return (z1 * var1 * omega2 + z2 * var2 * omega1) / nel
             else:
                 raise ValueError(('get_quantity: This variable is only '
                                   'avaiable if do_hion and do_helium is true'))
 
         elif quant in DEBYE_LN_QUANT:
-
-            uni = Bifrost_units()
-
             tg = self.get_var('tg')
             part = np.copy(self.get_var('ne'))
             # We are assuming a single charge state:
             for iele in elemlist:
                 part += self.get_var('n' + iele + '-2')
-
             if self.heion:
                 part += 4.0 * self.get_var('nhe3')
             # check units of n
-
-            return np.sqrt(uni.permsi / uni.qsi_electron**2 /
-                           (uni.ksi_b * tg.astype('Float64') *
-                           part.astype('Float64') + 1.0e-20))
+            return np.sqrt(self.uni.permsi / self.uni.qsi_electron**2 /
+                           (self.uni.ksi_b * tg.astype('Float64') *
+                            part.astype('Float64') + 1.0e-20))
 
         elif ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
-            uni = Bifrost_units()
             if quant == 'gfe':
-                return self.get_var('modb') * uni.usi_b * \
-                    uni.qsi_electron / (uni.msi_e)
+                return self.get_var('modb') * self.uni.usi_b * \
+                    self.uni.qsi_electron / (self.uni.msi_e)
             else:
                 ion = float(''.join([i for i in quant if i.isdigit()]))
-                return self.get_var('modb') * uni.usi_b * \
-                    uni.qsi_electron * \
+                return self.get_var('modb') * self.uni.usi_b * \
+                    self.uni.qsi_electron * \
                     (ion - 1.0) / \
-                    (uni.weightdic[quant[2:-1]] * uni.amusi)
+                    (self.uni.weightdic[quant[2:-1]] * self.uni.amusi)
 
         elif quant in COULOMB_COL_QUANT:
-            uni = Bifrost_units()
-
             iele = np.where(COULOMB_COL_QUANT == quant)
             tg = self.get_var('tg')
             nel = np.copy(self.get_var('ne'))
             elem = quant.replace('coucol', '')
 
-            const = (uni.pi * uni.qsi_electron ** 4 /
-                     ((4.0 * uni.pi * uni.permsi)**2 *
-                     np.sqrt(uni.weightdic[elem] * uni.amusi *
-                             (2.0 * uni.ksi_b) ** 3) + 1.0e-20))
+            const = (self.uni.pi * self.uni.qsi_electron ** 4 /
+                     ((4.0 * self.uni.pi * self.uni.permsi)**2 *
+                      np.sqrt(self.uni.weightdic[elem] * self.uni.amusi *
+                             (2.0 * self.uni.ksi_b) ** 3) + 1.0e-20))
+
 
             return (const * nel.astype('Float64') *
-                   np.log(12.0 * uni.pi * nel.astype('Float64') *
-                   self.get_var('debye_ln').astype('Float64') + 1e-50) /
-                   (np.sqrt(tg.astype('Float64')**3) + 1.0e-20))
+                    np.log(12.0 * self.uni.pi * nel.astype('Float64') *
+                    self.get_var('debye_ln').astype('Float64') + 1e-50) /
+                    (np.sqrt(tg.astype('Float64')**3) + 1.0e-20))
 
         elif quant in CROSTAB_QUANT:
-            uni = Bifrost_units()
             tg = self.get_var('tg')
             elem = quant.split('_')
             spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
@@ -1348,8 +1352,8 @@ class BifrostData(object):
                     cross_tab = 'e-h.txt'
                     crossunits = 1e-16
                 else:
-                    cross = uni.weightdic[spic2] / uni.weightdic['h'] * \
-                        uni.cross_p * np.ones(np.shape(tg))
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
+                        self.uni.cross_p * np.ones(np.shape(tg))
             elif spic1 == 'he':
                 if spic2 == 'h':
                     cross_tab = 'p-h-elast.txt'
@@ -1359,8 +1363,8 @@ class BifrostData(object):
                 elif spic2 == 'e':
                     cross_tab = 'e-he.txt'
                 else:
-                    cross = uni.weightdic[spic2] / uni.weightdic['he'] * \
-                        uni.cross_he * np.ones(np.shape(tg))
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] * \
+                        self.uni.cross_he * np.ones(np.shape(tg))
             elif spic1 == 'e':
                 if spic2 == 'h':
                     cross_tab = 'e-h.txt'
@@ -1370,15 +1374,14 @@ class BifrostData(object):
                 crossobj = Cross_sect(cross_tab=[cross_tab])
                 cross = crossunits * crossobj.tab_interp(tg)
             else:
-                cross = uni.weightdic[spic2] / uni.weightdic['h'] * \
-                    uni.cross_p * np.ones(np.shape(tg))
+                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
+                    self.uni.cross_p * np.ones(np.shape(tg))
             try:
                 return cross
             except Exception:
                 print('(WWW) cross-section: wrong combination of species')
 
         elif ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
-            uni = Bifrost_units()
 
             elem = quant.split('_')
             spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
@@ -1391,19 +1394,19 @@ class BifrostData(object):
             nspic2 = self.get_var('n%s-%s' % (spic2, ion2))
 
             tg = self.get_var('tg')
-            awg1 = uni.weightdic[spic1] * uni.amu
-            awg2 = uni.weightdic[spic2] * uni.amu
+            awg1 = self.uni.weightdic[spic1] * self.uni.amu
+            awg2 = self.uni.weightdic[spic2] * self.uni.amu
+            scr1 = np.sqrt(8.0 * self.uni.kboltzmann * tg / self.uni.pi)
 
-            scr1 = np.sqrt(8.0 * uni.kboltzmann * tg / uni.pi)
 
             return crossarr * np.sqrt((awg1 + awg2) / (awg1 * awg2)) *\
                 scr1 * nspic2 * (awg1 / (awg1 + awg1))
 
         elif ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT:
             if quant == 'nu_ni':
-                result = uni.m_h * self.get_var('nh-1') * \
+                result = self.uni.m_h * self.get_var('nh-1') * \
                     self.get_var('nuh1_i') + \
-                    uni.m_he * self.get_var('nhe-1') * self.get_var('nuhe1_i')
+                    self.uni.m_he * self.get_var('nhe-1') * self.get_var('nuhe1_i')
             elif quant == 'nu_ei':
                 if self.hion:
                     nel = self.get_var('hionne')
@@ -1446,9 +1449,6 @@ class BifrostData(object):
             return result
 
         elif ''.join([i for i in quant if not i.isdigit()]) in IONP_QUANT:
-
-            uni = Bifrost_units()
-
             elem = quant.split('_')
             spic = ''.join([i for i in elem[0] if not i.isdigit()])
             lvl = ''.join([i for i in elem[0] if i.isdigit()])
@@ -1456,7 +1456,7 @@ class BifrostData(object):
                 if quant[0] == 'n':
                     mass = 1.0
                 else:
-                    mass = uni.m_h
+                    mass = self.uni.m_h
                 if lvl == '1':
 
                     return mass * (self.get_var('n1') +
@@ -1468,7 +1468,7 @@ class BifrostData(object):
                 if quant[0] == 'n':
                     mass = 1.0
                 else:
-                    mass = uni.m_he
+                    mass = self.uni.m_he
                 if self.verbose:
                     print('get_var: reading nhe%s' % lvl)
                 return mass * self.get_var('nhe%s' % lvl)
@@ -1530,7 +1530,6 @@ class BifrostData(object):
 
         # grph = 2.38049d-24 uni.GRPH
         # bk = 1.38e-16 uni.KBOLTZMANN
-        uni = Bifrost_units()
         # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
         if not hasattr(self, 'ne'):
             nel = self.get_var('ne')
@@ -1543,19 +1542,19 @@ class BifrostData(object):
             tg = self.tg
 
         if not hasattr(self, 'r'):
-            rho = self.get_var('r') * uni.u_r
+            rho = self.get_var('r') * self.uni.u_r
         else:
-            rho = self.r * uni.u_r
+            rho = self.r * self.uni.u_r
 
         tau = np.zeros((self.nx, self.ny, self.nz)) + 1.e-16
         xhmbf = np.zeros((self.nz))
-        const = (1.03526e-16 / uni.grph) * 2.9256e-17 / 1e6
+        const = (1.03526e-16 / self.uni.grph) * 2.9256e-17 / 1e6
         for iix in range(self.nx):
             for iiy in range(self.ny):
                 for iiz in range(self.nz):
                     xhmbf[iiz] = const * nel[iix, iiy, iiz] / \
                         tg[iix, iiy, iiz]**1.5 * np.exp(0.754e0 *
-                        uni.ev_to_erg / uni.kboltzmann /
+                        self.uni.ev_to_erg / self.uni.kboltzmann /
                         tg[iix, iiy, iiz]) * rho[iix, iiy, iiz]
 
                 for iiz in range(1, self.nz):
@@ -1577,14 +1576,13 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
-        uni = Bifrost_units()
         if self.hion:
             ne = self.get_var('hionne')[sx, sy, sz]
         else:
             ee = self.get_var('ee')[sx, sy, sz]
             ee = ee * self.uni.u_ee
             eostab = Rhoeetab(fdir=self.fdir)
-            rho = self.r[sx, sy, sz] * uni.u_r   # to cm^-3
+            rho = self.r[sx, sy, sz] * self.uni.u_r   # to cm^-3
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
@@ -1600,7 +1598,6 @@ class BifrostData(object):
             are needed.
         """
         from astropy.units import Quantity
-        uni = Bifrost_units()
         if self.hion:
             shape = [6, ]
             # calculate size of slices to determine array shape
@@ -1614,10 +1611,9 @@ class BifrostData(object):
                 nv = self.get_var('n%i' % (k + 1))
                 nh[k] = nv[sx, sy, sz]
         else:
-            rho = self.r[sx, sy, sz] * uni.u_r
+            rho = self.r[sx, sy, sz] * self.uni.u_r
             subsfile = os.path.join(self.fdir, 'subs.dat')
-            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][
-                            self.snapInd].strip())
+            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
             tabparams = []
             if os.access(tabfile, os.R_OK):
                 tabparams = read_idl_ascii(tabfile)
@@ -1632,7 +1628,6 @@ class BifrostData(object):
             nh = rho / grph
             nh = nh[None]  # add extra empty dimension when nhydr = 1
         return Quantity(nh, unit='1/cm3')
-
 
     def write_rh15d(self, outfile, desc=None, append=True, sx=slice(None),
                     sy=slice(None), sz=slice(None)):
@@ -1664,6 +1659,8 @@ class BifrostData(object):
             except ModuleNotFoundError:
                 verbose = False
         # unit conversion to SI
+        # Comment to Tiago, params['units'] is hard coded. I
+        # strongly recoment to use Bifrost_units.
         ul = self.params['u_l'][self.snapInd] / 1.e2  # to metres
         # to g/cm^3  (for ne_rt_table)
         ur = self.params['u_r'][self.snapInd]
@@ -1861,6 +1858,8 @@ class Create_new_br_files:
                                              getattr(self, 'd' + p),
                                              getattr(self, 'n' + p)))
             else:
+                if (len(locals()[p]) < 1):
+                    raise ValueError("(EEE): "+p+" axis has length zero")
                 setattr(self, 'n' + p, len(locals()[p]))
             if getattr(self, 'n' + p) > 1:
                 xmdn = __xxdn(getattr(self, p))
@@ -1889,8 +1888,8 @@ def polar2cartesian(r, t, grid, x, y, order=3):
     new_r = np.sqrt(X * X + Y * Y)
     new_t = np.arctan2(X, Y)
 
-    ir = sp.interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
-    it = sp.interpolate.interp1d(t, np.arange(len(t)))
+    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
+    it = interpolate.interp1d(t, np.arange(len(t)))
 
     new_ir = ir(new_r.ravel())
     new_it = it(new_t.ravel())
@@ -1912,8 +1911,8 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     new_x = R * np.cos(T)
     new_y = R * np.sin(T)
 
-    ix = sp.interpolate.interp1d(x, np.arange(len(x)), bounds_error=False)
-    iy = sp.interpolate.interp1d(y, np.arange(len(y)), bounds_error=False)
+    ix = interpolate.interp1d(x, np.arange(len(x)), bounds_error=False)
+    iy = interpolate.interp1d(y, np.arange(len(y)), bounds_error=False)
 
     new_ix = ix(new_x.ravel())
     new_iy = iy(new_y.ravel())
@@ -1929,17 +1928,14 @@ def cartesian2polar(x, y, grid, r, t, order=3):
 
 
 class Bifrost_units(object):
-    """
-    Bifrost_units.py
-    Created by Mikolaj Szydlarski on 2017-01-20.
-    Modified by Martinez-Sykora 2019-7-10
-    Copyright (c) 2014, ITA UiO - All rights reserved.
-    """
-    def __init__(self,filename='mhd.in'):
+
+    def __init__(self,filename='mhd.in',fdir='./'):
         import scipy.constants as const
         from astropy import constants as aconst
-        if os.path.isfile(filename):
-            self.params = read_idl_ascii(filename)
+        from astropy import units
+
+        if os.path.isfile(os.path.join(fdir,filename)):
+            self.params = read_idl_ascii(os.path.join(fdir,filename))
             try:
                 self.u_l = self.params['u_l']
                 self.u_t = self.params['u_t']
@@ -1949,7 +1945,7 @@ class Bifrost_units(object):
 
             except:
                 print('(WWW) the filename does not have u_l, u_t and u_r.'
-                    ' Default Solar Bifrost units has been selected')
+                      ' Default Solar Bifrost units has been selected')
                 self.u_l = 1.0e8
                 self.u_t = 1.0e2
                 self.u_r = 1.0e-7
@@ -1957,26 +1953,26 @@ class Bifrost_units(object):
                 self.gamma = self.params['gamma']
         else:
             print('(WWW) selected filename is not available.'
-                ' Default Solar Bifrost units has been selected')
+                  ' Default Solar Bifrost units has been selected')
             self.u_l = 1.0e8
             self.u_t = 1.0e2
             self.u_r = 1.0e-7
             # --- ideal gas
-            self.gamma = self.params['gamma']
+            self.gamma = 1.667
 
         self.u_u = self.u_l / self.u_t
-        self.u_p = self.u_r * (self.u_l / self.u_t)**2          # Pressure [dyne/cm2]
-        self.u_kr = 1 / (self.u_r * self.u_l)               # Rosseland opacity [cm2/g]
+        self.u_p = self.u_r * (self.u_l / self.u_t)**2    # Pressure [dyne/cm2]
+        self.u_kr = 1 / (self.u_r * self.u_l)             # Rosseland opacity [cm2/g]
         self.u_ee = self.u_u**2
         self.u_e = self.u_r * self.u_ee
-        self.u_te = self.u_e / self.u_t * self.u_l               # Box therm. em. [erg/(s ster cm2)]
+        self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
         self.mu = 0.8
-        self.u_n = 3.00e+10                  # Denisty number n_0 * 1/cm^3
-        self.k_b = aconst.k_B.to('erg/K').value  # 1.380658E-16 Boltzman's cst. [erg/K]
-        self.m_h = const.m_n / const.gram  # 1.674927471e-24
+        self.u_n = 3.00e+10                      # Density number n_0 * 1/cm^3
+        self.k_b = aconst.k_B.to_value('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
+        self.m_h = const.m_n / const.gram        # 1.674927471e-24
         self.m_he = 6.65e-24
-        self.m_p = self.mu * self.m_h   # Mass per particle
-        self.m_e = const.m_e / const.gram  # 9.1093897E-28
+        self.m_p = self.mu * self.m_h            # Mass per particle
+        self.m_e = aconst.m_e.to_value('g')
         self.u_tg = (self.m_h / self.k_b) * self.u_ee
         self.u_tge = (self.m_e / self.k_b) * self.u_ee
         self.pi = const.pi
@@ -1984,64 +1980,64 @@ class Bifrost_units(object):
 
 
         self.usi_l = self.u_l * const.centi  # 1e6
-        self.usi_r = self.u_r * const.gram  # 1e-4
+        self.usi_r = self.u_r * const.gram   # 1e-4
         self.usi_u = self.usi_l / self.u_t
-        self.usi_p = self.usi_r * (self.usi_l / self.u_t)**2       # Pressure [N/m2]
-        self.usi_kr = 1 / (self.usi_r * self.usi_l)            # Rosseland opacity [m2/kg]
+        self.usi_p = self.usi_r * (self.usi_l / self.u_t)**2  # Pressure [N/m2]
+        self.usi_kr = 1 / (self.usi_r * self.usi_l)           # Rosseland opacity [m2/kg]
         self.usi_ee = self.usi_u**2
         self.usi_e = self.usi_r * self.usi_ee
-        self.usi_te = self.usi_e / self.u_t * self.usi_l            # Box therm. em. [J/(s ster m2)]
-        self.ksi_b = aconst.k_B.to('J/K') .value # 1.380658E-23 Boltzman's cst. [J/K]
-        self.msi_h = const.m_n  # 1.674927471e-27
+        self.usi_te = self.usi_e / self.u_t * self.usi_l      # Box therm. em. [J/(s ster m2)]
+        self.ksi_b = aconst.k_B.to_value('J/K')               # Boltzman's cst. [J/K]
+        self.msi_h = const.m_n                                # 1.674927471e-27
         self.msi_he = 6.65e-27
-        self.msi_p = self.mu * self.msi_h  # Mass per particle
+        self.msi_p = self.mu * self.msi_h                     # Mass per particle
         self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
         self.msi_e = const.m_e  # 9.1093897e-31
         self.usi_b = self.u_b * 1e-4
 
         # Solar gravity
-        self.gsun = 27400.0  # (cgs)
+        self.gsun = (aconst.GM_sun / aconst.R_sun**2).cgs.value  # solar surface gravity
 
         # --- physical constants and other useful quantities
-        self.clight = aconst.c.to('cm/s').value  # 2.99792458E+10 Speed of light [cm/s]
-        self.hplanck = aconst.h.to('erg s').value  # 6.6260755E-27 Planck's constant [erg s]
-        self.kboltzmann = aconst.k_B.to('erg/K').value  # 1.380658E-16 Boltzman's cst. [erg/K]
-        self.amu = aconst.u.to('g').value  # 1.6605402E-24 Atomic mass unit [g]
-        self.amusi = aconst.u.to('kg').value  # 1.6605402E-27 Atomic mass unit [kg]
-        self.m_electron = aconst.m_e.to('g').value  # 9.1093897E-28 Electron mass [g]
-        self.q_electron = 4.80325E-10    # Electron charge [esu]
-        self.qsi_electron = aconst.e  # 1.6021765e-19 Electron charge [C]
-        self.rbohr = aconst.a0.to('cm').value  # 5.29177349e-9 bohr radius [cm]
-        self.e_rydberg = 2.1798741e-11  # ion. pot. hydrogen [erg]
-        self.eh2diss = 4.478          # H2 dissociation energy [eV]
-        self.pie2_mec = 0.02654        # pi e^2 / m_e c [cm^2 Hz]
+        self.clight = aconst.c.to_value('cm/s')   # Speed of light [cm/s]
+        self.hplanck = aconst.h.to_value('erg s') # Planck's constant [erg s]
+        self.kboltzmann = aconst.k_B.to_value('erg/K')  # Boltzman's cst. [erg/K]
+        self.amu = aconst.u.to_value('g')        # Atomic mass unit [g]
+        self.amusi = aconst.u.to_value('kg')     # Atomic mass unit [kg]
+        self.m_electron = aconst.m_e.to_value('g')  # Electron mass [g]
+        self.q_electron = aconst.e.esu.value     # Electron charge [esu]
+        self.qsi_electron = aconst.e.value       # Electron charge [C]
+        self.rbohr = aconst.a0.to_value('cm')    #  bohr radius [cm]
+        self.e_rydberg = aconst.Ryd.to_value('erg', equivalencies=units.spectral())
+        self.eh2diss = 4.478007          # H2 dissociation energy [eV]
+        self.pie2_mec = (np.pi * aconst.e.esu **2 / (aconst.m_e * aconst.c)).cgs.value
         # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
-        self.stefboltz = aconst.sigma_sb.to('erg/(cm2 s K4)').value
+        self.stefboltz = aconst.sigma_sb.cgs.value
         self.mion = self.m_h            # Ion mass [g]
         self.r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
 
         # --- Unit conversions
-        self.ev_to_erg = const.eV / const.erg  # 1.60217733e-12 one electronvolt [erg]
-        self.ev_to_j = const.eV  # 1.60217733e-19 one electronvolt [j]
-        self.nm_to_m = const.nano  # 1.0e-09
+        self.ev_to_erg = units.eV.to('erg')
+        self.ev_to_j = units.eV.to('J')
+        self.nm_to_m = const.nano   # 1.0e-09
         self.cm_to_m = const.centi  # 1.0e-02
-        self.km_to_m = const.kilo  # 1.0e+03
+        self.km_to_m = const.kilo   # 1.0e+03
         self.erg_to_joule = const.erg  # 1.0e-07
-        self.g_to_kg = const.gram  # 1.0e-03
-        self.micron_to_nm = 1.0e+03
-        self.megabarn_to_m2 = 1.0e-22
+        self.g_to_kg = const.gram   # 1.0e-03
+        self.micron_to_nm = units.um.to('nm')
+        self.megabarn_to_m2 = units.Mbarn.to('m2')
         self.atm_to_pa = const.atm  # 1.0135e+05 atm to pascal (n/m^2)
-        self.dyne_cm2_to_pascal = 0.1
-        self.k_to_ev = 8.621738E-5    # KtoeV
-        self.ev_to_k = 11604.50520    # eVtoK
+        self.dyne_cm2_to_pascal = (units.dyne / units.cm**2).to('Pa')
+        self.k_to_ev = units.K.to('eV', equivalencies=units.temperature_energy())
+        self.ev_to_k = 1. / self.k_to_ev
         self.ergd2wd = 0.1
         self.grph = 2.27e-24
-        self.permsi = 8.85e-12  # Permitivitty in vacuum (F/m)
+        self.permsi = aconst.eps0.value  # Permitivitty in vacuum (F/m)
         self.cross_p = 1.59880e-14
         self.cross_he = 9.10010e-17
 
         # Dissociation energy of H2 [eV] from Barklem & Collet (2016)
-        self.di = 4.478007
+        self.di = self.eh2diss
 
         self.atomdic = {'h': 1, 'he': 2, 'c': 3, 'n': 4, 'o': 5, 'ne': 6, 'na': 7,
                    'mg': 8, 'al': 9, 'si': 10, 's': 11, 'k': 12, 'ca': 13,
@@ -2065,6 +2061,7 @@ class Bifrost_units(object):
                  'na': 1., 'mg': 2., 'al': 1., 'si': 5.7, 's': 4.1, 'k': 1.,
                  'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
 
+
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
                  verbose=True, radtab=False):
@@ -2079,8 +2076,20 @@ class Rhoeetab:
         if tabfile is None:
             tabfile = '%s/tabparam.in' % (fdir)
         self.param = self.read_tab_file(tabfile)
+        try:
+            tmp = find_first_match("*idl", fdir)
+        except IndexError:
+            try:
+                tmp = find_first_match("*idl.scr", fdir)
+            except IndexError:
+                try:
+                    tmp = find_first_match("mhd.in", fdir)
+                except IndexError:
+                    tmp = ''
+                    print("(WWW) init: no .idl or mhd.in files found." +
+                          "Units set to 'standard' Bifrost units.")
+        self.uni = Bifrost_units(filename=tmp,fdir=fdir)
         # load table(s)
-        self.params['abund'] = 10**(self.params['abund'] - 12.0)
         self.load_eos_table()
         if radtab:
             self.load_rad_table()
@@ -2398,9 +2407,6 @@ class Cross_sect:
 
     Examples
     --------
-    This reads snapshot 383 from simulation "cb24bih", whose file
-    root is "cb24bih", and is found at directory /data/cb24bih:
-
     >>> a = cross_sect(['h-h-data2.txt','h-h2-data.txt'], fdir="/data/cb24bih")
 
     """
@@ -2459,7 +2465,7 @@ class Cross_sect:
         if out in ['se el vi mt'.split()] and not self.load_cross_tables:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
 
-        finterp = sp.interpolate.interp1d(self.cross_tab[itab]['tg'],
+        finterp = interpolate.interp1d(self.cross_tab[itab]['tg'],
                                           self.cross_tab[itab][out])
         tgreg = tg * 1.0
         max_temp = np.max(self.cross_tab[itab]['tg'])
@@ -2633,8 +2639,20 @@ def read_idl_ascii(filename):
 def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     print('ionpopulation: reading species %s and level %s' % (elem, lvl))
-
-    uni = Bifrost_units()
+    fdir = '.'
+    try:
+        tmp = find_first_match("*.idl", fdir)
+    except IndexError:
+        try:
+            tmp = find_first_match("*idl.scr", fdir)
+        except IndexError:
+            try:
+                tmp = find_first_match("mhd.in", fdir)
+            except IndexError:
+                tmp = ''
+                print("(WWW) init: no .idl or mhd.in files found." +
+                      "Units set to 'standard' Bifrost units.")
+    uni = Bifrost_units(filename=tmp)
 
     totconst = 2.0 * uni.pi * uni.m_electron * uni.k_b / \
         uni.hplanck / uni.hplanck
@@ -2874,7 +2892,6 @@ def threadQuantity_z(task, numThreads, *args):
     args = list(args)
 
     for index in range(np.shape(args)[0]):
-        print(len(np.shape(args[index])))
         if len(np.shape(args[index])) == 3:
             args[index] = np.array_split(args[index], numThreads, axis=2)
         else:
@@ -2884,3 +2901,22 @@ def threadQuantity_z(task, numThreads, *args):
     pool = ThreadPool(processes=numThreads)
     result = np.concatenate(pool.starmap(task, zip(*args)), axis=2)
     return result
+
+
+def find_first_match(name, path,incl_path=False):
+    '''
+    This will find the first match,
+    name : string, e.g., 'patern*'
+    incl_root: boolean, if true will add full path, otherwise, the name.
+    path : sring, e.g., '.'
+    '''
+    originalpath=os.getcwd()
+    os.chdir(path)
+    for file in glob(name):
+        if incl_path:
+            os.chdir(originalpath)
+            return os.path.join(path, file)
+        else:
+            os.chdir(originalpath)
+            return file
+    os.chdir(originalpath)

@@ -7,6 +7,7 @@ import os
 from .bifrost import BifrostData, Rhoeetab, Bifrost_units
 from .bifrost import read_idl_ascii, subs2grph
 from . import cstagger
+from at_tools import atom_tools as at
 
 class EbysusData(BifrostData):
 
@@ -104,6 +105,10 @@ class EbysusData(BifrostData):
         except KeyError:
             raise KeyError('read_params: could not find mf_epf in idl file!')
         try:
+            self.mf_nspecies = self.params['mf_nspecies'][self.snapInd]
+        except KeyError:
+            raise KeyError('read_params: could not find mf_nspecies in idl file!')
+        try:
             self.with_electrons = self.params['mf_electrons'][self.snapInd]
         except KeyError:
             raise KeyError(
@@ -137,6 +142,7 @@ class EbysusData(BifrostData):
         self.variables = {}
 
         self.set_mfi(None, None)
+        self.set_mfj(None, None)
 
         for var in self.simple_vars:
             try:
@@ -176,9 +182,31 @@ class EbysusData(BifrostData):
         elif not hasattr(self, 'mf_ilevel'):
             self.mf_ilevel = 1
 
+    def set_mfj(self, mf_jspecies=None, mf_jlevel=None):
+        """
+        adds mf_ispecies and mf_ilevel attributes if they don't exist and
+        changes mf_ispecies and mf_ilevel if needed. It will set defaults to 1
+        """
+
+        if (mf_jspecies is not None):
+            if (mf_jspecies != self.mf_jspecies):
+                self.mf_jspecies = mf_jspecies
+            elif not hasattr(self, 'mf_jspecies'):
+                self.mf_ispecies = 1
+        elif not hasattr(self, 'mf_jspecies'):
+            self.mf_jspecies = 1
+
+        if (mf_jlevel is not None):
+            if (mf_jlevel != self.mf_jlevel):
+                self.mf_jlevel = mf_jlevel
+            elif not hasattr(self, 'mf_jlevel'):
+                self.mf_jlevel = 1
+        elif not hasattr(self, 'mf_jlevel'):
+            self.mf_jlevel = 1
+
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), mf_ispecies=None, mf_ilevel=None, *args,
-                **kwargs):
+                iiz=slice(None), mf_ispecies=None, mf_ilevel=None,
+                mf_jspecies=None, mf_jlevel=None, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -254,13 +282,21 @@ class EbysusData(BifrostData):
         elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
-        assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
+        if var in self.varsmm:
+            if ((mf_jspecies is not None) and (mf_jspecies != self.mf_jspecies)):
+                self.set_mfj(mf_jspecies, mf_jlevel)
+            elif (( mf_ilevel is not None) and (mf_jlevel != self.mf_jlevel)):
+                self.set_mfj(mf_jspecies, mf_jlevel)
+
+        # This should not be here because mf_ispecies < 0 is for electrons.
+        #assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
 
         # # check if already in memmory
         # if var in self.variables:
         #     return self.variables[var]
         if var in self.simple_vars:  # is variable already loaded?
-            val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel)
+            val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel,
+                                self.mf_jspecies, self.mf_jlevel)
         elif var in self.auxxyvars:
             val =  super(EbysusData, self)._get_simple_var_xy(var)
         else:
@@ -293,6 +329,8 @@ class EbysusData(BifrostData):
             var,
             mf_ispecies=None,
             mf_ilevel=None,
+            mf_jspecies=None,
+            mf_jlevel=None,
             order='F',
             mode='r',
             *args,
@@ -336,7 +374,7 @@ class EbysusData(BifrostData):
             filename = self.file_root
             fsuffix_b = ''
 
-        mf_arr_size = 1
+        self.mf_arr_size = 1
         if os.path.exists('%s.io' % self.file_root):
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
                     var in ['bx', 'by', 'bz']):
@@ -365,7 +403,7 @@ class EbysusData(BifrostData):
             elif var in self.snapevars and self.mf_ispecies < 0:
                 idx = self.snapevars.index(var)
                 filename = self.mf_e_file
-                dirvars = '%s.io/mf_e/'
+                dirvars = '%s.io/mf_e/'% self.file_root
                 fsuffix_a = '.snap'
             elif var in self.auxvars:
                 idx = self.auxvars.index(var)
@@ -385,7 +423,19 @@ class EbysusData(BifrostData):
                 dirvars = '%s.io/mf_%02i_%02i/mm/' % (self.file_root,
                         self.mf_ispecies, self.mf_ilevel)
                 filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
-                mf_arr_size = self.mf_total_nlevel
+                self.mf_arr_size = self.mf_total_nlevel
+                jdx=0
+                for ispecies in range(1,self.mf_nspecies+1):
+                    if (self.mf_nspecies == 1):
+                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][2])
+                    else:
+                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2])
+                    nlevels=len(aa.params['lvl'])
+                    for ilevel in range(1,nlevels+1):
+                        if (ispecies < self.mf_jspecies):
+                            jdx += 1
+                        elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
+                            jdx += 1
             elif var in self.varsmfe:
                 idx = self.varsmfe.index(var)
                 fsuffix_a = '.aux'
@@ -429,7 +479,20 @@ class EbysusData(BifrostData):
                 idx = self.varsmm.index(var)
                 fsuffix_a = '.aux'
                 filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
-                mf_arr_size = self.mf_total_nlevel
+                self.mf_arr_size = self.mf_total_nlevel
+                jdx=0
+                for ispecies in range(1,self.mf_nspecies+1):
+                    if (self.mf_nspecies == 1):
+                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][2])
+                    else:
+                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2])
+                    nlevels=len(aa.params['lvl'])
+                    for ilevel in range(1,nlevels+1):
+                        if (ispecies < self.mf_jspecies):
+                            jdx += 1
+                        elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
+                            jdx += 1
+
             elif var in self.varsmfe:
                 idx = self.varsmfe.index(var)
                 fsuffix_a = '.aux'
@@ -446,9 +509,8 @@ class EbysusData(BifrostData):
             filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
 
         dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * self.nzb * idx * dsize * mf_arr_size
-
-        if (mf_arr_size == 1):
+        offset = self.nx * self.ny * self.nzb * idx * dsize * self.mf_arr_size
+        if (self.mf_arr_size == 1):
             return np.memmap(
                 filename,
                 dtype=self.dtype,
@@ -457,13 +519,23 @@ class EbysusData(BifrostData):
                 mode=mode,
                 shape=(self.nx, self.ny, self.nzb))
         else:
-            return np.memmap(
-                filename,
-                dtype=self.dtype,
-                order=order,
-                offset=offset,
-                mode=mode,
-                shape=(self.nx, self.ny, self.nzb, mf_arr_size))
+            if var in  self.varsmm:
+                offset += self.nx * self.ny * self.nzb * jdx * dsize
+                return np.memmap(
+                    filename,
+                    dtype=self.dtype,
+                    order=order,
+                    offset=offset,
+                    mode=mode,
+                    shape=(self.nx, self.ny, self.nzb))
+            else:
+                return np.memmap(
+                    filename,
+                    dtype=self.dtype,
+                    order=order,
+                    offset=offset,
+                    mode=mode,
+                    shape=(self.nx, self.ny, self.nzb, self.mf_arr_size))
 
     def _get_composite_mf_var(self, var, order='F', mode='r', *args, **kwargs):
         """
@@ -485,7 +557,8 @@ class EbysusData(BifrostData):
             return super(EbysusData, self).get_quantity(var)
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
-                    mf_ispecies=None, mf_ilevel=None, order='F',
+                    mf_ispecies=None, mf_ilevel=None, mf_jspecies=None,
+                    mf_jlevel=None,order='F',
                     mode='r', *args, **kwargs):
 
         self.iix = iix
@@ -493,12 +566,14 @@ class EbysusData(BifrostData):
         self.iiz = iiz
 
         try:
-            if ((snap is not None) and  any(snap != self.snap)):
-                self.set_snap(snap)
-
+            if (snap is not None):
+                if (np.size(snap) == np.size(self.snap)):
+                    if (any(snap != self.snap)):
+                        self.set_snap(snap)
+                else:
+                    self.set_snap(snap)
         except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
+            print('WWW: snap has to be a numpy.arrange parameter')
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
@@ -563,6 +638,8 @@ class EbysusData(BifrostData):
 
         return value
 
+    def get_nspecies(self):
+        return len(self.mf_tabparam['SPECIES'])
 
 ###########
 #  TOOLS  #
@@ -570,6 +647,10 @@ class EbysusData(BifrostData):
 
 
 def write_mfr(rootname,inputdata,mf_ispecies,mf_ilevel):
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
     directory = '%s.io/mf_%02i_%02i/mfr' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -579,6 +660,10 @@ def write_mfr(rootname,inputdata,mf_ispecies,mf_ilevel):
     data.flush()
 
 def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
     directory = '%s.io/mf_%02i_%02i/mfp' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdatax.shape
     if not os.path.exists(directory):
@@ -590,6 +675,10 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
     data.flush()
 
 def write_mfe(rootname,inputdata,mf_ispecies,mf_ilevel):
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
     directory = '%s.io/mf_%02i_%02i/mfe' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -625,6 +714,35 @@ def write_mf_e(rootname,inputdata):
     data[...,0] = inputdata
     data.flush()
 
+def printi(fdir='./',rootname='',it=1):
+    dd=EbysusData(rootname,fdir=fdir,verbose=False)
+    nspecies=len(dd.mf_tabparam['SPECIES'])
+    for ispecies in range(0,nspecies):
+        aa=at.atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2])
+        nlevels=len(aa.params['lvl'])
+        print('reading %s'%dd.mf_tabparam['SPECIES'][ispecies][2])
+        for ilevel in range(1,nlevels+1):
+            print('ilv = %i'%ilevel)
+            r=dd.get_var('r',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_r']
+            print('dens=%6.2E,%6.2E g/cm3'%(np.min(r),np.max(r)))
+            ux=dd.get_var('ux',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('ux=%6.2E,%6.2E km/s'%(np.min(ux),np.max(ux)))
+            uy=dd.get_var('uy',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('uy=%6.2E,%6.2E km/s'%(np.min(uy),np.max(uy)))
+            uz=dd.get_var('uz',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('uz=%6.2E,%6.2E km/s'%(np.min(uz),np.max(uz)))
+            tg=dd.get_var('mfe_tg',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1)
+            print('tg=%6.2E,%6.2E K'%(np.min(tg),np.max(tg)))
+            ener=dd.get_var('e',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_e']
+            print('e=%6.2E,%6.2E erg'%(np.min(ener),np.max(ener)))
+
+    bx=dd.get_var('bx',it) * dd.params['u_b']
+    print('bx=%5.2E G'%np.max(bx))
+    by=dd.get_var('by',it) * dd.params['u_b']
+    print('by=%5.2E G'%np.max(by))
+    bz=dd.get_var('bz',it) * dd.params['u_b']
+    print('bz=%5.2E G'%np.max(bz))
+    
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary
