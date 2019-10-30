@@ -2551,8 +2551,8 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
     for i, s in enumerate(snaps):
         data.set_snap(s)
         tgas[:, i] = np.squeeze(data.tg)[sx, sz]
-        rho = data.r[sx, sz]
-        vz[:, i] = np.squeeze(cstagger.zup(data.pz)[sx, sz] / rho) * (-uv)
+        rho = np.squeeze(data.r)[sx, sz]
+        vz[:, i] = np.squeeze(cstagger.zup(data.pz))[sx, sz] / rho * (-uv)
         if writeB:
             Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
             By[:, i] = np.squeeze(-data.by)[sx, sz] * ub
