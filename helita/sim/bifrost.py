@@ -1938,19 +1938,32 @@ class Bifrost_units(object):
             self.params = read_idl_ascii(os.path.join(fdir,filename))
             try:
                 self.u_l = self.params['u_l']
-                self.u_t = self.params['u_t']
-                self.u_r = self.params['u_r']
-                # --- ideal gas
-                self.gamma = self.params['gamma']
-
             except:
-                print('(WWW) the filename does not have u_l, u_t and u_r.'
-                      ' Default Solar Bifrost units has been selected')
+                print('(WWW) the filename does not have u_l.'
+                    ' Default Solar Bifrost u_l has been selected')
                 self.u_l = 1.0e8
+
+            try:
+                self.u_t = self.params['u_t']
+            except:
+                print('(WWW) the filename does not have u_t.'
+                    ' Default Solar Bifrost u_t has been selected')
                 self.u_t = 1.0e2
+
+            try:
+                self.u_r = self.params['u_r']
+            except:
+                print('(WWW) the filename does not have u_r.'
+                    ' Default Solar Bifrost u_r has been selected')
                 self.u_r = 1.0e-7
-                # --- ideal gas
+
+            try:
                 self.gamma = self.params['gamma']
+            except:
+                print('(WWW) the filename does not have gamma.'
+                    ' ideal gas has been selected')
+                self.gamma = 1.667
+
         else:
             print('(WWW) selected filename is not available.'
                   ' Default Solar Bifrost units has been selected')
