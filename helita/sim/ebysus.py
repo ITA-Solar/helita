@@ -540,16 +540,72 @@ class EbysusData(BifrostData):
         """
         Gets composite variables for multi species fluid.
         """
-        if var == 'totr':  # velocities
-            for mf_ispecies in range(28):
-                for mf_ispecies in range(28):
-                    r = self._get_simple_var(
-                        'e',
+        if var == 'totr':  # total density
+            for ispecies in range(0,self.mf_nspecies):
+                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
+                nlevels=len(aa.params['lvl'])
+                for mf_ispecies in range(nlevels):
+                    ouput += self._get_simple_var(
+                        'r',
                         mf_ispecies=self.mf_ispecies,
                         mf_ilevel=self.mf_ilevel,
                         order=order,
                         mode=mode)
-            return r
+            return ouput
+            
+        elif var == 'grph':
+            aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][0][2])
+            weight = aa.params['weight'] * self.uni.amu / self.uni.u_r
+            for ispecies in range(0,self.mf_nspecies):
+                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
+                nlevels=len(aa.params['lvl'])
+                for mf_ispecies in range(nlevels):
+                    total_hpart += self._get_simple_var(
+                        'r',
+                        mf_ispecies=self.mf_ispecies,
+                        mf_ilevel=self.mf_ilevel,
+                        order=order,
+                        mode=mode) / weight
+            for mf_ispecies in range(0,self.mf_nspecies):
+                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
+                nlevels=len(aa.params['lvl'])
+                weight = aa.params['weight'] * self.uni.amu / self.uni.u_r
+                for ilevel in range(nlevels):
+                    ouput += self._get_simple_var(
+                        'r',
+                        mf_ispecies=self.mf_ispecies,
+                        mf_ilevel=self.mf_ilevel,
+                        order=order,
+                        mode=mode) / mf_total_hpart * u_r
+            return output
+
+        elif var == 'tot_part':
+            for mf_ispecies in range(0,self.mf_nspecies):
+                for ilevel in range(nlevels):
+                    aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][ilevel])
+                    nlevels=len(aa.params['lvl'])
+                    weight = aa.params['weight'] * self.uni.amu / self.uni.u_r
+                    ouput +=  self._get_simple_var(
+                        'r',
+                        mf_ispecies=self.mf_ispecies,
+                        mf_ilevel=self.mf_ilevel,
+                        order=order,
+                        mode=mode) / weight * (aa.params['lvl'][ilevel][-2]+1)
+            return output
+
+        elif var == 'mu':
+            for mf_ispecies in range(0,self.mf_nspecies):
+                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
+                nlevels=len(aa.params['lvl'])
+                for mf_ispecies in range(nlevels):
+                    ouput += self._get_simple_var(
+                        'r',
+                        mf_ispecies=self.mf_ispecies,
+                        mf_ilevel=self.mf_ilevel,
+                        order=order,
+                        mode=mode)
+            return output
+
         elif var in self.compvars:
             return super(EbysusData, self)._get_composite_var(var)
         else:
