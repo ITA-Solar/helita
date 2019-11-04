@@ -552,7 +552,7 @@ class EbysusData(BifrostData):
                         order=order,
                         mode=mode)
             return ouput
-            
+
         elif var == 'grph':
             aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][0][2])
             weight = aa.params['weight'] * self.uni.amu / self.uni.u_r
