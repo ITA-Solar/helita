@@ -19,6 +19,13 @@ class EbysusData(BifrostData):
     def __init__(self, *args, **kwargs):
         super(EbysusData, self).__init__(*args, **kwargs)
 
+        self.att = {}
+        for ispecies in range(1,self.mf_nspecies+1):
+            if (self.mf_nspecies == 1):
+                self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][2])
+            else:
+                self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2])
+
     def _set_snapvars(self):
 
         if os.path.exists('%s.io' % self.file_root):
@@ -425,11 +432,7 @@ class EbysusData(BifrostData):
                 self.mf_arr_size = self.mf_total_nlevel
                 jdx=0
                 for ispecies in range(1,self.mf_nspecies+1):
-                    if (self.mf_nspecies == 1):
-                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][2])
-                    else:
-                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2])
-                    nlevels=len(aa.params['lvl'])
+                    nlevels=self.att[ispecies].params.nlevel
                     for ilevel in range(1,nlevels+1):
                         if (ispecies < self.mf_jspecies):
                             jdx += 1
@@ -481,11 +484,7 @@ class EbysusData(BifrostData):
                 self.mf_arr_size = self.mf_total_nlevel
                 jdx=0
                 for ispecies in range(1,self.mf_nspecies+1):
-                    if (self.mf_nspecies == 1):
-                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][2])
-                    else:
-                        aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2])
-                    nlevels=len(aa.params['lvl'])
+                    nlevels=self.att[ispecies].params.nlevel
                     for ilevel in range(1,nlevels+1):
                         if (ispecies < self.mf_jspecies):
                             jdx += 1
@@ -542,8 +541,7 @@ class EbysusData(BifrostData):
         """
         if var == 'totr':  # total density
             for ispecies in range(0,self.mf_nspecies):
-                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
-                nlevels=len(aa.params['lvl'])
+                nlevels=self.att[ispecies].params.nlevel
                 for mf_ispecies in range(nlevels):
                     ouput += self._get_simple_var(
                         'r',
@@ -554,11 +552,9 @@ class EbysusData(BifrostData):
             return ouput
 
         elif var == 'grph':
-            aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][0][2])
-            weight = aa.params['weight'] * self.uni.amu / self.uni.u_r
+            weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
             for ispecies in range(0,self.mf_nspecies):
-                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
-                nlevels=len(aa.params['lvl'])
+                nlevels=self.att[ispecies].params.nlevel
                 for mf_ispecies in range(nlevels):
                     total_hpart += self._get_simple_var(
                         'r',
@@ -567,9 +563,8 @@ class EbysusData(BifrostData):
                         order=order,
                         mode=mode) / weight
             for mf_ispecies in range(0,self.mf_nspecies):
-                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
-                nlevels=len(aa.params['lvl'])
-                weight = aa.params['weight'] * self.uni.amu / self.uni.u_r
+                nlevels=self.att[ispecies].params.nlevel
+                weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
                 for ilevel in range(nlevels):
                     ouput += self._get_simple_var(
                         'r',
@@ -582,21 +577,19 @@ class EbysusData(BifrostData):
         elif var == 'tot_part':
             for mf_ispecies in range(0,self.mf_nspecies):
                 for ilevel in range(nlevels):
-                    aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][ilevel])
-                    nlevels=len(aa.params['lvl'])
-                    weight = aa.params['weight'] * self.uni.amu / self.uni.u_r
+                    nlevels=self.att[ispecies].params.nlevel
+                    weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
                     ouput +=  self._get_simple_var(
                         'r',
                         mf_ispecies=self.mf_ispecies,
                         mf_ilevel=self.mf_ilevel,
                         order=order,
-                        mode=mode) / weight * (aa.params['lvl'][ilevel][-2]+1)
+                        mode=mode) / weight * (self.att[ispecies].params.levels[ilevel][-2]+1)
             return output
 
         elif var == 'mu':
             for mf_ispecies in range(0,self.mf_nspecies):
-                aa=at.atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies][2])
-                nlevels=len(aa.params['lvl'])
+                nlevels=self.att[ispecies].params.nlevel
                 for mf_ispecies in range(nlevels):
                     ouput += self._get_simple_var(
                         'r',
@@ -774,7 +767,7 @@ def printi(fdir='./',rootname='',it=1):
     nspecies=len(dd.mf_tabparam['SPECIES'])
     for ispecies in range(0,nspecies):
         aa=at.atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2])
-        nlevels=len(aa.params['lvl'])
+        nlevels=aa.params.nlevel
         print('reading %s'%dd.mf_tabparam['SPECIES'][ispecies][2])
         for ilevel in range(1,nlevels+1):
             print('ilv = %i'%ilevel)
