@@ -1804,6 +1804,8 @@ class Create_new_br_files:
                 x[i] = x[4] - (4 - i) * (x[5] - x[4])
             for i in range(1, 4):
                 x[nx - i] = x[nx - 4] + i * (x[nx - 4] - x[nx - 5])
+
+            x[nx-3:] = x[nx-3:][::-1] # fixes order in the tail of x
             return x
 
         def __ddxxup(f, dx=None):
