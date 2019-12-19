@@ -1781,6 +1781,40 @@ class BifrostData(object):
             fout2.close()
 
 
+def write_br_snap(rootname,r,px,py,pz,e,bx,by,bz):
+    nx, ny, nz = r.shape
+    data = np.memmap(rootname, dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,8))
+    data[...,0] = r
+    data[...,1] = px
+    data[...,2] = py
+    data[...,3] = pz
+    data[...,4] = e
+    data[...,5] = bx
+    data[...,6] = by
+    data[...,7] = bz
+    data.flush()
+
+def paramfile_br_update(infile, outfile, new_values):
+    ''' Updates a given number of fields with values on a bifrost.idl file.
+        These are given in a dictionary: fvalues = {field: value}.
+        Reads from infile and writes into outfile.'''
+    out = open(outfile, 'w')
+    with open(infile) as fin:
+        for line in fin:
+            if line[0] == ';':
+                out.write(line)
+            elif line.find('=') < 0:
+                out.write(line)
+            else:
+                ss = line.split('=')[0]
+                ssv = ss.strip().upper()
+                if ssv in list(new_values.keys()):
+                    out.write('%s= %s\n' % (ss, str(new_values[ssv])))
+                else:
+                    out.write(line)
+    return
+
+
 class Create_new_br_files:
     def write_mesh(self, x=None, y=None, z=None, nx=None, ny=None, nz=None,
                    dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
