@@ -658,8 +658,10 @@ class EbysusData(BifrostData):
             if getattr(self, dim) is None:
                 if dim[2] == 'z':
                     setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]+'b'))
+                    setattr(self, dim, np.arange(0,getattr(self, 'n' + dim[2]+'b')))
                 else:
                     setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
+                    setattr(self, dim, np.arange(0,getattr(self, 'n' + dim[2])))
                 setattr(self, dim, slice(None))
             else:
                 indSize = np.size(getattr(self, dim))
@@ -668,13 +670,13 @@ class EbysusData(BifrostData):
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-        for i in range(0, snapLen):
+        for it in range(0, snapLen):
             self.snapInd = 0
             self._set_snapvars()
             self._init_vars()
-            value[:, :, :, i] = self.get_var(
-                var, snap=snap[i], iix=self.iix, iiy=self.iiy, iiz=self.iiz,
-                mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel)
+            value[..., it] = self.get_var(var, snap=snap[it], iix=self.iix,
+                iiy=self.iiy, iiz=self.iiz, mf_ispecies = self.mf_ispecies,
+                mf_ilevel=self.mf_ilevel)
 
         try:
             if ((snap is not None) and (snap != self.snap)):
