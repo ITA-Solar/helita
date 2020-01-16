@@ -293,15 +293,17 @@ class BifrostData(object):
                     np.repeat(self.dzidzdn[-1], self.nb)))
                 self.nz = self.nzb
         else:  # no mesh file
-            print('(WWW) Mesh file %s does not exist.' % meshfile)
+            if self.verbose:
+                print('(WWW) Mesh file %s does not exist.' % meshfile)
             if self.dx == 0.0:
                 self.dx = 1.0
             if self.dy == 0.0:
                 self.dy = 1.0
             if self.dz == 0.0:
                 self.dz = 1.0
-            print(('(WWW) Creating uniform grid with [dx,dy,dz] = '
-                   '[%f,%f,%f]') % (self.dx, self.dy, self.dz))
+            if self.verbose:
+                print(('(WWW) Creating uniform grid with [dx,dy,dz] = '
+                       '[%f,%f,%f]') % (self.dx, self.dy, self.dz))
             # x
             self.x = np.arange(self.nx) * self.dx
             self.xdn = self.x - 0.5 * self.dx
@@ -772,7 +774,8 @@ class BifrostData(object):
                     'k', 'ca', 'cr', 'fe', 'ni']
         GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
         self.description['GYROF'] = ('gyro freqency are (Hz): ' +
-            ', '.join(GYROF_QUANT))
+            ', '.join(GYROF_QUANT) + ' at the end it must have the ioniztion' +
+            'state, e,g, gfh2 is for ionized hydrogen')
 
         DEBYE_LN_QUANT = ['debye_ln']
         self.description['DEBYE'] = ('Debye length in ... units:',
