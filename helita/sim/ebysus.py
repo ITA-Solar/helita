@@ -768,7 +768,7 @@ def printi(fdir='./',rootname='',it=1):
     dd=EbysusData(rootname,fdir=fdir,verbose=False)
     nspecies=len(dd.mf_tabparam['SPECIES'])
     for ispecies in range(0,nspecies):
-        aa=at.atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2])
+        aa=at.Atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2],fdir=fdir)
         nlevels=aa.params.nlevel
         print('reading %s'%dd.mf_tabparam['SPECIES'][ispecies][2])
         for ilevel in range(1,nlevels+1):
