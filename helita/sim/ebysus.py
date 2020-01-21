@@ -230,6 +230,8 @@ class EbysusData(BifrostData):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
+        if var == '':
+            print(help(self.get_var))
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
@@ -289,11 +291,10 @@ class EbysusData(BifrostData):
         elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
             self.set_mfi(mf_ispecies, mf_ilevel)
 
-        if var in self.varsmm:
-            if ((mf_jspecies is not None) and (mf_jspecies != self.mf_jspecies)):
-                self.set_mfj(mf_jspecies, mf_jlevel)
-            elif (( mf_ilevel is not None) and (mf_jlevel != self.mf_jlevel)):
-                self.set_mfj(mf_jspecies, mf_jlevel)
+        if ((mf_jspecies is not None) and (mf_jspecies != self.mf_jspecies)):
+            self.set_mfj(mf_jspecies, mf_jlevel)
+        elif (( mf_ilevel is not None) and (mf_jlevel != self.mf_jlevel)):
+            self.set_mfj(mf_jspecies, mf_jlevel)
 
         # This should not be here because mf_ispecies < 0 is for electrons.
         #assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
@@ -309,27 +310,27 @@ class EbysusData(BifrostData):
         else:
             val =  self._get_composite_mf_var(var)
 
-        if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+        if (var != ''):
+            if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+                if np.size(self.iix)+np.size(self.iiy)+np.size(self.iiz) > 3:
+                    # at least one slice has more than one value
 
-            if np.size(self.iix)+np.size(self.iiy)+np.size(self.iiz) > 3:
-                # at least one slice has more than one value
+                    # x axis may be squeezed out, axes for take()
+                    axes = [0, -2, -1]
 
-                # x axis may be squeezed out, axes for take()
-                axes = [0, -2, -1]
+                    for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
+                        if (np.size(getattr(self, dim)) > 1 or
+                                getattr(self, dim) != slice(None)):
+                            # slicing each dimension in turn
+                            val = val.take(getattr(self, dim), axis=axes[counter])
+                else:
+                    # all of the slices are only one int or slice(None)
+                    val = val[self.iix, self.iiy, self.iiz]
 
-                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                    if (np.size(getattr(self, dim)) > 1 or
-                            getattr(self, dim) != slice(None)):
-                        # slicing each dimension in turn
-                        val = val.take(getattr(self, dim), axis=axes[counter])
-            else:
-                # all of the slices are only one int or slice(None)
-                val = val[self.iix, self.iiy, self.iiz]
+                # ensuring that dimensions of size 1 are retained
+                val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
 
-            # ensuring that dimensions of size 1 are retained
-            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
-
-        return val
+            return val
 
     def _get_simple_var(
             self,
@@ -363,6 +364,9 @@ class EbysusData(BifrostData):
         result - numpy.memmap array
             Requested variable.
         """
+        if var == '':
+            print(help(self._get_simple_var))
+
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
             currStr = self.snap_str[self.snapInd]
@@ -539,70 +543,104 @@ class EbysusData(BifrostData):
         """
         Gets composite variables for multi species fluid.
         """
-        if var == 'totr':  # total density
-            for ispecies in range(0,self.mf_nspecies):
-                nlevels=self.att[ispecies].params.nlevel
-                for mf_ispecies in range(nlevels):
-                    ouput += self._get_simple_var(
-                        'r',
-                        mf_ispecies=self.mf_ispecies,
-                        mf_ilevel=self.mf_ilevel,
-                        order=order,
-                        mode=mode)
-            return ouput
+        GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu']
+        self.mf_description = {}
+        self.mf_description['GLOBAL_QUANT'] = ('These variables are calculate looping'
+                                            'either speciess or levels' +
+                                            ', '.join(GLOBAL_QUANT))
+        '''
+        ADD HERE Stuff from quantity that needs to be modified since it is MFMS:
+        PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+                        'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
+                        'kz']
+        CYCL_RES = ['n6nhe2', 'n6nhe3', 'nhe2nhe3']
+        CROSTAB_QUANT = ['h_' + clist for clist in elemlist]
+        COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_QUANT]
+        COLFRI_QUANT = ['nu_ni', 'nu_en', 'nu_ei']
+        COLFRI_QUANT = COLFRI_QUANT + \
+            ['nu' + clist + '_i' for clist in elemlist]
+        COLFRI_QUANT = COLFRI_QUANT + \
+            ['nu' + clist + '_n' for clist in elemlist]
 
-        elif var == 'grph':
-            weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
-            for ispecies in range(0,self.mf_nspecies):
-                nlevels=self.att[ispecies].params.nlevel
-                for mf_ispecies in range(nlevels):
-                    total_hpart += self._get_simple_var(
-                        'r',
-                        mf_ispecies=self.mf_ispecies,
-                        mf_ilevel=self.mf_ilevel,
-                        order=order,
-                        mode=mode) / weight
-            for mf_ispecies in range(0,self.mf_nspecies):
-                nlevels=self.att[ispecies].params.nlevel
+        '''
+        COL_QUANT = ['nu_ss']
+
+        if var == '':
+            print(help(self._get_composite_mf_var))
+
+        if var in GLOBAL_QUANT:
+            if var == 'totr':  # total density
+                for ispecies in range(0,self.mf_nspecies):
+                    nlevels=self.att[ispecies].params.nlevel
+                    for mf_ispecies in range(nlevels):
+                        ouput += self._get_simple_var(
+                            'r',
+                            mf_ispecies=self.mf_ispecies,
+                            mf_ilevel=self.mf_ilevel,
+                            order=order,
+                            mode=mode)
+                return ouput
+
+            elif var == 'grph':
                 weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
-                for ilevel in range(nlevels):
-                    ouput += self._get_simple_var(
-                        'r',
-                        mf_ispecies=self.mf_ispecies,
-                        mf_ilevel=self.mf_ilevel,
-                        order=order,
-                        mode=mode) / mf_total_hpart * u_r
-            return output
-
-        elif var == 'tot_part':
-            for mf_ispecies in range(0,self.mf_nspecies):
-                for ilevel in range(nlevels):
+                for ispecies in range(0,self.mf_nspecies):
+                    nlevels=self.att[ispecies].params.nlevel
+                    for mf_ispecies in range(nlevels):
+                        total_hpart += self._get_simple_var(
+                            'r',
+                            mf_ispecies=self.mf_ispecies,
+                            mf_ilevel=self.mf_ilevel,
+                            order=order,
+                            mode=mode) / weight
+                for mf_ispecies in range(0,self.mf_nspecies):
                     nlevels=self.att[ispecies].params.nlevel
                     weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
-                    ouput +=  self._get_simple_var(
-                        'r',
-                        mf_ispecies=self.mf_ispecies,
-                        mf_ilevel=self.mf_ilevel,
-                        order=order,
-                        mode=mode) / weight * (self.att[ispecies].params.levels[ilevel][-2]+1)
-            return output
+                    for ilevel in range(nlevels):
+                        ouput += self._get_simple_var(
+                            'r',
+                            mf_ispecies=self.mf_ispecies,
+                            mf_ilevel=self.mf_ilevel,
+                            order=order,
+                            mode=mode) / mf_total_hpart * u_r
+                return output
 
-        elif var == 'mu':
-            for mf_ispecies in range(0,self.mf_nspecies):
-                nlevels=self.att[ispecies].params.nlevel
-                for mf_ispecies in range(nlevels):
-                    ouput += self._get_simple_var(
-                        'r',
-                        mf_ispecies=self.mf_ispecies,
-                        mf_ilevel=self.mf_ilevel,
-                        order=order,
-                        mode=mode)
-            return output
+            elif var == 'tot_part':
+                for mf_ispecies in range(0,self.mf_nspecies):
+                    for ilevel in range(nlevels):
+                        nlevels=self.att[ispecies].params.nlevel
+                        weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
+                        ouput +=  self._get_simple_var(
+                            'r',
+                            mf_ispecies=self.mf_ispecies,
+                            mf_ilevel=self.mf_ilevel,
+                            order=order,
+                            mode=mode) / weight * (self.att[ispecies].params.levels[ilevel][-2]+1)
+                return output
+
+            elif var == 'mu':
+                for mf_ispecies in range(0,self.mf_nspecies):
+                    nlevels=self.att[ispecies].params.nlevel
+                    for mf_ispecies in range(nlevels):
+                        ouput += self._get_simple_var(
+                            'r',
+                            mf_ispecies=self.mf_ispecies,
+                            mf_ilevel=self.mf_ilevel,
+                            order=order,
+                            mode=mode)
+                return output
+
+        if var in COL_QUANT:
+            print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
+            return self.r * 0.0
 
         elif var in self.compvars:
             return super(EbysusData, self)._get_composite_var(var)
         else:
-            return super(EbysusData, self).get_quantity(var)
+            return super(EbysusData, self).get_quantity(var,PLASMA_QUANT='',
+                        CYCL_RES='',
+                        COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                        EOSTAB_QUANT='', TAU_QUANT='', DEBYE_LN_QUANT='',
+                        CROSTAB_QUANT='', COULOMB_COL_QUANT='')
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None,
