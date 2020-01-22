@@ -675,7 +675,8 @@ class BifrostData(object):
     def get_quantity(self, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 COLFRE_QUANT=None, COLFRI_QUANT=None, IONP_QUANT=None,
                 EOSTAB_QUANT=None, TAU_QUANT=None, DEBYE_LN_QUANT=None,
-                CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, **kwargs):
+                CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None,
+                HALL_QUANT=None, **kwargs):
         """
         Calculates a quantity from the simulation quantiables.
 
@@ -754,6 +755,12 @@ class BifrostData(object):
             ' Parallel and perpendicular have in the middle the following: ' +
             ', '.join(PROJ_QUANT))
         self.description['ALL'] += "\n"+ self.description['PROJ']
+
+        VECO_QUANT = ['times']
+        self.description['VECO'] = ('vectorial products (Bifrost units).'
+            ' have in the middle the following: ' +
+            ', '.join(VECO_QUANT))
+        self.description['ALL'] += "\n"+ self.description['VECO']
 
         CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
         self.description['CURRENT'] = ('Calculates currents (bifrost units) or'
@@ -858,6 +865,19 @@ class BifrostData(object):
             self.description['IONP'] = ('densities for specific ionized species as'
                 'follow (in SI): ' + ', '.join(IONP_QUANT))
             self.description['ALL'] += +"\n"+ self.description['IONP']
+
+        if (AMB_QUANT == None):
+            AMB_QUANT = ['uambx','uamby','uambz','ambx','amby','ambz']
+            self.description['AMB'] = ('ambipolar velocity or term as'
+                'follow (in Bifrost units): ' + ', '.join(AMB_QUANT))
+            self.description['ALL'] += +"\n"+ self.description['AMB']
+
+
+        if (HALL_QUANT == None):
+            HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz']
+            self.description['HALL'] = ('Hall velocity or term as'
+                'follow (in Bifrost units): ' + ', '.join(HALL_QUANT))
+            self.description['ALL'] += +"\n"+ self.description['HALL']
 
         if quant == '':
             help(self.get_quantity)
@@ -1186,6 +1206,23 @@ class BifrostData(object):
                                       x_a, y_a, z_a, x_b, y_b, z_b)
             else:
                 return proj_task(x_a, y_a, z_a, x_b, y_b, z_b)
+
+
+        elif quant[1:6] in VECO_QUANT:
+            # projects v1 onto v2
+            v1 = quant[0]
+            v2 = quant[7]
+            axis = quant[-1]
+            if axis == 'x':
+                varsn = ['y', 'z']
+            elif axis == 'y':
+                varsn = ['z', 'y']
+            elif axis == 'z':
+                varsn = ['x', 'y']
+            return (self.get_var(v1 + varsn[0] + 'c') *
+                self.get_var(v2 + varsn[1] + 'c') -
+                self.get_var(v1 + varsn[1] + 'c') *
+                self.get_var(v2 + varsn[0] + 'c'))
 
         elif quant in CURRENT_QUANT:
             # Calculate derivative of quantity
@@ -1559,6 +1596,32 @@ class BifrostData(object):
                 return np.sqrt(result)
             elif quant[-1] in SQUARE_QUANT:
                 return result
+
+        elif (quant in AMB_QUANT):
+            axis = quant[-1]
+            if quant[0] == 'u':
+                result = self.get_var('jxb' + quant[-1]) / dd.get_var('modb')
+            else:
+                if axis == 'x':
+                    varsn = ['y', 'z']
+                elif axis == 'y':
+                    varsn = ['z', 'y']
+                elif axis == 'z':
+                    varsn = ['x', 'y']
+                result = (self.get_var('jxb' + varsn[0]) *
+                    self.get_var('b' + varsn[1] + 'c') -
+                    self.get_var('jxb' + varsn[1]) *
+                    self.get_var('b' + varsn[0] + 'c')) / dd.get_var('b2')
+
+            return dd.get_var('eta_amb') * result
+
+        elif (quant in HALL_QUANT):
+            if quant[0] == 'u':
+                result = self.get_var('j' + quant[-1])
+            else:
+                result = self.get_var('jxb' + quant[-1]) / dd.get_var('modb')
+
+            return dd.get_var('eta_hall') * result
 
         else:
             raise ValueError(('get_quantity: do not know (yet) how to '
