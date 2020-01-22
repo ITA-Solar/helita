@@ -564,6 +564,7 @@ class EbysusData(BifrostData):
 
         '''
         COL_QUANT = ['nu_ss']
+        DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
 
         if var == '':
             print(help(self._get_composite_mf_var))
@@ -633,14 +634,23 @@ class EbysusData(BifrostData):
             print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
             return self.r * 0.0
 
+        if var[:-1] in DRIFT_QUANT:
+            axis = var[-1]
+            varn= var[:-2]
+            return (self.get_var(varn + axis,mf_ispecies=self.mf_ispecies,mf_ilevel=self.mf_ilevel) -
+                self.get_var(varn + axis,mf_ispecies=self.mf_jspecies,mf_ilevel=self.mf_jlevel))
+        if var in DRIFT_QUANT:
+            return (self.get_var(var[:-1],mf_ispecies=self.mf_ispecies,mf_ilevel=self.mf_ilevel) -
+                self.get_var(var[:-1],mf_ispecies=self.mf_jspecies,mf_ilevel=self.mf_jlevel))
+
         elif var in self.compvars:
             return super(EbysusData, self)._get_composite_var(var)
         else:
             return super(EbysusData, self).get_quantity(var,PLASMA_QUANT='',
-                        CYCL_RES='',
-                        COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
-                        EOSTAB_QUANT='', TAU_QUANT='', DEBYE_LN_QUANT='',
-                        CROSTAB_QUANT='', COULOMB_COL_QUANT='')
+                        CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                        IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                        DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                        COULOMB_COL_QUANT='', AMB_QUANT='', HALL_QUANT='')
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None,
