@@ -702,7 +702,8 @@ class BifrostData(object):
         >>> print(dd.description['ALL'])
         """
         quant = quant.lower()
-        self.description = {}
+        if not hasattr(self,'description'):
+            self.description = {}
         DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
         self.description['DERIV'] = ('Spatial derivative (Bifrost units). '
                                      'It must start with d and end with: ' +
