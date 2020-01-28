@@ -4,7 +4,7 @@ Set of programs to read and interact with output from Multifluid/multispecies
 
 import numpy as np
 import os
-from .bifrost import BifrostData, Rhoeetab, Bifrost_units
+from .bifrost import BifrostData, Rhoeetab, Bifrost_units, Cross_sect
 from .bifrost import read_idl_ascii, subs2grph
 from . import cstagger
 from at_tools import atom_tools as at
@@ -548,6 +548,7 @@ class EbysusData(BifrostData):
         self.mf_description['GLOBAL_QUANT'] = ('These variables are calculate looping'
                                             'either speciess or levels' +
                                             ', '.join(GLOBAL_QUANT))
+        self.mf_description['ALL'] = self.mf_description['GLOBAL_QUANT']
         '''
         ADD HERE Stuff from quantity that needs to be modified since it is MFMS:
         PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
@@ -565,6 +566,10 @@ class EbysusData(BifrostData):
         '''
         COL_QUANT = ['nu_ss']
         DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
+        CROSTAB_QUANT = ['cross']
+        self.mf_description['CROSTAB'] = ('Cross section between species'
+            '(in cgs): ' + ', '.join(CROSTAB_QUANT))
+        self.mf_description['ALL'] += "\n"+ self.mf_description['CROSTAB']
 
         if var == '':
             print(help(self._get_composite_mf_var))
@@ -634,14 +639,64 @@ class EbysusData(BifrostData):
             print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
             return self.r * 0.0
 
-        if var[:-1] in DRIFT_QUANT:
+        elif var[:-1] in DRIFT_QUANT:
             axis = var[-1]
             varn= var[:-2]
             return (self.get_var(varn + axis,mf_ispecies=self.mf_ispecies,mf_ilevel=self.mf_ilevel) -
                 self.get_var(varn + axis,mf_ispecies=self.mf_jspecies,mf_ilevel=self.mf_jlevel))
-        if var in DRIFT_QUANT:
+        elif var in DRIFT_QUANT:
             return (self.get_var(var[:-1],mf_ispecies=self.mf_ispecies,mf_ilevel=self.mf_ilevel) -
                 self.get_var(var[:-1],mf_ispecies=self.mf_jspecies,mf_ilevel=self.mf_jlevel))
+
+        elif var in CROSTAB_QUANT:
+            tg = self.get_var('mfe_tg')
+            if (self.mf_ispecies<0):
+                spic1='e'
+            else:
+                spic1 = self.att[self.mf_ispecies].params.element
+            if (self.mf_jspecies<0):
+                spic2='e'
+            else:
+                spic2 = self.att[self.mf_jspecies].params.element
+            cross_tab = ''
+            crossunits = 2.8e-17
+            if spic1 == 'h':
+                if spic2 == 'h':
+                    cross_tab = 'p-h-elast.txt'
+                elif spic2 == 'he':
+                    cross_tab = 'p-he.txt'
+                elif spic2 == 'e':
+                    cross_tab = 'e-h.txt'
+                    crossunits = 1e-16
+                else:
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
+                        self.uni.cross_p * np.ones(np.shape(tg))
+            elif spic1 == 'he':
+                if spic2 == 'h':
+                    cross_tab = 'p-h-elast.txt'
+                elif spic2 == 'he':
+                    cross_tab = 'he-he.txt'
+                    crossunits = 1e-16
+                elif spic2 == 'e':
+                    cross_tab = 'e-he.txt'
+                else:
+                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] * \
+                        self.uni.cross_he * np.ones(np.shape(tg))
+            elif spic1 == 'e':
+                if spic2 == 'h':
+                    cross_tab = 'e-h.txt'
+                elif spic2 == 'he':
+                    cross_tab = 'e-he.txt'
+            if cross_tab != '':
+                crossobj = Cross_sect(cross_tab=[cross_tab])
+                cross = crossunits * crossobj.tab_interp(tg)
+            else:
+                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
+                    self.uni.cross_p * np.ones(np.shape(tg))
+            try:
+                return cross
+            except Exception:
+                print('(WWW) cross-section: wrong combination of species')
 
         elif var in self.compvars:
             return super(EbysusData, self)._get_composite_var(var)
