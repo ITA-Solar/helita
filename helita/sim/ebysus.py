@@ -660,39 +660,38 @@ class EbysusData(BifrostData):
                 spic2 = self.att[self.mf_jspecies].params.element
             cross_tab = ''
             crossunits = 2.8e-17
-            if spic1 == 'h':
-                if spic2 == 'h':
-                    cross_tab = 'p-H-elast.txt'
-                elif spic2 == 'he':
-                    cross_tab = 'p-He.txt'
-                elif spic2 == 'e':
-                    cross_tab = 'e-h.txt'
-                    crossunits = 1e-16
-                else:
-                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
-                        self.uni.cross_p * np.ones(np.shape(tg))
-            elif spic1 == 'he':
-                if spic2 == 'h':
-                    cross_tab = 'p-He.txt'
-                elif spic2 == 'he':
-                    cross_tab = 'he-he.txt'
-                    crossunits = 1e-16
-                elif spic2 == 'e':
-                    cross_tab = 'e-he.txt'
-                else:
-                    cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] * \
-                        self.uni.cross_he * np.ones(np.shape(tg))
-            elif spic1 == 'e':
-                if spic2 == 'h':
-                    cross_tab = 'e-h.txt'
-                elif spic2 == 'he':
-                    cross_tab = 'e-he.txt'
+            if ([spic1,spic2] == ['h','h']) :
+                cross_tab = 'p-h-elast.txt'
+            elif (([spic1,spic2] == ['h','he']) or
+                 ([spic2,spic1] == ['h','he'])):
+                cross_tab = 'p-he.txt'
+            elif ([spic1,spic2] == ['he','he']):
+                cross_tab = 'he-he.txt'
+                crossunits = 1e-16
+            elif (([spic1,spic2] == ['e','he']) or
+                 ([spic2,spic1] == ['e','he'])):
+                cross_tab = 'e-he.txt'
+                crossunits = 1e-16
+            elif (([spic1,spic2]==['e','h']) or ([spic2,spic1]==['e','h'])):
+                cross_tab = 'e-h.txt'
+                crossunits = 1e-16
+            elif (spic1 == 'h'):
+                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
+                    self.uni.cross_p * np.ones(np.shape(tg))
+            elif (spic2 == 'h'):
+                cross = self.uni.weightdic[spic1] / self.uni.weightdic['h'] * \
+                    self.uni.cross_p * np.ones(np.shape(tg))
+            elif (spic1 == 'he'):
+                cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] * \
+                    self.uni.cross_he * np.ones(np.shape(tg))
+            elif (spic2 == 'he'):
+                cross = self.uni.weightdic[spic1] / self.uni.weightdic['he'] * \
+                    self.uni.cross_he * np.ones(np.shape(tg))
+
             if cross_tab != '':
                 crossobj = Cross_sect(cross_tab=[cross_tab])
                 cross = crossunits * crossobj.tab_interp(tg)
-            else:
-                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
-                    self.uni.cross_p * np.ones(np.shape(tg))
+                
             try:
                 return cross
             except Exception:
