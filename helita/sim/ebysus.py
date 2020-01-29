@@ -662,9 +662,9 @@ class EbysusData(BifrostData):
             crossunits = 2.8e-17
             if spic1 == 'h':
                 if spic2 == 'h':
-                    cross_tab = 'p-h-elast.txt'
+                    cross_tab = 'p-H-elast.txt'
                 elif spic2 == 'he':
-                    cross_tab = 'p-he.txt'
+                    cross_tab = 'p-He.txt'
                 elif spic2 == 'e':
                     cross_tab = 'e-h.txt'
                     crossunits = 1e-16
@@ -673,7 +673,7 @@ class EbysusData(BifrostData):
                         self.uni.cross_p * np.ones(np.shape(tg))
             elif spic1 == 'he':
                 if spic2 == 'h':
-                    cross_tab = 'p-h-elast.txt'
+                    cross_tab = 'p-He.txt'
                 elif spic2 == 'he':
                     cross_tab = 'he-he.txt'
                     crossunits = 1e-16
