@@ -777,6 +777,12 @@ class BifrostData(object):
             ', '.join(GYROF_QUANT) + ' at the end it must have the ioniztion' +
             'state, e,g, gfh2 is for ionized hydrogen')
 
+        KAPPA_QUANT = ['kappae'] + ['kappa' + clist for clist in elemlist]
+        self.description['KAPPA'] = ('kappa, i.e., magnetization are (adimensional): ' +
+            ', '.join(KAPPA_QUANT) + ' at the end it must have the ionization' +
+            'state, e,g, kappah2 is for protons')
+
+
         DEBYE_LN_QUANT = ['debye_ln']
         self.description['DEBYE'] = ('Debye length in ... units:',
             ', '.join(DEBYE_LN_QUANT))
@@ -1321,6 +1327,13 @@ class BifrostData(object):
                     self.uni.qsi_electron * \
                     (ion - 1.0) / \
                     (self.uni.weightdic[quant[2:-1]] * self.uni.amusi)
+
+        elif ''.join([i for i in quant if not i.isdigit()]) in KAPPA_QUANT:
+            if quant == 'kappae':
+                return self.get_var('gfe') / (self.get_var('nue_n') + 1e-28)
+            else:
+                elem = quant.replace('kappa', '')
+                return self.get_var('gf'+elem) / (self.get_var('nu'+elem+'_n') + 1e-28)
 
         elif quant in COULOMB_COL_QUANT:
             iele = np.where(COULOMB_COL_QUANT == quant)
