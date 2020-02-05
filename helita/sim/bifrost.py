@@ -822,9 +822,14 @@ class BifrostData(object):
             'state, e,g, gfh2 is for ionized hydrogen')
         self.description['ALL'] += "\n"+ self.description['GYROF']
 
+        KAPPA_QUANT = ['kappae'] + ['kappa' + clist for clist in elemlist]
+        self.description['KAPPA'] = ('kappa, i.e., magnetization are (adimensional): ' +
+            ', '.join(KAPPA_QUANT) + ' at the end it must have the ionization' +
+            'state, e,g, kappah2 is for protons')
+
         if (DEBYE_LN_QUANT == None):
             DEBYE_LN_QUANT = ['debye_ln']
-            self.description['DEBYE'] = ('Debye length in ... units:', +
+            self.description['DEBYE'] = ('Debye length in ... units:' +
                 ', '.join(DEBYE_LN_QUANT))
             self.description['ALL'] += "\n"+ self.description['DEBYE']
 
@@ -869,21 +874,20 @@ class BifrostData(object):
             IONP_QUANT = IONP_QUANT + ['r' + clist + '-' for clist in elemlist]
             self.description['IONP'] = ('densities for specific ionized species as'
                 'follow (in SI): ' + ', '.join(IONP_QUANT))
-            self.description['ALL'] += +"\n"+ self.description['IONP']
+            self.description['ALL'] += "\n"+ self.description['IONP']
 
         if (AMB_QUANT == None):
             AMB_QUANT = ['uambx','uamby','uambz','ambx','amby','ambz',
                         'eta_amb1','eta_amb2','eta_amb3','eta_amb4','eta_amb5']
             self.description['AMB'] = ('ambipolar velocity or term as'
                 'follow (in Bifrost units): ' + ', '.join(AMB_QUANT))
-            self.description['ALL'] += +"\n"+ self.description['AMB']
-
+            self.description['ALL'] += "\n"+ self.description['AMB']
 
         if (HALL_QUANT == None):
             HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz']
             self.description['HALL'] = ('Hall velocity or term as'
                 'follow (in Bifrost units): ' + ', '.join(HALL_QUANT))
-            self.description['ALL'] += +"\n"+ self.description['HALL']
+            self.description['ALL'] += "\n"+ self.description['HALL']
 
         if quant == '':
             help(self.get_quantity)
@@ -1415,6 +1419,13 @@ class BifrostData(object):
                     (ion - 1.0) / \
                     (self.uni.weightdic[quant[2:-1]] * self.uni.amusi)
 
+        elif ''.join([i for i in quant if not i.isdigit()]) in KAPPA_QUANT:
+            if quant == 'kappae':
+                return self.get_var('gfe') / (self.get_var('nu_en') + 1e-28)
+            else:
+                elem = quant.replace('kappa', '')
+                return self.get_var('gf'+elem) / (self.get_var('nu'+elem+'_n') + 1e-28)
+
         elif quant in COULOMB_COL_QUANT:
             iele = np.where(COULOMB_COL_QUANT == quant)
             tg = self.get_var('tg')
@@ -1554,9 +1565,11 @@ class BifrostData(object):
                     lvl = '1'
                 elem = quant.split('_')
                 result = np.zeros(np.shape(self.r))
+
                 for ielem in elemlist:
-                    if elem[0][2:] != '%s%s' % (ielem, lvl):
-                        result += self.get_var('%s_%s%s' %
+                    if lvl == '1' and ielem in elemlist[:2]:
+                        if elem[0][2:] != '%s%s' % (ielem, lvl):
+                            result += self.get_var('%s_%s%s' %
                                                (elem[0], ielem, lvl))
                 if self.heion and quant[-2:] == '_i':
                     result += self.get_var('%s_%s' % (elem[0], 'he3'))
