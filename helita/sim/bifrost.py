@@ -871,7 +871,8 @@ class BifrostData(object):
 
         if (IONP_QUANT == None):
             IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
-            IONP_QUANT = IONP_QUANT + ['r' + clist + '-' for clist in elemlist]
+            IONP_QUANT += ['r' + clist + '-' for clist in elemlist]
+            IONP_QUANT += ['rneu','rion','nion','nneu']
             self.description['IONP'] = ('densities for specific ionized species as'
                 'follow (in SI): ' + ', '.join(IONP_QUANT))
             self.description['ALL'] += "\n"+ self.description['IONP']
@@ -1496,6 +1497,7 @@ class BifrostData(object):
             ion2 = ''.join([i for i in elem[1] if i.isdigit()])
 
             spic1 = spic1[2:]
+            print(spic1, spic2)
             crossarr = self.get_var('%s_%s' % (spic1, spic2))
             nspic2 = self.get_var('n%s-%s' % (spic2, ion2))
 
@@ -1530,7 +1532,8 @@ class BifrostData(object):
             if quant == 'nu_ins':
                 result = self.uni.m_h * self.get_var('nh-2') * \
                     self.get_var('nuh2_ns') + \
-                    self.uni.m_he * self.get_var('nhe-2') * self.get_var('nuhe2_ns')
+                    self.uni.m_he * self.get_var('nhe-2') * self.get_var('nuhe2_ns') + \
+                    self.uni.m_he * self.get_var('nhe-3') * self.get_var('nuhe3_ns')
 
             elif quant == 'nu_ei':
                 if self.hion:
@@ -1558,23 +1561,23 @@ class BifrostData(object):
                 result = 5.2e-11 * scr2 / nel * self.get_var('tg')**2 / \
                     culblog * scr1
 
-            elif quant[-1:] != 's':
+            elif quant[-2:] == '_i' or quant[-2:] == '_n':
                 if quant[-2:] == '_i':
                     lvl = '2'
                 else:
                     lvl = '1'
                 elem = quant.split('_')
                 result = np.zeros(np.shape(self.r))
-
+                print(elem[0],quant)
                 for ielem in elemlist:
-                    if lvl == '1' and ielem in elemlist[:2]:
+                    if elem[0][2:] in ['h','he'] or ielem in ['h','he']:
                         if elem[0][2:] != '%s%s' % (ielem, lvl):
                             result += self.get_var('%s_%s%s' %
                                                (elem[0], ielem, lvl))
                 if self.heion and quant[-2:] == '_i':
                     result += self.get_var('%s_%s' % (elem[0], 'he3'))
 
-            elif quant[-1:] == 's':
+            elif quant[-3:] == '_is' or quant[-3:] == '_ns':
                 if quant[-3:] == '_is':
                     lvl = '2'
                 else:
@@ -1584,30 +1587,41 @@ class BifrostData(object):
                 for ielem in elemlist:
                     if elem[0][2:] != '%s%s' % (ielem, lvl):
                         result += self.get_var('%s_%s%s' %
-                                (elem[0], ielem, lvl)) * uni.weightdic[ielem] /\
-                                (uni.weightdic[ielem] + uni.weightdic[elem[0][2:]])
+                                (elem[0], ielem, lvl)) * self.uni.weightdic[ielem] /\
+                                (self.uni.weightdic[ielem] + self.uni.weightdic[elem[0][2:-1]])
                 if self.heion and quant[-3:] == '_is':
-                    result += self.get_var('%s_%s' % (elem[0], 'he3')) * uni.weightdic['he'] /\
-                            (uni.weightdic['he'] + uni.weightdic[elem[0][2:]])
+                    result += self.get_var('%s_%s' % (elem[0], 'he3')) * self.uni.weightdic['he'] /\
+                            (self.uni.weightdic['he'] + self.uni.weightdic[elem[0][2:-1]])
 
             return result
 
+
+        elif quant in IONP_QUANT:
+            if quant[3:] == 'ion':
+                lvl = '2'
+            else:
+                lvl = '1'
+            result = np.zeros(np.shape(self.r))
+            for ielem in elemlist:
+                result += self.get_var(quant[0]+ielem+'-'+lvl)
+            return result
+
         elif ''.join([i for i in quant if not i.isdigit()]) in IONP_QUANT:
-            elem = quant.split('_')
-            spic = ''.join([i for i in elem[0] if not i.isdigit()])
-            lvl = ''.join([i for i in elem[0] if i.isdigit()])
+            elem = quant.replace('-','')
+            spic = ''.join([i for i in elem if not i.isdigit()])
+            lvl = ''.join([i for i in elem if i.isdigit()])
             if self.hion and spic[1:-1] == 'h':
                 if quant[0] == 'n':
                     mass = 1.0
                 else:
                     mass = self.uni.m_h
                 if lvl == '1':
-
                     return mass * (self.get_var('n1') +
                                    self.get_var('n2') + self.get_var('n3') +
                                    self.get_var('n4') + self.get_var('n5'))
                 else:
                     return mass * self.get_var('n6')
+
             elif self.heion and spic[1:-1] == 'he':
                 if quant[0] == 'n':
                     mass = 1.0
@@ -1627,12 +1641,13 @@ class BifrostData(object):
                 else:
                     dens = True
 
-                return ionpopulation(r, nel, tg, elem=spic[1:-1], lvl=lvl,
+                return ionpopulation(r, nel, tg, elem=spic[1:], lvl=lvl,
                                      dens=dens)
 
         elif ((quant[:3] in MODULE_QUANT) or (
                 quant[-1] in MODULE_QUANT) or (
-                quant[-1] in SQUARE_QUANT and not(quant in CYCL_RES))):
+                quant[-1] in SQUARE_QUANT and
+                not(quant in CYCL_RES) and not(quant in AMB_QUANT))):
             # Calculate module of vector quantity
             if (quant[:3] in MODULE_QUANT):
                 q = quant[3:]
@@ -1669,18 +1684,18 @@ class BifrostData(object):
                     self.get_var('b' + varsn[0] + 'c')) / dd.get_var('b2') * dd.get_var('eta_amb')
 
             elif quant == 'eta_amb1':
-                result = (self.get_var('r_neutral') / self.r * uni.u_b)**2 / (
-                    4.0 * uni.pi * self.get_var('rnu_ni') + 1e-20)
+                result = (self.get_var('rneu') / self.get_var('r') * self.uni.u_b)**2
+                result /= (4.0 * self.uni.pi * self.get_var('nu_ni') + 1e-20)
                 result *= self.get_var('b2') / 1e7
 
             elif quant == 'eta_amb2': # Daniel version
-                result = (self.get_var('r_neutral') / self.r * uni.u_b)**2 / (
-                    4.0 * uni.pi * self.get_var('rnu_nis') + 1e-20)
+                result = (self.get_var('rneu') / self.r * self.uni.u_b)**2 / (
+                    4.0 * self.uni.pi * self.get_var('nu_nis') + 1e-20)
                 result *= self.get_var('b2') / 1e7
 
             elif quant == 'eta_amb3': # My version
-                result = (self.get_var('r_neutral') / self.r * uni.u_b)**2 / (
-                    4.0 * uni.pi * self.get_var('rnu_nis') + 1e-20)
+                result = (self.get_var('rneu') / self.r * self.uni.u_b)**2 / (
+                    4.0 * self.uni.pi * self.get_var('nu_ins') + 1e-20)
                 result *= self.get_var('b2') / 1e7
 
             elif quant == 'eta_amb4': # Yakov, Eq ()
@@ -1695,7 +1710,7 @@ class BifrostData(object):
                         1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
 
                     psi += (self.get_var('kappae') +
-                        ddmag.get_var('kappa'+iele+'2')) * (
+                        self.get_var('kappa'+iele+'2')) * (
                         1.0 + self.get_var('kappae') * self.get_var('kappa'+iele+'2')) / (
                         1.0 + self.get_var('kappa'+iele+'2')**2) / (
                         1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
@@ -1713,7 +1728,7 @@ class BifrostData(object):
                         1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
 
                     psi += (self.get_var('kappae') +
-                        ddmag.get_var('kappa'+iele+'2')) * (
+                        self.get_var('kappa'+iele+'2')) * (
                         1.0 + self.get_var('kappae') * self.get_var('kappa'+iele+'2')) / (
                         1.0 + self.get_var('kappa'+iele+'2')**2) / (
                         1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
