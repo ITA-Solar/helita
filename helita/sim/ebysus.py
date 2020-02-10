@@ -565,11 +565,14 @@ class EbysusData(BifrostData):
 
         '''
         COL_QUANT = ['n_i', 'n_j', 'CC', 'C_tot_per_vol', 'nu_ij', 'nu_ji']
+        self.mf_description['COL_QUANT'] = ('Collisional quantities for mf_ispecies'
+                           ' and mf_jspecies: ' + ', '.join(COL_QUANT))
         DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
         CROSTAB_QUANT = ['cross']
         self.mf_description['CROSTAB'] = ('Cross section between species'
             '(in cgs): ' + ', '.join(CROSTAB_QUANT))
         self.mf_description['ALL'] += "\n"+ self.mf_description['CROSTAB']
+        
 
         if var == '':
             print(help(self._get_composite_mf_var))
