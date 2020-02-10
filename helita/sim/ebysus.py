@@ -564,7 +564,7 @@ class EbysusData(BifrostData):
             ['nu' + clist + '_n' for clist in elemlist]
 
         '''
-        COL_QUANT = ['nu_ss']
+        COL_QUANT = ['n_i', 'n_j', 'CC', 'C_tot_per_vol', 'nu_ij', 'nu_ji']
         DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
         CROSTAB_QUANT = ['cross']
         self.mf_description['CROSTAB'] = ('Cross section between species'
@@ -625,7 +625,7 @@ class EbysusData(BifrostData):
 
             elif var == 'mu':
                 for mf_ispecies in range(0,self.mf_nspecies):
-                    nlevels=self.att[ispecies].params.nlevel
+                    nlevels=self.att[mf_ispecies].params.nlevel
                     for mf_ispecies in range(nlevels):
                         ouput += self._get_simple_var(
                             'r',
@@ -636,8 +636,46 @@ class EbysusData(BifrostData):
                 return output
 
         if var in COL_QUANT:
-            print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
-            return self.r * 0.0
+            if var in ["n_i","n_j"]:
+                amu   = 1.6605402e-24 #grams
+                if var[-1]=="i":
+                    s = self.mf_ispecies
+                    l = self.mf_ilevel
+                elif var[-1]=="j":
+                    s = self.mf_jspecies
+                    l = self.mf_jlevel
+                m = self.att[ s ].params.atomic_weight
+                r = self.get_var('r', mf_ispecies= s , mf_ilevel= l )
+                n = r * self.params['u_r'][0] / (amu * m)
+                del amu, s, l, m, r
+                return n
+            elif var == "CC":
+                (s_i, l_i) = (self.mf_ispecies, self.mf_ilevel)
+                (s_j, l_j) = (self.mf_jspecies, self.mf_jlevel)
+                #determine cross section, n_i, n_j
+                cross = self.get_var('cross', mf_ispecies=s_i, mf_ilevel=l_i, 
+                                        mf_jspecies=s_j, mf_jlevel=l_j) #units are in cm^2.
+                #determine mu
+                amu   = 1.6605402e-24 #grams
+                m_i   = self.att[s_i].params.atomic_weight
+                m_j   = self.att[s_j].params.atomic_weight
+                mu    = amu * m_i * m_j / (m_i + m_j)
+                #determine temperature
+                kb    = 1.380658e-16 #ergs K^-1
+                tg    = self.get_var('mfe_tg') #need to check if units are correct
+                #determine CC
+                CC    = cross * np.sqrt(8 * kb * tg / (np.pi * mu))
+                del s_i, s_j, l_i, l_j, amu, m_i, m_j, kb, tg
+                return CC
+            elif var == "C_tot_per_vol":
+                return self.get_var("CC") * self.get_var("n_i") * self.get_var("n_j")
+            elif var == "nu_ij":
+                return self.get_var("n_i") * self.get_var("CC")
+            elif var == "nu_ji":
+                return self.get_var("n_j") * self.get_var("CC")
+            else:
+                print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
+                return self.r * 0.0
 
         elif var[:-1] in DRIFT_QUANT:
             axis = var[-1]
