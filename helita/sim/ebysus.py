@@ -145,6 +145,7 @@ class EbysusData(BifrostData):
         self.mfc_file = (self.root_name + '_mfc_%02i_%02i')
         self.mm_file = (self.root_name + '_mm_%02i_%02i')
         self.mf_e_file = (self.root_name + '_mf_e')
+        self.aux_file = (self.root_name)
 
         self.variables = {}
 
@@ -420,7 +421,7 @@ class EbysusData(BifrostData):
                 idx = self.auxvars.index(var)
                 fsuffix_a = '.aux'
                 dirvars = '%s.io/mf_common/' % self.file_root
-                filename = self.file_root
+                filename = self.aux_file
             elif var in self.varsmf:
                 idx = self.varsmf.index(var)
                 fsuffix_a = '.aux'
@@ -476,7 +477,7 @@ class EbysusData(BifrostData):
             elif var in self.auxvars:
                 idx = self.auxvars.index(var)
                 fsuffix_a = '.aux'
-                filename = self.file_root
+                filename = self.aux_file
             elif var in self.varsmf:
                 idx = self.varsmf.index(var)
                 fsuffix_a = '.aux'
@@ -572,7 +573,7 @@ class EbysusData(BifrostData):
         self.mf_description['CROSTAB'] = ('Cross section between species'
             '(in cgs): ' + ', '.join(CROSTAB_QUANT))
         self.mf_description['ALL'] += "\n"+ self.mf_description['CROSTAB']
-        
+
 
         if var == '':
             print(help(self._get_composite_mf_var))
@@ -656,7 +657,7 @@ class EbysusData(BifrostData):
                 (s_i, l_i) = (self.mf_ispecies, self.mf_ilevel)
                 (s_j, l_j) = (self.mf_jspecies, self.mf_jlevel)
                 #determine cross section, n_i, n_j
-                cross = self.get_var('cross', mf_ispecies=s_i, mf_ilevel=l_i, 
+                cross = self.get_var('cross', mf_ispecies=s_i, mf_ilevel=l_i,
                                         mf_jspecies=s_j, mf_jlevel=l_j) #units are in cm^2.
                 #determine mu
                 amu   = 1.6605402e-24 #grams
@@ -732,7 +733,7 @@ class EbysusData(BifrostData):
             if cross_tab != '':
                 crossobj = Cross_sect(cross_tab=[cross_tab])
                 cross = crossunits * crossobj.tab_interp(tg)
-                
+
             try:
                 return cross
             except Exception:
