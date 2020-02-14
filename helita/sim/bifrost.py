@@ -1650,10 +1650,7 @@ class BifrostData(object):
             else:
                 tg = self.get_var('tg')
                 r = self.get_var('r')
-                if self.hion:
-                    nel = self.get_var('hionne')
-                else:
-                    nel = self.get_var('ne') / 1e6  # 1e6 conversion from SI to cgs
+                nel = self.get_var('ne') / 1e6  # 1e6 conversion from SI to cgs
 
                 if quant[0] == 'n':
                     dens = False
@@ -2979,9 +2976,9 @@ def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
 
     if dens:
         if lvl == '1':
-            return (1.0 - ifracpos) * c2
+            return (1.0 - ifracpos) * c2 * uni.u_r
         else:
-            return ifracpos * c2
+            return ifracpos * c2 * uni.u_r
 
     else:
         if lvl == '1':
