@@ -841,6 +841,7 @@ class BifrostData(object):
 
         if (CROSTAB_QUANT == None):
             CROSTAB_QUANT = ['h_' + clist for clist in elemlist]
+            CROSTAB_QUANT += ['e_' + clist for clist in elemlist]
             for iel in elemlist:
                 CROSTAB_QUANT = CROSTAB_QUANT + [
                     iel + '_' + clist for clist in elemlist]
@@ -850,6 +851,7 @@ class BifrostData(object):
 
         if (COLFRE_QUANT == None):
             COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_QUANT]
+            COLFRE_QUANT += ['nue_'+ clist for clist in elemlist]
             self.description['COLFRE'] = ('Collision frequency (elastic and charge'
                 'exchange) between different species in (cgs): ' +
                 ', '.join(COLFRE_QUANT))
@@ -879,7 +881,8 @@ class BifrostData(object):
 
         if (AMB_QUANT == None):
             AMB_QUANT = ['uambx','uamby','uambz','ambx','amby','ambz',
-                        'eta_amb1','eta_amb2','eta_amb3','eta_amb4','eta_amb5']
+                        'eta_amb1','eta_amb2','eta_amb3','eta_amb4','eta_amb5',
+                        'chi','psi','chi_red','psi_red']
             self.description['AMB'] = ('ambipolar velocity or term as'
                 'follow (in Bifrost units): ' + ', '.join(AMB_QUANT))
             self.description['ALL'] += "\n"+ self.description['AMB']
@@ -1497,13 +1500,18 @@ class BifrostData(object):
             ion2 = ''.join([i for i in elem[1] if i.isdigit()])
 
             spic1 = spic1[2:]
-            print(spic1, spic2)
             crossarr = self.get_var('%s_%s' % (spic1, spic2))
             nspic2 = self.get_var('n%s-%s' % (spic2, ion2))
 
             tg = self.get_var('tg')
-            awg1 = self.uni.weightdic[spic1] * self.uni.amu
-            awg2 = self.uni.weightdic[spic2] * self.uni.amu
+            if spic1 == 'e':
+                awg1 = self.uni.m_electron
+            else:
+                awg1 = self.uni.weightdic[spic1] * self.uni.amu
+            if spic1 == 'e':
+                awg2 = self.uni.m_electron
+            else:
+                awg2 = self.uni.weightdic[spic2] * self.uni.amu
             scr1 = np.sqrt(8.0 * self.uni.kboltzmann * tg / self.uni.pi)
 
             return crossarr * np.sqrt((awg1 + awg2) / (awg1 * awg2)) *\
@@ -1546,20 +1554,28 @@ class BifrostData(object):
                 result = 3.759 * nel / (self.get_var('tg')**(1.5)) * culblog
 
             elif quant == 'nu_en':
-                if self.hion:
-                    nel = self.get_var('hionne')
-                else:
-                    nel = self.get_var('nel')
-                culblog = 23. + 1.5 * np.log(self.get_var('tg') / 1.e6) - \
-                    0.5 * np.log(nel / 1e6)
-                scr1 = 3.759 * nel / (self.get_var('tg')**(1.5)) * culblog
-                scr2 = 0.0 * nel
+                elem = quant.split('_')
+                result = np.zeros(np.shape(self.r))
+                lvl = 1
                 for ielem in elemlist:
-                    scr2 += self.get_var('n%s-%s' % (ielem, 2))
-                if self.heion and quant[-2:] == '_i':
-                    scr2 += self.get_var('%s_%s' % (elem[0], 'he3'))
-                result = 5.2e-11 * scr2 / nel * self.get_var('tg')**2 / \
-                    culblog * scr1
+                    if ielem in ['h','he']:
+                        result += self.get_var('%s_%s%s' %
+                                       ('nue', ielem, lvl))
+                #if self.hion:
+                #    nel = self.get_var('hionne')
+                #else:
+                #    nel = self.get_var('nel')
+                #culblog = 23. + 1.5 * np.log(self.get_var('tg') / 1.e6) - \
+                #    0.5 * np.log(nel / 1e6)
+                #scr1 = 3.759 * nel / (self.get_var('tg')**(1.5)) * culblog
+                #scr2 = 0.0 * nel
+                #for ielem in elemlist:
+                #    scr2 += self.get_var('n%s-%s' % (ielem, 1)
+                #result = 5.2e-11 * scr2 / nel * self.get_var('tg')**2 / \
+                #    culblog * scr1
+                #for ielem in elemlist:
+                #    result+=self.uni.amu * self.uni.weightdic[ielem] * self.get_var('n%s-2'%ielem) * \
+                #        self.get_var('nu%s2_n'%ielem)
 
             elif quant[-2:] == '_i' or quant[-2:] == '_n':
                 if quant[-2:] == '_i':
@@ -1568,7 +1584,6 @@ class BifrostData(object):
                     lvl = '1'
                 elem = quant.split('_')
                 result = np.zeros(np.shape(self.r))
-                print(elem[0],quant)
                 for ielem in elemlist:
                     if elem[0][2:] in ['h','he'] or ielem in ['h','he']:
                         if elem[0][2:] != '%s%s' % (ielem, lvl):
@@ -1610,7 +1625,8 @@ class BifrostData(object):
             elem = quant.replace('-','')
             spic = ''.join([i for i in elem if not i.isdigit()])
             lvl = ''.join([i for i in elem if i.isdigit()])
-            if self.hion and spic[1:-1] == 'h':
+
+            if self.hion and spic[1:] == 'h':
                 if quant[0] == 'n':
                     mass = 1.0
                 else:
@@ -1622,7 +1638,7 @@ class BifrostData(object):
                 else:
                     return mass * self.get_var('n6')
 
-            elif self.heion and spic[1:-1] == 'he':
+            elif self.heion and spic[1:] == 'he':
                 if quant[0] == 'n':
                     mass = 1.0
                 else:
@@ -1634,7 +1650,10 @@ class BifrostData(object):
             else:
                 tg = self.get_var('tg')
                 r = self.get_var('r')
-                nel = self.get_var('ne') / 1e6  # 1e6 conversion from SI to cgs
+                if self.hion:
+                    nel = self.get_var('hionne')
+                else:
+                    nel = self.get_var('ne') / 1e6  # 1e6 conversion from SI to cgs
 
                 if quant[0] == 'n':
                     dens = False
@@ -1671,7 +1690,7 @@ class BifrostData(object):
             if quant[0] == 'u':
                 result = self.get_var('jxb' + quant[-1]) / dd.get_var('modb') * dd.get_var('eta_amb')
 
-            elif quant[:-1] != 'eta_amb':
+            elif quant[:-1] != 'eta_amb' and quant[:3] != 'chi' and quant[:3] != 'psi' :
                 if axis == 'x':
                     varsn = ['y', 'z']
                 elif axis == 'y':
@@ -1683,7 +1702,7 @@ class BifrostData(object):
                     self.get_var('jxb' + varsn[1]) *
                     self.get_var('b' + varsn[0] + 'c')) / dd.get_var('b2') * dd.get_var('eta_amb')
 
-            elif quant == 'eta_amb1':
+            elif quant == 'eta_amb1': # version from other
                 result = (self.get_var('rneu') / self.get_var('r') * self.uni.u_b)**2
                 result /= (4.0 * self.uni.pi * self.get_var('nu_ni') + 1e-20)
                 result *= self.get_var('b2') / 1e7
@@ -1693,47 +1712,48 @@ class BifrostData(object):
                     4.0 * self.uni.pi * self.get_var('nu_nis') + 1e-20)
                 result *= self.get_var('b2') / 1e7
 
-            elif quant == 'eta_amb3': # My version
+            elif quant == 'eta_amb3': # This should be the same and eta_amb2 except that eta_amb2 has many more species involved.
                 result = (self.get_var('rneu') / self.r * self.uni.u_b)**2 / (
                     4.0 * self.uni.pi * self.get_var('nu_ins') + 1e-20)
                 result *= self.get_var('b2') / 1e7
 
-            elif quant == 'eta_amb4': # Yakov, Eq ()
-                chi = self.r*0.0
-                psi = self.r*0.0
-
-                for iele in elemlist:
-                    chi += (self.get_var('kappae') +
-                        self.get_var('kappa'+iele+'2')) * (
-                        self.get_var('kappae') - self.get_var('kappa'+iele+'2')) / (
-                        1.0 + self.get_var('kappa'+iele+'2')**2) / (
-                        1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
-
-                    psi += (self.get_var('kappae') +
-                        self.get_var('kappa'+iele+'2')) * (
-                        1.0 + self.get_var('kappae') * self.get_var('kappa'+iele+'2')) / (
-                        1.0 + self.get_var('kappa'+iele+'2')**2) / (
-                        1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
-
-                result = self.get_var('modb') * (-1 + (psi**2 +chi**2) / ( self.get_var('hionne') * self.get_var('kappae') * psi + 1e-20)) * psi / ((psi**2 +chi**2))
             elif quant == 'eta_amb5': # Yakov, Eq ()
-                chi = self.r*0.0
-                psi = self.r*0.0
+                psi = self.get_var('psi_red')
+                chi = self.get_var('chi_red')
+
+                result = self.get_var('modb') *(psi / (psi**2 +chi**2) - 1.0 / (
+                        self.get_var('hionne') * self.get_var('kappae') * self.uni.q_electron + 1e-20))
+
+            elif quant == 'chi':
+                result = self.r*0.0
 
                 for iele in elemlist:
-                    chi += (self.get_var('kappae') +
+                    result += (self.get_var('kappae') +
                         self.get_var('kappa'+iele+'2')) * (
                         self.get_var('kappae') - self.get_var('kappa'+iele+'2')) / (
                         1.0 + self.get_var('kappa'+iele+'2')**2) / (
                         1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
 
-                    psi += (self.get_var('kappae') +
+            elif quant == 'psi': # Yakov, Eq ()
+                result = self.r*0.0
+                for iele in elemlist:
+                    result += (self.get_var('kappae') +
                         self.get_var('kappa'+iele+'2')) * (
                         1.0 + self.get_var('kappae') * self.get_var('kappa'+iele+'2')) / (
                         1.0 + self.get_var('kappa'+iele+'2')**2) / (
                         1.0 + self.get_var('kappae')**2) * self.get_var('n'+iele+'-2')
+            elif quant == 'chi_red': # alpha
+                result = self.r*0.0
 
-                result = (psi / (psi**2 +chi**2) - 1.0/((self.get_var('hionne') * self.get_var('kappae')) * psi + 1e-20)) * self.get_var('modb')
+                for iele in elemlist:
+                    result += 1.0 / (
+                        1.0 + self.get_var('kappa'+iele+'2')**2) * self.get_var('n'+iele+'-2')
+
+            elif quant == 'psi_red': # beta
+                result = self.r*0.0
+                for iele in elemlist:
+                    result += self.get_var('kappa'+iele+'2') / (
+                        1.0 + self.get_var('kappa'+iele+'2')**2) * self.get_var('n'+iele+'-2')
 
             return  result
 
