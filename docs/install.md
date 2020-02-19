@@ -18,9 +18,24 @@ Many of these should be installed when [astropy](http://astropy.org) is installe
 !!! warning "Compiled modules"
     Some helita modules are written in C and Fortran. To use them, you need to have respective compilers available in your system **before** you try to install helita (see below for help with compilers). The Fortran modules are optional, and most of helita works without them, but the C modules are not. **You need a C compiler to install helita!**
 
+## Install with pip
+
+The easiest way to install helita is with `pip`. This should be the preferred method unless you are planning to change the helita code or need a custom install (e.g. with non-standard compilers). With `pip`, you can install the master branch of helita with the following:
+
+```
+pip install git+https://github.com/ITA-Solar/helita.git@master
+```
+
+If you don't have write permission to your Python packages directory, you can add the `--user` flag to install it in your home directory (typically `~/.local`):
+
+```
+pip install --user git+https://github.com/ITA-Solar/helita.git@master
+```
+
+
 ## Install from source
 
-To install helita you need to clone the [repository](https://github.com/ITA-Solar/helita) (or download a [zip version](https://github.com/ITA-Solar/helita/archive/master.zip) if you don't have git) and then install with python:
+For an install from source you need to clone the [repository](https://github.com/ITA-Solar/helita) (or download a [zip version](https://github.com/ITA-Solar/helita/archive/master.zip) if you don't have git) and then install with python:
 
 ```
 git clone https://github.com/ITA-solar/helita.git
@@ -28,15 +43,9 @@ cd helita
 python setup.py install
 ```
 
-## Non-root install
+Similar to the `pip` case, you can also use the `--user` flag for non-root installs.
 
-If you don't have write permission to your Python packages directory, use the following option with `setup.py`:
-
-    python setup.py install --user
-
-This will install helita under your home directory (typically `~/.local`).
-
-## Developer install
+### Developer install
 
 If you want to install helita but also actively change the code or contribute to its development, it is recommended that you do a developer install instead:
 
@@ -44,7 +53,7 @@ If you want to install helita but also actively change the code or contribute to
 
 This will set up the package such as the source files used are from the git repository that you cloned (only a link to it is placed on the Python packages directory). Can also be combined with the `--user` flag for local installs.
 
-## Installing with different C or Fortran compilers
+### Installing with different C or Fortran compilers
 
 The procedure above will compile the C and Fortran modules using the default gcc/gfortran compilers. It will fail if at least a C compiler is not available in the system. If you want to use a different compiler, please use `setup.py` with the  `--compiler=xxx` and/or `--fcompiler=yyy` options, where `xxx`, `yyy` are C and Fortran compiler families (names depend on system). To check which Fortran compilers are available in your system, you can run:
 
