@@ -541,7 +541,7 @@ def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=No
     idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
     for var in data:
         if var not in ['x', 'y']:  # these are always 1D
-            data[var][0] = data[var][0][idx]
+            data[var][0] = data[var][0][tuple(idx)]
     if len(data['temperature'][0].shape) != 4:
         raise ValueError('Invalid shape for T')
     nt, nx, ny, nz = data['temperature'][0].shape
