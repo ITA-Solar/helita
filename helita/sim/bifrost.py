@@ -480,9 +480,6 @@ class BifrostData(object):
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
         """
-        if var == '':
-            print(help(self.get_var))
-
         if self.verbose:
             print('(get_var): reading ', var, whsp*6, end="\r", flush=True)
 
@@ -541,9 +538,8 @@ class BifrostData(object):
             if np.shape(val) is ():
                 val = load_arithmetic_quantities(self,var)
 
-
         if var == '':
-            help(self.get_var)
+            print(help(self.get_var))
             print(self.description['ALL'])
             return None
 
