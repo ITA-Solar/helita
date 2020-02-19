@@ -26,7 +26,7 @@ class EbysusData(BifrostData):
             else:
                 self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2],fdir=self.fdir)
 
-    def _set_snapvars(self):
+    def _set_snapvars(self,firstime=False):
 
         if os.path.exists('%s.io' % self.file_root):
             self.snaprvars = ['r']
@@ -101,7 +101,7 @@ class EbysusData(BifrostData):
     # def set_snap(self,snap):
     #     super(EbysusData, self).set_snap(snap)
 
-    def _read_params(self):
+    def _read_params(self,firstime=False):
         ''' Reads parameter file specific for Multi Fluid Bifrost '''
         super(EbysusData, self)._read_params()
 
@@ -131,7 +131,7 @@ class EbysusData(BifrostData):
         except KeyError:
             print('warning, this idl file does not include mf_param_file')
 
-    def _init_vars(self, *args, **kwargs):
+    def _init_vars(self, firstime=False, *args, **kwargs):
         """
         Initialises variable (common for all fluid)
         """
@@ -160,8 +160,9 @@ class EbysusData(BifrostData):
             except BaseException:
                 if self.verbose:
                     if not (self.mf_ilevel == 1 and var in self.varsmfc):
-                        print(('(WWW) init_vars: could not read '
-                               'variable %s' % var))
+                        if (firstime):
+                            print(('(WWW) init_vars: could not read '
+                                'variable %s' % var))
 
         rdt = self.r.dtype
         cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
