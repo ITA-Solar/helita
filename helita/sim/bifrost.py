@@ -679,7 +679,7 @@ class BifrostData(object):
         return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
                          offset=offset, shape=(self.nx, self.ny))
 
-    def _get_composite_var(self, var, *args, **kwargs):
+    def _get_composite_var(self, var, *args, EOSTAB_QUANT=None, **kwargs):
         """
         Gets composite variables such as ux, uy, uz, ee, s tau (at 500),
         and other eos variables are in cgs except ne which is in SI.
@@ -692,6 +692,8 @@ class BifrostData(object):
 
         if (EOSTAB_QUANT == None):
             EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
+            if not hasattr(self,'description'):
+                self.description={}
             self.description['EOSTAB'] = ('Variables from EOS table. All of them '
                 'are in cgs except ne which is in SI. The electron density '
                 '[m^-3], temperature [K], pressure [dyn/cm^2], Rosseland opacity '
@@ -2002,7 +2004,7 @@ def read_cross_txt(filename,firstime=False):
                 continue
             # force lowercase because IDL is case-insensitive
             temp = line[0].strip()
-            cross = line[1].strip()
+            cross = line[2].strip()
 
             # instead of the insecure 'exec', find out the datatypes
             if ((temp.upper().find('E') >= 0) or (temp.find('.') >= 0)):
