@@ -566,7 +566,8 @@ class EbysusData(BifrostData):
             ['nu' + clist + '_n' for clist in elemlist]
 
         '''
-        COL_QUANT = ['n_i', 'n_j', 'CC', 'C_tot_per_vol', 'nu_ij', 'nu_ji']
+        COL_QUANT = ['n_i', 'n_j', 'CC', 'C_tot_per_vol', '1dcolslope',
+                     'mu_ij', 'mu_ji', 'nu_ij', 'nu_ji']
         self.mf_description['COL_QUANT'] = ('Collisional quantities for mf_ispecies'
                            ' and mf_jspecies: ' + ', '.join(COL_QUANT))
         DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
@@ -654,6 +655,17 @@ class EbysusData(BifrostData):
                 n = r * self.params['u_r'][0] / (amu * m)
                 del amu, s, l, m, r
                 return n
+            elif var in ["mu_ij", "mu_ji"]:
+                #mu_ij = m_i / (m_i + m_j)
+                (s_i, s_j) = (self.mf_ispecies, self.mf_jspecies)
+                m_i = self.att[s_i].params.atomic_weight
+                m_j = self.att[s_j].params.atomic_weight
+                if var[-2]=="i":
+                    mu = m_i / (m_i + m_j)
+                elif var[-2]=="j":
+                    mu = m_j / (m_i + m_j)
+                del s_i, s_j, m_i, m_j
+                return np.array(mu + (self.r * 0.0))
             elif var == "CC":
                 (s_i, l_i) = (self.mf_ispecies, self.mf_ilevel)
                 (s_j, l_j) = (self.mf_jspecies, self.mf_jlevel)
@@ -678,6 +690,10 @@ class EbysusData(BifrostData):
                 return self.get_var("n_i") * self.get_var("CC")
             elif var == "nu_ji":
                 return self.get_var("n_j") * self.get_var("CC")
+            elif var == "1dcolslope":
+                return -(self.get_var("mu_ji") * self.get_var("nu_ij")
+                         + self.get_var("mu_ij") * self.get_var("nu_ji")
+                         + (self.r * 0.0))
             else:
                 print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
                 return self.r * 0.0
