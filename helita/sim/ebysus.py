@@ -569,7 +569,7 @@ class EbysusData(BifrostData):
         COL_QUANT = ['n_i', 'n_j', 'CC', 'C_tot_per_vol', '1dcolslope',
                      'mu_ij', 'mu_ji', 'nu_ij', 'nu_ji'] # JMS you could separate this in
                     #other groups, e.g., n_i and n_j in one group. Then in self.mf_description
-                    # you could describe what is what with the detail or definitions that you desire. 
+                    # you could describe what is what with the detail or definitions that you desire.
         self.mf_description['COL_QUANT'] = ('Collisional quantities for mf_ispecies'
                            ' and mf_jspecies: ' + ', '.join(COL_QUANT))
         DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
@@ -680,7 +680,7 @@ class EbysusData(BifrostData):
                 kb    = 1.380658e-16 #ergs K^-1
                 tg    = self.get_var('mfe_tg') #need to check if units are correct
                 #determine CC
-                CC    = cross * np.sqrt(8 * kb * tg / (np.pi * mu))
+                CC    = m_j / (m_i + m_j) * cross * np.sqrt(8 * kb * tg / (np.pi * mu)) #JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency  instead of spearated. That is the missing factor 2. 
                 del s_i, s_j, l_i, l_j, amu, m_i, m_j, kb, tg
                 return CC
             elif var == "C_tot_per_vol":
