@@ -710,14 +710,11 @@ class EbysusData(BifrostData):
                 cross_tab = 'p-he.txt'
             elif ([spic1,spic2] == ['he','he']):
                 cross_tab = 'he-he.txt'
-                crossunits = 1e-16
             elif (([spic1,spic2] == ['e','he']) or
                  ([spic2,spic1] == ['e','he'])):
                 cross_tab = 'e-he.txt'
-                crossunits = 1e-16
             elif (([spic1,spic2]==['e','h']) or ([spic2,spic1]==['e','h'])):
                 cross_tab = 'e-h.txt'
-                crossunits = 1e-16
             elif (spic1 == 'h'):
                 cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
                     self.uni.cross_p * np.ones(np.shape(tg))
@@ -733,6 +730,7 @@ class EbysusData(BifrostData):
 
             if cross_tab != '':
                 crossobj = Cross_sect(cross_tab=[cross_tab])
+                crossunits = crossobj.crossunits
                 cross = crossunits * crossobj.tab_interp(tg)
 
             try:
