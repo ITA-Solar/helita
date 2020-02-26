@@ -567,7 +567,9 @@ class EbysusData(BifrostData):
 
         '''
         COL_QUANT = ['n_i', 'n_j', 'CC', 'C_tot_per_vol', '1dcolslope',
-                     'mu_ij', 'mu_ji', 'nu_ij', 'nu_ji']
+                     'mu_ij', 'mu_ji', 'nu_ij', 'nu_ji'] # JMS you could separate this in
+                    #other groups, e.g., n_i and n_j in one group. Then in self.mf_description
+                    # you could describe what is what with the detail or definitions that you desire. 
         self.mf_description['COL_QUANT'] = ('Collisional quantities for mf_ispecies'
                            ' and mf_jspecies: ' + ', '.join(COL_QUANT))
         DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
@@ -642,7 +644,7 @@ class EbysusData(BifrostData):
                 return output
 
         if var in COL_QUANT:
-            if var in ["n_i","n_j"]:
+            if var in ["n_i","n_j"]: # JMS No need for two of them, they can be selected separately with mf_ispicies.
                 amu   = 1.6605402e-24 #grams
                 if var[-1]=="i":
                     s = self.mf_ispecies
@@ -655,18 +657,15 @@ class EbysusData(BifrostData):
                 n = r * self.params['u_r'][0] / (amu * m)
                 del amu, s, l, m, r
                 return n
-            elif var in ["mu_ij", "mu_ji"]:
+            elif var in ["mu_ij"]: #JMS in reality you only need one of them since  mf_ispecies and mf_jspecies can be selected
                 #mu_ij = m_i / (m_i + m_j)
                 (s_i, s_j) = (self.mf_ispecies, self.mf_jspecies)
                 m_i = self.att[s_i].params.atomic_weight
                 m_j = self.att[s_j].params.atomic_weight
-                if var[-2]=="i":
-                    mu = m_i / (m_i + m_j)
-                elif var[-2]=="j":
-                    mu = m_j / (m_i + m_j)
+                mu = m_i / (m_i + m_j) #JMS removef if statement
                 del s_i, s_j, m_i, m_j
                 return np.array(mu + (self.r * 0.0))
-            elif var == "CC":
+            elif var == "CC":  #JMS choose names with lower letters
                 (s_i, l_i) = (self.mf_ispecies, self.mf_ilevel)
                 (s_j, l_j) = (self.mf_jspecies, self.mf_jlevel)
                 #determine cross section, n_i, n_j
@@ -687,13 +686,29 @@ class EbysusData(BifrostData):
             elif var == "C_tot_per_vol":
                 return self.get_var("CC") * self.get_var("n_i") * self.get_var("n_j")
             elif var == "nu_ij":
-                return self.get_var("n_i") * self.get_var("CC")
-            elif var == "nu_ji":
-                return self.get_var("n_j") * self.get_var("CC")
+                return self.get_var("n_i") * self.get_var("CC") # JMS like for mu_ij, you only need to define one of them
             elif var == "1dcolslope":
-                return -(self.get_var("mu_ji") * self.get_var("nu_ij")
-                         + self.get_var("mu_ij") * self.get_var("nu_ji")
-                         + (self.r * 0.0))
+                # JMS there is no need of so many definitions:
+                #return -(self.get_var("mu_ji") * self.get_var("nu_ij")
+                #         + self.get_var("mu_ij") * self.get_var("nu_ji")
+                #         + (self.r * 0.0)) # JMS why this r*0.0? No need
+                ispc = self.mf_ispecies
+                jspc = self.mf_jspecies
+                ilvl = self.mf_ilevel
+                jlvl = self.mf_jlevel
+                value = -(self.get_var("mu_ij",mf_ispecies = ispc, mf_ilevel=ilvl,
+                        mf_jspecies = jspc, mf_jlevel=jlvl) * self.get_var("nu_ij",
+                        mf_ispecies = ispc, mf_ilevel=ilvl,
+                        mf_jspecies = jspc, mf_jlevel=jlvl) +
+                        self.get_var("mu_ij",mf_ispecies = jspc, mf_ilevel=jlvl,
+                        mf_jspecies = ispc, mf_jlevel=ilvl) *
+                        self.get_var("nu_ij",mf_ispecies = jspc, mf_ilevel=jlvl,
+                        mf_jspecies = ispc, mf_jlevel=ilvl)
+                self.mf_ispecies =  ispc
+                self.mf_jspecies = jspc
+                self.mf_ilevel = ilvl
+                self.mf_jlevel = jlvl
+                return value
             else:
                 print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
                 return self.r * 0.0
@@ -746,7 +761,7 @@ class EbysusData(BifrostData):
 
             if cross_tab != '':
                 crossobj = Cross_sect(cross_tab=[cross_tab])
-                crossunits = crossobj.crossunits
+                crossunits = crossobj.cross_tab[0]['crossunits']
                 cross = crossunits * crossobj.tab_interp(tg)
 
             try:
