@@ -680,7 +680,7 @@ class EbysusData(BifrostData):
                 kb    = 1.380658e-16 #ergs K^-1
                 tg    = self.get_var('mfe_tg') #need to check if units are correct
                 #determine CC
-                CC    = m_j / (m_i + m_j) * cross * np.sqrt(8 * kb * tg / (np.pi * mu)) #JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency  instead of spearated. That is the missing factor 2. 
+                CC    = m_j / (m_i + m_j) * cross * np.sqrt(8 * kb * tg / (np.pi * mu)) #JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency  instead of spearated. That is the missing factor 2.
                 del s_i, s_j, l_i, l_j, amu, m_i, m_j, kb, tg
                 return CC
             elif var == "C_tot_per_vol":
@@ -703,7 +703,7 @@ class EbysusData(BifrostData):
                         self.get_var("mu_ij",mf_ispecies = jspc, mf_ilevel=jlvl,
                         mf_jspecies = ispc, mf_jlevel=ilvl) *
                         self.get_var("nu_ij",mf_ispecies = jspc, mf_ilevel=jlvl,
-                        mf_jspecies = ispc, mf_jlevel=ilvl)
+                        mf_jspecies = ispc, mf_jlevel=ilvl))
                 self.mf_ispecies =  ispc
                 self.mf_jspecies = jspc
                 self.mf_ilevel = ilvl
