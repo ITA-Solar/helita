@@ -77,13 +77,10 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
             cross_tab = 'p-he.txt'
         elif ([spic1,spic2] == ['he','he']):
             cross_tab = 'he-he.txt'
-            crossunits = 1e-16
         elif (([spic1,spic2] == ['e','he']) or ([spic2,spic1] == ['e','he'])):
             cross_tab = 'e-he.txt'
-            crossunits = 1e-16
         elif (([spic1,spic2]==['e','h']) or ([spic2,spic1]==['e','h'])):
             cross_tab = 'e-h.txt'
-            crossunits = 1e-16
         elif (spic1 == 'h'):
             cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['h'] * \
                 obj.uni.cross_p * np.ones(np.shape(tg))
@@ -99,7 +96,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
 
         if cross_tab != '':
             crossobj = obj.cross_sect(cross_tab=[cross_tab])
-            cross = crossunits * crossobj.tab_interp(tg)
+            cross = crossobj.cross_tab[0]['crossunits'] * crossobj.tab_interp(tg)
 
         try:
             return cross
