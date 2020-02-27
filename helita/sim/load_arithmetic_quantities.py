@@ -185,8 +185,7 @@ def get_module(obj,quant):
     if (quant == ''):
         return None
 
-    if ((quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT) or (
-            quant[-1] in SQUARE_QUANT)):
+    if ((quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT)):
         # Calculate module of vector quantity
         if (quant[:3] in MODULE_QUANT):
             q = quant[3:]
