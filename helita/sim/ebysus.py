@@ -8,6 +8,9 @@ from .bifrost import BifrostData, Rhoeetab, Bifrost_units, Cross_sect
 from .bifrost import read_idl_ascii, subs2grph
 from . import cstagger
 from at_tools import atom_tools as at
+from .load_mf_quantities import *
+from .load_quantities import *
+from .load_arithmetic_quantities import *
 
 class EbysusData(BifrostData):
 
@@ -309,30 +312,54 @@ class EbysusData(BifrostData):
                                 self.mf_jspecies, self.mf_jlevel)
         elif var in self.auxxyvars:
             val =  super(EbysusData, self)._get_simple_var_xy(var)
+        elif var in self.compvars:
+            val =  super(EbysusData, self)._get_composite_var(var)
         else:
-            val =  self._get_composite_mf_var(var)
+            # Loading quantities
+            val = load_quantities(self,var,PLASMA_QUANT='',
+                        CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                        IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                        DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                        COULOMB_COL_QUANT='', AMB_QUANT='', HALL_QUANT='')
+            # Loading arithmetic quantities
+            if np.shape(val) is ():
+                val = load_arithmetic_quantities(self,var)
+            if np.shape(val) is ():
+                val =  load_mf_quantities(self,var)
 
-        if (var != ''):
-            if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-                if np.size(self.iix)+np.size(self.iiy)+np.size(self.iiz) > 3:
-                    # at least one slice has more than one value
+        if var == '':
+            print(help(self.get_var))
+            print(self.description['ALL'])
+            print(self.mf_description['ALL'])
+            return None
 
-                    # x axis may be squeezed out, axes for take()
-                    axes = [0, -2, -1]
+        if np.shape(val) is ():
+            raise ValueError(('get_var: do not know (yet) how to '
+                          'calculate quantity %s. Note that simple_var '
+                          'available variables are: %s.\nIn addition, '
+                          'get_quantity can read others computed variables '
+                          'see e.g. help(self.get_var) or get_var('')) for guidance'
+                          '.' % (var, repr(self.simple_vars))))
 
-                    for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                        if (np.size(getattr(self, dim)) > 1 or
-                                getattr(self, dim) != slice(None)):
-                            # slicing each dimension in turn
-                            val = val.take(getattr(self, dim), axis=axes[counter])
-                else:
-                    # all of the slices are only one int or slice(None)
-                    val = val[self.iix, self.iiy, self.iiz]
+        if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+            # at least one slice has more than one value
+            if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
+                # x axis may be squeezed out, axes for take()
+                axes = [0, -2, -1]
 
-                # ensuring that dimensions of size 1 are retained
-                val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
+                    if (np.size(getattr(self, dim)) > 1 or
+                            getattr(self, dim) != slice(None)):
+                        # slicing each dimension in turn
+                        val = val.take(getattr(self, dim), axis=axes[counter])
+            else:
+                # all of the slices are only one int or slice(None)
+                val = val[self.iix, self.iiy, self.iiz]
 
-            return val
+            # ensuring that dimensions of size 1 are retained
+            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+
+        return val
 
     def _get_simple_var(
             self,
@@ -540,243 +567,6 @@ class EbysusData(BifrostData):
                     offset=offset,
                     mode=mode,
                     shape=(self.nx, self.ny, self.nzb, self.mf_arr_size))
-
-    def _get_composite_mf_var(self, var, order='F', mode='r', *args, **kwargs):
-        """
-        Gets composite variables for multi species fluid.
-        """
-        GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu']
-        self.mf_description = {}
-        self.mf_description['GLOBAL_QUANT'] = ('These variables are calculate looping'
-                                            'either speciess or levels' +
-                                            ', '.join(GLOBAL_QUANT))
-        self.mf_description['ALL'] = self.mf_description['GLOBAL_QUANT']
-        '''
-        ADD HERE Stuff from quantity that needs to be modified since it is MFMS:
-        PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
-                        'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
-                        'kz']
-        CYCL_RES = ['n6nhe2', 'n6nhe3', 'nhe2nhe3']
-        CROSTAB_QUANT = ['h_' + clist for clist in elemlist]
-        COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_QUANT]
-        COLFRI_QUANT = ['nu_ni', 'nu_en', 'nu_ei']
-        COLFRI_QUANT = COLFRI_QUANT + \
-            ['nu' + clist + '_i' for clist in elemlist]
-        COLFRI_QUANT = COLFRI_QUANT + \
-            ['nu' + clist + '_n' for clist in elemlist]
-
-        '''
-        COL_QUANT = ['n_i', 'n_j', 'CC', 'C_tot_per_vol', '1dcolslope',
-                     'mu_ij', 'mu_ji', 'nu_ij', 'nu_ji'] # JMS you could separate this in
-                    #other groups, e.g., n_i and n_j in one group. Then in self.mf_description
-                    # you could describe what is what with the detail or definitions that you desire.
-        self.mf_description['COL_QUANT'] = ('Collisional quantities for mf_ispecies'
-                           ' and mf_jspecies: ' + ', '.join(COL_QUANT))
-        DRIFT_QUANT = ['ud','pd','ed','rd','tgd']
-        CROSTAB_QUANT = ['cross']
-        self.mf_description['CROSTAB'] = ('Cross section between species'
-            '(in cgs): ' + ', '.join(CROSTAB_QUANT))
-        self.mf_description['ALL'] += "\n"+ self.mf_description['CROSTAB']
-
-
-        if var == '':
-            print(help(self._get_composite_mf_var))
-
-        if var in GLOBAL_QUANT:
-            if var == 'totr':  # total density
-                for ispecies in range(0,self.mf_nspecies):
-                    nlevels=self.att[ispecies].params.nlevel
-                    for mf_ispecies in range(nlevels):
-                        ouput += self._get_simple_var(
-                            'r',
-                            mf_ispecies=self.mf_ispecies,
-                            mf_ilevel=self.mf_ilevel,
-                            order=order,
-                            mode=mode)
-                return ouput
-
-            elif var == 'grph':
-                weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
-                for ispecies in range(0,self.mf_nspecies):
-                    nlevels=self.att[ispecies].params.nlevel
-                    for mf_ispecies in range(nlevels):
-                        total_hpart += self._get_simple_var(
-                            'r',
-                            mf_ispecies=self.mf_ispecies,
-                            mf_ilevel=self.mf_ilevel,
-                            order=order,
-                            mode=mode) / weight
-                for mf_ispecies in range(0,self.mf_nspecies):
-                    nlevels=self.att[ispecies].params.nlevel
-                    weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
-                    for ilevel in range(nlevels):
-                        ouput += self._get_simple_var(
-                            'r',
-                            mf_ispecies=self.mf_ispecies,
-                            mf_ilevel=self.mf_ilevel,
-                            order=order,
-                            mode=mode) / mf_total_hpart * u_r
-                return output
-
-            elif var == 'tot_part':
-                for mf_ispecies in range(0,self.mf_nspecies):
-                    for ilevel in range(nlevels):
-                        nlevels=self.att[ispecies].params.nlevel
-                        weight = self.att[ispecies].params.atomic_weight * self.uni.amu / self.uni.u_r
-                        ouput +=  self._get_simple_var(
-                            'r',
-                            mf_ispecies=self.mf_ispecies,
-                            mf_ilevel=self.mf_ilevel,
-                            order=order,
-                            mode=mode) / weight * (self.att[ispecies].params.levels[ilevel][-2]+1)
-                return output
-
-            elif var == 'mu':
-                for mf_ispecies in range(0,self.mf_nspecies):
-                    nlevels=self.att[mf_ispecies].params.nlevel
-                    for mf_ispecies in range(nlevels):
-                        ouput += self._get_simple_var(
-                            'r',
-                            mf_ispecies=self.mf_ispecies,
-                            mf_ilevel=self.mf_ilevel,
-                            order=order,
-                            mode=mode)
-                return output
-
-        if var in COL_QUANT:
-            if var in ["n_i","n_j"]: # JMS No need for two of them, they can be selected separately with mf_ispicies.
-                amu   = 1.6605402e-24 #grams
-                if var[-1]=="i":
-                    s = self.mf_ispecies
-                    l = self.mf_ilevel
-                elif var[-1]=="j":
-                    s = self.mf_jspecies
-                    l = self.mf_jlevel
-                m = self.att[ s ].params.atomic_weight
-                r = self.get_var('r', mf_ispecies= s , mf_ilevel= l )
-                n = r * self.params['u_r'][0] / (amu * m)
-                del amu, s, l, m, r
-                return n
-            elif var in ["mu_ij"]: #JMS in reality you only need one of them since  mf_ispecies and mf_jspecies can be selected
-                #mu_ij = m_i / (m_i + m_j)
-                (s_i, s_j) = (self.mf_ispecies, self.mf_jspecies)
-                m_i = self.att[s_i].params.atomic_weight
-                m_j = self.att[s_j].params.atomic_weight
-                mu = m_i / (m_i + m_j) #JMS removef if statement
-                del s_i, s_j, m_i, m_j
-                return np.array(mu + (self.r * 0.0))
-            elif var == "CC":  #JMS choose names with lower letters
-                (s_i, l_i) = (self.mf_ispecies, self.mf_ilevel)
-                (s_j, l_j) = (self.mf_jspecies, self.mf_jlevel)
-                #determine cross section, n_i, n_j
-                cross = self.get_var('cross', mf_ispecies=s_i, mf_ilevel=l_i,
-                                        mf_jspecies=s_j, mf_jlevel=l_j) #units are in cm^2.
-                #determine mu
-                amu   = 1.6605402e-24 #grams
-                m_i   = self.att[s_i].params.atomic_weight
-                m_j   = self.att[s_j].params.atomic_weight
-                mu    = amu * m_i * m_j / (m_i + m_j)
-                #determine temperature
-                kb    = 1.380658e-16 #ergs K^-1
-                tg    = self.get_var('mfe_tg') #need to check if units are correct
-                #determine CC
-                CC    = m_j / (m_i + m_j) * cross * np.sqrt(8 * kb * tg / (np.pi * mu)) #JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency  instead of spearated. That is the missing factor 2.
-                del s_i, s_j, l_i, l_j, amu, m_i, m_j, kb, tg
-                return CC
-            elif var == "C_tot_per_vol":
-                return self.get_var("CC") * self.get_var("n_i") * self.get_var("n_j")
-            elif var == "nu_ij":
-                return self.get_var("n_i") * self.get_var("CC") # JMS like for mu_ij, you only need to define one of them
-            elif var == "1dcolslope":
-                # JMS there is no need of so many definitions:
-                #return -(self.get_var("mu_ji") * self.get_var("nu_ij")
-                #         + self.get_var("mu_ij") * self.get_var("nu_ji")
-                #         + (self.r * 0.0)) # JMS why this r*0.0? No need
-                ispc = self.mf_ispecies
-                jspc = self.mf_jspecies
-                ilvl = self.mf_ilevel
-                jlvl = self.mf_jlevel
-                value = -(self.get_var("mu_ij",mf_ispecies = ispc, mf_ilevel=ilvl,
-                        mf_jspecies = jspc, mf_jlevel=jlvl) * self.get_var("nu_ij",
-                        mf_ispecies = ispc, mf_ilevel=ilvl,
-                        mf_jspecies = jspc, mf_jlevel=jlvl) +
-                        self.get_var("mu_ij",mf_ispecies = jspc, mf_ilevel=jlvl,
-                        mf_jspecies = ispc, mf_jlevel=ilvl) *
-                        self.get_var("nu_ij",mf_ispecies = jspc, mf_ilevel=jlvl,
-                        mf_jspecies = ispc, mf_jlevel=ilvl))
-                self.mf_ispecies =  ispc
-                self.mf_jspecies = jspc
-                self.mf_ilevel = ilvl
-                self.mf_jlevel = jlvl
-                return value
-            else:
-                print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
-                return self.r * 0.0
-
-        elif var[:-1] in DRIFT_QUANT:
-            axis = var[-1]
-            varn= var[:-2]
-            return (self.get_var(varn + axis,mf_ispecies=self.mf_ispecies,mf_ilevel=self.mf_ilevel) -
-                self.get_var(varn + axis,mf_ispecies=self.mf_jspecies,mf_ilevel=self.mf_jlevel))
-        elif var in DRIFT_QUANT:
-            return (self.get_var(var[:-1],mf_ispecies=self.mf_ispecies,mf_ilevel=self.mf_ilevel) -
-                self.get_var(var[:-1],mf_ispecies=self.mf_jspecies,mf_ilevel=self.mf_jlevel))
-
-        elif var in CROSTAB_QUANT:
-            tg = self.get_var('mfe_tg')
-            if (self.mf_ispecies<0):
-                spic1='e'
-            else:
-                spic1 = self.att[self.mf_ispecies].params.element
-            if (self.mf_jspecies<0):
-                spic2='e'
-            else:
-                spic2 = self.att[self.mf_jspecies].params.element
-            cross_tab = ''
-            crossunits = 2.8e-17
-            if ([spic1,spic2] == ['h','h']) :
-                cross_tab = 'p-h-elast.txt'
-            elif (([spic1,spic2] == ['h','he']) or
-                 ([spic2,spic1] == ['h','he'])):
-                cross_tab = 'p-he.txt'
-            elif ([spic1,spic2] == ['he','he']):
-                cross_tab = 'he-he.txt'
-            elif (([spic1,spic2] == ['e','he']) or
-                 ([spic2,spic1] == ['e','he'])):
-                cross_tab = 'e-he.txt'
-            elif (([spic1,spic2]==['e','h']) or ([spic2,spic1]==['e','h'])):
-                cross_tab = 'e-h.txt'
-            elif (spic1 == 'h'):
-                cross = self.uni.weightdic[spic2] / self.uni.weightdic['h'] * \
-                    self.uni.cross_p * np.ones(np.shape(tg))
-            elif (spic2 == 'h'):
-                cross = self.uni.weightdic[spic1] / self.uni.weightdic['h'] * \
-                    self.uni.cross_p * np.ones(np.shape(tg))
-            elif (spic1 == 'he'):
-                cross = self.uni.weightdic[spic2] / self.uni.weightdic['he'] * \
-                    self.uni.cross_he * np.ones(np.shape(tg))
-            elif (spic2 == 'he'):
-                cross = self.uni.weightdic[spic1] / self.uni.weightdic['he'] * \
-                    self.uni.cross_he * np.ones(np.shape(tg))
-
-            if cross_tab != '':
-                crossobj = Cross_sect(cross_tab=[cross_tab])
-                crossunits = crossobj.cross_tab[0]['crossunits']
-                cross = crossunits * crossobj.tab_interp(tg)
-
-            try:
-                return cross
-            except Exception:
-                print('(WWW) cross-section: wrong combination of species')
-
-        elif var in self.compvars:
-            return super(EbysusData, self)._get_composite_var(var)
-        else:
-            return super(EbysusData, self).get_quantity(var,PLASMA_QUANT='',
-                        CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                        IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                        DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                        COULOMB_COL_QUANT='', AMB_QUANT='', HALL_QUANT='')
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None,
