@@ -1997,6 +1997,11 @@ def read_cross_txt(filename,firstime=False):
                 li += 1
                 continue
             line = line.split(';')[0].split()
+            if (len(line) == 1):
+                params['crossunits'] = float(line[0].strip())
+            elif not('crossunits' in params.keys()):
+                print('(WWW) read_cross: line %i is invalid, missing crossunits' % li)
+
             if (len(line) < 2):
                 if (firstime):
                     print('(WWW) read_cross: line %i is invalid, skipping' % li)
