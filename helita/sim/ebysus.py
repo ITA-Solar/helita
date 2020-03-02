@@ -168,7 +168,8 @@ class EbysusData(BifrostData):
                                 'variable %s' % var))
 
         rdt = self.r.dtype
-        cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
+        if (self.nz>1):
+            cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
