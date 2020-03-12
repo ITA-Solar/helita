@@ -321,7 +321,7 @@ class EbysusData(BifrostData):
                         CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
                         IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
                         DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                        COULOMB_COL_QUANT='', AMB_QUANT='', HALL_QUANT='')
+                        COULOMB_COL_QUANT='', AMB_QUANT='')
             # Loading arithmetic quantities
             if np.shape(val) is ():
                 val = load_arithmetic_quantities(self,var)
