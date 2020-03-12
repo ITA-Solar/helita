@@ -613,6 +613,11 @@ class EbysusData(BifrostData):
                 mf_ispecies != self.mf_ispecies)) or ((
                 mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
             self.set_mfi(mf_ispecies, mf_ilevel)
+            
+        if (((mf_jspecies is not None) and (
+                mf_jspecies != self.mf_jspecies)) or ((
+                mf_jlevel is not None) and (mf_jlevel != self.mf_jlevel))):
+            self.set_mfj(mf_jspecies, mf_jlevel)
 
         # lengths for dimensions of return array
         self.xLength = 0
@@ -639,9 +644,10 @@ class EbysusData(BifrostData):
             self.snapInd = 0
             self._set_snapvars()
             self._init_vars()
-            value[..., it] = self.get_var(var, snap=snap[it], iix=self.iix,
-                iiy=self.iiy, iiz=self.iiz, mf_ispecies = self.mf_ispecies,
-                mf_ilevel=self.mf_ilevel)
+            value[..., it] = self.get_var(var, snap=snap[it],
+                iix=self.iix, iiy=self.iiy, iiz=self.iiz,
+                mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
+                mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
 
         try:
             if ((snap is not None) and (snap != self.snap)):

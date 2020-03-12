@@ -139,8 +139,15 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         COLFRE_QUANT = ['C_tot_per_vol', '1dcolslope', 'nu_ij'] # JMS in obj.mf_description
             # you could describe what is what with the detail or definitions that you desire.
 
-    obj.mf_description['COLFRE_QUANT'] = ('Collisional quantities for mf_ispecies'
-                       ' and mf_jspecies: ' + ', '.join(COLFRE_QUANT))
+    obj.mf_description['COLFRE_QUANT'] = ('Collisional quantities for mf_ispecies '
+                       'and mf_jspecies: ' + ', '.join(COLFRE_QUANT)+'.\n'
+                       'nu_ij := mu_ji times the frequency with which a single, specific '
+                           'particle of species i will collide with ANY particle of species j, '
+                           'where mu_ji = m_j / (m_i + m_j).\n'
+                       '1dcolslope := -(nu_ij + nu_ji), '
+                           'where nu_ji = nu_ij with species swapped.\n'
+                       'C_tot_per_vol := number of collisions per volume = '
+                           'nu_ij * n_j / mu_ji = nu_ji * n_i / mu_ij.')
 
     if 'ALL' in obj.mf_description.keys():
         obj.mf_description['ALL'] += "\n"+ obj.mf_description['COLFRE_QUANT']
@@ -153,10 +160,13 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         if var == "C_tot_per_vol":
             (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
             (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
-            return obj.get_var("nu_ij") * obj.get_var("n_i",mf_ispecies=s_j,mf_ilevel=l_j)
+            m_i   = obj.att[obj.mf_ispecies].params.atomic_weight
+            m_j   = obj.att[obj.mf_jspecies].params.atomic_weight
+            value = obj.get_var("nu_ij") /(m_j / (m_i + m_j)) * \
+                    obj.get_var("n_i",mf_ispecies=s_j,mf_ilevel=l_j) #SE added /mu_ji -> C_tot_per_vol == collisions/volume
             obj.set_mfi(s_i,l_i)
-            obj.set_mfj(s_j,l_j)
-            obj.set_mfi(s_i,l_i)
+            obj.set_mfj(s_j,l_j) #SE fixed this code so that set_mfi occurs before return statement.
+            return value
 
         elif var == "nu_ij":
             #determine cross section, n_i, n_j
@@ -167,8 +177,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
             mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
             #determine temperature
             tg    = obj.get_var('mfe_tg') #need to check if units are correct
-            #determine CC
-            return    obj.get_var("n_i") * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu)) #JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency  instead of spearated. That is the missing factor 2.
+            return    obj.get_var("n_i") * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
+                    #JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency instead of spearated.
 
         elif var == "1dcolslope":
             (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
