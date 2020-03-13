@@ -1929,58 +1929,6 @@ def read_idl_ascii(filename,firstime=False):
     return params
 
 
-def ionpopulation(rho, nel, tg, elem='h', lvl='1', dens=True):
-
-    print('ionpopulation: reading species %s and level %s' % (elem, lvl), whsp,
-        end="\r", flush=True)
-    fdir = '.'
-    try:
-        tmp = find_first_match("*.idl", fdir)
-    except IndexError:
-        try:
-            tmp = find_first_match("*idl.scr", fdir)
-        except IndexError:
-            try:
-                tmp = find_first_match("mhd.in", fdir)
-            except IndexError:
-                tmp = ''
-                print("(WWW) init: no .idl or mhd.in files found." +
-                      "Units set to 'standard' Bifrost units.")
-    uni = Bifrost_units(filename=tmp)
-
-    totconst = 2.0 * uni.pi * uni.m_electron * uni.k_b / \
-        uni.hplanck / uni.hplanck
-    abnd = np.zeros(len(uni.abnddic))
-    count = 0
-
-    for ibnd in uni.abnddic.keys():
-        abnddic = 10**(uni.abnddic[ibnd] - 12.0)
-        abnd[count] = abnddic * uni.weightdic[ibnd] * uni.amu
-        count += 1
-
-    abnd = abnd / np.sum(abnd)
-    phit = (totconst * tg)**(1.5) * 2.0 / nel
-    kbtg = uni.ev_to_erg / uni.k_b / tg
-    n1_n0 = phit * uni.u1dic[elem] / uni.u0dic[elem] * np.exp(
-        - uni.xidic[elem] * kbtg)
-    c2 = abnd[uni.atomdic[elem] - 1] * rho
-    ifracpos = n1_n0 / (1.0 + n1_n0)
-
-    if dens:
-        if lvl == '1':
-            return (1.0 - ifracpos) * c2 * uni.u_r
-        else:
-            return ifracpos * c2 * uni.u_r
-
-    else:
-        if lvl == '1':
-            return (1.0 - ifracpos) * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                                       uni.amu))
-        else:
-            return ifracpos * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                               uni.amu))
-
-
 def read_cross_txt(filename,firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary '''
     li = 0
