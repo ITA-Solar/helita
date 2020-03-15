@@ -129,8 +129,8 @@ class SourceFunction:
             sf = obj.ray.source_function[0, 0, :, 0].dropna('height')
             height = obj.atmos.height_scale[0, 0].dropna(
                 'height') / 1e6  # in Mm
-            bplanck = planck(obj.ray.wavelength_selected[0] * u.nm,
-                             obj.atmos.temperature[0, 0].dropna('height') * u.K,
+            bplanck = planck(obj.ray.wavelength_selected[0].values * u.nm,
+                             obj.atmos.temperature[0, 0].dropna('height').values * u.K,
                              dist='frequency').value
             fig, ax = plt.subplots()
             ax.plot(height, sf, 'b-', label=r'S$_\mathrm{total}$', lw=1)
@@ -161,9 +161,9 @@ class SourceFunction:
                   x=x_slider, y=y_slider)
         def _sf_update(wavelength=0, y_log=True, x=0, y=0):
             obj = self.rhobj
-            bplanck = planck(obj.ray.wavelength_selected[wavelength],
-                             obj.atmos.temperature[x, y].dropna('height'),
-                             units='Hz')
+            bplanck = planck(obj.ray.wavelength_selected[wavelength].values * u.nm,
+                             obj.atmos.temperature[x, y].dropna('height').values * u.K,
+                             dist='frequency').value
             quants = [obj.ray.source_function[x, y, :,
                                               wavelength].dropna('height'),
                       obj.ray.Jlambda[x, y, :, wavelength].dropna('height'),
