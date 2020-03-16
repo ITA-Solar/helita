@@ -689,7 +689,6 @@ class BifrostData(object):
         scattering probability (eps), opacity (opa), thermal emission (temt)
         and entropy (ent). They will will load into memory.
         """
-        'ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent'
 
         if (EOSTAB_QUANT == None):
             EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
@@ -1286,6 +1285,7 @@ class Bifrost_units(object):
         # --- physical constants and other useful quantities
         self.clight = aconst.c.to_value('cm/s')   # Speed of light [cm/s]
         self.hplanck = aconst.h.to_value('erg s') # Planck's constant [erg s]
+        self.hplancksi = aconst.h.to_value('J s') # Planck's constant [erg s]
         self.kboltzmann = aconst.k_B.to_value('erg/K')  # Boltzman's cst. [erg/K]
         self.amu = aconst.u.to_value('g')        # Atomic mass unit [g]
         self.amusi = aconst.u.to_value('kg')     # Atomic mass unit [kg]
@@ -1948,12 +1948,14 @@ def read_cross_txt(filename,firstime=False):
             line = line.split(';')[0].split()
             if (len(line) == 1):
                 params['crossunits'] = float(line[0].strip())
+                li += 1
+                continue
             elif not('crossunits' in params.keys()):
-                print('(WWW) read_cross: line %i is invalid, missing crossunits' % li)
+                print('(WWW) read_cross: line %i is invalid, missing crossunits, file %s' % (li,filename))
 
             if (len(line) < 2):
                 if (firstime):
-                    print('(WWW) read_cross: line %i is invalid, skipping' % li)
+                    print('(WWW) read_cross: line %i is invalid, skipping, file %s' % (li,filename))
                 li += 1
                 continue
             # force lowercase because IDL is case-insensitive
