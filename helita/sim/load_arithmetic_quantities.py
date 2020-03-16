@@ -379,11 +379,14 @@ def get_square(obj,quant):
     return None
 
   if quant[-1] in SQUARE_QUANT:
-    result = obj.get_var(quant[:-1] + 'xc') ** 2
-    result += obj.get_var(quant[:-1] + 'yc') ** 2
-    result += obj.get_var(quant[:-1] + 'zc') ** 2
-    return result
-  else:
+    try: 
+      result = obj.get_var(quant[:-1] + 'xc') ** 2
+      result += obj.get_var(quant[:-1] + 'yc') ** 2
+      result += obj.get_var(quant[:-1] + 'zc') ** 2
+      return result
+    except:
+      return None
+  else: 
     return None
 
 
