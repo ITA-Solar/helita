@@ -40,7 +40,7 @@ def load_mf_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
 
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu']
+      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel']
 
   obj.mf_description['GLOBAL_QUANT'] = ('These variables are calculate looping'
                                         'either speciess or levels' +
@@ -54,67 +54,60 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       return None
 
   if var in GLOBAL_QUANT:
+    output = np.zeros(np.shape(obj.r))    
     if var == 'totr':  # total density
       for ispecies in range(0, obj.mf_nspecies):
         nlevels = obj.att[ispecies].params.nlevel
-        for mf_ispecies in range(nlevels):
-          ouput += obj._get_simple_var('r',
-              mf_ispecies=obj.mf_ispecies,
-              mf_ilevel=obj.mf_ilevel,
-              order=order,
-              mode=mode)
+        for ilevel in range(1,nlevels+1):
+          ouput += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
       return ouput
 
-    elif var == 'grph':
-      weight = obj.att[ispecies].params.atomic_weight * \
-        obj.uni.amu / obj.uni.u_r
-
-      for ispecies in range(0, obj.mf_nspecies):
+    elif var == 'nel':
+      for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
+        weight = obj.att[ispecies].params.atomic_weight * \
+                 obj.uni.amu / obj.uni.u_r
+        for ilevel in range(1,nlevels+1):
+          obj.att[ispecies].params.nlevel
+          output += obj.get_var('r', mf_ispecies=ispecies,
+              mf_ilevel=ilevel) / weight * (obj.att[ispecies].params.levels['stage'][ilevel-1]-1)
 
-        for mf_ispecies in range(nlevels):
-          total_hpart += obj._get_simple_var('r',
-              mf_ispecies=obj.mf_ispecies,
-              mf_ilevel=obj.mf_ilevel,
-              order=order,
-              mode=mode) / weight
+    elif var == 'grph':
+      for ispecies in obj.att:
+        nlevels = obj.att[ispecies].params.nlevel
+        weight = obj.att[ispecies].params.atomic_weight * \
+          obj.uni.amu / obj.uni.u_r
 
-        for mf_ispecies in range(0, obj.mf_nspecies):
+        for ilevel in range(1,nlevels+1):
+          total_hpart += obj.get_var('r', mf_ispecies=ispecies,
+              mf_ilevel=ilevel) / weight
+
+        for mf_ispecies in obj.att:
           nlevels = obj.att[ispecies].params.nlevel
           weight = obj.att[ispecies].params.atomic_weight * \
               obj.uni.amu / obj.uni.u_r
 
-          for ilevel in range(nlevels):
-            ouput += obj._get_simple_var('r',
-                mf_ispecies=obj.mf_ispecies,
-                mf_ilevel=obj.mf_ilevel,
-                order=order,
-                mode=mode) / mf_total_hpart * u_r
-        return output
+          for ilevel in range(1,nlevels+1):
+            ouput += obj.get_var('r', mf_ispecies=ispecies,
+                mf_ilevel=ilevel) / mf_total_hpart * u_r
 
     elif var == 'tot_part':
-      for mf_ispecies in range(0, obj.mf_nspecies):
-        for ilevel in range(nlevels):
-          nlevels = obj.att[ispecies].params.nlevel
-          weight = obj.att[ispecies].params.atomic_weight * \
+      for mf_ispecies in obj.att:
+        nlevels = obj.att[ispecies].params.nlevel
+        weight = obj.att[ispecies].params.atomic_weight * \
               obj.uni.amu / obj.uni.u_r
-          ouput += obj._get_simple_var('r',
-              mf_ispecies=obj.mf_ispecies,
-              mf_ilevel=obj.mf_ilevel,
-              order=order,
-              mode=mode) / weight * (obj.att[ispecies].params.levels[ilevel][-2]+1)
-      return output
+        for ilevel in range(1,nlevels+1):
+          ouput += obj.get_var('r', mf_ispecies=mf_ispecies,
+              mf_ilevel=ilevel) / weight * (obj.att[ispecies].params.levels[ilevel-1]+1)
 
     elif var == 'mu':
-      for mf_ispecies in range(0, obj.mf_nspecies):
+      for mf_ispecies in obj.att:
         nlevels = obj.att[mf_ispecies].params.nlevel
-        for mf_ispecies in range(nlevels):
-          ouput += obj._get_simple_var('r',
-              mf_ispecies=obj.mf_ispecies,
-              mf_ilevel=obj.mf_ilevel,
-              order=order,
-              mode=mode)
-      return output
+        for mf_ilevel in range(1,nlevels+1):
+          ouput += obj.get_var('r', mf_ispecies=mf_ispecies,
+              mf_ilevel=mf_ilevel)
+
+    return output
   else:
     return None
 
@@ -152,13 +145,14 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
                                         'nu_ij := mu_ji times the frequency with which a single, specific '
                                         'particle of species i will collide with ANY particle of species j, '
                                         'where mu_ji = m_j / (m_i + m_j).\n'
-                                        '1dcolslope := -(nu_ij + nu_ji), '
-                                        'where nu_ji = nu_ij with species swapped.\n'
+                                        '1dcolslope := -(nu_ij + nu_ji).\n'
                                         'C_tot_per_vol := number of collisions per volume = '
                                         'nu_ij * n_j / mu_ji = nu_ji * n_i / mu_ij.')
 
   if 'ALL' in obj.mf_description.keys():
-    obj.mf_description['ALL'] += "\n" + obj.mf_description['COLFRE_QUANT']
+    if not obj.mf_description['COLFRE_QUANT'] in obj.mf_description['ALL']:
+    #SE added ^this^ line so that info will only be added to ALL if not in ALL already.
+        obj.mf_description['ALL'] += "\n" + obj.mf_description['COLFRE_QUANT']
   else:
     obj.mf_description['ALL'] = obj.mf_description['COLFRE_QUANT']
 
@@ -171,32 +165,37 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       m_i = obj.att[obj.mf_ispecies].params.atomic_weight
       m_j = obj.att[obj.mf_jspecies].params.atomic_weight
       value = obj.get_var("nu_ij") / (m_j / (m_i + m_j)) * \
-          obj.get_var("n_i", mf_ispecies=s_j,
-                      mf_ilevel=l_j)  # SE added /mu_ji -> C_tot_per_vol == collisions/volume
+          obj.get_var("n_i", mf_ispecies=s_j, mf_ilevel=l_j) 
+          # SE added /mu_ji -> C_tot_per_vol == collisions/volume
       obj.set_mfi(s_i, l_i)
-      # SE fixed this code so that set_mfi occurs before return statement.
-      obj.set_mfj(s_j, l_j)
+      obj.set_mfj(s_j, l_j) #SE: mfj should be unchanged anyway. included for readability.
       return value
 
     elif var == "nu_ij":
-      # determine cross section, n_i, n_j
       cross = obj.get_var('cross')  # units are in cm^2.
-      # determine mu
-      m_i = obj.att[obj.mf_ispecies].params.atomic_weight
-      m_j = obj.att[obj.mf_jspecies].params.atomic_weight
-      mu = obj.uni.amu * m_i * m_j / (m_i + m_j)
-      # determine temperature
-      tg = obj.get_var('mfe_tg')  # need to check if units are correct
-      return obj.get_var("n_i") * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
+      m_i   = obj.att[obj.mf_ispecies].params.atomic_weight
+      m_j   = obj.att[obj.mf_jspecies].params.atomic_weight
+      mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
+      tg    = obj.get_var('mfe_tg')
+      #get n_j:
+      (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
+      (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
+      n_j   = obj.get_var("n_i", mf_ispecies=s_j, mf_ilevel=l_j)
+      obj.set_mfi(s_i, l_i)
+      obj.set_mfj(s_j, l_j) #SE: mfj should be unchanged anyway. included for readability.
+      #calculate & return nu_ij:
+      return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
       # JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency instead of spearated.
-
+      # SE (4/9/20 corrected using "n_i" to now properly use "n_j" instead.
+      
     elif var == "1dcolslope":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
       (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
       value = -(obj.get_var("nu_ij",
                             mf_ispecies=s_i, mf_ilevel=l_i,
                             mf_jspecies=s_j, mf_jlevel=l_j) +
-                obj.get_var("nu_ij", mf_ispecies=s_j, mf_ilevel=l_j,
+                obj.get_var("nu_ij",
+                            mf_ispecies=s_j, mf_ilevel=l_j,
                             mf_jspecies=s_i, mf_jlevel=l_i))
       obj.set_mfi(s_i, l_i)
       obj.set_mfj(s_j, l_j)

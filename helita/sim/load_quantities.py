@@ -237,7 +237,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
       if obj.hion:
         nel = obj.get_var('hionne')
       else:
-        nel = obj.get_var('nel')
+        nel = obj.get_var('ne')
       culblog = 23. + 1.5 * np.log(obj.get_var('tg') / 1.e6) - \
         0.5 * np.log(nel / 1e6)
 
@@ -326,7 +326,7 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None):
     if obj.hion:
       nel = np.copy(obj.get_var('hionne'))
     else:
-      nel = np.copy(obj.get_var('nel'))
+      nel = np.copy(obj.get_var('ne'))
     elem = quant.replace('coucol', '')
 
     const = (obj.uni.pi * obj.uni.qsi_electron ** 4 /
@@ -559,7 +559,7 @@ def get_cyclo_res(obj, quant, CYCL_RES=None):
       if obj.hion:
         nel = obj.get_var('hionne')
       else:
-        nel = obj.get_var('nel')
+        nel = obj.get_var('ne')
       var2 = obj.get_var(q2)
       var1 = obj.get_var(q1)
       z1 = 1.0
@@ -727,15 +727,15 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
       tg = obj.get_var('tg')
       r = obj.get_var('r')
       if obj.hion:
-        nel = np.copy(obj.get_var('hionne'))/ 1e6 
+        nel = np.copy(obj.get_var('hionne'))
       else:
-        nel = np.copy(obj.get_var('nel'))/ 1e6   # 1e6 conversion from SI to cgs
+        nel = np.copy(obj.get_var('ne'))  
 
       if quant[0] == 'n':
         dens = False
       else:
         dens = True
-      return ionpopulation(obj, r, nel, tg, elem=spic[1:], lvl=lvl, dens=dens)
+      return ionpopulation(obj, r, nel, tg, elem=spic[1:], lvl=lvl, dens=dens) 
   else:
     return None
 
@@ -745,7 +745,9 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
   if (AMB_QUANT is None):
       AMB_QUANT = ['uambx', 'uamby', 'uambz', 'ambx', 'amby', 'ambz',
                   'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5',
-                  'eta_amb6', 'chi', 'psi', 'chi_red', 'psi_red']
+                  'eta_amb6', 'eta_amb5a', 'eta_amb5b', 'eta_amb6a',
+                  'eta_amb6b', 'nchi', 'npsi', 'nchi_red', 'npsi_red',
+                  'rchi', 'rpsi', 'rchi_red', 'rpsi_red']
       obj.description['AMB'] = ('ambipolar velocity or term as'
           'follow (in Bifrost units): ' + ', '.join(AMB_QUANT))
       obj.description['ALL'] += "\n" + obj.description['AMB']
@@ -755,23 +757,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
 
   if (quant in AMB_QUANT):
     axis = quant[-1]
-    if quant[0] == 'u':
-      result = obj.get_var('jxb' + quant[-1]) / \
-                           dd.get_var('modb') * dd.get_var('eta_amb')
-
-    elif quant[:-1] != 'eta_amb' and quant[:3] != 'chi' and quant[:3] != 'psi':
-      if axis == 'x':
-        varsn = ['y', 'z']
-      elif axis == 'y':
-        varsn = ['z', 'y']
-      elif axis == 'z':
-        varsn = ['x', 'y']
-      result = (obj.get_var('jxb' + varsn[0]) *
-        obj.get_var('b' + varsn[1] + 'c') -
-        obj.get_var('jxb' + varsn[1]) *
-        obj.get_var('b' + varsn[0] + 'c')) / dd.get_var('b2') * dd.get_var('eta_amb')
-
-    elif quant == 'eta_amb1':  # version from other
+    if quant == 'eta_amb1':  # version from other
       result = (obj.get_var('rneu') / obj.get_var('r') * obj.uni.u_b)**2
       result /= (4.0 * obj.uni.pi * obj.get_var('nu_ni') + 1e-20)
       result *= obj.get_var('b2') / 1e7
@@ -797,20 +783,48 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
       psi = obj.get_var('npsi_red')
       chi = obj.get_var('nchi_red')
 
-      result = obj.get_var('modb') * (psi / (psi**2 + chi**2) - 1.0 / (
-              obj.get_var('hionne') * obj.get_var('kappae') + 1e-20))
+      result = obj.get_var('modb') * obj.uni.u_b * (psi / (psi**2 + chi**2) - 1.0 / (
+              obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20))
 
     elif quant == 'eta_amb6': # Yakov for a random ionization level, Eq (22.kc (ref{A_2}))
-      mpsi = obj.get_var('mpsi_red')
-      mchi = obj.get_var('mchi_red')
+      mpsi = obj.get_var('rpsi_red')
+      mchi = obj.get_var('rchi_red')
       psi = obj.get_var('npsi_red')
       chi = obj.get_var('nchi_red')
 
-      result = 1.0 / ((psi**2 +chi**2) * obj.get_var('r') ) * ( 
+      result = 1.0 / ((psi**2 +chi**2) * obj.get_var('r') * obj.uni.u_r ) * ( 
           chi * mpsi - psi * (obj.get_var('rneu') + mchi)) + 1.0 / (
-          obj.get_var('hionne') * obj.get_var('kappae') + 1e-20)
+          obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20)
 
-    elif quant == ['nchi','mchi']:
+    elif quant == 'eta_amb5a':
+      psi = obj.get_var('npsi_red')
+      chi = obj.get_var('nchi_red')
+
+      result = obj.get_var('modb') * obj.uni.u_b * (psi / (psi**2 + chi**2) + 1e-20)
+
+    elif quant == 'eta_amb6a': # Yakov for a random ionization level, Eq (22.kc (ref{A_2}))
+      mpsi = obj.get_var('rpsi_red')
+      mchi = obj.get_var('rchi_red')
+      psi = obj.get_var('npsi_red')
+      chi = obj.get_var('nchi_red')
+
+      result = 1.0 / ((psi**2 +chi**2) * obj.get_var('r') * obj.uni.u_r ) * ( 
+          chi * mpsi - psi * (obj.get_var('rneu') + mchi)) 
+
+    elif quant == 'eta_amb5b':
+      psi = obj.get_var('npsi_red')
+      chi = obj.get_var('nchi_red')
+
+      result = obj.get_var('modb') * obj.uni.u_b * ( 1.0 / (
+              obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20))
+
+    elif quant == 'eta_amb6b': # Yakov for a random ionization level, Eq (22.kc (ref{A_2}))
+
+      result =  1.0 / (
+          obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20)
+
+
+    elif quant == ['nchi','rchi']:
       result = obj.r*0.0
 
       for iele in elemlist:
@@ -819,7 +833,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
             1.0 + obj.get_var('kappa'+iele+'2')**2) / (
             1.0 + obj.get_var('kappae')**2) * obj.get_var(quant[0]+iele+'-2')
 
-    elif quant in ['npsi','mpsi']: # Yakov, Eq ()
+    elif quant in ['npsi','rpsi']: # Yakov, Eq ()
       result = obj.r*0.0
 
       for iele in elemlist:
@@ -827,19 +841,36 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
             1.0 + obj.get_var('kappae') * obj.get_var('kappa'+iele+'2')) / (
             1.0 + obj.get_var('kappa'+iele+'2')**2) / (
             1.0 + obj.get_var('kappae')**2) * obj.get_var(quant[0]+iele+'-2')
-    elif quant in ['nchi_red','mchi_red']: # alpha
+    elif quant in ['nchi_red','rchi_red']: # alpha
       result = obj.r*0.0
 
       for iele in elemlist:
-        result += 1.0 / (
-          1.0 + obj.get_var('kappa'+iele+'2')**2) * obj.get_var(quant[0]+iele+'-2')
+        result += 1.0 / (1.0 + obj.get_var('kappa'+iele+'2')**2) *\
+                  obj.get_var(quant[0]+iele+'-2')
 
-    elif quant in ['npsi_red','mpsi_red']: # beta
+    elif quant in ['npsi_red','rpsi_red']: # beta
       result = obj.r*0.0
 
       for iele in elemlist:
         result += obj.get_var('kappa'+iele+'2') / (
-          1.0 + obj.get_var('kappa'+iele+'2')**2) * obj.get_var(quant[0]+iele+'-2')
+                  1.0 + obj.get_var('kappa'+iele+'2')**2) * \
+                  obj.get_var(quant[0]+iele+'-2')
+    
+    elif quant[0] == 'u':
+      result = obj.get_var('jxb' + quant[-1]) / \
+                           dd.get_var('modb') * dd.get_var('eta_amb')
+
+    elif quant[:-1] != 'eta_amb' and quant[:3] != 'chi' and quant[:3] != 'psi':
+      if axis == 'x':
+        varsn = ['y', 'z']
+      elif axis == 'y':
+        varsn = ['z', 'y']
+      elif axis == 'z':
+        varsn = ['x', 'y']
+      result = (obj.get_var('jxb' + varsn[0]) *
+        obj.get_var('b' + varsn[1] + 'c') -
+        obj.get_var('jxb' + varsn[1]) *
+        obj.get_var('b' + varsn[0] + 'c')) / dd.get_var('b2') * dd.get_var('eta_amb')
 
     return  result
   else:
@@ -894,6 +925,12 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None):
 
 
 def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
+  '''
+  rho is supposed to be in Bifrost units.
+  tg in [K]
+  nel in SI. 
+  The output, is in SI
+  '''
 
   print('ionpopulation: reading species %s and level %s' % (elem, lvl), whsp,
       end="\r", flush=True)
@@ -912,6 +949,7 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
         print("(WWW) init: no .idl or mhd.in files found." +
               "Units set to 'standard' Bifrost units.")
   '''
+  nelcgs = nel * 1e-6
   uni = obj.uni
 
   totconst = 2.0 * uni.pi * uni.m_electron * uni.k_b / \
@@ -925,7 +963,7 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
     count += 1
 
   abnd = abnd / np.sum(abnd)
-  phit = (totconst * tg)**(1.5) * 2.0 / nel
+  phit = (totconst * tg)**(1.5) * 2.0 / nelcgs
   kbtg = uni.ev_to_erg / uni.k_b / tg
   n1_n0 = phit * uni.u1dic[elem] / uni.u0dic[elem] * np.exp(
       - uni.xidic[elem] * kbtg)
@@ -934,17 +972,17 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
 
   if dens:
     if lvl == '1':
-      return (1.0 - ifracpos) * c2 * uni.u_r
+      return (1.0 - ifracpos) * c2 * uni.usi_r 
     else:
-      return ifracpos * c2 * uni.u_r
+      return ifracpos * c2 * uni.usi_r
 
   else:
     if lvl == '1':
-      return (1.0 - ifracpos) * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                                   uni.amu))
+      return (1.0 - ifracpos) * c2 * (uni.usi_r / (uni.weightdic[elem] *
+                                                   uni.amusi))
     else:
-      return ifracpos * c2 * (uni.u_r / (uni.weightdic[elem] *
-                                           uni.amu))
+      return ifracpos * c2 * (uni.usi_r / (uni.weightdic[elem] *
+                                           uni.amusi))
 
 
 def find_first_match(name, path,incl_path=False):
