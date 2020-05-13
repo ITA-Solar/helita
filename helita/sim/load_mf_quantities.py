@@ -56,11 +56,11 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   if var in GLOBAL_QUANT:
     output = np.zeros(np.shape(obj.r))    
     if var == 'totr':  # total density
-      for ispecies in range(0, obj.mf_nspecies):
+      for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
         for ilevel in range(1,nlevels+1):
-          ouput += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
-      return ouput
+          output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
+      return output
 
     elif var == 'nel':
       for ispecies in obj.att:
@@ -82,29 +82,29 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
           total_hpart += obj.get_var('r', mf_ispecies=ispecies,
               mf_ilevel=ilevel) / weight
 
-        for mf_ispecies in obj.att:
+        for ispecies in obj.att:
           nlevels = obj.att[ispecies].params.nlevel
           weight = obj.att[ispecies].params.atomic_weight * \
               obj.uni.amu / obj.uni.u_r
 
           for ilevel in range(1,nlevels+1):
-            ouput += obj.get_var('r', mf_ispecies=ispecies,
+            output += obj.get_var('r', mf_ispecies=ispecies,
                 mf_ilevel=ilevel) / mf_total_hpart * u_r
 
     elif var == 'tot_part':
-      for mf_ispecies in obj.att:
+      for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
         weight = obj.att[ispecies].params.atomic_weight * \
               obj.uni.amu / obj.uni.u_r
         for ilevel in range(1,nlevels+1):
-          ouput += obj.get_var('r', mf_ispecies=mf_ispecies,
+          output += obj.get_var('r', mf_ispecies=ispecies,
               mf_ilevel=ilevel) / weight * (obj.att[ispecies].params.levels[ilevel-1]+1)
 
     elif var == 'mu':
-      for mf_ispecies in obj.att:
-        nlevels = obj.att[mf_ispecies].params.nlevel
+      for ispecies in obj.att:
+        nlevels = obj.att[ispecies].params.nlevel
         for mf_ilevel in range(1,nlevels+1):
-          ouput += obj.get_var('r', mf_ispecies=mf_ispecies,
+          output += obj.get_var('r', mf_ispecies=ispecies,
               mf_ilevel=mf_ilevel)
 
     return output
