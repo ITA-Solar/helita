@@ -47,11 +47,11 @@ def get_deriv(obj,quant):
   if quant[0] == 'd' and quant[-4:] in DERIV_QUANT:
     # Calculate derivative of quantity
     axis = quant[-3]
-    q = quant[1:-4]  # base variable
+    q = quant[1:-4]  # base variable 
     var = obj.get_var(q)
 
     def deriv_loop(var, quant):
-      return cstagger.do(var, 'd' + quant[0])
+      return cstagger.do(var.astype('float32'), 'd' + quant[0])
 
     if getattr(obj, 'n' + axis) < 5:  # 2D or close
       print('(WWW) get_quantity: DERIV_QUANT: '
@@ -72,17 +72,17 @@ def get_deriv(obj,quant):
           if axis != 'z':
             for iiz in range(obj.nz):
               output[:, :, iiz] = np.reshape(
-                 cstagger.do(var[:, :, iiz].reshape((
-                 obj.nx, obj.ny, 1)), 'd' + quant[-4:]),(obj.nx, obj.ny))
+                 cstagger.do((var[:, :, iiz].reshape((
+                 obj.nx, obj.ny, 1)).astype('float32')), 'd' + quant[-4:]),(obj.nx, obj.ny))
           else:
             for iiy in range(obj.ny):
               output[:, iiy, :] = np.reshape(
-                 cstagger.do(var[:, iiy, :].reshape((
-                 obj.nx, 1, obj.nz)), 'd' + quant[-4:]),(obj.nx, obj.nz))
+                 cstagger.do((var[:, iiy, :].reshape((
+                 obj.nx, 1, obj.nz)).astype('float32')), 'd' + quant[-4:]),(obj.nx, obj.nz))
 
           return output
         else:
-          return cstagger.do(var, 'd' + quant[-4:])
+          return cstagger.do(var.astype('float32'), 'd' + quant[-4:])
   else:
     return None
 
@@ -124,12 +124,12 @@ def get_center(obj,quant, *args, **kwargs):
           if transf[0][0] != 'z':
             for iiz in range(obj.nz):
               output[:, :, iiz] = np.reshape(cstagger.do(
-                  var[:, :, iiz].reshape((obj.nx, obj.ny, 1)),
+                  (var[:, :, iiz].reshape((obj.nx, obj.ny, 1))).astype('float32'),
                   transf[0]), (obj.nx, obj.ny))
           else:
               for iiy in range(obj.ny):
                 output[:, iiy, :] = np.reshape(cstagger.do(
-                    var[:, iiy, :].reshape((obj.nx, 1, obj.nz)),
+                    (var[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
                     transf[0]), (obj.nx, obj.nz))
 
           if transf[1][0] != 'z':
@@ -140,28 +140,28 @@ def get_center(obj,quant, *args, **kwargs):
           else:
               for iiy in range(obj.ny):
                 output[:, iiy, :] = np.reshape(cstagger.do(
-                    output[:, iiy, :].reshape((obj.nx, 1, obj.nz)),
+                    (output[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
                     transf[1]), (obj.nx, obj.nz))
           return output
         else:
-            tmp = cstagger.do(var, transf[0])
-            return cstagger.do(tmp, transf[1])
+            tmp = cstagger.do(var.astype('float32'), transf[0])
+            return cstagger.do(tmp.astype('float32'), transf[1])
       else:
           if obj.lowbus:
             output = np.zeros_like(var)
             if axis != 'z':
               for iiz in range(obj.nz):
                   output[:, :, iiz] = np.reshape(cstagger.do(
-                      var[:, :, iiz].reshape((obj.nx, obj.ny, 1)),
+                      (var[:, :, iiz].reshape((obj.nx, obj.ny, 1))).astype('float32'),
                       transf[0]), (obj.nx, obj.ny))
             else:
               for iiy in range(obj.ny):
                   output[:, iiy, :] = np.reshape(cstagger.do(
-                      var[:, iiy, :].reshape((obj.nx, 1, obj.nz)),
+                      (var[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
                       transf[0]), (obj.nx, obj.nz))
             return output
           else:
-            return cstagger.do(var, transf[0])
+            return cstagger.do(var.astype('float32'), transf[0])
   else:
     return None
 
