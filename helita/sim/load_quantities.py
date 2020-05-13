@@ -16,8 +16,8 @@ whsp = '  '
 def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 COLFRE_QUANT=None, COLFRI_QUANT=None, IONP_QUANT=None,
                 EOSTAB_QUANT=None, TAU_QUANT=None, DEBYE_LN_QUANT=None,
-                CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None,
-                HALL_QUANT=None, **kwargs):
+                CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None, HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, **kwargs):
+#                HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   quant = quant.lower()
 
   if not hasattr(obj, 'description'):
@@ -52,6 +52,12 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
     val = get_ambparam(obj, quant)
   if np.shape(val) is ():
     val = get_hallparam(obj, quant)
+  if np.shape(val) is ():
+    val = get_batteryparam(obj, quant)  
+  if np.shape(val) is ():
+    val = get_spitzerparam(obj, quant)  
+  #if np.shape(val) is ():
+  #  val = get_spitzerparam(obj, quant)
   return val
 
 
@@ -846,13 +852,39 @@ def get_hallparam(obj, quant, HALL_QUANT=None):
 
   if (quant in HALL_QUANT):
     if quant[0] == 'u':
-      result = obj.get_var('j' + quant[-1])
+      try:
+        result = obj.get_var('j' + quant[-1])
+      except:
+        result = obj.get_var('rotb' + quant[-1])   
     else:
-      result = obj.get_var('jxb' + quant[-1]) / dd.get_var('modb')
+      result = obj.get_var('jxb_' + quant[-1]) / dd.get_var('modb')
 
     return obj.get_var('eta_hall') * result
   else:
     return None
+
+def get_batteryparam(obj, quant, BATTERY_QUANT=None):
+  return None
+  #if (HALL_QUANT is None):
+  #  HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz']
+  #  obj.description['HALL'] = ('Hall velocity or term as'
+  #      'follow (in Bifrost units): ' + ', '.join(HALL_QUANT))
+  #  obj.description['ALL'] += "\n"+ obj.description['HALL']
+
+  #if (quant == ''):
+  #  return None
+
+  #if (quant in HALL_QUANT):
+  #  if quant[0] == 'u':
+  #    result = obj.get_var('j' + quant[-1])
+  #  else:
+  #    result = obj.get_var('jxb' + quant[-1]) / dd.get_var('modb')
+
+  #  return obj.get_var('eta_hall') * result
+  #else:
+  #  return None    
+def get_spitzerparam(obj, quant, SPITZER_QUANT=None):
+  return None  
 
 
 def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
