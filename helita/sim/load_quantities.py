@@ -98,6 +98,10 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
     elif (spic2 == 'he'):
       cross = obj.uni.weightdic[spic1] / obj.uni.weightdic['he'] * \
             obj.uni.cross_he * np.ones(np.shape(tg))
+    else: 
+       cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['h'] * \
+            obj.uni.cross_p / (np.pi*obj.uni.weightdic[spic2])**2 * \
+            np.ones(np.shape(tg))
 
     if cross_tab != '':
       crossobj = obj.cross_sect(cross_tab=[cross_tab])
@@ -159,20 +163,12 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
 def get_collision_ms(obj, quant, COLFRI_QUANT=None):
 
   if (COLFRI_QUANT == None):
-    COLFRI_QUANT = ['nu_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_nis', 'nu_ins']
-    COLFRI_QUANT += ['nu_ni_mag', 'nu_in_mag', 'nu_nis_mag', 'nu_ins_mag']
-    COLFRI_QUANT = COLFRI_QUANT + \
-        ['nu' + clist + '_i' for clist in elemlist]
-    COLFRI_QUANT = COLFRI_QUANT + \
-        ['nu' + clist + '_n' for clist in elemlist]
-    COLFRI_QUANT = COLFRI_QUANT + \
-        ['nu' + clist + '_is' for clist in elemlist]
-    COLFRI_QUANT = COLFRI_QUANT + \
-        ['nu' + clist + '_is_mag' for clist in elemlist]
-    COLFRI_QUANT = COLFRI_QUANT + \
-        ['nu' + clist + '_ns' for clist in elemlist]
-    COLFRI_QUANT = COLFRI_QUANT + \
-        ['nu' + clist + '_ns_mag' for clist in elemlist]
+    COLFRI_QUANT = ['nu_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
+    COLFRI_QUANT += ['nu' + clist + '_i' for clist in elemlist]
+    COLFRI_QUANT += ['nu' + clist + '_i_mag' for clist in elemlist]
+    COLFRI_QUANT += ['nu' + clist + '_n' for clist in elemlist]
+    COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
+
     obj.description['COLFRI'] = ('Collision frequency (elastic and charge'
         'exchange) between fluids in (cgs): ' + ', '.join(COLFRI_QUANT))
     obj.description['ALL'] += "\n" + obj.description['COLFRI']
@@ -181,51 +177,43 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
     return None
 
   if ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT:
-    if quant == 'nu_ni':
-      result = obj.uni.m_h * obj.get_var('nh-1') * \
-        obj.get_var('nuh1_i') + \
-        obj.uni.m_he * obj.get_var('nhe-1') * obj.get_var('nuhe1_i')
 
-    if quant == 'nu_in':
+    if ((quant == 'nu_ni_mag') or (quant == 'nu_ni')):
+      result = np.zeros(np.shape(obj.r))
+      for ielem in elemlist: 
+        if ielem in elemlist[2:] and '_mag' in quant: 
+          const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
+          mag='_mag'
+        else: 
+          const = 1.0
+          mag=''
+
+        result += obj.uni.amu * obj.uni.weightdic[ielem] * \
+                obj.get_var('n%s-1' % ielem) * const * \
+                obj.get_var('nu%s1_i%s'% (ielem,mag))
+
+        if ((ielem in elemlist[2:]) and ('_mag' in quant)): 
+          result += obj.uni.amu * obj.uni.weightdic[ielem] * \
+                obj.get_var('n%s-2' % ielem) * const * \
+                obj.get_var('nu%s2_i%s'% (ielem,mag))
+                
+
+    if ((quant == 'nu_in_mag') or (quant == 'nu_in')):
       result = np.zeros(np.shape(obj.r))
       for ielem in elemlist:
-        result += obj.uni.amu * obj.uni.weightdic[ielem] * obj.get_var('n%s-2' % ielem) * \
-            obj.get_var('nu%s2_n' % ielem)
+        if (ielem in elemlist[2:] and '_mag' in quant): 
+          const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
+          mag='_mag'
+        else: 
+          const = 1.0
+          mag=''
+
+        result += obj.uni.amu * obj.uni.weightdic[ielem] * const * \
+            obj.get_var('n%s-2' % ielem) * obj.get_var('nu%s2_n%s' % (ielem,mag))
       if obj.heion:
-        result += obj.uni.amu * obj.uni.weightdic['he'] * obj.get_var('nhe3') * \
-            obj.get_var('nuhe3_n')
+        result += obj.uni.amu * obj.uni.weightdic['he'] * obj.get_var('nhe-3') * \
+            obj.get_var('nuhe3_n%s'% mag)
 
-    if quant == 'nu_nis':
-      result = obj.uni.m_h * obj.get_var('nh-1') * \
-        obj.get_var('nuh1_is') + \
-        obj.uni.m_he * obj.get_var('nhe-1') * obj.get_var('nuhe1_is')
-      # for ielem in elemlist[2:]:
-      #    result +=  obj.get_var('r%s-1')%ielem * obj.get_var('nu%s1_is')%ielem
-
-    if quant == 'nu_nis_mag':
-      result = obj.uni.m_h * obj.get_var('nh-1') * \
-        obj.get_var('nuh1_is_mag') + \
-        obj.uni.m_he * obj.get_var('nhe-1') * obj.get_var('nuhe1_is_mag')
-      # for ielem in elemlist[2:]:
-      #    result +=  obj.get_var('r%s-1'%ielem) * \
-      #        obj.get_var('kappanorm_%s'%ielem) * obj.get_var('nu%s1_is_mag'%ielem)
-
-    if quant == 'nu_ins':
-      result = obj.uni.m_h * obj.get_var('nh-2') * \
-        obj.get_var('nuh2_ns') + \
-        obj.uni.m_he * obj.get_var('nhe-2') * obj.get_var('nuhe2_ns') + \
-        obj.uni.m_he * obj.get_var('nhe-3') * obj.get_var('nuhe3_ns')
-      # for ielem in elemlist[2:]:
-      #    result +=  obj.get_var('r%s-2')%ielem * obj.get_var('nu%s2_ns')%ielem
-
-    if quant == 'nu_ins_mag':
-      result = obj.uni.m_h * obj.get_var('nh-2') * \
-        obj.get_var('nuh2_ns') + \
-        obj.uni.m_he * obj.get_var('nhe-2') * obj.get_var('nuhe2_ns_mag') + \
-        obj.uni.m_he * obj.get_var('nhe-3') * obj.get_var('nuhe3_ns_mag')
-      # for ielem in elemlist[2:]:
-      #    result +=  obj.get_var('r%s-2')%ielem * \
-      #        obj.get_var('kappanorm_%s'%ielem) * obj.get_var('nu%s2_ns_mag')%ielem
 
     elif quant == 'nu_ei':
       if obj.hion:
@@ -237,6 +225,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
 
       result = 3.759 * nel / (obj.get_var('tg')**(1.5)) * culblog
 
+
     elif quant == 'nu_en':
       elem = quant.split('_')
       result = np.zeros(np.shape(obj.r))
@@ -245,42 +234,13 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
         if ielem in ['h', 'he']:
           result += obj.get_var('%s_%s%s' %
                          ('nue', ielem, lvl))
-      # if obj.hion:
-      #    nel = obj.get_var('hionne')
-      # else:
-      #    nel = obj.get_var('nel')
-      # culblog = 23. + 1.5 * np.log(obj.get_var('tg') / 1.e6) - \
-      #    0.5 * np.log(nel / 1e6)
-      # scr1 = 3.759 * nel / (obj.get_var('tg')**(1.5)) * culblog
-      # scr2 = 0.0 * nel
-      # for ielem in elemlist:
-      #    scr2 += obj.get_var('n%s-%s' % (ielem, 1)
-      # result = 5.2e-11 * scr2 / nel * obj.get_var('tg')**2 / \
-      #    culblog * scr1
-      # for ielem in elemlist:
-      #    result+=obj.uni.amu * obj.uni.weightdic[ielem] * obj.get_var('n%s-2'%ielem) * \
-      #        obj.get_var('nu%s2_n'%ielem)
 
-    elif quant[-2:] == '_i' or quant[-2:] == '_n':
-        if quant[-2:] == '_i':
-          lvl = '2'
-        else:
-          lvl = '1'
-        elem = quant.split('_')
-        result = np.zeros(np.shape(obj.r))
-        for ielem in elemlist:
-          if elem[0][2:] in ['h', 'he'] or ielem in ['h', 'he']:
-            if elem[0][2:] != '%s%s' % (ielem, lvl):
-              result += obj.get_var('%s_%s%s' %
-                                 (elem[0], ielem, lvl))
-        if obj.heion and quant[-2:] == '_i':
-          result += obj.get_var('%s_%s' % (elem[0], 'he3'))
 
-    elif (('_is' in quant) or ('_ns' in quant)):
+    elif quant[-2:] == '_i' or quant[-2:] == '_n' or quant[-6:] == '_i_mag' or quant[-6:] == '_n_mag':
       addtxt = ''
       if quant[-4:] == '_mag':
         addtxt = '_mag'
-      if '_is' in quant:
+      if '_i' in quant:
         lvl = '2'
       else:
         lvl = '1'
@@ -291,7 +251,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
           result += obj.get_var('%s_%s%s%s' %
                   (elem[0], ielem, lvl, addtxt)) * obj.uni.weightdic[ielem] /\
                   (obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
-      if obj.heion and quant[-3:] == '_is':
+      if obj.heion and quant[-3:] == '_i':
         result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) * obj.uni.weightdic['he'] /\
                 (obj.uni.weightdic['he'] + obj.uni.weightdic[elem[0][2:-1]])
 
@@ -656,8 +616,8 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
   if (IONP_QUANT is None):
     IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
     IONP_QUANT += ['r' + clist + '-' for clist in elemlist]
-    IONP_QUANT += ['rneu', 'rion', 'nion', 'nneu']
-    IONP_QUANT += ['rneu_mag', 'rion_mag', 'nion_mag', 'nneu_mag']
+    IONP_QUANT += ['rneu', 'rion', 'nion', 'nneu', 'nelc']
+    IONP_QUANT += ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']
     obj.description['IONP'] = ('densities for specific ionized species as'
         'follow (in SI): ' + ', '.join(IONP_QUANT))
     obj.description['ALL'] += "\n" + obj.description['IONP']
@@ -666,7 +626,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
       return None
 
   if ((quant in IONP_QUANT) and (quant[-3:] in ['ion', 'neu'])):
-    if quant[-3:] == 'ion':
+    if 'ion' in quant:
         lvl = '2'
     else:
         lvl = '1'
@@ -675,20 +635,32 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
         result += obj.get_var(quant[0]+ielem+'-'+lvl)
     return result
 
-  elif ((quant in IONP_QUANT) and (quant[-7:] in ['ion_mag', 'neu_mag'])):
-    if quant[-3:] == 'ion':
+  elif ((quant in IONP_QUANT) and (quant[-9:] in ['ion_nomag', 'neu_nomag'])):
+    # I dont think it makes sence to have neu_nomag
+    if 'ion' in quant:
         lvl = '2'
     else:
         lvl = '1'
     result = np.zeros(np.shape(obj.r))
-    if quant[-7:] == 'ion_mag':
+    if quant[-7:] == 'ion_nomag':
       for ielem in elemlist[2:]:
         result += obj.get_var(quant[0]+ielem+'-'+lvl) * \
-                              (1 - obj.get_var('kappanorm_%s' % ielem))
+                              (1-obj.get_var('kappanorm_%s' % ielem))
     else:
       for ielem in elemlist[2:]:
         result += obj.get_var(quant[0]+ielem+'-'+lvl) * \
-                              obj.get_var('kappanorm_%s' % ielem)
+                              (1-obj.get_var('kappanorm_%s' % ielem))
+    return result
+
+
+  elif (quant == 'nelc'):
+  
+    result = np.zeros(np.shape(obj.r))  
+    for ielem in elemlist:
+      result += obj.get_var('n'+ielem+'-2')
+    
+    result += obj.get_var('nhe-3')*2
+
     return result
 
   elif ''.join([i for i in quant if not i.isdigit()]) in IONP_QUANT:
@@ -739,9 +711,8 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
   if (AMB_QUANT is None):
       AMB_QUANT = ['uambx', 'uamby', 'uambz', 'ambx', 'amby', 'ambz',
                   'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5',
-                  'eta_amb6', 'eta_amb5a', 'eta_amb5b', 'eta_amb6a',
-                  'eta_amb6b', 'nchi', 'npsi', 'nchi_red', 'npsi_red',
-                  'rchi', 'rpsi', 'rchi_red', 'rpsi_red']
+                  'eta_amb5a', 'eta_amb5b', 'nchi', 'npsi', 'nchi_red', 'npsi_red',
+                  'rchi', 'rpsi', 'rchi_red', 'rpsi_red','alphai','betai']
       obj.description['AMB'] = ('ambipolar velocity or term as'
           'follow (in Bifrost units): ' + ', '.join(AMB_QUANT))
       obj.description['ALL'] += "\n" + obj.description['AMB']
@@ -754,71 +725,41 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
     if quant == 'eta_amb1':  # version from other
       result = (obj.get_var('rneu') / obj.get_var('r') * obj.uni.u_b)**2
       result /= (4.0 * obj.uni.pi * obj.get_var('nu_ni') + 1e-20)
-      result *= obj.get_var('b2') / 1e7
-
-    elif quant == 'eta_amb2':  # Our version
-      result = (obj.get_var('rneu') / obj.r * obj.uni.u_b)**2 / (
-          4.0 * obj.uni.pi * obj.get_var('nu_nis') + 1e-20)
-      result *= obj.get_var('b2') / 1e7
+      result *= obj.get_var('b2') #/ 1e7
 
     # This should be the same and eta_amb2 except that eta_amb2 has many more species involved.
-    elif quant == 'eta_amb3':
+    elif quant == 'eta_amb2':
       result = (obj.get_var('rneu') / obj.r * obj.uni.u_b)**2 / (
-          4.0 * obj.uni.pi * obj.get_var('nu_ins') + 1e-20)
-      result *= obj.get_var('b2') / 1e7
+          4.0 * obj.uni.pi * obj.get_var('nu_in') + 1e-20)
+      result *= obj.get_var('b2') #/ 1e7
 
-    elif quant == 'eta_amb4':  # This version takes into account the magnetization
-      result = ((obj.get_var('rneu') + obj.get_var('rneu_mag')) / obj.r * obj.uni.u_b)**2 / (
-          4.0 * obj.uni.pi * obj.get_var('nu_nis_mag') + 1e-20)
-      result *= obj.get_var('b2') / 1e7
+    elif quant == 'eta_amb3':  # This version takes into account the magnetization
+      result = ((obj.get_var('rneu') + obj.get_var('rion_nomag')) / obj.r * obj.uni.u_b)**2 / (
+          4.0 * obj.uni.pi * obj.get_var('nu_ni_mag') + 1e-20)
+      result *= obj.get_var('b2') #/ 1e7
 
     # Yakov for low ionization regime, Eq (20) (ref{Faraday_corr})
-    elif quant == 'eta_amb5':
-      psi = obj.get_var('npsi_red')
-      chi = obj.get_var('nchi_red')
+    elif quant == 'eta_amb4':
+      psi = obj.get_var('npsi')
+      chi = obj.get_var('nchi')
 
-      result = obj.get_var('modb') * obj.uni.u_b * (psi / (psi**2 + chi**2) - 1.0 / (
-              obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20))
+      result = obj.get_var('modb') * obj.uni.u_b * (psi / (1e5 * (psi**2 + chi**2)) - 1.0 / (
+              obj.get_var('nelc')  * obj.get_var('kappae') * 1e5 + 1e-20))
 
-    elif quant == 'eta_amb6': # Yakov for a random ionization level, Eq (22.kc (ref{A_2}))
-      mpsi = obj.get_var('rpsi_red')
-      mchi = obj.get_var('rchi_red')
-      psi = obj.get_var('npsi_red')
-      chi = obj.get_var('nchi_red')
-
-      result = 1.0 / ((psi**2 +chi**2) * obj.get_var('r') * obj.uni.u_r ) * ( 
-          chi * mpsi - psi * (obj.get_var('rneu') + mchi)) + 1.0 / (
-          obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20)
-
-    elif quant == 'eta_amb5a':
-      psi = obj.get_var('npsi_red')
-      chi = obj.get_var('nchi_red')
+    elif quant == 'eta_amb4a':
+      psi = obj.get_var('npsi')
+      chi = obj.get_var('nchi')
 
       result = obj.get_var('modb') * obj.uni.u_b * (psi / (psi**2 + chi**2) + 1e-20)
 
-    elif quant == 'eta_amb6a': # Yakov for a random ionization level, Eq (22.kc (ref{A_2}))
-      mpsi = obj.get_var('rpsi_red')
-      mchi = obj.get_var('rchi_red')
-      psi = obj.get_var('npsi_red')
-      chi = obj.get_var('nchi_red')
-
-      result = 1.0 / ((psi**2 +chi**2) * obj.get_var('r') * obj.uni.u_r ) * ( 
-          chi * mpsi - psi * (obj.get_var('rneu') + mchi)) 
-
-    elif quant == 'eta_amb5b':
-      psi = obj.get_var('npsi_red')
-      chi = obj.get_var('nchi_red')
+    elif quant == 'eta_amb4b':
+      psi = obj.get_var('npsi')
+      chi = obj.get_var('nchi')
 
       result = obj.get_var('modb') * obj.uni.u_b * ( 1.0 / (
               obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20))
 
-    elif quant == 'eta_amb6b': # Yakov for a random ionization level, Eq (22.kc (ref{A_2}))
-
-      result =  1.0 / (
-          obj.get_var('hionne') / 1e6 * obj.get_var('kappae') + 1e-20)
-
-
-    elif quant == ['nchi','rchi']:
+    elif quant in ['nchi','rchi']:
       result = obj.r*0.0
 
       for iele in elemlist:
@@ -835,6 +776,25 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
             1.0 + obj.get_var('kappae') * obj.get_var('kappa'+iele+'2')) / (
             1.0 + obj.get_var('kappa'+iele+'2')**2) / (
             1.0 + obj.get_var('kappae')**2) * obj.get_var(quant[0]+iele+'-2')
+
+    elif quant == 'alphai':
+      result = obj.r*0.0
+
+      for iele in elemlist:
+        result += (obj.get_var('kappae') + obj.get_var('kappa'+iele+'2')) * (
+            obj.get_var('kappae') - obj.get_var('kappa'+iele+'2')) / (
+            1.0 + obj.get_var('kappa'+iele+'2')**2) / (
+            1.0 + obj.get_var('kappae')**2) 
+
+    elif quant == 'betai': # Yakov, Eq ()
+      result = obj.r*0.0
+
+      for iele in elemlist:
+        result += (obj.get_var('kappae') + obj.get_var('kappa'+iele+'2')) * (
+            1.0 + obj.get_var('kappae') * obj.get_var('kappa'+iele+'2')) / (
+            1.0 + obj.get_var('kappa'+iele+'2')**2) / (
+            1.0 + obj.get_var('kappae')**2) 
+
     elif quant in ['nchi_red','rchi_red']: # alpha
       result = obj.r*0.0
 
@@ -854,7 +814,10 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
       result = obj.get_var('jxb' + quant[-1]) / \
                            dd.get_var('modb') * dd.get_var('eta_amb')
 
-    elif quant[:-1] != 'eta_amb' and quant[:3] != 'chi' and quant[:3] != 'psi':
+    elif (quant[-4:-1] == 'amb' and quant[-1] in ['x','y','z'] and 
+         quant[1:3] != 'chi' and quant[1:3] != 'psi'):
+
+      axis = quant[-1]
       if axis == 'x':
         varsn = ['y', 'z']
       elif axis == 'y':
@@ -873,7 +836,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
 def get_hallparam(obj, quant, HALL_QUANT=None):
 
   if (HALL_QUANT is None):
-    HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz']
+    HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz','eta_hall1']
     obj.description['HALL'] = ('Hall velocity or term as'
         'follow (in Bifrost units): ' + ', '.join(HALL_QUANT))
     obj.description['ALL'] += "\n"+ obj.description['HALL']
