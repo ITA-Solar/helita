@@ -71,11 +71,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
           obj.att[ispecies].params.nlevel
           output += obj.get_var('r', mf_ispecies=ispecies,
               mf_ilevel=ilevel) / weight * (obj.att[ispecies].params.levels['stage'][ilevel-1]-1)
+          
     elif var == 'pe':
-      nel = obj.get_var('nel')
-      te  = obj.get_var('etg')
-      electron_energy = obj.get_var('e', mf_ispecies=-1) #(nel * obj.uni.k_b * te) / (obj.uni.gamma-1) / obj.uni.u_e
-      output = (obj.uni.gamma-1) * electron_energy 
+      output = (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
     elif var == 'grph':
       for ispecies in obj.att:
