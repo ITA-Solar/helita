@@ -883,7 +883,7 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None):
       
   if (quant in BATTERY_QUANT):
     if quant == 'bb_constqe':
-      const = (obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t))/obj.uni.u_p
+      const = (obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t))#/obj.uni.u_p
       result = const
 
     if quant == 'dxpe':
@@ -901,21 +901,21 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None):
     if quant == 'bb_batx':
       gradx_pe = obj.get_var('dxpe')#obj.get_var('d' + pe + 'dxdn')
       nel     =  obj.get_var('nel')
-      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)/obj.uni.u_p
+      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)#/obj.uni.u_p
       bb_batx = gradx_pe / (nel * bb_constqe)
       result  = bb_batx 
 
     if quant == 'bb_baty':
       grady_pe = obj.get_var('dype')#obj.get_var('d' + pe + 'dxdn')
       nel     =  obj.get_var('nel')
-      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)/obj.uni.u_p
+      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)#/obj.uni.u_p
       bb_baty = grady_pe / (nel * bb_constqe)
       result  = bb_baty
 
     if quant == 'bb_batz':
       gradz_pe = obj.get_var('dzpe')#obj.get_var('d' + pe + 'dxdn')
       nel     =  obj.get_var('nel')
-      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)/obj.uni.u_p
+      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)#/obj.uni.u_p
       bb_batz = gradz_pe / (nel * bb_constqe)
       result  = bb_batz  
     return result
