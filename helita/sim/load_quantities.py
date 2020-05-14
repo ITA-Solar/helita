@@ -842,7 +842,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
 def get_hallparam(obj, quant, HALL_QUANT=None):
 
   if (HALL_QUANT is None):
-    HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz','eta_hall1']
+    HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz','eta_hall','eta_hallb']
     obj.description['HALL'] = ('Hall velocity or term as'
         'follow (in Bifrost units): ' + ', '.join(HALL_QUANT))
     obj.description['ALL'] += "\n"+ obj.description['HALL']
@@ -856,35 +856,86 @@ def get_hallparam(obj, quant, HALL_QUANT=None):
         result = obj.get_var('j' + quant[-1])
       except:
         result = obj.get_var('rotb' + quant[-1])   
-    else:
-      result = obj.get_var('jxb_' + quant[-1]) / dd.get_var('modb')
+    elif quant == 'eta_hall':
+      nel = obj.get_var('nel')
+      result =  (obj.uni.clight)*(obj.uni.u_b) / (4.0 * obj.uni.pi * obj.uni.q_electron * nel)
+      result = obj.get_var('modb')*result /obj.uni.u_l/obj.uni.u_l*obj.uni.u_t 
+    
+    elif quant == 'eta_hallb':
+      nel = obj.get_var('nel')
+      result =  (obj.uni.clight)*(obj.uni.u_b) / (4.0 * obj.uni.pi * obj.uni.q_electron * nel)
+      result = result /obj.uni.u_l/obj.uni.u_l*obj.uni.u_t 
 
-    return obj.get_var('eta_hall') * result
+    else:
+      result = obj.get_var('jxb_' + quant[-1]) / obj.get_var('modb')
+
+    return result #obj.get_var('eta_hall') * result
   else:
     return None
 
 def get_batteryparam(obj, quant, BATTERY_QUANT=None):
-  return None
-  #if (HALL_QUANT is None):
-  #  HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz']
-  #  obj.description['HALL'] = ('Hall velocity or term as'
-  #      'follow (in Bifrost units): ' + ', '.join(HALL_QUANT))
-  #  obj.description['ALL'] += "\n"+ obj.description['HALL']
+  if (BATTERY_QUANT is None):
+    BATTERY_QUANT = ['bb_constqe','dxpe','dype','dzpe','bb_batx','bb_baty','bb_batz']
+    obj.description['BATTERY'] = ('Battery term ' + ', '.join(BATTERY_QUANT))
+    obj.description['ALL'] += "\n"+ obj.description['BATTERY']
+  if (quant == ''):
+    return None
+      
+  if (quant in BATTERY_QUANT):
+    if quant == 'bb_constqe':
+      const = (obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t))/obj.uni.u_p
+      result = const
 
-  #if (quant == ''):
-  #  return None
+    if quant == 'dxpe':
+      gradx_pe = obj.get_var('dpedxup')
+      result = gradx_pe
 
-  #if (quant in HALL_QUANT):
-  #  if quant[0] == 'u':
-  #    result = obj.get_var('j' + quant[-1])
-  #  else:
-  #    result = obj.get_var('jxb' + quant[-1]) / dd.get_var('modb')
+    if quant == 'dype':
+      grady_pe = obj.get_var('dpedyup')
+      result = grady_pe  
 
-  #  return obj.get_var('eta_hall') * result
-  #else:
-  #  return None    
+    if quant == 'dzpe':
+      gradz_pe = obj.get_var('dpedzup')
+      result = gradz_pe    
+
+    if quant == 'bb_batx':
+      gradx_pe = obj.get_var('dxpe')#obj.get_var('d' + pe + 'dxdn')
+      nel     =  obj.get_var('nel')
+      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)/obj.uni.u_p
+      bb_batx = gradx_pe / (nel * bb_constqe)
+      result  = bb_batx 
+
+    if quant == 'bb_baty':
+      grady_pe = obj.get_var('dype')#obj.get_var('d' + pe + 'dxdn')
+      nel     =  obj.get_var('nel')
+      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)/obj.uni.u_p
+      bb_baty = grady_pe / (nel * bb_constqe)
+      result  = bb_baty
+
+    if quant == 'bb_batz':
+      gradz_pe = obj.get_var('dzpe')#obj.get_var('d' + pe + 'dxdn')
+      nel     =  obj.get_var('nel')
+      bb_constqe = obj.uni.usi_p / obj.uni.qsi_electron / (1/((obj.uni.cm_to_m)**3)) / obj.uni.usi_l / (obj.uni.usi_b * obj.uni.usi_l/obj.uni.u_t)/obj.uni.u_p
+      bb_batz = gradz_pe / (nel * bb_constqe)
+      result  = bb_batz  
+    return result
+  else:
+    return None
+
+
 def get_spitzerparam(obj, quant, SPITZER_QUANT=None):
-  return None  
+  if (SPITZER_QUANT is None):
+    SPITZER_QUANT = ['dxTe','dyTe','dzTe','th_diffusivity','fcx','fcy','fcz','qspitz']
+    obj.description['SPITZER'] = ('Spitzer term ' + ', '.join(SPITZER_QUANT))
+    obj.description['ALL'] += "\n"+ obj.description['SPITZER']
+  if (quant == ''):
+    return None
+   
+  if (quant in SPITZER_QUANT): 
+    
+    return result 
+  else:
+    return None  
 
 
 def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
