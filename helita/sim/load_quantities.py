@@ -913,14 +913,79 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None):
 
 def get_spitzerparam(obj, quant, SPITZER_QUANT=None):
   if (SPITZER_QUANT is None):
-    SPITZER_QUANT = ['dxTe','dyTe','dzTe','th_diffusivity','fcx','fcy','fcz','qspitz']
+    SPITZER_QUANT = ['fcx','fcy','fcz','qspitz']
     obj.description['SPITZER'] = ('Spitzer term ' + ', '.join(SPITZER_QUANT))
     obj.description['ALL'] += "\n"+ obj.description['SPITZER']
   if (quant == ''):
     return None
    
   if (quant in SPITZER_QUANT): 
-    
+    if (quant == 'fcx'):  
+      kappaq = obj.get_var('kappaq')
+      gradx_Te = obj.get_var('detgdxup')
+      bx =   obj.get_var('bx')
+      by =   obj.get_var('by')
+      bz =   obj.get_var('bz')
+      rhs =  obj.get_var('rhs')
+      bmin = 1E-5 
+
+      normb = np.sqrt(bx**2+by**2+bz**2)
+      norm2bmin = bx**2+by**2+bz**2+bmin**2
+
+      bbx = bx/normb
+
+      bm = (bmin**2)/norm2bmin
+
+      fcx = kappaq * (bbx*rhs+bm*gradx_Te)
+
+      result = fcx
+
+    if (quant == 'fcy'):  
+      kappaq = obj.get_var('kappaq')
+      grady_Te = obj.get_var('detgdyup')
+      bx =   obj.get_var('bx')
+      by =   obj.get_var('by')
+      bz =   obj.get_var('bz')
+      rhs =  obj.get_var('rhs')
+      bmin = 1E-5 
+
+      normb = np.sqrt(bx**2+by**2+bz**2)
+      norm2bmin = bx**2+by**2+bz**2+bmin**2
+
+      bby = by/normb
+
+      bm = (bmin**2)/norm2bmin
+
+      fcy = kappaq * (bby*rhs+bm*grady_Te)
+
+      result = fcy
+
+    if (quant == 'fcz'): 
+      kappaq = obj.get_var('kappaq')
+      gradz_Te = obj.get_var('detgdzup')
+      bx =   obj.get_var('bx')
+      by =   obj.get_var('by')
+      bz =   obj.get_var('bz')
+      rhs =  obj.get_var('rhs')
+      bmin = 1E-5 
+
+      normb = np.sqrt(bx**2+by**2+bz**2)
+      norm2bmin = bx**2+by**2+bz**2+bmin**2
+
+      bbz = bz/normb
+
+      bm = (bmin**2)/norm2bmin
+
+      fcz = kappaq * (bbz*rhs+bm*gradz_Te)
+
+      result = fcz     
+  
+    if (quant == 'qspitz'):  
+      dxfcx = obj.get_var('dfcxdxup')
+      dyfcy = obj.get_var('dfcydyup')
+      dzfcz = obj.get_var('dfczdzup')
+      result = dxfcx + dyfcy + dzfcz
+
     return result 
   else:
     return None  
