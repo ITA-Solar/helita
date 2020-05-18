@@ -5,7 +5,7 @@ def load_mf_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                        COLFRE_QUANT=None, COLFRI_QUANT=None, IONP_QUANT=None,
                        EOSTAB_QUANT=None, TAU_QUANT=None, DEBYE_LN_QUANT=None,
                        CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None,
-                       HALL_QUANT=None, **kwargs):
+                       HALL_QUANT=None, SPITZERTERM_QUANT=None, **kwargs):
   quant = quant.lower()
 
   if not hasattr(obj, 'mf_description'):
@@ -20,6 +20,8 @@ def load_mf_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
     val = get_mf_driftvar(obj, quant)
   if np.shape(val) is ():
     val = get_mf_cross(obj, quant)
+  if np.shape(val) is ():
+    val = get_spitzerterm(obj, quant)  
   return val
 
   '''
@@ -134,6 +136,68 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
     return obj.get_var('r') * obj.params['u_r'][0] / (obj.uni.amu * obj.att[obj.mf_ispecies].params.atomic_weight)
   else:
     return None
+
+def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
+  if SPITZERTERM_QUANT is None:
+    SPITZERTERM_QUANT = ['kappaq','dxTe','dyTe','dzTe','rhs']
+
+  obj.mf_description['SPITZERTERM_QUANT'] = ('These variables are calculate spitzer conductivities'
+                                       'either speciess or levels' +
+                                       ', '.join(SPITZERTERM_QUANT))
+  if 'ALL' in obj.mf_description.keys():
+    obj.mf_description['ALL'] += "\n" + obj.mf_description['SPITZERTERM_QUANT']
+  else:
+    obj.mf_description['ALL'] = obj.mf_description['SPITZERTERM_QUANT']
+
+  if (var == ''):
+    return None
+
+  if var in SPITZERTERM_QUANT:
+    if (var == 'kappaq'):
+      spitzer_amp = 1.0
+      kappa_e = 1.1E-25
+      kappaq0 = kappa_e * spitzer_amp
+      te  = obj.get_var('etg')
+      result = kappaq0*(te)**(5.0/2.0)
+
+    if (var == 'dxTe'):     
+      gradx_Te = obj.get_var('detgdxup')
+      result = gradx_Te
+
+    if (var == 'dyTe'):
+      grady_Te = obj.get_var('detgdyup')
+      result = grady_Te
+    
+    if (var == 'dzTe'):
+      gradz_Te = obj.get_var('detgdzup')
+      result = gradz_Te
+
+    if (var == 'rhs'):  
+      bx =   obj.get_var('bx')
+      by =   obj.get_var('by')
+      bz =   obj.get_var('bz')
+      gradx_Te = obj.get_var('detgdxup')
+      grady_Te = obj.get_var('detgdyup')
+      gradz_Te = obj.get_var('detgdzup')
+
+      bmin = 1E-5 
+
+      normb = np.sqrt(bx**2+by**2+bz**2)
+      norm2bmin = bx**2+by**2+bz**2+bmin**2
+
+      bbx = bx/normb
+      bby = by/normb
+      bbz = bz/normb
+
+      bm = (bmin**2)/norm2bmin
+
+      rhs = bbx*gradx_Te + bby*grady_Te + bbz*gradz_Te
+      result = rhs
+
+    return result
+  else:
+    return None
+
 
 
 def get_mf_colf(obj, var, COLFRE_QUANT=None):

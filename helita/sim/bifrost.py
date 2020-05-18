@@ -6,7 +6,10 @@ import os
 import warnings
 from glob import glob
 import numpy as np
-from . import cstagger
+try:
+    from . import cstagger
+except ImportError:
+    print("(WWW) cstagger routines not imported, certain functions will be inaccesible")
 from scipy import interpolate
 from scipy.ndimage import map_coordinates
 from .load_quantities import *
@@ -69,7 +72,7 @@ class BifrostData(object):
     snap = None
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
                  verbose=True, dtype='f4', big_endian=False, cstagop=True,
-                 ghost_analyse=False, lowbus=False, numThreads=1):
+                 ghost_analyse=False, lowbus=False, numThreads=1, params_only=False):
         """
         Loads metadata and initialises variables.
         """
@@ -92,7 +95,7 @@ class BifrostData(object):
             self.dtype = '<' + dtype
         self.hion = False
         self.heion = False
-        self.set_snap(snap,True)
+        self.set_snap(snap,True,params_only=params_only)
         try:
             tmp = find_first_match("%s*idl" % file_root, fdir)
         except IndexError:
@@ -141,7 +144,7 @@ class BifrostData(object):
                 self.auxvars.remove(var)
                 self.vars2d.append(var)
 
-    def set_snap(self, snap, firstime=False):
+    def set_snap(self, snap, firstime=False, params_only=False):
         """
         Reads metadata and sets variable memmap links for a given snapshot
         number.
@@ -187,7 +190,9 @@ class BifrostData(object):
         self.__read_mesh(self.meshfile,firstime=firstime)
         # variables: lists and initialisation
         self._set_snapvars(firstime=firstime)
-        self._init_vars(firstime=firstime)
+        # Do not call if params_only requested
+        if(not params_only):
+            self._init_vars(firstime=firstime)
 
     def _read_params(self,firstime=False):
         """
