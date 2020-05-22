@@ -16,46 +16,49 @@ whsp = '  '
 def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 COLFRE_QUANT=None, COLFRI_QUANT=None, IONP_QUANT=None,
                 EOSTAB_QUANT=None, TAU_QUANT=None, DEBYE_LN_QUANT=None,
-                CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None, HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, **kwargs):
+                CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None, 
+                HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, 
+                KAPPA_QUANT=None, GYROF_QUANT=None, WAVE_QUANT=None, 
+                FLUX_QUANT=None, CURRENT_QUANT=None, **kwargs):
 #                HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   quant = quant.lower()
 
   if not hasattr(obj, 'description'):
     obj.description = {}
 
-  val = get_coulomb(obj, quant)
+  val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT)
   if np.shape(val) is ():
-    val = get_collision(obj, quant)
+    val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
   if np.shape(val) is ():
-    val = get_crossections(obj, quant)
+    val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
   if np.shape(val) is ():
-    val = get_collision_ms(obj, quant)
+    val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT)
   if np.shape(val) is ():
-    val = get_current(obj, quant)
+    val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT)
   if np.shape(val) is ():
-    val = get_flux(obj, quant)
+    val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT)
   if np.shape(val) is ():
-    val = get_plasmaparam(obj, quant)
+    val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
   if np.shape(val) is ():
-    val = get_wavemode(obj, quant)
+    val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT)
   if np.shape(val) is ():
-    val = get_cyclo_res(obj, quant)
+    val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES)
   if np.shape(val) is ():
-    val = get_gyrof(obj, quant)
+    val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT)
   if np.shape(val) is ():
-    val = get_kappa(obj, quant)
+    val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT)
   if np.shape(val) is ():
-    val = get_debye_ln(obj, quant)
+    val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT)
   if np.shape(val) is ():
-    val = get_ionpopulations(obj, quant)
+    val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT)
   if np.shape(val) is ():
-    val = get_ambparam(obj, quant)
+    val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT)
   if np.shape(val) is ():
-    val = get_hallparam(obj, quant)
+    val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT)
   if np.shape(val) is ():
-    val = get_batteryparam(obj, quant)  
+    val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT)  
   if np.shape(val) is ():
-    val = get_spitzerparam(obj, quant)  
+    val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT)  
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
@@ -67,7 +70,11 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
     CROSTAB_QUANT = CROSTAB_LIST
   obj.description['CROSTAB'] = ('Cross section between species'
     '(in cgs): ' + ', '.join(CROSTAB_QUANT))
-  obj.description['ALL'] += "\n" + obj.description['CROSTAB']
+ 
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['CROSTAB']
+  else:
+    obj.description['ALL'] = obj.description['CROSTAB']
 
   if (quant == ''):
     return None
@@ -127,10 +134,16 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
     COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_LIST]
     COLFRE_QUANT += ['nu%s_mag' % clist for clist in CROSTAB_LIST]
     COLFRE_QUANT += ['nue_' + clist for clist in elemlist]
-    obj.description['COLFRE'] = ('Collision frequency (elastic and charge'
+  
+  obj.description['COLFRE'] = ('Collision frequency (elastic and charge'
         'exchange) between different species in (cgs): ' +
         ', '.join(COLFRE_QUANT))
+
+  if 'ALL' in obj.description.keys():
     obj.description['ALL'] += "\n" + obj.description['COLFRE']
+  else:
+    obj.description['ALL'] = obj.description['COLFRE']
+
 
   if (quant == ''):
     return None
@@ -142,7 +155,6 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
     ion1 = ''.join([i for i in elem[0] if i.isdigit()])
     spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
-
     spic1 = spic1[2:]
     crossarr = obj.get_var('%s_%s' % (spic1, spic2))
     nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
@@ -175,9 +187,13 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
     COLFRI_QUANT += ['nu' + clist + '_n' for clist in elemlist]
     COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
 
-    obj.description['COLFRI'] = ('Collision frequency (elastic and charge'
+  obj.description['COLFRI'] = ('Collision frequency (elastic and charge'
         'exchange) between fluids in (cgs): ' + ', '.join(COLFRI_QUANT))
+
+  if 'ALL' in obj.description.keys():
     obj.description['ALL'] += "\n" + obj.description['COLFRI']
+  else:
+    obj.description['ALL'] = obj.description['COLFRI']
 
   if (quant == ''):
     return None
@@ -255,11 +271,11 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
       for ielem in elemlist:
         if elem[0][2:] != '%s%s' % (ielem, lvl):
           result += obj.get_var('%s_%s%s%s' %
-                  (elem[0], ielem, lvl, addtxt)) * obj.uni.weightdic[ielem] /\
-                  (obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
-      if obj.heion and quant[-3:] == '_i':
-        result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) * obj.uni.weightdic['he'] /\
-                (obj.uni.weightdic['he'] + obj.uni.weightdic[elem[0][2:-1]])
+                  (elem[0], ielem, lvl, addtxt)) #* obj.uni.weightdic[ielem] /\
+                  #(obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
+      #if obj.heion and quant[-3:] == '_i':
+        #result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) #* obj.uni.weightdic['he'] /\
+                #(obj.uni.weightdic['he'] + obj.uni.weightdic[elem[0][2:-1]])
 
     return result
   else:
@@ -270,12 +286,13 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None):
 
   if COULOMB_COL_QUANT is None:
     COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
-    obj.description['COULOMB_COL'] = ('Coulomb collision frequency in Hz'
+  obj.description['COULOMB_COL'] = ('Coulomb collision frequency in Hz'
         'units: ' + ', '.join(COULOMB_COL_QUANT))
-    if 'ALL' in obj.description.keys():
-      obj.description['ALL'] += "\n" + obj.description['COULOMB_COL']
-    else:
-      obj.description['ALL'] = "\n" + obj.description['COULOMB_COL']
+  
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['COULOMB_COL']
+  else:
+    obj.description['ALL'] = obj.description['COULOMB_COL']
 
   if (quant == ''):
     return None
@@ -306,10 +323,14 @@ def get_current(obj, quant, CURRENT_QUANT=None):
 
   if CURRENT_QUANT is None:
     CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
-    obj.description['CURRENT'] = ('Calculates currents (bifrost units) or'
+  obj.description['CURRENT'] = ('Calculates currents (bifrost units) or'
         'rotational components of the velocity as follows ' +
         ', '.join(CURRENT_QUANT))
-    obj.description['ALL'] += "\n" + obj.description['CURRENT']
+
+  if 'ALL' in obj.description.keys():
+      obj.description['ALL'] += "\n" + obj.description['CURRENT']
+  else:
+      obj.description['ALL'] = obj.description['CURRENT']
 
   if (quant == ''):
     return None
@@ -353,7 +374,12 @@ def get_flux(obj, quant, FLUX_QUANT=None):
   obj.description['FLUX'] = ('Poynting flux, Flux emergence, and'
       'Poynting flux from "horizontal" motions: ' +
       ', '.join(FLUX_QUANT))
-  obj.description['ALL'] += "\n" + obj.description['FLUX']
+
+  if 'ALL' in obj.description.keys():
+      obj.description['ALL'] += "\n" + obj.description['FLUX']
+  else:
+      obj.description['ALL'] = obj.description['FLUX']
+
 
   if (quant == ''):
     return None
@@ -389,13 +415,17 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None):
     PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
                 'kz']
-    obj.description['PLASMA'] = ('Plasma beta, alfven velocity (and its'
+  obj.description['PLASMA'] = ('Plasma beta, alfven velocity (and its'
         'components), sound speed, entropy, kinetic energy flux'
         '(and its components), magnetic and sonic Mach number'
         'pressure scale height, and each component of the total energy'
         'flux (if applicable, Bifrost units): ' +
         ', '.join(PLASMA_QUANT))
-    obj.description['ALL'] += "\n" + obj.description['PLASMA']
+
+  if 'ALL' in obj.description.keys():
+      obj.description['ALL'] += "\n" + obj.description['PLASMA']
+  else:
+      obj.description['ALL'] = obj.description['PLASMA']
 
   if (quant == ''):
     return None
@@ -452,9 +482,13 @@ def get_wavemode(obj, quant, WAVE_QUANT=None):
 
   if WAVE_QUANT is None:
     WAVE_QUANT = ['alf', 'fast', 'long']
-    obj.description['WAVE'] = ('Alfven, fast and longitudinal wave'
+  obj.description['WAVE'] = ('Alfven, fast and longitudinal wave'
         'components (Bifrost units): ' + ', '.join(WAVE_QUANT))
+
+  if 'ALL' in obj.description.keys():
     obj.description['ALL'] += "\n" + obj.description['WAVE']
+  else:
+    obj.description['ALL'] = obj.description['WAVE']
 
   if (quant == ''):
     return None
@@ -504,9 +538,13 @@ def get_cyclo_res(obj, quant, CYCL_RES=None):
 
   if (CYCL_RES is None):
     CYCL_RES = ['n6nhe2', 'n6nhe3', 'nhe2nhe3']
-    obj.description['CYCL_RES'] = ('Resonant cyclotron frequencies'
+  obj.description['CYCL_RES'] = ('Resonant cyclotron frequencies'
         '(only for do_helium) are (SI units): ' + ', '.join(CYCL_RES))
+
+  if 'ALL' in obj.description.keys():
     obj.description['ALL'] += "\n" + obj.description['CYCL_RES']
+  else:
+    obj.description['ALL'] = obj.description['CYCL_RES']
 
   if (quant == ''):
     return None
@@ -541,10 +579,14 @@ def get_gyrof(obj, quant, GYROF_QUANT=None):
 
   if (GYROF_QUANT is None):
     GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
-    obj.description['GYROF'] = ('gyro freqency are (Hz): ' +
+  obj.description['GYROF'] = ('gyro freqency are (Hz): ' +
         ', '.join(GYROF_QUANT) + ' at the end it must have the ionization' +
         'state, e,g, gfh2 is for ionized hydrogen')
+
+  if 'ALL' in obj.description.keys():
     obj.description['ALL'] += "\n" + obj.description['GYROF']
+  else:
+    obj.description['ALL'] = obj.description['GYROF']
 
   if (quant == ''):
     return None
@@ -567,9 +609,14 @@ def get_kappa(obj, quant, KAPPA_QUANT=None):
   if (KAPPA_QUANT is None):
     KAPPA_QUANT = ['kappanorm_', 'kappae'] + \
         ['kappa' + clist for clist in elemlist]
-    obj.description['KAPPA'] = ('kappa, i.e., magnetization are (adimensional): ' +
+  obj.description['KAPPA'] = ('kappa, i.e., magnetization are (adimensional): ' +
         ', '.join(KAPPA_QUANT) + ' at the end it must have the ionization' +
         'state, e,g, kappah2 is for protons')
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['KAPPA']
+  else:
+    obj.description['ALL'] = obj.description['KAPPA']
 
   if (quant == ''):
     return None
@@ -594,9 +641,13 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None):
 
   if (DEBYE_LN_QUANT is None):
     DEBYE_LN_QUANT = ['debye_ln']
-    obj.description['DEBYE'] = ('Debye length in ... units:' +
+  obj.description['DEBYE'] = ('Debye length in ... units:' +
         ', '.join(DEBYE_LN_QUANT))
+
+  if 'ALL' in obj.description.keys():
     obj.description['ALL'] += "\n" + obj.description['DEBYE']
+  else:
+    obj.description['ALL'] = obj.description['DEBYE']
 
   if (quant == ''):
     return None
@@ -624,9 +675,13 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
     IONP_QUANT += ['r' + clist + '-' for clist in elemlist]
     IONP_QUANT += ['rneu', 'rion', 'nion', 'nneu', 'nelc']
     IONP_QUANT += ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']
-    obj.description['IONP'] = ('densities for specific ionized species as'
+  obj.description['IONP'] = ('densities for specific ionized species as'
         'follow (in SI): ' + ', '.join(IONP_QUANT))
+
+  if 'ALL' in obj.description.keys():
     obj.description['ALL'] += "\n" + obj.description['IONP']
+  else:
+    obj.description['ALL'] = obj.description['IONP']
 
   if (quant == ''):
       return None
@@ -701,13 +756,13 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
       if obj.hion:
         nel = np.copy(obj.get_var('hionne'))
       else:
-        nel = np.copy(obj.get_var('ne'))  
+        nel = np.copy(obj.get_var('ne')) 
 
       if quant[0] == 'n':
         dens = False
       else:
         dens = True
-      return ionpopulation(obj, r, nel, tg, elem=spic[1:], lvl=lvl, dens=dens) 
+      return ionpopulation(obj, r, nel, tg, elem=spic[1:], lvl=lvl, dens=dens) /1e6 # to convert in cm^3
   else:
     return None
 
@@ -715,13 +770,18 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
 def get_ambparam(obj, quant, AMB_QUANT=None):
 
   if (AMB_QUANT is None):
-      AMB_QUANT = ['uambx', 'uamby', 'uambz', 'ambx', 'amby', 'ambz',
-                  'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5',
-                  'eta_amb5a', 'eta_amb5b', 'nchi', 'npsi', 'nchi_red', 'npsi_red',
-                  'rchi', 'rpsi', 'rchi_red', 'rpsi_red','alphai','betai']
-      obj.description['AMB'] = ('ambipolar velocity or term as'
+    AMB_QUANT = ['uambx', 'uamby', 'uambz', 'ambx', 'amby', 'ambz',
+              'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5',
+              'eta_amb5a', 'eta_amb5b', 'nchi', 'npsi', 'nchi_red', 'npsi_red',
+              'rchi', 'rpsi', 'rchi_red', 'rpsi_red','alphai','betai']
+
+  obj.description['AMB'] = ('ambipolar velocity or term as'
           'follow (in Bifrost units): ' + ', '.join(AMB_QUANT))
-      obj.description['ALL'] += "\n" + obj.description['AMB']
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['AMB']
+  else:
+      obj.description['ALL'] = obj.description['AMB']
 
   if (quant == ''):
     return None
@@ -749,8 +809,8 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
       psi = obj.get_var('npsi')
       chi = obj.get_var('nchi')
 
-      result = obj.get_var('modb') * obj.uni.u_b * (psi / (1e5 * (psi**2 + chi**2)) - 1.0 / (
-              obj.get_var('nelc')  * obj.get_var('kappae') * 1e5 + 1e-20))
+      result = obj.get_var('modb') * obj.uni.u_b * (psi / (1e2 * (psi**2 + chi**2)) - 1.0 / (
+              obj.get_var('nelc')  * obj.get_var('kappae') * 1e2 + 1e-20))
 
     elif quant == 'eta_amb4a':
       psi = obj.get_var('npsi')
@@ -767,30 +827,33 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
 
     elif quant in ['nchi','rchi']:
       result = obj.r*0.0
+      kappae = obj.get_var('kappae')
 
       for iele in elemlist:
-        result += (obj.get_var('kappae') + obj.get_var('kappa'+iele+'2')) * (
-            obj.get_var('kappae') - obj.get_var('kappa'+iele+'2')) / (
+        result += (kappae + obj.get_var('kappa'+iele+'2')) * (
+            kappae - obj.get_var('kappa'+iele+'2')) / (
             1.0 + obj.get_var('kappa'+iele+'2')**2) / (
-            1.0 + obj.get_var('kappae')**2) * obj.get_var(quant[0]+iele+'-2')
+            1.0 + kappae**2) * obj.get_var(quant[0]+iele+'-2')
 
     elif quant in ['npsi','rpsi']: # Yakov, Eq ()
       result = obj.r*0.0
+      kappae = obj.get_var('kappae')
 
       for iele in elemlist:
-        result += (obj.get_var('kappae') + obj.get_var('kappa'+iele+'2')) * (
-            1.0 + obj.get_var('kappae') * obj.get_var('kappa'+iele+'2')) / (
+        result += (kappae + obj.get_var('kappa'+iele+'2')) * (
+            1.0 + kappae * obj.get_var('kappa'+iele+'2')) / (
             1.0 + obj.get_var('kappa'+iele+'2')**2) / (
-            1.0 + obj.get_var('kappae')**2) * obj.get_var(quant[0]+iele+'-2')
+            1.0 + kappae**2) * obj.get_var(quant[0]+iele+'-2')
 
     elif quant == 'alphai':
       result = obj.r*0.0
+      kappae = obj.get_var('kappae')
 
       for iele in elemlist:
-        result += (obj.get_var('kappae') + obj.get_var('kappa'+iele+'2')) * (
-            obj.get_var('kappae') - obj.get_var('kappa'+iele+'2')) / (
+        result += (kappae + obj.get_var('kappa'+iele+'2')) * (
+            kappae - obj.get_var('kappa'+iele+'2')) / (
             1.0 + obj.get_var('kappa'+iele+'2')**2) / (
-            1.0 + obj.get_var('kappae')**2) 
+            1.0 + kappae**2) 
 
     elif quant == 'betai': # Yakov, Eq ()
       result = obj.r*0.0
@@ -842,10 +905,16 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
 def get_hallparam(obj, quant, HALL_QUANT=None):
 
   if (HALL_QUANT is None):
-    HALL_QUANT = ['uhallx','uhally','uhallz','hallx','hally','hallz','eta_hall','eta_hallb']
-    obj.description['HALL'] = ('Hall velocity or term as'
+    HALL_QUANT = ['uhallx', 'uhally', 'uhallz', 'hallx', 'hally', 'hallz',
+                'eta_hall', 'eta_hallb']
+  obj.description['HALL'] = ('Hall velocity or term as'
         'follow (in Bifrost units): ' + ', '.join(HALL_QUANT))
-    obj.description['ALL'] += "\n"+ obj.description['HALL']
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['HALL']
+  else:
+      obj.description['ALL'] = obj.description['HALL']
+
 
   if (quant == ''):
     return None
@@ -875,9 +944,16 @@ def get_hallparam(obj, quant, HALL_QUANT=None):
 
 def get_batteryparam(obj, quant, BATTERY_QUANT=None):
   if (BATTERY_QUANT is None):
-    BATTERY_QUANT = ['bb_constqe','dxpe','dype','dzpe','bb_batx','bb_baty','bb_batz']
-    obj.description['BATTERY'] = ('Battery term ' + ', '.join(BATTERY_QUANT))
-    obj.description['ALL'] += "\n"+ obj.description['BATTERY']
+    BATTERY_QUANT = ['bb_constqe', 'dxpe', 'dype', 'dzpe', 'bb_batx',
+                    'bb_baty', 'bb_batz']
+  
+  obj.description['BATTERY'] = ('Battery term ' + ', '.join(BATTERY_QUANT))
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['BATTERY']
+  else:
+    obj.description['ALL'] = obj.description['BATTERY']
+
   if (quant == ''):
     return None
       
@@ -914,8 +990,14 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None):
 def get_spitzerparam(obj, quant, SPITZER_QUANT=None):
   if (SPITZER_QUANT is None):
     SPITZER_QUANT = ['fcx','fcy','fcz','qspitz']
-    obj.description['SPITZER'] = ('Spitzer term ' + ', '.join(SPITZER_QUANT))
-    obj.description['ALL'] += "\n"+ obj.description['SPITZER']
+
+  obj.description['SPITZER'] = ('Spitzer term ' + ', '.join(SPITZER_QUANT))
+  
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['SPITZER']
+  else:
+    obj.description['ALL'] = obj.description['SPITZER']
+
   if (quant == ''):
     return None
    
@@ -1030,7 +1112,7 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
     count += 1
 
   abnd = abnd / np.sum(abnd)
-  phit = (totconst * tg)**(1.5) * 2.0 / nelcgs
+  phit = (totconst * tg)**(1.5) * 2.0 / nel
   kbtg = uni.ev_to_erg / uni.k_b / tg
   n1_n0 = phit * uni.u1dic[elem] / uni.u0dic[elem] * np.exp(
       - uni.xidic[elem] * kbtg)
