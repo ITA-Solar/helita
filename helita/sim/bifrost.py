@@ -109,6 +109,7 @@ class BifrostData(object):
                                     "found"))
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
         self.cross_sect = Cross_sect
+        self.rhoeetab = Rhoeetab(fdir=fdir)
 
     def _set_snapvars(self,firstime=False):
         """
@@ -534,11 +535,9 @@ class BifrostData(object):
         elif var in self.auxxyvars:
             val = self._get_simple_var_xy(var, *args, **kwargs)
         elif var in self.compvars:  # add to variable list
-            print('r',var,)
             self.variables[var] = self._get_composite_var(var, *args, **kwargs)
             setattr(self, var, self.variables[var])
             val = self.variables[var]
-            print(np.shape(val))
         else:
             # Loading quantities
             val = load_quantities(self,var)
@@ -714,6 +713,7 @@ class BifrostData(object):
             return np.log(self.get_var('p', *args, **kwargs)) - \
                 self.params['gamma'][self.snapInd] * np.log(
                     self.get_var('r', *args, **kwargs))
+
     def calc_tau(self):
         """
         Calculates optical depth.
