@@ -534,9 +534,11 @@ class BifrostData(object):
         elif var in self.auxxyvars:
             val = self._get_simple_var_xy(var, *args, **kwargs)
         elif var in self.compvars:  # add to variable list
+            print('r',var,)
             self.variables[var] = self._get_composite_var(var, *args, **kwargs)
             setattr(self, var, self.variables[var])
             val = self.variables[var]
+            print(np.shape(val))
         else:
             # Loading quantities
             val = load_quantities(self,var)
@@ -695,17 +697,6 @@ class BifrostData(object):
         and entropy (ent). They will will load into memory.
         """
 
-        if (EOSTAB_QUANT == None):
-            EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
-            if not hasattr(self,'description'):
-                self.description={}
-            self.description['EOSTAB'] = ('Variables from EOS table. All of them '
-                'are in cgs except ne which is in SI. The electron density '
-                '[m^-3], temperature [K], pressure [dyn/cm^2], Rosseland opacity '
-                '[cm^2/g], scattering probability, opacity, thermal emission and '
-                'entropy are as follows: ' + ', '.join(EOSTAB_QUANT))
-            self.description['ALL'] = "\n"+ self.description['EOSTAB']
-
         if var == '':
             print(help(self._get_composite_var))
 
@@ -723,36 +714,6 @@ class BifrostData(object):
             return np.log(self.get_var('p', *args, **kwargs)) - \
                 self.params['gamma'][self.snapInd] * np.log(
                     self.get_var('r', *args, **kwargs))
-        elif quant == 'tau':
-            return self.calc_tau()
-
-        elif quant in EOSTAB_QUANT:
-            # unit conversion to SI
-            # to g/cm^3
-            ur = self.params['u_r'][self.snapInd]
-            ue = self.params['u_ee'][self.snapInd]        # to erg/g
-            if self.hion and quant == 'ne':
-                return self.get_var('hionne')
-            rho = self.get_var('r')
-            rho = rho * ur
-            ee = self.get_var('ee')
-            ee = ee * ue
-            if self.verbose:
-                print(quant + ' interpolation...', whsp*7, end="\r", flush=True)
-
-            fac = 1.0
-            # JMS Why SI?? SI seems to work with bifrost_uvotrt.
-            if quant == 'ne':
-                fac = 1.e6  # cm^-3 to m^-3
-            if quant in ['eps', 'opa', 'temt']:
-                radtab = True
-            else:
-                radtab = False
-            eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
-            return eostab.tab_interp(
-                rho, ee, order=1, out=quant) * fac
-
-
     def calc_tau(self):
         """
         Calculates optical depth.
@@ -765,15 +726,17 @@ class BifrostData(object):
 
         if not hasattr(self, 'z'):
             print('(WWW) get_tau needs the height (z) in Mm (units code)')
+        print('a')
 
         # grph = 2.38049d-24 uni.GRPH
         # bk = 1.38e-16 uni.KBOLTZMANN
         # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
         if not hasattr(self, 'ne'):
+
             nel = self.get_var('ne')
         else:
             nel = self.ne
-
+        print('b')
         if not hasattr(self, 'tg'):
             tg = self.get_var('tg')
         else:

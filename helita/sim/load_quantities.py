@@ -58,7 +58,9 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
   if np.shape(val) is ():
     val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT)  
   if np.shape(val) is ():
-    val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT)  
+    val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT) 
+  if np.shape(val) is (): 
+    val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
@@ -126,6 +128,62 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
       print('(WWW) cross-section: wrong combination of species')
   else:
     return None
+
+def get_eosparam(obj, quant, EOSTAB_QUANT=None): 
+
+  if (EOSTAB_QUANT == None):
+      EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
+      if not hasattr(obj,'description'):
+          obj.description={}
+  
+  obj.description['EOSTAB'] = ('Variables from EOS table. All of them '
+          'are in cgs except ne which is in SI. The electron density '
+          '[m^-3], temperature [K], pressure [dyn/cm^2], Rosseland opacity '
+          '[cm^2/g], scattering probability, opacity, thermal emission and '
+          'entropy are as follows: ' + ', '.join(EOSTAB_QUANT))
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['EOSTAB']
+  else:
+    obj.description['ALL'] = obj.description['EOSTAB']
+
+  if (quant == ''):
+    return None
+
+
+  if quant in EOSTAB_QUANT:
+    # unit conversion to SI
+    # to g/cm^3
+    ur = obj.params['u_r'][obj.snapInd]
+    ue = obj.params['u_ee'][obj.snapInd]        # to erg/g
+    if obj.hion and quant == 'ne':
+        return obj.get_var('hionne')
+    rho = obj.get_var('r')
+    rho = rho * ur
+    ee = obj.get_var('ee')
+    ee = ee * ue
+    if obj.verbose:
+        print(quant + ' interpolation...', whsp*7, end="\r", flush=True)
+
+    fac = 1.0
+    # JMS Why SI?? SI seems to work with bifrost_uvotrt.
+    if quant == 'ne':
+        fac = 1.e6  # cm^-3 to m^-3
+    if quant in ['eps', 'opa', 'temt']:
+        radtab = True
+    else:
+        radtab = False
+    eostab = Rhoeetab(fdir=self.fdir, radtab=radtab)
+    return eostab.tab_interp(
+        rho, ee, order=1, out=quant) * fac
+
+  elif quant == 'tau':
+    return obj.calc_tau()
+  else: 
+   return None
+
+
+
 
 
 def get_collision(obj, quant, COLFRE_QUANT=None):
