@@ -1,27 +1,29 @@
 import numpy as np
 
 
-def load_mf_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
-                       COLFRE_QUANT=None, COLFRI_QUANT=None, IONP_QUANT=None,
-                       EOSTAB_QUANT=None, TAU_QUANT=None, DEBYE_LN_QUANT=None,
-                       CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None,
-                       HALL_QUANT=None, SPITZERTERM_QUANT=None, **kwargs):
+def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
+                      NDENS_QUANT=None, CROSTAB_QUANT=None, 
+                      SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
+                      **kwargs):
+
   quant = quant.lower()
 
   if not hasattr(obj, 'mf_description'):
     obj.mf_description = {}
 
-  val = get_global_var(obj, quant)
+  val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
   if np.shape(val) is ():
-    val = get_mf_ndens(obj, quant)
+    val = get_mf_ndens(obj, quant, NDENS_QUANT=NDENS_QUANT)
   if np.shape(val) is ():
-    val = get_mf_colf(obj, quant)
+    val = get_mf_colf(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
   if np.shape(val) is ():
-    val = get_mf_driftvar(obj, quant)
+    val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
   if np.shape(val) is ():
-    val = get_mf_cross(obj, quant)
+    val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
   if np.shape(val) is ():
-    val = get_spitzerterm(obj, quant)  
+    val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT)  
+  if np.shape(val) is (): 
+    val = get_mf_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
   return val
 
   '''
@@ -42,7 +44,7 @@ def load_mf_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
 
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel','pe']
+      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel', 'pe', 'rc']
 
   obj.mf_description['GLOBAL_QUANT'] = ('These variables are calculate looping'
                                         'either speciess or levels' +
@@ -63,7 +65,13 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
         for ilevel in range(1,nlevels+1):
           output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
       return output
-
+    elif var == 'rc':  # total ionized density
+      for ispecies in obj.att:
+        nlevels = obj.att[ispecies].params.nlevel
+        for ilevel in range(1,nlevels+1):
+          if (obj.att[ispecies].params.levels['stage'][ilevel-1] > 1): 
+            output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
+      return output
     elif var == 'nel':
       for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
@@ -119,7 +127,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 
 def get_mf_ndens(obj, var, NDENS_QUANT=None):
   if NDENS_QUANT is None:
-    NDENS_QUANT = ['n_i']
+    NDENS_QUANT = ['nr']
 
   obj.mf_description['NDENS_QUANT'] = ('These variables are calculate looping'
                                        'either speciess or levels' +
@@ -232,7 +240,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       m_i = obj.att[obj.mf_ispecies].params.atomic_weight
       m_j = obj.att[obj.mf_jspecies].params.atomic_weight
       value = obj.get_var("nu_ij") / (m_j / (m_i + m_j)) * \
-          obj.get_var("n_i", mf_ispecies=s_j, mf_ilevel=l_j) 
+          obj.get_var("nr", mf_ispecies=s_j, mf_ilevel=l_j) 
           # SE added /mu_ji -> C_tot_per_vol == collisions/volume
       obj.set_mfi(s_i, l_i)
       obj.set_mfj(s_j, l_j) #SE: mfj should be unchanged anyway. included for readability.
@@ -247,11 +255,12 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       #get n_j:
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
       (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
-      n_j   = obj.get_var("n_i", mf_ispecies=s_j, mf_ilevel=l_j)
+      n_j   = obj.get_var("nr", mf_ispecies=s_j, mf_ilevel=l_j)
       obj.set_mfi(s_i, l_i)
       obj.set_mfj(s_j, l_j) #SE: mfj should be unchanged anyway. included for readability.
       #calculate & return nu_ij:
-      return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
+      #return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
+      return n_j * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))      
       # JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency instead of spearated.
       # SE (4/9/20 corrected using "n_i" to now properly use "n_j" instead.
       
@@ -366,3 +375,69 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
         print('(WWW) cross-section: wrong combination of species')
   else:
       return None
+
+
+
+def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
+
+  if PLASMA_QUANT is None:
+    PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+                'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
+                'kz']
+    obj.description['PLASMA'] = ('Plasma beta, alfven velocity (and its'
+        'components), sound speed, entropy, kinetic energy flux'
+        '(and its components), magnetic and sonic Mach number'
+        'pressure scale height, and each component of the total energy'
+        'flux (if applicable, Bifrost units): ' +
+        ', '.join(PLASMA_QUANT))
+    obj.description['ALL'] += "\n" + obj.description['PLASMA']
+
+  if (quant == ''):
+    return None
+
+  if quant in PLASMA_QUANT:
+    if quant in ['hp', 's', 'cs', 'beta']:
+      var = obj.get_var('p')
+      if quant == 'hp':
+        if getattr(obj, 'nx') < 5:
+          return np.zeros_like(var)
+        else:
+          return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
+      elif quant == 'cs':
+        return np.sqrt(obj.params['gamma'][obj.snapInd] *
+                       var / obj.get_var('totr'))
+      elif quant == 's':
+        return (np.log(var) - obj.params['gamma'][obj.snapInd] *
+                np.log(obj.get_var('totr')))
+      elif quant == 'beta':
+        return 2 * var / obj.get_var('b2')
+
+    if quant in ['mn', 'man']:
+      var = obj.get_var('modu')
+      if quant == 'mn':
+        return var / (obj.get_var('cs') + 1e-12)
+      else:
+        return var / (obj.get_var('va') + 1e-12)
+
+    if quant in ['va', 'vax', 'vay', 'vaz']:
+      var = obj.get_var('totr')
+      if len(quant) == 2:
+        return obj.get_var('modb') / np.sqrt(var)
+      else:
+        axis = quant[-1]
+        return np.sqrt(obj.get_var('b' + axis + 'c') ** 2 / var)
+
+    if quant in ['hx', 'hy', 'hz', 'kx', 'ky', 'kz']:
+      axis = quant[-1]
+      var = obj.get_var('p' + axis + 'c')
+      if quant[0] == 'h':
+        return ((obj.get_var('e') + obj.get_var('p')) /
+                obj.get_var('r') * var)
+      else:
+        return obj.get_var('u2') * var * 0.5
+
+    if quant in ['ke']:
+      var = obj.get_var('r')
+      return obj.get_var('u2') * var * 0.5
+  else:
+    return None
