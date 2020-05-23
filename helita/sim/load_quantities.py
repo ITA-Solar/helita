@@ -168,14 +168,10 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None):
     fac = 1.0
     # JMS Why SI?? SI seems to work with bifrost_uvotrt.
     if quant == 'ne':
-        fac = 1.e6  # cm^-3 to m^-3
-    if quant in ['eps', 'opa', 'temt']:
-        radtab = True
-    else:
-        radtab = False
-    eostab = obj.rhoeetab(fdir=obj.fdir, radtab=radtab)
-    return eostab.tab_interp(
-        rho, ee, order=1, out=quant) * fac
+      fac = 1.e6  # cm^-3 to m^-3
+
+    return obj.rhoee.tab_interp(
+      rho, ee, order=1, out=quant) * fac
 
   elif quant == 'tau':
     return obj.calc_tau()

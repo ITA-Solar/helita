@@ -109,7 +109,7 @@ class BifrostData(object):
                                     "found"))
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
         self.cross_sect = Cross_sect
-        self.rhoeetab = Rhoeetab(fdir=fdir)
+        self.rhoee = Rhoeetab(fdir=fdir,radtab=True)
 
     def _set_snapvars(self,firstime=False):
         """
