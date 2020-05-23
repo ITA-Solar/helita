@@ -173,7 +173,7 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None):
         radtab = True
     else:
         radtab = False
-    eostab = obj.rhoeetab(fdir=self.fdir, radtab=radtab)
+    eostab = obj.rhoeetab(fdir=obj.fdir, radtab=radtab)
     return eostab.tab_interp(
         rho, ee, order=1, out=quant) * fac
 
