@@ -109,7 +109,10 @@ class BifrostData(object):
                                     "found"))
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
         self.cross_sect = Cross_sect
-        self.rhoee = Rhoeetab(fdir=fdir,radtab=True)
+        if 'tabinputfile' in self.params.keys(): 
+            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
+            if os.access(tabfile, os.R_OK):
+                self.rhoee = Rhoeetab(tabfile=tabfile,fdir=fdir,radtab=True)
 
     def _set_snapvars(self,firstime=False):
         """
