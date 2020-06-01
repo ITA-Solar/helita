@@ -252,16 +252,16 @@ class EbysusData(BifrostData):
                 print("Warning: mfc is only for ionized species."
                       " Level changed to 2")
 
-        if var not in self.snapevars:
-            if (mf_ispecies is None):
-                if self.mf_ispecies < 1:
-                    mf_ispecies = 1
-                    print("Warning: variable is only for electrons, "
-                          "iSpecie changed to 1")
-            elif (mf_ispecies < 1):
-                mf_ispecies = 1
-                print("Warning: variable is only for electrons, "
-                      "iSpecie changed to 1")
+        #if var not in self.snapevars:
+        #    if (mf_ispecies is None):
+        #        if self.mf_ispecies < 1:
+        #            mf_ispecies = 1
+        #            print("Warning: variable is only for electrons, "
+        #                  "iSpecie changed to 1")
+        #    elif (mf_ispecies < 1):
+        #        mf_ispecies = 1
+        #        print("Warning: variable is only for electrons, "
+        #              "iSpecie changed to 1")
 
         if not hasattr(self, 'iix'):
             self.set_domain_iiaxis(iinum=iix, iiaxis='x')
@@ -598,16 +598,16 @@ class EbysusData(BifrostData):
                 print("Warning: mfc is only for ionized species."
                       "Level changed to 2")
 
-        if var not in self.snapevars:
-            if (mf_ispecies is None):
-                if self.mf_ispecies < 1:
-                    mf_ispecies = 1
-                    print("Warning: variable is only for electrons,"
-                          "iSpecie changed to 1")
-            elif (mf_ispecies < 1):
-                mf_ispecies = 1
-                print("Warning: variable is only for electrons,"
-                      "iSpecie changed to 1")
+        #if var not in self.snapevars:
+        #    if (mf_ispecies is None):
+        #        if self.mf_ispecies < 1:
+        #            mf_ispecies = 1
+        #            print("Warning: variable is only for electrons,"
+        #                  "iSpecie changed to 1")
+        #    elif (mf_ispecies < 1):
+        #        mf_ispecies = 1
+        #        print("Warning: variable is only for electrons,"
+        #              "iSpecie changed to 1")
 
         if (((mf_ispecies is not None) and (
                 mf_ispecies != self.mf_ispecies)) or ((
@@ -746,6 +746,8 @@ def printi(fdir='./',rootname='',it=1):
             print('ilv = %i'%ilevel)
             r=dd.get_var('r',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_r']
             print('dens=%6.2E,%6.2E g/cm3'%(np.min(r),np.max(r)))
+            r=dd.get_var('nr',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) 
+            print('ndens=%6.2E,%6.2E 1/cm3'%(np.min(r),np.max(r)))
             ux=dd.get_var('ux',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
             print('ux=%6.2E,%6.2E km/s'%(np.min(ux),np.max(ux)))
             uy=dd.get_var('uy',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
@@ -758,11 +760,14 @@ def printi(fdir='./',rootname='',it=1):
             print('e=%6.2E,%6.2E erg'%(np.min(ener),np.max(ener)))
 
     bx=dd.get_var('bx',it) * dd.params['u_b']
-    print('bx=%5.2E G'%np.max(bx))
+    print('bx=%6.2E,%6.2E G'%(np.min(bx),np.max(bx)))
     by=dd.get_var('by',it) * dd.params['u_b']
-    print('by=%5.2E G'%np.max(by))
+    print('by=%6.2E,%6.2E G'%(np.min(by),np.max(by)))
     bz=dd.get_var('bz',it) * dd.params['u_b']
-    print('bz=%5.2E G'%np.max(bz))
+    print('bz=%6.2E,%6.2E G'%(np.min(bz),np.max(bz)))
+    va=dd.get_var('va',it) * dd.params['u_u'] / 1e5
+    print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
+
 
 def read_mftab_ascii(filename):
     '''
