@@ -44,7 +44,7 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel', 'pe', 'rc']
+      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel', 'pe', 'rc','rne']
 
   obj.mf_description['GLOBAL_QUANT'] = ('These variables are calculate looping'
                                         'either speciess or levels' +
@@ -65,6 +65,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
         for ilevel in range(1,nlevels+1):
           output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
       return output
+
     elif var == 'rc':  # total ionized density
       for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
@@ -72,6 +73,15 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
           if (obj.att[ispecies].params.levels['stage'][ilevel-1] > 1): 
             output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
       return output
+
+    elif var == 'rneu':  # total ionized density
+      for ispecies in obj.att:
+        nlevels = obj.att[ispecies].params.nlevel
+        for ilevel in range(1,nlevels+1):
+          if (obj.att[ispecies].params.levels['stage'][ilevel-1] == 1): 
+            output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
+      return output
+
     elif var == 'nel':
       for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
@@ -211,7 +221,9 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['C_tot_per_vol', '1dcolslope',
-                    'nu_ij']  # JMS in obj.mf_description
+                    'nu_ij','nu_en','nu_ei']  
+
+    # JMS in obj.mf_description
     # you could describe what is what with the detail or definitions that you desire.
 
   obj.mf_description['COLFRE_QUANT'] = ('Collisional quantities for mf_ispecies '
@@ -233,6 +245,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
   if (var == ''):
     return None
+
   if var in COLFRE_QUANT:
     if var == "C_tot_per_vol":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
@@ -247,17 +260,23 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       return value
 
     elif var == "nu_ij":
+      ispecies = obj.mf_ispecies
+      jspecies = obj.mf_jspecies
+      ilevel = obj.mf_ilevel
+      jlevel = obj.mf_jlevel
       cross = obj.get_var('cross')  # units are in cm^2.
-      m_i   = obj.att[obj.mf_ispecies].params.atomic_weight
-      m_j   = obj.att[obj.mf_jspecies].params.atomic_weight
+      if (ispecies < 0):
+        m_i   = obj.uni.m_electron/obj.uni.amu
+        tg    = obj.get_var('etg')        
+      else: 
+        m_i   = obj.att[ispecies].params.atomic_weight
+        tg    = obj.get_var('mfe_tg')        
+      m_j   = obj.att[jspecies].params.atomic_weight
       mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
-      tg    = obj.get_var('mfe_tg')
       #get n_j:
-      (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
-      (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
-      n_j   = obj.get_var("nr", mf_ispecies=s_j, mf_ilevel=l_j)
-      obj.set_mfi(s_i, l_i)
-      obj.set_mfj(s_j, l_j) #SE: mfj should be unchanged anyway. included for readability.
+      n_j   = obj.get_var("nr", mf_ispecies=jspecies, mf_ilevel=jlevel)
+      obj.set_mfi(ispecies, ilevel)
+      obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
       #calculate & return nu_ij:
       #return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
       return n_j * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))      
@@ -273,9 +292,54 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
                 obj.get_var("nu_ij",
                             mf_ispecies=s_j, mf_ilevel=l_j,
                             mf_jspecies=s_i, mf_jlevel=l_i))
+      m_j   = obj.att[s_j].params.atomic_weight
+      m_i   = obj.att[s_i].params.atomic_weight
+
       obj.set_mfi(s_i, l_i)
       obj.set_mfj(s_j, l_j)
-      return value
+      return value * m_j / (m_i + m_j)
+
+    elif var == 'nu_ei':
+      result = np.zeros(np.shape(obj.r))
+      ispecies = obj.mf_ispecies
+      ilevel = obj.mf_ilevel      
+      nel = obj.get_var('nel')
+      nr = obj.get_var('nr',mf_ispecies=ispecies,mf_ilevel=ilevel)
+      obj.set_mfi(ispecies,ilevel)
+      #for ispecies in obj.att:
+      #nlevels = obj.att[ispecies].params.nlevel
+      #for ilevel in range(1,nlevels+1):
+      
+      if (obj.att[ispecies].params.levels['stage'][ilevel-1] > 1):
+        mst = obj.att[ispecies].params.atomic_weight*obj.uni.amu * obj.uni.m_electron / (
+              obj.att[ispecies].params.atomic_weight*obj.uni.amu + (obj.uni.m_electron))
+
+        #mst = obj.uni.m_electron
+
+        etg = obj.get_var('etg')
+        tg1 = obj.get_var('mfe_tg',mf_ispecies=ispecies,mf_ilevel=ilevel)
+
+        tg =  ((obj.uni.m_electron/obj.uni.amu) * tg1 + 
+              obj.att[ispecies].params.atomic_weight * etg)/((
+              obj.uni.m_electron/obj.uni.amu)+obj.att[ispecies].params.atomic_weight) 
+
+        culblog = 23. + 1.5 * np.log(etg / 1.e6) - \
+            0.5 * np.log(nel / 1e6)
+        result = 1.7 * culblog/20. * (obj.uni.m_h/obj.uni.m_electron) * nr * \
+            (mst/obj.uni.m_h)**0.5 / tg**1.5 * (obj.att[ispecies].params.levels['stage'][ilevel-1]-1)
+      obj.set_mfi(ispecies,ilevel)
+      return result 
+
+    elif var == 'nu_en':
+      result = np.zeros(np.shape(obj.r))
+      lvl = 1
+      for ispecies in obj.att:
+        nlevels = obj.att[ispecies].params.nlevel
+        for ilevel in range(1,nlevels+1):
+          if (obj.att[ispecies].params.levels['stage'][ilevel-1] == 1):
+            result += obj.get_var('nu_ij', mf_ispecies=-1,mf_jspeces=ispecies,mf_jlevel=ilevel)
+      
+      return result 
 
     else:
       print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
@@ -328,15 +392,31 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
     return None
 
   if var in CROSTAB_QUANT:
-    tg = obj.get_var('mfe_tg')
+    ispecies = obj.mf_ispecies
+    jspecies = obj.mf_jspecies
+    ilevel = obj.mf_ilevel
+    jlevel = obj.mf_jlevel
     if (obj.mf_ispecies < 0):
       spic1 = 'e'
+      tg1 = obj.get_var('etg') 
+      wgt1 = obj.uni.m_electron/obj.uni.amu
     else:
-      spic1 = obj.att[obj.mf_ispecies].params.element
+      spic1 = obj.att[ispecies].params.element
+      tg1 = obj.get_var('mfe_tg',mf_ispecies=ispecies,mf_ilevel=ilevel)
+      wgt1 = obj.att[ispecies].params.atomic_weight
+
     if (obj.mf_jspecies < 0):
       spic2 = 'e'
+      tg2 = obj.get_var('etg')  
+      wgt2 = obj.uni.m_electron/obj.uni.amu
     else:
-      spic2 = obj.att[obj.mf_jspecies].params.element
+      spic2 = obj.att[jspecies].params.element
+      tg2 = obj.get_var('mfe_tg',mf_ispecies=jspecies,mf_ilevel=jlevel)
+      wgt2 = obj.att[jspecies].params.atomic_weight
+    obj.set_mfi(ispecies,ilevel)
+    obj.set_mfj(jspecies,jlevel)
+
+    tg = (tg1*wgt2 + tg2*wgt1)/(wgt1+wgt2)
     cross_tab = ''
     crossunits = 2.8e-17
     if ([spic1, spic2] == ['h', 'h']):
