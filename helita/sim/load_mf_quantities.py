@@ -2,7 +2,7 @@ import numpy as np
 
 
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
-                      NDENS_QUANT=None, CROSTAB_QUANT=None, 
+                      NDENS_QUANT=None, CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
                       SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
                       **kwargs):
 
@@ -16,6 +16,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
     val = get_mf_ndens(obj, quant, NDENS_QUANT=NDENS_QUANT)
   if np.shape(val) is ():
     val = get_mf_colf(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
+  if np.shape(val) is ():
+    val = get_mf_logcul(obj, quant, LOGCUL_QUANT=LOGCUL_QUANT)
   if np.shape(val) is ():
     val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
   if np.shape(val) is ():
@@ -252,7 +254,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
       m_i = obj.att[obj.mf_ispecies].params.atomic_weight
       m_j = obj.att[obj.mf_jspecies].params.atomic_weight
-      value = obj.get_var("nu_ij") / (m_j / (m_i + m_j)) * \
+      value = obj.get_var("nu_ij") * \
           obj.get_var("nr", mf_ispecies=s_j, mf_ilevel=l_j) 
           # SE added /mu_ji -> C_tot_per_vol == collisions/volume
       obj.set_mfi(s_i, l_i)
@@ -278,9 +280,10 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       obj.set_mfi(ispecies, ilevel)
       obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
       #calculate & return nu_ij:
-      #return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
-      return n_j * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))      
+      return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
+      #return n_j * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))      
       # JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency instead of spearated.
+      # Now it is consistent with Ebysus, i.e., this is the momentum transfer collision frequency
       # SE (4/9/20 corrected using "n_i" to now properly use "n_j" instead.
       
     elif var == "1dcolslope":
@@ -297,7 +300,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
       obj.set_mfi(s_i, l_i)
       obj.set_mfj(s_j, l_j)
-      return value * m_j / (m_i + m_j)
+      return value #* m_j / (m_i + m_j)
 
     elif var == 'nu_ei':
       result = np.zeros(np.shape(obj.r))
@@ -344,6 +347,40 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     else:
       print('ERROR: under construction, the idea is to include here quantity vars specific for species/levels')
       return obj.r * 0.0
+
+  else:
+    return None
+
+
+
+def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
+  if LOGCUL_QUANT is None:
+    LOGCUL_QUANT = ['logcul']  
+
+    # JMS in obj.mf_description
+    # you could describe what is what with the detail or definitions that you desire.
+
+  obj.mf_description['LOGCUL_QUANT'] = ('Logcul')
+
+  if 'ALL' in obj.mf_description.keys():
+    if not obj.mf_description['LOGCUL_QUANT'] in obj.mf_description['ALL']:
+    #SE added ^this^ line so that info will only be added to ALL if not in ALL already.
+        obj.mf_description['ALL'] += "\n" + obj.mf_description['LOGCUL_QUANT']
+  else:
+    obj.mf_description['ALL'] = obj.mf_description['LOGCUL_QUANT']
+
+  if (var == ''):
+    return None
+  
+  if var in LOGCUL_QUANT:
+    if var == "logcul":
+      ispecies = obj.mf_ispecies
+      ilevel = obj.mf_ilevel
+      etg = obj.get_var('etg')
+      nel = obj.get_var('nel')
+      obj.set_mfi(ispecies,ilevel)
+      return 23. + 1.5 * np.log(etg / 1.e6) - \
+            0.5 * np.log(nel / 1e6)
 
   else:
     return None
