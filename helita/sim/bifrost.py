@@ -1235,7 +1235,7 @@ class Bifrost_units(object):
 
 
         self.usi_l = self.u_l * const.centi  # 1e6
-        self.usi_r = 1e-4 # self.u_r * const.gram   # 1e-4
+        self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
         self.usi_u = self.usi_l / self.u_t
         self.usi_p = self.usi_r * (self.usi_l / self.u_t)**2  # Pressure [N/m2]
         self.usi_kr = 1 / (self.usi_r * self.usi_l)           # Rosseland opacity [m2/kg]
