@@ -269,22 +269,24 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       cross = obj.get_var('cross')  # units are in cm^2.
       if (ispecies < 0):
         m_i   = obj.uni.m_electron/obj.uni.amu
-        tg    = obj.get_var('etg')        
+        tgi   = obj.get_var('etg')
       else: 
         m_i   = obj.att[ispecies].params.atomic_weight
-        tg    = obj.get_var('mfe_tg')        
+        tgi   = obj.get_var('mfe_tg')        
       m_j   = obj.att[jspecies].params.atomic_weight
       mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
       #get n_j:
       n_j   = obj.get_var("nr", mf_ispecies=jspecies, mf_ilevel=jlevel)
+      #get tgj:
+      obj.set_mfi(jspecies, jlevel)
+      tgj = obj.get_var('etg') if jspecies < 0 else obj.get_var('mfe_tg')
+      #calculate tgij; the mass-weighted temperature used in nu_ij calculation.
+      tgij = (m_i * tgj + m_j * tgi) / (m_i + m_j)
+      #restore original i & j species & levels
       obj.set_mfi(ispecies, ilevel)
       obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
       #calculate & return nu_ij:
-      return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))
-      #return n_j * cross * np.sqrt(8 * obj.uni.kboltzmann * tg / (np.pi * mu))      
-      # JMS Added here m_j / (m_i + m_j), I prefer to have mu in the collision frequency instead of spearated.
-      # Now it is consistent with Ebysus, i.e., this is the momentum transfer collision frequency
-      # SE (4/9/20 corrected using "n_i" to now properly use "n_j" instead.
+      return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
       
     elif var == "1dcolslope":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
