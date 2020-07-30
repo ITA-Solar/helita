@@ -219,7 +219,7 @@ class EbysusData(BifrostData):
 
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None),
                 iiz=slice(None), mf_ispecies=None, mf_ilevel=None,
-                mf_jspecies=None, mf_jlevel=None, *args, **kwargs):
+                mf_jspecies=None, mf_jlevel=None, panic=False, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -371,6 +371,7 @@ class EbysusData(BifrostData):
             mf_jlevel=None,
             order='F',
             mode='r',
+            panic=False, 
             *args,
             **kwargs):
         """
@@ -534,7 +535,10 @@ class EbysusData(BifrostData):
                 fsuffix_a = '.aux'
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
 
-        filename = dirvars + filename + currStr + fsuffix_a + fsuffix_b
+        if panic: 
+            filename = dirvars + filename + currStr + '.panic'
+        else: 
+            filename = dirvars + filename + currStr + fsuffix_a + fsuffix_b
 
         '''if var not in self.mhdvars and not (var in self.snapevars and
             self.mf_ispecies < 0) and var not in self.auxvars :
