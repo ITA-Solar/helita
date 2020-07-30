@@ -19,7 +19,8 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None, 
                 HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, 
                 KAPPA_QUANT=None, GYROF_QUANT=None, WAVE_QUANT=None, 
-                FLUX_QUANT=None, CURRENT_QUANT=None, **kwargs):
+                FLUX_QUANT=None, CURRENT_QUANT=None, COLCOU_QUANT=None,  
+                COLCOUMS_QUANT=None, **kwargs):
 #                HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   quant = quant.lower()
 
@@ -61,6 +62,10 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
     val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT) 
   if np.shape(val) is (): 
     val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT)
+  if np.shape(val) is (): 
+    val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT)
+  if np.shape(val) is (): 
+    val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
@@ -231,6 +236,99 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
   else:
     return None
 
+
+
+
+def get_collcoul(obj, quant, COLCOU_QUANT=None):
+
+  if COLCOU_QUANT is None:
+    COLCOU_QUANT = ['nucou' + clist for clist in CROSTAB_LIST]
+    COLCOU_QUANT += ['nucoue_' + clist for clist in elemlist]
+  
+  obj.description['COLCOU'] = ('Coulomb Collision frequency between different'+
+        'ionized species in (cgs) (Hansteen et al. 1997): ' +
+        ', '.join(COLCOU_QUANT))
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['COLCOU']
+  else:
+    obj.description['ALL'] = obj.description['COLCOU']
+
+  if (quant == ''):
+    return None
+
+  if ''.join([i for i in quant if not i.isdigit()]) in COLCOU_QUANT:
+
+    elem = quant.split('_')
+    spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
+    ion1 = ''.join([i for i in elem[0] if i.isdigit()])
+    spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
+    ion2 = ''.join([i for i in elem[1] if i.isdigit()])
+    spic1 = spic1[5:]
+    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) # scr2
+
+    tg = obj.get_var('tg') #scr1
+    if obj.hion:
+      nel = obj.get_var('hionne')
+    else:
+      nel = obj.get_var('ne')
+    
+    coulog = 23. + 1.5 * np.log(tg/1.e6) - 0.5 * np.log(nel/1e6) # Coulomb logarithm scr4
+    
+    mst = obj.uni.weightdic[spic1] * obj.uni.weightdic[spic2] * obj.uni.amu / \
+        (obj.uni.weightdic[spic1] + obj.uni.weightdic[spic2])
+
+    return 1.7 * coulog/20.0 * (obj.uni.m_h/(obj.uni.weightdic[spic1] * 
+          obj.uni.amu)) * (mst/obj.uni.m_h)**0.5 * \
+          nspic2 / tg**1.5 * (int(ion2)-1)**2
+
+  else:
+    return None
+
+def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None):
+
+  if (COLCOUMS_QUANT == None):
+    COLCOUMS_QUANT = ['nucou_ei', 'nucou_ii']
+    COLCOUMS_QUANT += ['nucou' + clist + '_i' for clist in elemlist]
+
+  obj.description['COLCOUMS'] = ('Coulomb collision between ionized fluids' +
+                  ' (adding) in (cgs): ' + ', '.join(COLCOUMS_QUANT))
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['COLCOUMS']
+  else:
+    obj.description['ALL'] = obj.description['COLCOUMS']
+
+  if (quant == ''):
+    return None
+
+  if ''.join([i for i in quant if not i.isdigit()]) in COLCOUMS_QUANT:
+
+    if (quant == 'nucou_ii'):
+      result = np.zeros(np.shape(obj.r))
+      for ielem in elemlist: 
+
+        result += obj.uni.amu * obj.uni.weightdic[ielem] * \
+                obj.get_var('n%s-1' % ielem) * \
+                obj.get_var('nucou%s1_i'% (ielem))
+    
+      if obj.heion:
+        result += obj.uni.amu * obj.uni.weightdic['he'] * obj.get_var('nhe-3') * \
+            obj.get_var('nucouhe3_i')
+
+    elif quant[-2:] == '_i':
+      lvl = '2'
+
+      elem = quant.split('_')
+      result = np.zeros(np.shape(obj.r))
+      for ielem in elemlist:
+        if elem[0][5:] != '%s%s' % (ielem, lvl):
+          result += obj.get_var('%s_%s%s' %
+                  (elem[0], ielem, lvl)) 
+
+    return result
+  else:
+    return None
 
 def get_collision_ms(obj, quant, COLFRI_QUANT=None):
 
@@ -865,6 +963,38 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
 
       result = obj.get_var('modb') * obj.uni.u_b * (psi / (1e2 * (psi**2 + chi**2)) - 1.0 / (
               obj.get_var('nelc')  * obj.get_var('kappae') * 1e2 + 1e-20))
+
+    # Yakov for any ionization regime, 7c
+    elif quant == 'eta_amb5': 
+      psi = obj.get_var('npsi')
+      chi = obj.get_var('nchi')
+      
+      chi = obj.r*0.0
+      chif = obj.r*0.0
+      psi = obj.r*0.0
+      psif = obj.r*0.0      
+      eta = obj.r*0.0      
+      kappae = obj.get_var('kappae')
+
+      for iele in elemlist:
+        kappaiele = obj.get_var('kappa'+iele+'2')
+        chi += (kappae + kappaiele) * (
+            kappae - kappaiele) / (
+            1.0 + kappaiele**2) / (
+            1.0 + kappae**2) * obj.get_var('n'+iele+'-2')
+        chif +=  obj.get_var('r'+iele+'-2') * kappaiele / (
+            1.0 + kappaiele**2) 
+        psif +=  obj.get_var('r'+iele+'-2') / (
+            1.0 + kappaiele**2) 
+        psi += (kappae + kappaiele) * (
+            1.0 + kappae * kappaiele) / (
+            1.0 + kappaiele**2) / (
+            1.0 + kappae**2) * obj.get_var('n'+iele+'-2')
+        eta += (kappae + kappaiele) * obj.get_var('n'+iele+'-2')
+
+      result =  obj.get_var('modb') * obj.uni.u_b * ( 1.0 / ((psi**2 + chi**2) * obj.r) * (chi* chif - psi * (
+            obj.get_var('rneu')+psif))- 1.0 / (eta+1e-28)) 
+
 
     elif quant == 'eta_amb4a':
       psi = obj.get_var('npsi')
