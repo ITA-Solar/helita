@@ -582,7 +582,7 @@ class BifrostData(object):
 
         return val
 
-    def _get_simple_var(self, var, order='F', mode='r', *args, **kwargs):
+    def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
         Parameters
@@ -610,7 +610,10 @@ class BifrostData(object):
             currStr = self.snap_str
         if currSnap < 0:
             filename = self.file_root
-            fsuffix_b = '.scr'
+            if panic: 
+                fsuffix_b = ''
+            else: 
+                fsuffix_b = '.scr'
         elif currSnap == 0:
             filename = self.file_root
             fsuffix_b = ''
@@ -619,7 +622,10 @@ class BifrostData(object):
             fsuffix_b = ''
 
         if var in self.snapvars:
-            fsuffix_a = '.snap'
+            if panic: 
+                fsuffix_a = '.panic'
+            else: 
+                fsuffix_a = '.snap'
             idx = (self.snapvars).index(var)
             filename += fsuffix_a + fsuffix_b
         elif var in self.auxvars:
@@ -629,23 +635,29 @@ class BifrostData(object):
         elif var in self.hionvars:
             idx = self.hionvars.index(var)
             isnap = self.params['isnap'][self.snapInd]
-            if isnap <= -1:
-                filename = filename + '.hion.snap.scr'
-            elif isnap == 0:
-                filename = filename + '.hion.snap'
-            elif isnap > 0:
-                filename = '%s.hion_%03d.snap' % (self.file_root, isnap)
-                if not os.path.isfile(filename):
-                    filename = '%s_.hion%s.snap' % (self.file_root, isnap)
+            if panic: 
+                filename = filename + '.hion.panic'
+            else: 
+                if isnap <= -1:
+                    filename = filename + '.hion.snap.scr'
+                elif isnap == 0:
+                    filename = filename + '.hion.snap'
+                elif isnap > 0:
+                    filename = '%s.hion_%03d.snap' % (self.file_root, isnap)
+                    if not os.path.isfile(filename):
+                        filename = '%s_.hion%s.snap' % (self.file_root, isnap)
         elif var in self.heliumvars:
             idx = self.heliumvars.index(var)
             isnap = self.params['isnap'][self.snapInd]
-            if isnap <= -1:
-                filename = filename + '.helium.snap.scr'
-            elif isnap == 0:
-                filename = filename + '.helium.snap'
-            elif isnap > 0:
-                filename = '%s.helium_%s.snap' % (self.file_root, isnap)
+            if panic: 
+                filename = filename + '.helium.panic'
+            else:
+                if isnap <= -1:
+                    filename = filename + '.helium.snap.scr'
+                elif isnap == 0:
+                    filename = filename + '.helium.snap'
+                elif isnap > 0:
+                    filename = '%s.helium_%s.snap' % (self.file_root, isnap)
         else:
             raise ValueError(('_get_simple_var: could not find variable '
                               '%s. Available variables:' % (var) +
