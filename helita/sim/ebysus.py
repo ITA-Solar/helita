@@ -19,9 +19,16 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, fast=False, **kwargs):
+        self.fast=fast #whether to read data "fast", by only reading the requested data.
+            #implemented as a flag, with False as default, for backwards compatibility;
+            #some previous codes may have assumed non-requested data was read.
+            #To avoid issues, just ensure you use get_var() every time you want to have data,
+            #and don't assume things exist (e.g. self.bx) unless you do get_var for that thing (e.g. get_var('bx')).
+
         super(EbysusData, self).__init__(*args, **kwargs)
 
+        
         self.att = {}
         for ispecies in range(1,self.mf_nspecies+1):
             if (self.mf_nspecies == 1):
@@ -134,9 +141,13 @@ class EbysusData(BifrostData):
         except KeyError:
             print('warning, this idl file does not include mf_param_file')
 
-    def _init_vars(self, firstime=False, *args, **kwargs):
+    def _init_vars(self, firstime=False, fast=None, *args, **kwargs):
         """
-        Initialises variable (common for all fluid)
+        Initialises variables (common for all fluid)
+        
+        fast: None, True, or False.
+            whether to only read density (and not all the other variables).
+            if None, use self.fast instead.
         """
         self.mf_common_file = (self.root_name + '_mf_common')
         if os.path.exists('%s.io' % self.file_root):
@@ -155,7 +166,9 @@ class EbysusData(BifrostData):
         self.set_mfi(None, None)
         self.set_mfj(None, None)
 
-        for var in self.simple_vars:
+        fast = fast if fast is not None else self.fast
+        varlist = ['r'] if fast else self.simple_vars
+        for var in varlist:
             try:
                 self.variables[var] = self._get_simple_var(
                     var, self.mf_ispecies, self.mf_ilevel, *args, **kwargs)
