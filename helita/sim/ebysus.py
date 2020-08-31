@@ -267,20 +267,23 @@ class EbysusData(BifrostData):
             self.set_domain_iiaxis(iinum=iix, iiaxis='x')
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
+            self.variables={}
         else:
             if (iix != slice(None)) and np.any(iix != self.iix):
                 if self.verbose:
                     print('(get_var): iix ', iix, self.iix)
                 self.set_domain_iiaxis(iinum=iix, iiaxis='x')
+                self.variables={}
             if (iiy != slice(None)) and np.any(iiy != self.iiy):
                 if self.verbose:
                     print('(get_var): iiy ', iiy, self.iiy)
                 self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
+                self.variables={}
             if (iiz != slice(None)) and np.any(iiz != self.iiz):
                 if self.verbose:
                     print('(get_var): iiz ', iiz, self.iiz)
                 self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-
+                self.variables={}
         if self.cstagop and ((self.iix != slice(None)) or
                              (self.iiy != slice(None)) or
                              (self.iiz != slice(None))):
@@ -291,26 +294,30 @@ class EbysusData(BifrostData):
 
         if ((snap is not None) and np.any(snap != self.snap)):
             self.set_snap(snap)
+             self.variables={}
 
         if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)):
             self.set_mfi(mf_ispecies, mf_ilevel)
+            self.variables={}
         elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
             self.set_mfi(mf_ispecies, mf_ilevel)
-
+            self.variables={}
         if ((mf_jspecies is not None) and (mf_jspecies != self.mf_jspecies)):
             self.set_mfj(mf_jspecies, mf_jlevel)
+            self.variables={}
         elif (( mf_ilevel is not None) and (mf_jlevel != self.mf_jlevel)):
             self.set_mfj(mf_jspecies, mf_jlevel)
+            self.variables={}
 
         # This should not be here because mf_ispecies < 0 is for electrons.
         #assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
 
         # # check if already in memmory
-        # if var in self.variables:
-        #     return self.variables[var]
-        if var in self.simple_vars:  # is variable already loaded?
+        if var in self.variables:
+            return self.variables[var]
+        elif var in self.simple_vars:  # is variable already loaded?
             val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel,
-                                self.mf_jspecies, self.mf_jlevel)
+                                self.mf_jspecies, self.mf_jlevel,panic=panic)
         elif var in self.auxxyvars:
             val =  super(EbysusData, self)._get_simple_var_xy(var)
         elif var in self.compvars:
@@ -536,7 +543,11 @@ class EbysusData(BifrostData):
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
 
         if panic: 
-            filename = dirvars + filename + currStr + '.panic'
+            if fsuffix_a == '.aux': 
+                filename = dirvars + filename  + fsuffix_a + '.panic' 
+            else: 
+                filename = dirvars + filename + '.panic'
+
         else: 
             filename = dirvars + filename + currStr + fsuffix_a + fsuffix_b
 

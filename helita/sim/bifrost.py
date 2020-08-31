@@ -497,22 +497,26 @@ class BifrostData(object):
             self.set_domain_iiaxis(iinum=iix, iiaxis='x')
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
             self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
+            self.variables={}
         else:
             if (iix != slice(None)) and np.any(iix != self.iix):
                 if self.verbose:
                     print('(get_var): iix ', iix, self.iix,
                         whsp*4, end="\r",flush=True)
                 self.set_domain_iiaxis(iinum=iix, iiaxis='x')
+                self.variables={}
             if (iiy != slice(None)) and np.any(iiy != self.iiy):
                 if self.verbose:
                     print('(get_var): iiy ', iiy, self.iiy, whsp*4,
                         end="\r",flush=True)
                 self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
+                self.variables={}
             if (iiz != slice(None)) and np.any(iiz != self.iiz):
                 if self.verbose:
                     print('(get_var): iiz ', iiz, self.iiz, whsp*4,
                         end="\r",flush=True)
                 self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
+                self.variables={}
 
         if self.cstagop and ((self.iix != slice(None)) or
                              (self.iiy != slice(None)) or
@@ -529,8 +533,12 @@ class BifrostData(object):
                 print('(get_var): setsnap ', snap, self.snap, whsp*6,
                     end="\r",flush=True)
             self.set_snap(snap)
+            self.variables={}
 
-        if var in self.simple_vars:  # is variable already loaded?
+        # # check if already in memmory
+        if var in self.variables:
+            return self.variables[var]
+        elif var in self.simple_vars:  # is variable already loaded?
             val = self._get_simple_var(var, *args, **kwargs)
             if self.verbose:
                 print('(get_var): reading simple ', np.shape(val), whsp*5,
