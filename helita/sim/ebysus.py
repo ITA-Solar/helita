@@ -294,7 +294,7 @@ class EbysusData(BifrostData):
 
         if ((snap is not None) and np.any(snap != self.snap)):
             self.set_snap(snap)
-             self.variables={}
+            self.variables={}
 
         if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)):
             self.set_mfi(mf_ispecies, mf_ilevel)
