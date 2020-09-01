@@ -693,6 +693,14 @@ class EbysusData(BifrostData):
                 print("Consider whether error may be related to not doing _init_vars & _set_snapvars.")
                 raise
 
+        try:
+            if ((snap is not None) and (snap != self.snap)):
+                self.set_snap(snap)
+
+        except ValueError:
+            if ((snap is not None) and any(snap != self.snap)):
+                self.set_snap(snap)
+                
         return value
 
     def get_nspecies(self):

@@ -455,6 +455,16 @@ class BifrostData(object):
 
             value[..., i] = self.get_var(var, self.snap[i], iix=self.iix,
                                          iiy=self.iiy, iiz=self.iiz)
+
+
+        try:
+            if ((snap is not None) and (snap != self.snap)):
+                self.set_snap(snap)
+
+        except ValueError:
+            if ((snap is not None) and any(snap != self.snap)):
+                self.set_snap(snap)
+                        
         return value
 
     def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
