@@ -94,7 +94,7 @@ class BifrostData(object):
         self.lowbus = lowbus
         self.numThreads = numThreads
         self.fast = fast
-        self._fast_skip_flag = False
+        self._fast_skip_flag = False if fast else None #None-> never skip
 
         # endianness and data type
         if big_endian:
