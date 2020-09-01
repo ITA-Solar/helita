@@ -51,6 +51,11 @@ class BifrostData(object):
         operations layer by layer using threads (slower).
     numThreads - integer, optional
         number of threads for certain operations that use parallelism.
+    fast  - whether to read data "fast", by only reading the requested data.
+            implemented as a flag, with False as default, for backwards compatibility;
+            some previous codes may have assumed non-requested data was read.
+            To avoid issues, just ensure you use get_var() every time you want to have data,
+            and don't assume things exist (e.g. self.bx) unless you do get_var for that thing (e.g. get_var('bx')).
 
     Examples
     --------
@@ -70,7 +75,7 @@ class BifrostData(object):
     >>> vx = a.get_var("ux")
     """
     snap = None
-    def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
+    def __init__(self, file_root, snap=None, meshfile=None, fdir='.', fast=False,
                  verbose=True, dtype='f4', big_endian=False, cstagop=True,
                  ghost_analyse=False, lowbus=False, numThreads=1, params_only=False):
         """
@@ -88,6 +93,9 @@ class BifrostData(object):
         self.cstagop = cstagop
         self.lowbus = lowbus
         self.numThreads = numThreads
+        self.fast = fast
+        self._fast_skip_flag = False
+
         # endianness and data type
         if big_endian:
             self.dtype = '>' + dtype
@@ -346,7 +354,19 @@ class BifrostData(object):
         """
         Memmaps "simple" variables, and maps them to methods.
         Also, sets file name[s] from which to read a data
+        
+        fast: None, True, or False.
+            whether to only read density (and not all the other variables).
+            if None, use self.fast instead.
         """
+        fast = fast if fast is not None else self.fast
+        if self._fast_skip_flag is True:
+            return
+        elif self._fast_skip_flag is False:
+            self._fast_skip_flag = True #swaps flag to True, then runs the rest of the code (this time around).
+        #else, fast_skip_flag is None, so the code should never be skipped.
+        #as long as fast is False, fast_skip_flag should be None.
+
         self.variables = {}
         for var in self.simple_vars:
             try:
@@ -402,8 +422,10 @@ class BifrostData(object):
                 if np.size(snap) == np.size(self.snap):
                     if any(snap != self.snap):
                         self.set_snap(snap)
+                        self.variables={}
                 else:
                     self.set_snap(snap)
+                    self.variables={}
         except ValueError:
             print('WWW: snap has to be a numpy.arrange parameter')
 
@@ -430,8 +452,6 @@ class BifrostData(object):
 
         for i in range(0, snapLen):
             self.snapInd = i
-            self._set_snapvars()
-            self._init_vars()
 
             value[..., i] = self.get_var(var, self.snap[i], iix=self.iix,
                                          iiy=self.iiy, iiz=self.iiz)

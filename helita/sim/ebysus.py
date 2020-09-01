@@ -19,16 +19,8 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, fast=False, **kwargs):
-        self.fast = fast #whether to read data "fast", by only reading the requested data.
-            #implemented as a flag, with False as default, for backwards compatibility;
-            #some previous codes may have assumed non-requested data was read.
-            #To avoid issues, just ensure you use get_var() every time you want to have data,
-            #and don't assume things exist (e.g. self.bx) unless you do get_var for that thing (e.g. get_var('bx')).
-        self._fast_skip_flag = None if not fast else False #whether to skip running _init_vars().
-            #if None, will never skip running _init_vars().
-            #if False, will run _init_vars() the first time, but then will be set to True (via _init_vars()).
-            #     (for debugging purposes, maually doing dd._fast_skip_flag=None may be useful.)
+    def __init__(self, *args,  **kwargs):
+
         super(EbysusData, self).__init__(*args, **kwargs)
 
         
@@ -628,18 +620,22 @@ class EbysusData(BifrostData):
                 if (np.size(snap) == np.size(self.snap)):
                     if (any(snap != self.snap)):
                         self.set_snap(snap)
+                        self.variables={}
                 else:
                     self.set_snap(snap)
+                    self.variables={}
         except ValueError:
             print('WWW: snap has to be a numpy.arrange parameter')
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
                 mf_ilevel = 2
+                self.variables={}
                 print("Warning: mfc is only for ionized species,"
                       "Level changed to 2")
             if mf_ilevel == 1:
                 mf_ilevel = 2
+                self.variables={}
                 print("Warning: mfc is only for ionized species."
                       "Level changed to 2")
 
@@ -658,12 +654,12 @@ class EbysusData(BifrostData):
                 mf_ispecies != self.mf_ispecies)) or ((
                 mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
             self.set_mfi(mf_ispecies, mf_ilevel)
-            
+            self.variables={}
         if (((mf_jspecies is not None) and (
                 mf_jspecies != self.mf_jspecies)) or ((
                 mf_jlevel is not None) and (mf_jlevel != self.mf_jlevel))):
             self.set_mfj(mf_jspecies, mf_jlevel)
-
+            self.variables={}
         # lengths for dimensions of return array
         self.xLength = 0
         self.yLength = 0
@@ -687,8 +683,6 @@ class EbysusData(BifrostData):
 
         for it in range(0, snapLen):
             self.snapInd = 0
-            #self._set_snapvars()
-            #self._init_vars()
             try:
                 value[..., it] = self.get_var(var, snap=snap[it],
                     iix=self.iix, iiy=self.iiy, iiz=self.iiz,
@@ -698,14 +692,6 @@ class EbysusData(BifrostData):
                 print("Error at not-fully-tested spot in get_varTime (~line 680 of helita/sim/ebysus.py).")
                 print("Consider whether error may be related to not doing _init_vars & _set_snapvars.")
                 raise
-
-        try:
-            if ((snap is not None) and (snap != self.snap)):
-                self.set_snap(snap)
-
-        except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
 
         return value
 
