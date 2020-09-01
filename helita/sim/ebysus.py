@@ -20,12 +20,15 @@ class EbysusData(BifrostData):
     """
 
     def __init__(self, *args, fast=False, **kwargs):
-        self.fast=fast #whether to read data "fast", by only reading the requested data.
+        self.fast = fast #whether to read data "fast", by only reading the requested data.
             #implemented as a flag, with False as default, for backwards compatibility;
             #some previous codes may have assumed non-requested data was read.
             #To avoid issues, just ensure you use get_var() every time you want to have data,
             #and don't assume things exist (e.g. self.bx) unless you do get_var for that thing (e.g. get_var('bx')).
-
+        self._fast_skip_flag = None if not fast else False #whether to skip running _init_vars().
+            #if None, will never skip running _init_vars().
+            #if False, will run _init_vars() the first time, but then will be set to True (via _init_vars()).
+            #     (for debugging purposes, maually doing dd._fast_skip_flag=None may be useful.)
         super(EbysusData, self).__init__(*args, **kwargs)
 
         
@@ -149,6 +152,14 @@ class EbysusData(BifrostData):
             whether to only read density (and not all the other variables).
             if None, use self.fast instead.
         """
+        fast = fast if fast is not None else self.fast
+        if self._fast_skip_flag is True:
+            return
+        elif self._fast_skip_flag is False:
+            self._fast_skip_flag = True #swaps flag to True, then runs the rest of the code (this time around).
+        #else, fast_skip_flag is None, so the code should never be skipped.
+        #as long as fast is False, fast_skip_flag should be None.
+
         self.mf_common_file = (self.root_name + '_mf_common')
         if os.path.exists('%s.io' % self.file_root):
             self.mfr_file = (self.root_name + '_mfr_%02i_%02i')
@@ -166,7 +177,7 @@ class EbysusData(BifrostData):
         self.set_mfi(None, None)
         self.set_mfj(None, None)
 
-        fast = fast if fast is not None else self.fast
+        
         varlist = ['r'] if fast else self.simple_vars
         for var in varlist:
             try:
@@ -601,7 +612,13 @@ class EbysusData(BifrostData):
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None,
                     mf_jlevel=None,order='F',
                     mode='r', *args, **kwargs):
+        """ Gets and returns the value of var over multiple snaps.
 
+        snap should be a np.array of the snapshot numbers to read.
+
+        return array will have dimensions of [*var_dimensions, len(snap)].
+            (e.g. var.shape==[32,10,20], snap=[4,5,6], --> result is shape [32,10,20,3])
+        """
         self.iix = iix
         self.iiy = iiy
         self.iiz = iiz
@@ -670,12 +687,17 @@ class EbysusData(BifrostData):
 
         for it in range(0, snapLen):
             self.snapInd = 0
-            self._set_snapvars()
-            self._init_vars()
-            value[..., it] = self.get_var(var, snap=snap[it],
-                iix=self.iix, iiy=self.iiy, iiz=self.iiz,
-                mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
-                mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
+            #self._set_snapvars()
+            #self._init_vars()
+            try:
+                value[..., it] = self.get_var(var, snap=snap[it],
+                    iix=self.iix, iiy=self.iiy, iiz=self.iiz,
+                    mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
+                    mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
+            except:
+                print("Error at not-fully-tested spot in get_varTime (~line 680 of helita/sim/ebysus.py).")
+                print("Consider whether error may be related to not doing _init_vars & _set_snapvars.")
+                raise
 
         try:
             if ((snap is not None) and (snap != self.snap)):
