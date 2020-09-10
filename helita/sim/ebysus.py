@@ -739,6 +739,22 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
     data[...,2] = inputdataz
     data.flush()
 
+def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,test):
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
+    directory = '%s.io/mf_%02i_%02i/mfp' % (rootname,mf_ispecies,mf_ilevel)
+    nx, ny, nz = inputdataxyz.shape
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    data = np.memmap(directory+'/%s_mfp_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
+    data[...,test] = inputdataxyz
+    #data[...,1] = inputdatay
+    #data[...,2] = inputdataz
+    data.flush()
+
+
 def write_mfe(rootname,inputdata,mf_ispecies,mf_ilevel):
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
@@ -769,6 +785,20 @@ def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
         data[...,2] = inputdatay
         data[...,3] = inputdataz
     data.flush()
+
+def write_mf_commonxyz(rootname,inputdataxyz,test):
+    directory = '%s.io/mf_common' % (rootname)
+    nx, ny, nz = inputdataxyz.shape
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    if np.any(inputdatae) == None:
+        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
+        data[...,test] = inputdataxyz
+    else:
+        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,4))
+        data[...,test] = inputdataxyz
+    data.flush()
+
 
 def write_mf_e(rootname,inputdata):
     directory = '%s.io/mf_e/' % (rootname)
