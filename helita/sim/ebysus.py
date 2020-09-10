@@ -791,12 +791,8 @@ def write_mf_commonxyz(rootname,inputdataxyz,test):
     nx, ny, nz = inputdataxyz.shape
     if not os.path.exists(directory):
         os.makedirs(directory)
-    if np.any(inputdatae) == None:
-        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
-        data[...,test] = inputdataxyz
-    else:
-        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,4))
-        data[...,test] = inputdataxyz
+    data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,4))
+    data[...,test] = inputdataxyz
     data.flush()
 
 
