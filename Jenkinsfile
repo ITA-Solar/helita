@@ -17,14 +17,15 @@ pipeline {
 #!/usr/bin/env python
 from helita.sim.bifrost import BifrostData as br
 from helita.sim.ebysus import EbysusData as eb
-from helita.sim.bifrost import BifrostUnits as uni            
+from helita.sim.bifrost import Bifrostunits as uni            
 '''
          }
       }
       stage('running test py') {
          steps {
             sh '''#!/bin/csh 
-            python test.py 
+            chmod +x test.py
+            ./test.py
             exit	  
 '''
          }
