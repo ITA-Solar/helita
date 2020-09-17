@@ -17,7 +17,7 @@ pipeline {
 #!/usr/bin/env python
 from helita.sim.bifrost import BifrostData as br
 from helita.sim.ebysus import EbysusData as eb
-from helita.sim.bifrost import Bifrostunits as uni            
+from helita.sim.bifrost import Bifrost_units as uni            
 '''
          }
       }
