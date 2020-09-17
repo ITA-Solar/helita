@@ -24,8 +24,7 @@ from helita.sim.bifrost import Bifrost_units as uni
       stage('running test py') {
          steps {
             sh '''#!/bin/csh 
-            chmod +x test.py
-            ./test.py
+            python -m test.py || [[ $? -eq 1 ]]'
             exit	  
 '''
          }
