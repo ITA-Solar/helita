@@ -10,13 +10,23 @@ pipeline {
 '''
          }
       }
-      stage('test import') {
+         stage('create test py') {
          steps {
             sh '''#!/bin/csh 
-            python 
+            cat <<-'TEST_CASES' > test.py
+            #!/usr/bin/env python
             from helita.sim.bifrost import BifrostData as br
             from helita.sim.ebysus import EbysusData as eb
             from helita.sim.bifrost import BifrostUnits as uni
+            TEST_CASES
+            chmod +x test.py
+'''
+         }
+      }
+      stage('running test py') {
+         steps {
+            sh '''#!/bin/csh 
+            python test.py 
             exit	  
 '''
          }
