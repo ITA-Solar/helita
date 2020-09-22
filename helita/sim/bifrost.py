@@ -350,7 +350,7 @@ class BifrostData(object):
         else:
             self.dz1d = np.zeros(self.nz)
 
-    def _init_vars(self, firstime=False, *args, **kwargs):
+    def _init_vars(self, firstime=False,  fast=None, *args, **kwargs):
         """
         Memmaps "simple" variables, and maps them to methods.
         Also, sets file name[s] from which to read a data
@@ -1221,7 +1221,7 @@ def cartesian2polar(x, y, grid, r, t, order=3):
 
 class Bifrost_units(object):
 
-    def __init__(self,filename='mhd.in',fdir='./'):
+    def __init__(self,filename='mhd.in',fdir='./',verbose=True):
         import scipy.constants as const
         from astropy import constants as aconst
         from astropy import units
@@ -1231,34 +1231,39 @@ class Bifrost_units(object):
             try:
                 self.u_l = self.params['u_l']
             except:
-                print('(WWW) the filename does not have u_l.'
-                    ' Default Solar Bifrost u_l has been selected')
+                if (verbose): 
+                    print('(WWW) the filename does not have u_l.'
+                        ' Default Solar Bifrost u_l has been selected')
                 self.u_l = 1.0e8
 
             try:
                 self.u_t = self.params['u_t']
             except:
-                print('(WWW) the filename does not have u_t.'
-                    ' Default Solar Bifrost u_t has been selected')
+                if (verbose): 
+                    print('(WWW) the filename does not have u_t.'
+                        ' Default Solar Bifrost u_t has been selected')
                 self.u_t = 1.0e2
 
             try:
                 self.u_r = self.params['u_r']
             except:
-                print('(WWW) the filename does not have u_r.'
-                    ' Default Solar Bifrost u_r has been selected')
+                if (verbose): 
+                    print('(WWW) the filename does not have u_r.'
+                        ' Default Solar Bifrost u_r has been selected')
                 self.u_r = 1.0e-7
 
             try:
                 self.gamma = self.params['gamma']
             except:
-                print('(WWW) the filename does not have gamma.'
-                    ' ideal gas has been selected')
+                if (verbose): 
+                    print('(WWW) the filename does not have gamma.'
+                        ' ideal gas has been selected')
                 self.gamma = 1.667
 
         else:
-            print('(WWW) selected filename is not available.'
-                  ' Default Solar Bifrost units has been selected')
+            if (verbose): 
+                print('(WWW) selected filename is not available.'
+                      ' Default Solar Bifrost units has been selected')
             self.u_l = 1.0e8
             self.u_t = 1.0e2
             self.u_r = 1.0e-7
