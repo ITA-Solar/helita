@@ -262,26 +262,29 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       return value
 
     elif var == "nu_ij":
-      ispecies = obj.mf_ispecies
-      jspecies = obj.mf_jspecies
-      ilevel = obj.mf_ilevel
-      jlevel = obj.mf_jlevel
+      ispec = obj.mf_ispecies
+      jspec = obj.mf_jspecies
+      ilvl  = obj.mf_ilevel
+      jlvl  = obj.mf_jlevel
       cross = obj.get_var('cross')  # units are in cm^2.
+      #get m_i, tgi:
       if (ispecies < 0):
         m_i   = obj.uni.m_electron/obj.uni.amu
-        tgi   = obj.get_var('etg')
+        tgi   = obj.get_var('etg',    mf_ispecies=ispec, mf_ilevel=ilvl)
       else: 
-        m_i   = obj.att[ispecies].params.atomic_weight
-        tgi   = obj.get_var('mfe_tg')        
-      m_j   = obj.att[jspecies].params.atomic_weight
+        m_i   = obj.att[ispec].params.atomic_weight
+        tgi   = obj.get_var('mfe_tg', mf_ispecies=ispec, mf_ilevel=ilvl)
+      #get m_j, tgj:
+      if (jspecies < 0):
+        m_j   = obj.uni.m_electron/obj.uni.amu
+        tgj   = obj.get_var('etg',    mf_ispecies=jspec, mf_ilevel=jlvl)
+      else:
+        m_j   = obj.att[jspec].params.atomic_weight
+        tgj   = obj.get_var('mfe_tg', mf_ispecies=jspec, mf_ilevel=jlvl)
+      #more variables
       mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
-      #get n_j:
+      tgij  = (m_i * tgj + m_j * tgi) / (m_i + m_j)
       n_j   = obj.get_var("nr", mf_ispecies=jspecies, mf_ilevel=jlevel)
-      #get tgj:
-      obj.set_mfi(jspecies, jlevel)
-      tgj = obj.get_var('etg') if jspecies < 0 else obj.get_var('mfe_tg')
-      #calculate tgij; the mass-weighted temperature used in nu_ij calculation.
-      tgij = (m_i * tgj + m_j * tgi) / (m_i + m_j)
       #restore original i & j species & levels
       obj.set_mfi(ispecies, ilevel)
       obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
@@ -297,9 +300,6 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
                 obj.get_var("nu_ij",
                             mf_ispecies=s_j, mf_ilevel=l_j,
                             mf_jspecies=s_i, mf_jlevel=l_i))
-      m_j   = obj.att[s_j].params.atomic_weight
-      m_i   = obj.att[s_i].params.atomic_weight
-
       obj.set_mfi(s_i, l_i)
       obj.set_mfj(s_j, l_j)
       return value #* m_j / (m_i + m_j)
