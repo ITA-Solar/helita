@@ -262,13 +262,16 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       return value
 
     elif var == "nu_ij":
-      ispec = obj.mf_ispecies
-      jspec = obj.mf_jspecies
-      ilvl  = obj.mf_ilevel
-      jlvl  = obj.mf_jlevel
-      cross = obj.get_var('cross')  # units are in cm^2.
-      #get m_i, tgi:
-      if (ispec < 0):
+      ispecies = obj.mf_ispecies
+      jspecies = obj.mf_jspecies
+      ilevel = obj.mf_ilevel
+      jlevel = obj.mf_jlevel
+      #get n_j:
+      n_j   = obj.get_var("nr", mf_ispecies=jspecies, mf_ilevel=jlevel)
+      #restore original i & j species & levels
+      obj.set_mfi(ispecies, ilevel)
+      obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
+      if (ispecies < 0):
         m_i   = obj.uni.m_electron/obj.uni.amu
         tgi   = obj.get_var('etg',    mf_ispecies=ispec, mf_ilevel=ilvl)
       else: 
@@ -283,13 +286,30 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         tgj   = obj.get_var('mfe_tg', mf_ispecies=jspec, mf_ilevel=jlvl)
       #more variables
       mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
-      tgij  = (m_i * tgj + m_j * tgi) / (m_i + m_j)
-      n_j   = obj.get_var("nr", mf_ispecies=jspec, mf_ilevel=jlvl)
+
+      #get tgj:
+      obj.set_mfi(jspecies, jlevel)
+      tgj = obj.get_var('etg') if jspecies < 0 else obj.get_var('mfe_tg')
       #restore original i & j species & levels
-      obj.set_mfi(ispec, ilvl)
-      obj.set_mfj(jspec, jlvl) #SE: mfj should be unchanged anyway. included for readability.
-      #calculate & return nu_ij (units = s^-1):
-      return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
+      obj.set_mfi(ispecies, ilevel)
+      obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.      
+      #calculate tgij; the mass-weighted temperature used in nu_ij calculation.
+      tgij = (m_i * tgj + m_j * tgi) / (m_i + m_j)
+
+      if ((obj.att[ispecies].params.levels[ilevel-1]['stage'] > 1) and (
+           obj.att[jspecies].params.levels[jlevel-1]['stage'] > 1)):
+        m_h = obj.uni.m_h
+        logcul = obj.get_var('logcul')
+        return 1.7 * logcul/20.0 * (m_h/(m_i * obj.uni.amu)) * (mu/m_h)**0.5 * \
+             n_j / tgij**1.5 * (obj.att[jspecies].params.levels[jlevel-1]['stage'] - 1.0)
+
+      else:
+        #restore original i & j species & levels
+        obj.set_mfi(ispecies, ilevel)
+        obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
+        cross = obj.get_var('cross')  # units are in cm^2.
+        #calculate & return nu_ij:
+        return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
       
     elif var == "1dcolslope":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
