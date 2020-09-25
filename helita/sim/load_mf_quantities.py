@@ -268,14 +268,14 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       jlvl  = obj.mf_jlevel
       cross = obj.get_var('cross')  # units are in cm^2.
       #get m_i, tgi:
-      if (ispecies < 0):
+      if (ispec < 0):
         m_i   = obj.uni.m_electron/obj.uni.amu
         tgi   = obj.get_var('etg',    mf_ispecies=ispec, mf_ilevel=ilvl)
       else: 
         m_i   = obj.att[ispec].params.atomic_weight
         tgi   = obj.get_var('mfe_tg', mf_ispecies=ispec, mf_ilevel=ilvl)
       #get m_j, tgj:
-      if (jspecies < 0):
+      if (jspec < 0):
         m_j   = obj.uni.m_electron/obj.uni.amu
         tgj   = obj.get_var('etg',    mf_ispecies=jspec, mf_ilevel=jlvl)
       else:
@@ -284,11 +284,11 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       #more variables
       mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
       tgij  = (m_i * tgj + m_j * tgi) / (m_i + m_j)
-      n_j   = obj.get_var("nr", mf_ispecies=jspecies, mf_ilevel=jlevel)
+      n_j   = obj.get_var("nr", mf_ispecies=jspec, mf_ilevel=jlvl)
       #restore original i & j species & levels
-      obj.set_mfi(ispecies, ilevel)
-      obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
-      #calculate & return nu_ij:
+      obj.set_mfi(ispec, ilvl)
+      obj.set_mfj(jspec, jlvl) #SE: mfj should be unchanged anyway. included for readability.
+      #calculate & return nu_ij (units = s^-1):
       return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
       
     elif var == "1dcolslope":
