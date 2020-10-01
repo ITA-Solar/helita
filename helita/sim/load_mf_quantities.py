@@ -223,7 +223,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['C_tot_per_vol', '1dcolslope',
-                    'nu_ij','nu_en','nu_ei']  
+                    'nu_ij','nu_en','nu_ei','nu_ij_test']  
 
     # JMS in obj.mf_description
     # you could describe what is what with the detail or definitions that you desire.
@@ -318,7 +318,26 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         cross = obj.get_var('cross')  # units are in cm^2.
         #calculate & return nu_ij:
         return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
-      
+    
+    elif var == "nu_ij_test":
+      #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
+      CONST_MULT    = 1.96     #factor in front.
+      CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen #unsure of units.
+      e_charge= 1.602176e-19   #[C]      #elementary charge
+      eps0    = 8.854187e-12   #[F m^-1] #epsilon0, standard definition
+      #get variables.
+      (ispec, ilvl) = (obj.mf_ispecies, obj.mf_ilevel)
+      (jspec, jlvl) = (obj.mf_jspecies, obj.mf_jlevel)
+      n_j = obj.get_var("nr", mf_ispecies=jspec, mf_ilevel=jlvl)
+      m_i = obj.uni.m_electron/obj.uni.amu if ispec<0 else obj.att[jspec].params.atomic_weight
+      m_j = obj.uni.m_electron/obj.uni.amu if ispec<0 else obj.att[jspec].params.atomic_weight
+      mu  = obj.uni.amu * m_i * m_j / (m_i + m_j)
+      #restore original i & j species & levels
+      obj.set_mfi(ispec, ilvl)
+      obj.set_mfj(jspec, jlvl) #SE: mfj should be unchanged anyway. included for readability
+      #calculate & return nu_ij_test:
+      return CONST_MULT * n_j * m_j / (m_i + m_j) * np.sqrt(CONST_ALPHA_N * e_charge**2 / (eps0 * mu))
+
     elif var == "1dcolslope":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
       (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
