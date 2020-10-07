@@ -248,7 +248,6 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if (var == ''):
     return None
   
-  print(var, COLFRE_QUANT)
   if var in COLFRE_QUANT:
     if var == "c_tot_per_vol":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
