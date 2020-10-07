@@ -303,14 +303,6 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
           logcul = obj.get_var('logcul')
           return 1.7 * logcul/20.0 * (m_h/(m_i * obj.uni.amu)) * (mu/m_h)**0.5 * \
                n_j / tgij**1.5 * (obj.att[jspecies].params.levels[jlevel-1]['stage'] - 1.0)
-
-        else:
-          #restore original i & j species & levels
-          obj.set_mfi(ispecies, ilevel)
-          obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
-          cross = obj.get_var('cross')  # units are in cm^2.
-          #calculate & return nu_ij:
-          return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
         
       else: 
         #restore original i & j species & levels
