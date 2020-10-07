@@ -222,8 +222,8 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['C_tot_per_vol', '1dcolslope',
-                    'nu_ij','nu_en','nu_ei','nu_ij_test']  
+    COLFRE_QUANT = ['c_tot_per_vol', '1dcolslope',
+                    'nu_ij','nu_en','nu_ei','nu_ij_mx']  
 
     # JMS in obj.mf_description
     # you could describe what is what with the detail or definitions that you desire.
@@ -247,9 +247,10 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
   if (var == ''):
     return None
-
+  
+  print(var, COLFRE_QUANT)
   if var in COLFRE_QUANT:
-    if var == "C_tot_per_vol":
+    if var == "c_tot_per_vol":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
       (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
       m_i = obj.att[obj.mf_ispecies].params.atomic_weight
@@ -319,7 +320,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         #calculate & return nu_ij:
         return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
     
-    elif var == "nu_ij_test":
+    elif var == "nu_ij_mx":
+      #### ASSUMES ifluid is charged AND jfluid is neutral. ####
       #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
       CONST_MULT    = 1.96     #factor in front.
       CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen #unsure of units.
@@ -328,15 +330,15 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       #get variables.
       (ispec, ilvl) = (obj.mf_ispecies, obj.mf_ilevel)
       (jspec, jlvl) = (obj.mf_jspecies, obj.mf_jlevel)
-      n_j = obj.get_var("nr", mf_ispecies=jspec, mf_ilevel=jlvl)
-      m_i = obj.uni.m_electron/obj.uni.amu if ispec<0 else obj.att[jspec].params.atomic_weight
-      m_j = obj.uni.m_electron/obj.uni.amu if ispec<0 else obj.att[jspec].params.atomic_weight
-      mu  = obj.uni.amu * m_i * m_j / (m_i + m_j)
+      n_j = obj.get_var("nr", mf_ispecies=jspec, mf_ilevel=jlvl) /(obj.uni.cm_to_m**3)      #number density [m^-3]
+      m_i = obj.uni.msi_e/obj.uni.amusi if ispec<0 else obj.att[ispec].params.atomic_weight #mass [amu]
+      #m_j = obj.uni.msi_e/obj.uni.amusi if jspec<0 else obj.att[jspec].params.atomic_weight #mass [amu]
+      m_j = obj.att[jspec].params.atomic_weight #mass [amu]      #jfluid is assumed to be neutral --> can't be electrons.
       #restore original i & j species & levels
       obj.set_mfi(ispec, ilvl)
       obj.set_mfj(jspec, jlvl) #SE: mfj should be unchanged anyway. included for readability
       #calculate & return nu_ij_test:
-      return CONST_MULT * n_j * m_j / (m_i + m_j) * np.sqrt(CONST_ALPHA_N * e_charge**2 / (eps0 * mu))
+      return CONST_MULT * n_j * np.sqrt(CONST_ALPHA_N * e_charge**2 * m_j / (eps0 * obj.uni.amusi * m_i *(m_i + m_j)))
 
     elif var == "1dcolslope":
       (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
