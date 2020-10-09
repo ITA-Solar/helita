@@ -311,7 +311,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
     
     elif var == "nu_ij_mx":
-      #### ASSUMES ifluid is charged AND jfluid is neutral. ####
+      #### ASSUMES one fluid is charged & other is neutral. ####
       #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
       CONST_MULT    = 1.96     #factor in front.
       CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen #unsure of units.
@@ -322,8 +322,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       (jspec, jlvl) = (obj.mf_jspecies, obj.mf_jlevel)
       n_j = obj.get_var("nr", mf_ispecies=jspec, mf_ilevel=jlvl) /(obj.uni.cm_to_m**3)      #number density [m^-3]
       m_i = obj.uni.msi_e/obj.uni.amusi if ispec<0 else obj.att[ispec].params.atomic_weight #mass [amu]
-      #m_j = obj.uni.msi_e/obj.uni.amusi if jspec<0 else obj.att[jspec].params.atomic_weight #mass [amu]
-      m_j = obj.att[jspec].params.atomic_weight #mass [amu]      #jfluid is assumed to be neutral --> can't be electrons.
+      m_j = obj.uni.msi_e/obj.uni.amusi if jspec<0 else obj.att[jspec].params.atomic_weight #mass [amu]
       #restore original i & j species & levels
       obj.set_mfi(ispec, ilvl)
       obj.set_mfj(jspec, jlvl) #SE: mfj should be unchanged anyway. included for readability
