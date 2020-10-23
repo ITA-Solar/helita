@@ -1596,6 +1596,7 @@ class Opatab:
     """
     def __init__(self, tabname=None, fdir='.',  dtype='f4',
                  verbose=True, lambd=100.0):
+        import ChiantiPy.core as ch
         self.fdir = fdir
         self.dtype = dtype
         self.verbose = verbose
@@ -1604,6 +1605,7 @@ class Opatab:
         self.radload = False
         self.teinit = 4.0
         self.dte = 0.1
+        self.ch_tabname = "chianti" # alternatives are e.g. 'mazzotta' and others found in Chianti
         # read table file and calculate parameters
         if tabname is None:
             tabname = os.path.join(fdir, 'ionization.dat')
@@ -1690,17 +1692,32 @@ class Opatab:
         arr[arr < 0] = 0
         return arr
 
-    def load_opa1d_table(self, tabname=None):
+    def load_opa1d_table(self, tabname='chianti'):
         ''' Loads ionizationstate table. '''
         if tabname is None:
             tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
-        dtype = ('>' if self.big_endian else '<') + self.dtype
-        table = np.memmap(tabname, mode='r', shape=(41, 3), dtype=dtype,
+        if tabname == '%s/%s' % (self.fdir, 'ionization1d.dat')
+            dtype = ('>' if self.big_endian else '<') + self.dtype
+            table = np.memmap(tabname, mode='r', shape=(41, 3), dtype=dtype,
                           order='F')
-        self.ionh1d = table[:, 0]
-        self.ionhe1d = table[:, 1]
-        self.ionhei1d = table[:, 2]
-        self.opaload = True
+            self.ionh1d = table[:, 0]
+            self.ionhe1d = table[:, 1]
+            self.ionhei1d = table[:, 2]
+            self.opaload = True
+        else: # Chianti table
+            if self.verbose:
+                print('*** Reading Chianti table', whsp*4, end="\r",
+                          flush=True)
+            h = ch.Ioneq.ioneq(1)
+            h.load(tabname)
+            logte = np.log10(h.Temperature)
+            self.dte = logte[1]-logte[0]
+            self.teinit = logte[0]
+            self.ionh1d = h.Ioneq[0,:]
+            he = ch.Ioneq.ioneq(2)
+            he.load(tabname)
+            self.ionhe1d = he.Ioneq[0,:]
+            self.ionhei1d = he.Ioneq[1,:]
         if self.verbose:
             print('*** Read OPA table from ' + tabname, whsp*4, end="\r",
                 flush=True)
