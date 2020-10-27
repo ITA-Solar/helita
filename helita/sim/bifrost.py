@@ -1696,7 +1696,7 @@ class Opatab:
         ''' Loads ionizationstate table. '''
         if tabname is None:
             tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
-        if tabname == '%s/%s' % (self.fdir, 'ionization1d.dat')
+        if tabname == '%s/%s' % (self.fdir, 'ionization1d.dat'):
             dtype = ('>' if self.big_endian else '<') + self.dtype
             table = np.memmap(tabname, mode='r', shape=(41, 3), dtype=dtype,
                           order='F')
