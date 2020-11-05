@@ -77,6 +77,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
 
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = CROSTAB_LIST
+    CROSTAB_QUANT += ['p_h','h_h2','p_h2']
   obj.description['CROSTAB'] = ('Cross section between species'
     '(in cgs): ' + ', '.join(CROSTAB_QUANT))
  
@@ -92,21 +93,22 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
     tg = obj.get_var('tg')
     elem = quant.split('_')
 
-    spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
-    spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
-
-
-    lvl1 = int(''.join([i for i in elem[0] if i.isdigit()]))
-    lvl2 = int(''.join([i for i in elem[1] if i.isdigit()]))
+    #spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
+    #spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
+    spic1 = elem[0]
+    spic2 = elem[1]
 
     cross_tab = ''
     crossunits = 2.8e-17
 
-    if ([spic1, spic2] == ['h', 'h']):
-      if ((lvl1 > 1) or (lvl2 > 1)): 
+    if ([spic1, spic2] == ['p', 'h']):
         cross_tab = 'p-h-elast.txt'
-      else: 
+    elif ([spic1, spic2] == ['h', 'h']): 
         cross_tab = 'h-h-data2.txt'
+    elif ([spic1, spic2] == ['h', 'h2']): 
+        cross_tab = 'h-h2-data.txt'
+    elif ([spic1, spic2] == ['p', 'h2']): 
+        cross_tab = 'h-h2-data.txt'
     elif (([spic1, spic2] == ['h', 'he']) or ([spic2, spic1] == ['h', 'he'])):
       cross_tab = 'p-he.txt'
     elif ([spic1, spic2] == ['he', 'he']):
@@ -224,6 +226,12 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
     spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
     spic1 = spic1[2:]
+    
+    if ((spic1 == 'h') and (ion1 > 1)): 
+      spic1 = 'p'
+    if ((spic2 == 'h') and (ion2 > 1)): 
+      spic2 = 'p'
+
     crossarr = obj.get_var('%s_%s' % (spic1, spic2))
     nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
     if np.size(elem) > 2:
