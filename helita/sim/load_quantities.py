@@ -233,6 +233,10 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
       spic2 = 'p'
 
     crossarr = obj.get_var('%s_%s' % (spic1, spic2))
+    if spic1 == 'p': 
+      spic1 = 'h'
+    if spic2 == 'p': 
+      spic2 = 'h'
     nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
     if np.size(elem) > 2:
       nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
