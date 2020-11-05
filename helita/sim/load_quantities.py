@@ -101,7 +101,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
     cross_tab = ''
     crossunits = 2.8e-17
 
-    if ([spic1, spic2] == ['p', 'h']):
+    if (([spic1, spic2] == ['p', 'h']) or ([spic1, spic2] == ['h', 'p'])):
         cross_tab = 'p-h-elast.txt'
     elif ([spic1, spic2] == ['h', 'h']): 
         cross_tab = 'h-h-data2.txt'
@@ -115,7 +115,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
       cross_tab = 'he-he.txt'
     elif (([spic1, spic2] == ['e', 'he']) or ([spic2, spic1] == ['e', 'he'])):
       cross_tab = 'e-he.txt'
-    elif (([spic1, spic2] == ['e', 'h']) or ([spic2, spic1] == ['e', 'h'])):
+    elif (([spic1, spic2] == ['e', 'h']) or ([spic2, spic1] == ['e', 'h']) or ([spic1, spic2] == ['e', 'p']) or  or ([spic2, spic1] == ['e', 'p'])):
       cross_tab = 'e-h.txt'
     elif (spic1 == 'h'):
       cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['h'] * \
