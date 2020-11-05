@@ -20,7 +20,7 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, 
                 KAPPA_QUANT=None, GYROF_QUANT=None, WAVE_QUANT=None, 
                 FLUX_QUANT=None, CURRENT_QUANT=None, COLCOU_QUANT=None,  
-                COLCOUMS_QUANT=None, **kwargs):
+                COLCOUMS_QUANT=None, COLFREMX_QUANT=None, **kwargs):
 #                HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   quant = quant.lower()
 
@@ -66,6 +66,8 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
     val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT)
   if np.shape(val) is (): 
     val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT)
+  if np.shape(val) is (): 
+    val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
@@ -93,11 +95,18 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
     spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
     spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
 
+
+    lvl1 = int(''.join([i for i in elem[0] if i.isdigit()]))
+    lvl2 = int(''.join([i for i in elem[1] if i.isdigit()]))
+
     cross_tab = ''
     crossunits = 2.8e-17
 
     if ([spic1, spic2] == ['h', 'h']):
-      cross_tab = 'p-h-elast.txt'
+      if ((lvl1 > 1) or (lvl2 > 1)): 
+        cross_tab = 'p-h-elast.txt'
+      else: 
+        cross_tab = 'h-h-data2.txt'
     elif (([spic1, spic2] == ['h', 'he']) or ([spic2, spic1] == ['h', 'he'])):
       cross_tab = 'p-he.txt'
     elif ([spic1, spic2] == ['he', 'he']):
@@ -238,6 +247,60 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
 
 
 
+def get_collision_maxw(obj, quant, COLFREMX_QUANT=None):
+  '''
+  MAxwell molecular collision
+  '''
+  if COLFREMX_QUANT is None:
+    COLFREMX_QUANT = ['numx' + clist for clist in CROSTAB_LIST]
+    COLFREMX_QUANT += ['numx%s_mag' % clist for clist in CROSTAB_LIST]
+  
+  obj.description['COLFREMX'] = ('Collision frequency (elastic and charge'
+        'exchange) between different species in (cgs): ' +
+        ', '.join(COLFREMX_QUANT))
+
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['COLFREMX']
+  else:
+    obj.description['ALL'] = obj.description['COLFREMX']
+
+  if (quant == ''):
+    return None
+
+  if ''.join([i for i in quant if not i.isdigit()]) in COLFREMX_QUANT:
+
+    #### ASSUMES ifluid is charged AND jfluid is neutral. ####
+    #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
+    CONST_MULT    = 1.96     #factor in front.
+    CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen #unsure of units.
+    e_charge= 1.602176e-19   #[C]      #elementary charge
+    eps0    = 8.854187e-12   #[F m^-1] #epsilon0, standard 
+
+    elem = quant.split('_')
+    spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
+    ion1 = ''.join([i for i in elem[0] if i.isdigit()])
+    spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
+    ion2 = ''.join([i for i in elem[1] if i.isdigit()])
+    spic1 = spic1[4:]
+    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
+    if np.size(elem) > 2:
+      nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
+
+    tg = obj.get_var('tg')
+    if spic1 == 'e':
+      awg1 = obj.uni.m_electron
+    else:
+      awg1 = obj.uni.weightdic[spic1] * obj.uni.amu
+    if spic1 == 'e':
+      awg2 = obj.uni.m_electron
+    else:
+      awg2 = obj.uni.weightdic[spic2] * obj.uni.amu
+
+    return CONST_MULT * nspic2 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg2 / (eps0 * obj.uni.amusi * awg1 * (awg1 + awg2)))
+
+  else:
+    return None
+
 
 def get_collcoul(obj, quant, COLCOU_QUANT=None):
 
@@ -333,11 +396,15 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None):
 def get_collision_ms(obj, quant, COLFRI_QUANT=None):
 
   if (COLFRI_QUANT == None):
-    COLFRI_QUANT = ['nu_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
+    COLFRI_QUANT = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
     COLFRI_QUANT += ['nu' + clist + '_i' for clist in elemlist]
+    COLFRI_QUANT += ['numx' + clist + '_i' for clist in elemlist]
     COLFRI_QUANT += ['nu' + clist + '_i_mag' for clist in elemlist]
+    COLFRI_QUANT += ['numx' + clist + '_i_mag' for clist in elemlist]
     COLFRI_QUANT += ['nu' + clist + '_n' for clist in elemlist]
+    COLFRI_QUANT += ['numx' + clist + '_n' for clist in elemlist]
     COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
+    COLFRI_QUANT += ['numx' + clist + '_n_mag' for clist in elemlist]
 
   obj.description['COLFRI'] = ('Collision frequency (elastic and charge'
         'exchange) between fluids in (cgs): ' + ', '.join(COLFRI_QUANT))
@@ -370,7 +437,26 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
           result += obj.uni.amu * obj.uni.weightdic[ielem] * \
                 obj.get_var('n%s-2' % ielem) * const * \
                 obj.get_var('nu%s2_i%s'% (ielem,mag))
-                
+
+
+    if ((quant == 'numx_ni_mag') or (quant == 'numx_ni')):
+      result = np.zeros(np.shape(obj.r))
+      for ielem in elemlist: 
+        if ielem in elemlist[2:] and '_mag' in quant: 
+          const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
+          mag='_mag'
+        else: 
+          const = 1.0
+          mag=''
+
+        result += obj.uni.amu * obj.uni.weightdic[ielem] * \
+                obj.get_var('n%s-1' % ielem) * const * \
+                obj.get_var('numx%s1_i%s'% (ielem,mag))
+
+        if ((ielem in elemlist[2:]) and ('_mag' in quant)): 
+          result += obj.uni.amu * obj.uni.weightdic[ielem] * \
+                obj.get_var('n%s-2' % ielem) * const * \
+                obj.get_var('numx%s2_i%s'% (ielem,mag))                
 
     if ((quant == 'nu_in_mag') or (quant == 'nu_in')):
       result = np.zeros(np.shape(obj.r))
@@ -409,7 +495,6 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
           result += obj.get_var('%s_%s%s' %
                          ('nue', ielem, lvl))
 
-
     elif quant[-2:] == '_i' or quant[-2:] == '_n' or quant[-6:] == '_i_mag' or quant[-6:] == '_n_mag':
       addtxt = ''
       if quant[-4:] == '_mag':
@@ -426,8 +511,8 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
                   (elem[0], ielem, lvl, addtxt)) #* obj.uni.weightdic[ielem] /\
                   #(obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
       #if obj.heion and quant[-3:] == '_i':
-        #result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) #* obj.uni.weightdic['he'] /\
-                #(obj.uni.weightdic['he'] + obj.uni.weightdic[elem[0][2:-1]])
+        #result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) * obj.uni.weightdic['he'] /\
+        #        (obj.uni.weightdic['he'] + obj.uni.weightdic[elem[0][2:-1]])
 
     return result
   else:
@@ -923,7 +1008,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
 
   if (AMB_QUANT is None):
     AMB_QUANT = ['uambx', 'uamby', 'uambz', 'ambx', 'amby', 'ambz',
-              'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5',
+              'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5','eta_amb6',
               'eta_amb5a', 'eta_amb5b', 'nchi', 'npsi', 'nchi_red', 'npsi_red',
               'rchi', 'rpsi', 'rchi_red', 'rpsi_red','alphai','betai']
 
@@ -943,6 +1028,12 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
     if quant == 'eta_amb1':  # version from other
       result = (obj.get_var('rneu') / obj.get_var('r') * obj.uni.u_b)**2
       result /= (4.0 * obj.uni.pi * obj.get_var('nu_ni') + 1e-20)
+      result *= obj.get_var('b2') #/ 1e7
+
+    elif quant == 'eta_amb6':  # version from other
+      result = (obj.get_var('rneu') / obj.get_var('r') * obj.uni.u_b)**2
+      bla=obj.get_var('numx_ni')
+      result /= (4.0 * obj.uni.pi * obj.get_var('numx_ni') + 1e-20)
       result *= obj.get_var('b2') #/ 1e7
 
     # This should be the same and eta_amb2 except that eta_amb2 has many more species involved.
