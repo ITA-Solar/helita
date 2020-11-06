@@ -112,9 +112,13 @@ class MuramAtmos:
 
         # from moments to velocities
         if self.prim:
-            self.vx /= self.rho
-            self.vy /= self.rho
-            self.vz /= self.rho
+            if hasattr(self,'rho'): 
+                if hasattr(self,'vx'):
+                    self.vx /= self.rho
+                if hasattr(self,'vy'):
+                    self.vy /= self.rho
+                if hasattr(self,'vz'):
+                    self.vz /= self.rho
 
     def read_Iout(self):
 
