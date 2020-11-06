@@ -33,11 +33,12 @@ class MuramAtmos:
         self.read_header("%s/Header%s" % (fdir, template))
         self.read_atmos(fdir, template)
         self.snap = 0
+        self.siter = template
 
     def read_header(self, headerfile):
         tmp = np.loadtxt(headerfile)
         self.nx, self.nz, self.ny = tmp[:3].astype("i")
-        self.dx, self.dz, self.dy, self.time, self.dt, self.vamax = tmp[3:9]
+        self.dx, self.dz, self.dy, self.time= tmp[3:7]
         self.x = np.arange(self.nx) * self.dx
         self.y = np.arange(self.ny) * self.dy
         self.z = np.arange(self.nz) * self.dz
@@ -114,6 +115,153 @@ class MuramAtmos:
             self.vy /= self.rho
             self.vz /= self.rho
 
+    def read_Iout(self):
+
+      tmp = np.fromfile(self.fdir+'I_out.'+self.siter)
+
+      size = tmp[1:3].astype(int)
+      time = tmp[3]
+
+      return tmp[4:].reshape([size[1],size[0]]).swapaxes(0,1),size,time
+
+
+    def read_slice(self,var,depth):
+
+      tmp = np.fromfile(self.fdir+var+'_slice_'+depth+'.'+self.siter)
+
+      nslices = tmp[0].astype(int)
+      size = tmp[1:3].astype(int)
+      time = tmp[3]
+
+      return tmp[4:].reshape([nslices,size[1],size[0]]).swapaxes(1,2),nslices,size,time
+
+
+    def read_dem(self,path,max_bins=None):
+
+      tmp = np.fromfile(path+'corona_emission_adj_dem_'+self.fdir+'.'+self.siter)
+
+      bins   = tmp[0].astype(int)
+      size   = tmp[1:3].astype(int)
+      time   = tmp[3]
+      lgTmin = tmp[4]
+      dellgT = tmp[5]
+      
+      dem = tmp[6:].reshape([bins,size[1],size[0]]).transpose(2,1,0)
+      
+      taxis = lgTmin+dellgT*np.arange(0,bins+1)
+      
+      X_H = 0.7
+      dem = dem*X_H*0.5*(1+X_H)*3.6e19
+      
+      if max_bins != None:
+        if bins > max_bins :
+          dem = dem[:,:,0:max_bins]
+        else :
+          tmp=dem
+          dem=np.zeros([size[0],size[1],max_bins])
+          dem[:,:,0:bins]=tmp
+          
+        taxis = lgTmin+dellgT*np.arange(0,max_bins+1)
+      
+      return dem,taxis,time
+
+      
+    def read_var_3d(dir,var,iter=None,layout=None):
+
+      if (not iter == None): 
+        self.siter=inttostring(iter)
+        self.read_header("%s/Header%s" % (self.fdir, self.siter))
+
+      tmp = np.fromfile(self.fdir+var+'.'+ self.siter)
+      self.data = tmp.reshape([size[2],size[1],size[0]])
+        
+      if layout != None :
+          self.data = tmp.transpose(layout)
+      
+      return self.data
+
+
+    def read_vlos(self,path,max_bins=None):
+
+      tmp = np.fromfile(path+'corona_emission_adj_vlos_'+self.fdir+'.'+self.siter)
+
+      bins   = tmp[0].astype(int)
+      size   = tmp[1:3].astype(int)
+      time   = tmp[3]
+      lgTmin = tmp[4]
+      dellgT = tmp[5]
+      
+      vlos = tmp[6:].reshape([bins,size[1],size[0]]).transpose(2,1,0)
+      
+      taxis = lgTmin+dellgT*np.arange(0,bins+1)
+     
+      if max_bins != None:
+        if bins > max_bins :
+          vlos = vlos[:,:,0:max_bins]
+        else :
+          tmp=vlos
+          vlos=np.zeros([size[0],size[1],max_bins])
+          vlos[:,:,0:bins]=tmp
+          
+        taxis = lgTmin+dellgT*np.arange(0,max_bins+1)
+      
+      return vlos,taxis,time
+
+
+    def read_vrms(self,path,max_bins=None):
+
+      tmp = np.fromfile(path+'corona_emission_adj_vrms_'+self.fdir+'.'+self.template)
+
+      bins   = tmp[0].astype(int)
+      size   = tmp[1:3].astype(int)
+      time   = tmp[3]
+      lgTmin = tmp[4]
+      dellgT = tmp[5]
+      
+      vlos = tmp[6:].reshape([bins,size[1],size[0]]).transpose(2,1,0)
+      
+      taxis = lgTmin+dellgT*np.arange(0,bins+1)
+     
+      if max_bins != None:
+        if bins > max_bins :
+          vlos = vlos[:,:,0:max_bins]
+        else :
+          tmp=vlos
+          vlos=np.zeros([size[0],size[1],max_bins])
+          vlos[:,:,0:bins]=tmp
+          
+        taxis = lgTmin+dellgT*np.arange(0,max_bins+1)
+      
+      return vlos,taxis,time
+
+
+    def read_fil(self,path,max_bins=None):
+
+      tmp = np.fromfile(path+'corona_emission_adj_fil_'+self.fdir+'.'+self.template)
+      bins   = tmp[0].astype(int)
+      size   = tmp[1:3].astype(int)
+      time   = tmp[3]
+      lgTmin = tmp[4]
+      dellgT = tmp[5]
+      
+      vlos = tmp[6:].reshape([bins,size[1],size[0]]).transpose(2,1,0)
+      
+      taxis = lgTmin+dellgT*np.arange(0,bins+1)
+     
+      if max_bins != None:
+        if bins > max_bins :
+          vlos = vlos[:,:,0:max_bins]
+        else :
+          tmp=vlos
+          vlos=np.zeros([size[0],size[1],max_bins])
+          vlos[:,:,0:bins]=tmp
+          
+        taxis = lgTmin+dellgT*np.arange(0,max_bins+1)
+      
+      return vlos,taxis,time
+
+
+
     def write_rh15d(self, outfile, desc=None, append=True, writeB=False,
                     sx=slice(None), sy=slice(None), sz=slice(None),
                     wght_per_h=1.4271):
@@ -165,3 +313,14 @@ class MuramAtmos:
         rh15d.make_xarray_atmos(outfile, temp, vz, z, nH=nh, x=x, y=y, vx=vx,
                                 vy=vy, rho=rho, append=append, Bx=Bx, By=By,
                                 Bz=Bz, desc=desc, snap=self.snap)
+
+def inttostring(ii,ts_size=7):
+
+  str_num = str(ii)
+
+  for bb in range(len(str_num),ts_size,1):
+    str_num = '0'+str_num
+  
+  return str_num
+
+
