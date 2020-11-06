@@ -1,6 +1,6 @@
 import os
 import numpy as np
-
+import scipy.constants as ct
 
 class MuramAtmos:
     """
@@ -31,7 +31,8 @@ class MuramAtmos:
         else:
             self.dtype = '<' + dtype
         self.read_header("%s/Header%s" % (fdir, template))
-        self.read_atmos(fdir, template)
+        #self.read_atmos(fdir, template)
+        self.units()
         self.snap = 0
         self.siter = template
 
@@ -171,14 +172,14 @@ class MuramAtmos:
       return dem,taxis,time
 
       
-    def read_var_3d(dir,var,iter=None,layout=None):
+    def read_var_3d(self,var,iter=None,layout=None):
 
       if (not iter == None): 
-        self.siter=inttostring(iter)
+        self.siter='.'+inttostring(iter)
         self.read_header("%s/Header%s" % (self.fdir, self.siter))
 
-      tmp = np.fromfile(self.fdir+var+'.'+ self.siter)
-      self.data = tmp.reshape([size[2],size[1],size[0]])
+      tmp = np.fromfile(self.fdir+'/'+var+ self.siter)
+      self.data = tmp.reshape([self.nx,self.ny,self.nz])
         
       if layout != None :
           self.data = tmp.transpose(layout)
@@ -196,7 +197,7 @@ class MuramAtmos:
       lgTmin = tmp[4]
       dellgT = tmp[5]
       
-      vlos = tmp[6:].reshape([bins,size[1],size[0]]).transpose(2,1,0)
+      vlos = tmp[6:].reshape([bins,self.ny,self.nz]).transpose(2,1,0)
       
       taxis = lgTmin+dellgT*np.arange(0,bins+1)
      
@@ -205,7 +206,7 @@ class MuramAtmos:
           vlos = vlos[:,:,0:max_bins]
         else :
           tmp=vlos
-          vlos=np.zeros([size[0],size[1],max_bins])
+          vlos=np.zeros([self.nz,self.ny,max_bins])
           vlos[:,:,0:bins]=tmp
           
         taxis = lgTmin+dellgT*np.arange(0,max_bins+1)
@@ -223,7 +224,7 @@ class MuramAtmos:
       lgTmin = tmp[4]
       dellgT = tmp[5]
       
-      vlos = tmp[6:].reshape([bins,size[1],size[0]]).transpose(2,1,0)
+      vlos = tmp[6:].reshape([bins,self.ny,self.nz]).transpose(2,1,0)
       
       taxis = lgTmin+dellgT*np.arange(0,bins+1)
      
@@ -232,7 +233,7 @@ class MuramAtmos:
           vlos = vlos[:,:,0:max_bins]
         else :
           tmp=vlos
-          vlos=np.zeros([size[0],size[1],max_bins])
+          vlos=np.zeros([self.nz,self.ny,max_bins])
           vlos[:,:,0:bins]=tmp
           
         taxis = lgTmin+dellgT*np.arange(0,max_bins+1)
@@ -265,8 +266,34 @@ class MuramAtmos:
       
       return vlos,taxis,time
 
-
-
+    def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
+        
+        ul = 1.e-2  # to metres
+        ur = 1.e3   # from g/cm^3 to kg/m^3
+        
+        rho = self.read_var_3d('result_prim_0',iter=iter,layout=layout)
+        nh = rho / (wght_per_h * ct.atomic_mass)  # from rho to nH 
+        if axis == 0:
+            ds = self.dx * self.ul
+        elif axis == 1:
+            ds = self.dy * self.ul
+        else:
+            ds = self.dz * self.ul
+            
+        nh *= ds / unitsnorm
+        en = nh *  wght_per_h # this may need a better adjustment. 
+        
+        return en * nh
+    
+    def units(self): 
+        self.ur = 1.e3   # from g/cm^3 to kg/m^3
+        self.ul = 1.e-2  # to metres
+        self.ut = 1.     # to seconds
+        self.uv=self.ul/self.ut 
+        self.ub = 1.e-4  # to Tesla
+        self.ue = 1.      # to erg/g
+        
+        
     def write_rh15d(self, outfile, desc=None, append=True, writeB=False,
                     sx=slice(None), sy=slice(None), sz=slice(None),
                     wght_per_h=1.4271):
