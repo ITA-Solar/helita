@@ -46,6 +46,7 @@ class MuramAtmos:
     def read_atmos(self, fdir, template):
         ashape = (self.nx, self.nz, self.ny)
         file_T = "%s/eosT%s" % (fdir, template)
+        bfact = np.sqrt(4 * np.pi)
         if os.path.isfile(file_T):
             self.tg = np.memmap(file_T, mode="r", shape=ashape,
                                 dtype=self.dtype,
@@ -85,16 +86,19 @@ class MuramAtmos:
             self.bx = np.memmap(file_Bx, mode="r", shape=ashape,
                                 dtype=self.dtype,
                                 order="F").transpose((0, 2, 1))
+            self.bx = self.bx * bfact
         file_Bz = "%s/result_prim_6%s" % (fdir, template)
         if os.path.isfile(file_Bz):
             self.bz = np.memmap(file_Bz, mode="r", shape=ashape,
                                 dtype=self.dtype,
                                 order="F").transpose((0, 2, 1))
+            self.bz = self.bz * bfact
         file_By = "%s/result_prim_7%s" % (fdir, template)
         if os.path.isfile(file_By):
             self.by = np.memmap(file_By, mode="r", shape=ashape,
                                 dtype=self.dtype,
                                 order="F").transpose((0, 2, 1))
+            self.by = self.by * bfact
         file_tau = "%s/tau%s" % (fdir, template)
         if os.path.isfile(file_tau):
             self.tau = np.memmap(file_tau, mode="r", shape=ashape,
@@ -105,10 +109,7 @@ class MuramAtmos:
             self.qtot = np.memmap(file_Qtot, mode="r", shape=ashape,
                                   dtype=self.dtype,
                                   order="F").transpose((0, 2, 1))
-        bfact = np.sqrt(4 * np.pi)
-        self.bx = self.bx * bfact
-        self.by = self.by * bfact
-        self.bz = self.bz * bfact
+
         # from moments to velocities
         if self.prim:
             self.vx /= self.rho
