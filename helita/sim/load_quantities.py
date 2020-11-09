@@ -227,15 +227,19 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
     spic1 = spic1[2:]
     
-    if ((spic1 == 'h') and (int(ion1) > 1)): 
+    trans=False
+    trans2=False 
+    if ((spic1 == 'h') and (int(ion1) > 1) and (spic2 == 'h')): 
       spic1 = 'p'
-    if ((spic2 == 'h') and (int(ion2) > 1)): 
+      trans=True
+    elif ((spic2 == 'h') and (int(ion2) > 1) and (spic1 == 'h')): 
       spic2 = 'p'
+      trans2=True
 
     crossarr = obj.get_var('%s_%s' % (spic1, spic2))
-    if spic1 == 'p': 
+    if trans: 
       spic1 = 'h'
-    if spic2 == 'p': 
+    if trans2: 
       spic2 = 'h'
     nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
     if np.size(elem) > 2:
