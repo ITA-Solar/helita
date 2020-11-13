@@ -475,7 +475,7 @@ def get_vector_product(obj,quant):
   if quant[1:6] in VECO_QUANT:
     # projects v1 onto v2
     v1 = quant[0]
-    v2 = quant[7]
+    v2 = quant[-2]
     axis = quant[-1]
     if axis == 'x':
       varsn = ['y', 'z']
@@ -483,9 +483,12 @@ def get_vector_product(obj,quant):
       varsn = ['z', 'y']
     elif axis == 'z':
       varsn = ['x', 'y']
-    return (obj.get_var(v1 + varsn[0] + 'c') *
-        obj.get_var(v2 + varsn[1] + 'c') - obj.get_var(v1 + varsn[1] + 'c') *
-        obj.get_var(v2 + varsn[0] + 'c'))
+    #return (obj.get_var(v1 + varsn[0] + 'c') *
+    #    obj.get_var(v2 + varsn[1] + 'c') - obj.get_var(v1 + varsn[1] + 'c') *
+    #    obj.get_var(v2 + varsn[0] + 'c'))
+    return (obj.get_var(v1 + varsn[0]) *
+        obj.get_var(v2 + varsn[1]) - obj.get_var(v1 + varsn[1]) *
+        obj.get_var(v2 + varsn[0]))
   else:
     return None
 

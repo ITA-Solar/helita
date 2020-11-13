@@ -172,8 +172,11 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None):
     # to g/cm^3
     ur = obj.params['u_r'][obj.snapInd]
     ue = obj.params['u_ee'][obj.snapInd]        # to erg/g
+    if quant == 'ne':
+      fac = 1.e6  # cm^-3 to m^-3
+
     if obj.hion and quant == 'ne':
-        return obj.get_var('hionne')
+        return obj.get_var('hionne') * fac
     rho = obj.get_var('r')
     rho = rho * ur
     ee = obj.get_var('ee')
@@ -347,10 +350,7 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None):
     nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) # scr2
 
     tg = obj.get_var('tg') #scr1
-    if obj.hion:
-      nel = obj.get_var('hionne')
-    else:
-      nel = obj.get_var('ne')
+    nel = obj.get_var('ne') / 1e6 # it takes into account NEQ and converts to cgs
     
     coulog = 23. + 1.5 * np.log(tg/1.e6) - 0.5 * np.log(nel/1e6) # Coulomb logarithm scr4
     
@@ -492,10 +492,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
 
 
     elif quant == 'nu_ei':
-      if obj.hion:
-        nel = obj.get_var('hionne')
-      else:
-        nel = obj.get_var('ne')
+      nel = obj.get_var('ne') / 1e6  # NEQ is taken into account and its converted to cgs
       culblog = 23. + 1.5 * np.log(obj.get_var('tg') / 1.e6) - \
         0.5 * np.log(nel / 1e6)
 
@@ -553,10 +550,7 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None):
   if quant in COULOMB_COL_QUANT:
     iele = np.where(COULOMB_COL_QUANT == quant)
     tg = obj.get_var('tg')
-    if obj.hion:
-      nel = np.copy(obj.get_var('hionne'))
-    else:
-      nel = np.copy(obj.get_var('ne'))
+    nel = np.copy(obj.get_var('ne')) # already takes into account NEQ (SI)
     elem = quant.replace('coucol', '')
 
     const = (obj.uni.pi * obj.uni.qsi_electron ** 4 /
@@ -807,10 +801,7 @@ def get_cyclo_res(obj, quant, CYCL_RES=None):
       posn = ([pos for pos, char in enumerate(quant) if char == 'n'])
       q2 = quant[posn[-1]:]
       q1 = quant[:posn[-1]]
-      if obj.hion:
-        nel = obj.get_var('hionne')
-      else:
-        nel = obj.get_var('ne')
+      nel = obj.get_var('ne')/1e6 # already takes into account NEQ converted to cgs
       var2 = obj.get_var(q2)
       var1 = obj.get_var(q1)
       z1 = 1.0
@@ -1006,10 +997,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
     else:
       tg = obj.get_var('tg')
       r = obj.get_var('r')
-      if obj.hion:
-        nel = np.copy(obj.get_var('hionne'))
-      else:
-        nel = np.copy(obj.get_var('ne')) 
+      nel = np.copy(obj.get_var('ne')) # already takes into account NEQ (SI)
 
       if quant[0] == 'n':
         dens = False
@@ -1171,8 +1159,8 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
                   obj.get_var(quant[0]+iele+'-2')
     
     elif quant[0] == 'u':
-      result = obj.get_var('jxb' + quant[-1]) / \
-                           dd.get_var('modb') * dd.get_var('eta_amb')
+      result = obj.get_var('itimesb' + quant[-1]) / \
+                           obj.get_var('modb') * obj.get_var('eta_amb')
 
     elif (quant[-4:-1] == 'amb' and quant[-1] in ['x','y','z'] and 
          quant[1:3] != 'chi' and quant[1:3] != 'psi'):
@@ -1184,10 +1172,10 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
         varsn = ['z', 'y']
       elif axis == 'z':
         varsn = ['x', 'y']
-      result = (obj.get_var('jxb' + varsn[0]) *
+      result = (obj.get_var('itimesb' + varsn[0]) *
         obj.get_var('b' + varsn[1] + 'c') -
-        obj.get_var('jxb' + varsn[1]) *
-        obj.get_var('b' + varsn[0] + 'c')) / dd.get_var('b2') * dd.get_var('eta_amb')
+        obj.get_var('itimesb' + varsn[1]) *
+        obj.get_var('b' + varsn[0] + 'c')) / obj.get_var('b2') * obj.get_var('eta_amb')
 
     return  result
   else:
@@ -1213,7 +1201,7 @@ def get_hallparam(obj, quant, HALL_QUANT=None):
   if (quant in HALL_QUANT):
     if quant[0] == 'u':
       try:
-        result = obj.get_var('j' + quant[-1])
+        result = obj.get_var('i' + quant[-1])
       except:
         result = obj.get_var('rotb' + quant[-1])   
     elif quant == 'eta_hall':
@@ -1227,7 +1215,7 @@ def get_hallparam(obj, quant, HALL_QUANT=None):
       result = result /obj.uni.u_l/obj.uni.u_l*obj.uni.u_t 
 
     else:
-      result = obj.get_var('jxb_' + quant[-1]) / obj.get_var('modb')
+      result = obj.get_var('itimesb_' + quant[-1]) / obj.get_var('modb')
 
     return result #obj.get_var('eta_hall') * result
   else:
