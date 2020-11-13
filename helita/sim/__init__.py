@@ -14,7 +14,7 @@ except ImportError:
 
 if found:
     __all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
-            "simtools", "synobs", "ebysus"]
+            "simtools", "synobs", "ebysus","cipmocct"]
 else:
     __all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
             "simtools", "synobs"]
@@ -23,6 +23,7 @@ else:
 from . import bifrost
 from . import multi
 from . import muram
+from . import cipmocct
 from . import rh
 if found:
     from . import ebysus
