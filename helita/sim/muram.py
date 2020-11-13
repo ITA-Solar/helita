@@ -38,8 +38,8 @@ class MuramAtmos:
 
     def read_header(self, headerfile):
         tmp = np.loadtxt(headerfile)
-        self.nx, self.nz, self.ny = tmp[:3].astype("i")
-        self.dx, self.dz, self.dy, self.time= tmp[3:7]
+        self.nx, self.ny, self.nz = tmp[:3].astype("i")
+        self.dx, self.dy, self.dz, self.time= tmp[3:7] # km
         self.x = np.arange(self.nx) * self.dx
         self.y = np.arange(self.ny) * self.dy
         self.z = np.arange(self.nz) * self.dz
@@ -51,75 +51,75 @@ class MuramAtmos:
         if os.path.isfile(file_T):
             self.tg = np.memmap(file_T, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
         file_press = "%s/eosP%s" % (fdir, template)
         if os.path.isfile(file_press):
             self.pressure = np.memmap(file_press, mode="r", shape=ashape,
                                       dtype=self.dtype,
-                                      order="F").transpose((0, 2, 1))
+                                      order="F")
         file_rho = "%s/result_prim_0%s" % (fdir, template)
         if os.path.isfile(file_rho):
             self.rho = np.memmap(file_rho, mode="r", shape=ashape,
                                  dtype=self.dtype,
-                                 order="F").transpose((0, 2, 1))
+                                 order="F")
         file_vx = "%s/result_prim_1%s" % (fdir, template)
         if os.path.isfile(file_vx):
             self.vx = np.memmap(file_vx, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
         file_vz = "%s/result_prim_2%s" % (fdir, template)
         if os.path.isfile(file_vz):
             self.vz = np.memmap(file_vz, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
         file_vy = "%s/result_prim_3%s" % (fdir, template)
         if os.path.isfile(file_vy):
             self.vy = np.memmap(file_vy, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
         file_ei = "%s/result_prim_4%s" % (fdir, template)
         if os.path.isfile(file_ei):
             self.ei = np.memmap(file_ei, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
         file_Bx = "%s/result_prim_5%s" % (fdir, template)
         if os.path.isfile(file_Bx):
             self.bx = np.memmap(file_Bx, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
             self.bx = self.bx * bfact
         file_Bz = "%s/result_prim_6%s" % (fdir, template)
         if os.path.isfile(file_Bz):
             self.bz = np.memmap(file_Bz, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
             self.bz = self.bz * bfact
         file_By = "%s/result_prim_7%s" % (fdir, template)
         if os.path.isfile(file_By):
             self.by = np.memmap(file_By, mode="r", shape=ashape,
                                 dtype=self.dtype,
-                                order="F").transpose((0, 2, 1))
+                                order="F")
             self.by = self.by * bfact
         file_tau = "%s/tau%s" % (fdir, template)
         if os.path.isfile(file_tau):
             self.tau = np.memmap(file_tau, mode="r", shape=ashape,
                                  dtype=self.dtype,
-                                 order="F").transpose((0, 2, 1))
+                                 order="F")
         file_Qtot = "%s/Qtot%s" % (fdir, template)
         if os.path.isfile(file_Qtot):
             self.qtot = np.memmap(file_Qtot, mode="r", shape=ashape,
                                   dtype=self.dtype,
-                                  order="F").transpose((0, 2, 1))
+                                  order="F")
 
         # from moments to velocities
-        if self.prim:
-            if hasattr(self,'rho'): 
-                if hasattr(self,'vx'):
-                    self.vx /= self.rho
-                if hasattr(self,'vy'):
-                    self.vy /= self.rho
-                if hasattr(self,'vz'):
-                    self.vz /= self.rho
+        #if self.prim:
+        #    if hasattr(self,'rho'): 
+        #        if hasattr(self,'vx'):
+        #            self.vx /= self.rho
+        #        if hasattr(self,'vy'):
+        #            self.vy /= self.rho
+        #        if hasattr(self,'vz'):
+        #            self.vz /= self.rho
 
     def read_Iout(self):
 
@@ -171,6 +171,59 @@ class MuramAtmos:
       
       return dem,taxis,time
 
+    def get_var(self,var,it=None, iix=None, iiy=None, iiz=None, layout=None): 
+        '''
+        Reads the variables from a snapshot (it).
+
+        Parameters
+        ----------
+        var - string
+            Name of the variable to read. Must be Bifrost internal names.
+        it - integer, optional
+            Snapshot number to read. By default reads the loaded snapshot;
+            if a different number is requested, will load that snapshot.
+        
+        Axes: 
+        -----
+        For the hgcr model:
+            y-axis is the vertical x and z-axes are horizontal 
+        Newer runs could have x-axis the vertical. 
+        
+        Variable list: 
+        --------------
+            result_prim_0 -- Density (g/cm^3)
+            eosT          -- Temperature (K)
+            result_prim_1 -- component x of the velocity (cm/s) 
+            result_prim_2 -- component y of the velocity (cm/s), vertical in the hgcr
+            result_prim_3 -- component z of the velocity (cm/s)
+            result_prim_4 -- internal energy (erg)
+            result_prim_5 -- component x of the magnetic field (G)
+            result_prim_6 -- component y of the magnetic field (G)
+            result_prim_7 -- component z of the magnetic field (G)
+            result_prim_8 -- component x of the magnetic field (G)
+            eos_          -- Pressure 
+        '''
+        if var == '':
+            print(help(self.get_var))
+            return None
+        
+        ashape = (self.nx, self.ny, self.nz)
+        if (not it == None): 
+            self.siter='.'+inttostring(it)
+            self.read_header("%s/Header%s" % (self.fdir, self.siter))
+        
+        var = np.memmap(self.fdir+'/'+var+ self.siter, mode="r", shape=ashape,
+                                dtype=self.dtype,
+                                order="F")
+        if iix != None: 
+            var= var[iix,:,:]
+        if iiy != None: 
+            var= var[:,iiy,:]
+        if iiz != None: 
+            var= var[:,:,iiz]
+        self.data = var
+        
+        return self.data
       
     def read_var_3d(self,var,iter=None,layout=None):
 
@@ -268,11 +321,8 @@ class MuramAtmos:
 
     def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
         
-        ul = 1.e-2  # to metres
-        ur = 1.e3   # from g/cm^3 to kg/m^3
-        
-        rho = self.read_var_3d('result_prim_0',iter=iter,layout=layout)
-        nh = rho / (wght_per_h * ct.atomic_mass)  # from rho to nH 
+        rho = self.get_var('result_prim_0',it=iter,layout=layout)
+        nh = rho / (wght_per_h * ct.atomic_mass * 1e3)  # from rho to nH and added unitsnorm
         if axis == 0:
             ds = self.dx * self.ul
         elif axis == 1:
@@ -280,18 +330,18 @@ class MuramAtmos:
         else:
             ds = self.dz * self.ul
             
-        nh *= ds / unitsnorm
-        en = nh *  wght_per_h # this may need a better adjustment. 
-        
-        return en * nh
+        en = nh + 2.*nh*(wght_per_h-1.) # this may need a better adjustment.             
+        nh *= ds
+
+        return en * (nh / unitsnorm )
     
     def units(self): 
-        self.ur = 1.e3   # from g/cm^3 to kg/m^3
-        self.ul = 1.e-2  # to metres
+        self.ur = 1      # it is already in g/cm^3
+        self.ul = 1.e5   # to cm
         self.ut = 1.     # to seconds
-        self.uv=self.ul/self.ut 
+        self.uv = 1.     # cm/s NOT self.ul/self.ut 
         self.ub = 1.e-4  # to Tesla
-        self.ue = 1.      # to erg/g
+        self.ue = 1.     # to erg/g
         
         
     def write_rh15d(self, outfile, desc=None, append=True, writeB=False,
