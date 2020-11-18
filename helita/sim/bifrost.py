@@ -116,6 +116,7 @@ class BifrostData(object):
                     raise ValueError(("(EEE) init: no .idl or mhd.in files "
                                     "found"))
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
+        self.genvar()
         self.cross_sect = Cross_sect
         if 'tabinputfile' in self.params.keys(): 
             tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
@@ -394,7 +395,7 @@ class BifrostData(object):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
                     *args, **kwargs):
         """
         Reads a given variable as a function of time.
@@ -506,8 +507,25 @@ class BifrostData(object):
                 temp = np.asarray(getattr(self, dim))
                 setattr(self, dim, temp.item())
 
+
+    def genvar(self): 
+        '''
+        Dictionary of original variables which will allow to convert to cgs. 
+        '''
+        self.varn={}
+        self.varn['rho']= 'r'
+        self.varn['tg'] = 'tg'
+        self.varn['pg'] = 'p'
+        self.varn['ux'] = 'ux'
+        self.varn['uy'] = 'uy'
+        self.varn['uz'] = 'uz'
+        self.varn['e']  = 'e'
+        self.varn['bx'] = 'bx'
+        self.varn['by'] = 'by'
+        self.varn['bz'] = 'bz'
+        
     def get_var(self, var, snap=None, *args, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), **kwargs):
+                iiz=slice(None), cgs=False, **kwargs):
         """
         Reads a variable from the relevant files.
 
@@ -565,18 +583,32 @@ class BifrostData(object):
             self.set_snap(snap)
             self.variables={}
 
+        if (cgs): 
+            varu=var.replace('x','')
+            varu=varu.replace('y','')
+            varu=varu.replace('z','')
+            if var in self.varn.keys(): 
+                cgsunits = self.uni.uni[varu]
+            else: 
+                cgsunits = 1.0
+        else: 
+            cgsunits = 1.0
+        
+        if var in self.varn.keys(): 
+            var=self.varn[var]
+            
         # # check if already in memmory
         if var in self.variables:
-            return self.variables[var]
+            return self.variables[var] * cgsunits
         elif var in self.simple_vars:  # is variable already loaded?
-            val = self._get_simple_var(var, *args, **kwargs)
+            val = self._get_simple_var(var, *args, **kwargs) * cgsunits
             if self.verbose:
                 print('(get_var): reading simple ', np.shape(val), whsp*5,
                     end="\r",flush=True)
         elif var in self.auxxyvars:
             val = self._get_simple_var_xy(var, *args, **kwargs)
         elif var in self.compvars:  # add to variable list
-            self.variables[var] = self._get_composite_var(var, *args, **kwargs)
+            self.variables[var] = self._get_composite_var(var, *args, **kwargs) * cgsunits
             setattr(self, var, self.variables[var])
             val = self.variables[var]
         else:
@@ -584,7 +616,7 @@ class BifrostData(object):
             val = load_quantities(self,var)
             # Loading arithmetic quantities
             if np.shape(val) is ():
-                val = load_arithmetic_quantities(self,var)
+                val = load_arithmetic_quantities(self,var) 
 
         if var == '':
             print(help(self.get_var))
@@ -1269,7 +1301,7 @@ class Bifrost_units(object):
             self.u_r = 1.0e-7
             # --- ideal gas
             self.gamma = 1.667
-
+        
         self.u_u = self.u_l / self.u_t
         self.u_p = self.u_r * (self.u_l / self.u_t)**2    # Pressure [dyne/cm2]
         self.u_kr = 1 / (self.u_r * self.u_l)             # Rosseland opacity [cm2/g]
@@ -1287,6 +1319,24 @@ class Bifrost_units(object):
         self.u_tge = (self.m_e / self.k_b) * self.u_ee
         self.pi = const.pi
         self.u_b = self.u_u * np.sqrt(4. * self.pi * self.u_r)
+
+        self.uni={}
+        self.uni['l'] = self.u_l
+        self.uni['t'] = self.u_t
+        self.uni['rho'] = self.u_r
+        self.uni['p'] = self.u_p
+        self.uni['u'] = self.u_u
+        self.uni['e'] = self.u_e
+        self.uni['ee'] = self.u_ee
+        self.uni['n'] = self.u_n
+        self.uni['kb'] = self.k_b
+        self.uni['mh'] = self.m_h
+        self.uni['tg'] = 1.0
+        self.uni['b'] = self.u_b
+        self.uni['kr'] = self.u_kr
+
+
+        self.uni['l'] = self.u_l
 
 
         self.usi_l = self.u_l * const.centi  # 1e6
