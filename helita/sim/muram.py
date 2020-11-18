@@ -35,7 +35,8 @@ class MuramAtmos:
         self.units()
         self.snap = 0
         self.siter = template
-
+        self.genvar()
+        
     def read_header(self, headerfile):
         tmp = np.loadtxt(headerfile)
         self.nx, self.ny, self.nz = tmp[:3].astype("i")
@@ -171,7 +172,7 @@ class MuramAtmos:
       
       return dem,taxis,time
 
-    def get_var(self,var,it=None, iix=None, iiy=None, iiz=None, layout=None): 
+    def get_var(self,var,it=None, iix=None, iiy=None, iiz=None, layout=None, cgs=True): 
         '''
         Reads the variables from a snapshot (it).
 
@@ -200,28 +201,46 @@ class MuramAtmos:
             result_prim_5 -- component x of the magnetic field (G)
             result_prim_6 -- component y of the magnetic field (G)
             result_prim_7 -- component z of the magnetic field (G)
-            result_prim_8 -- component x of the magnetic field (G)
-            eos_          -- Pressure 
+            eosP          -- Pressure 
         '''
         if var == '':
             print(help(self.get_var))
+            print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
+            for ii in self.varn: 
+                print('use ', ii,' for ',self.varn[ii])
             return None
         
         ashape = (self.nx, self.ny, self.nz)
         if (not it == None): 
             self.siter='.'+inttostring(it)
             self.read_header("%s/Header%s" % (self.fdir, self.siter))
+       
+        if (cgs): 
+            varu=var.replace('x','')
+            varu=varu.replace('y','')
+            varu=varu.replace('z','')
+            if var in self.varn.keys(): 
+                cgsunits = self.uni[varu]
+            else: 
+                cgsunits = 1.0
+        else: 
+            cgsunits = 1.0
         
-        var = np.memmap(self.fdir+'/'+var+ self.siter, mode="r", shape=ashape,
+        if var in self.varn.keys(): 
+            varname=self.varn[var]
+        else:
+            varname=var
+            
+        data = np.memmap(self.fdir+'/'+varname+ self.siter, mode="r", shape=ashape,
                                 dtype=self.dtype,
                                 order="F")
         if iix != None: 
-            var= var[iix,:,:]
+            data= data[iix,:,:]
         if iiy != None: 
-            var= var[:,iiy,:]
+            data= data[:,iiy,:]
         if iiz != None: 
-            var= var[:,:,iiz]
-        self.data = var
+            data= data[:,:,iiz]
+        self.data = data
         
         return self.data
       
@@ -320,29 +339,55 @@ class MuramAtmos:
       return vlos,taxis,time
 
     def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
-        
-        rho = self.get_var('result_prim_0',it=iter,layout=layout)
+        '''
+        Computes emission meassure in cgs and normalized to unitsnorm
+        '''       
+        rho = self.get_var('rho',it=iter,layout=layout)
         nh = rho / (wght_per_h * ct.atomic_mass * 1e3)  # from rho to nH and added unitsnorm
         if axis == 0:
-            ds = self.dx * self.ul
+            ds = self.dx * self.uni['l']
         elif axis == 1:
-            ds = self.dy * self.ul
+            ds = self.dy * self.uni['l']
         else:
-            ds = self.dz * self.ul
+            ds = self.dz * self.uni['l']
             
         en = nh + 2.*nh*(wght_per_h-1.) # this may need a better adjustment.             
         nh *= ds
 
         return en * (nh / unitsnorm )
-    
+
     def units(self): 
-        self.ur = 1      # it is already in g/cm^3
-        self.ul = 1.e5   # to cm
-        self.ut = 1.     # to seconds
-        self.uv = 1.     # cm/s NOT self.ul/self.ut 
-        self.ub = 1.e-4  # to Tesla
-        self.ue = 1.     # to erg/g
-        
+        '''
+        Units and constants in cgs
+        '''
+        self.uni={}
+        self.uni['proton'] = 1.67262158e-24 #gr
+        self.uni['kboltz'] = 1.380658e-16 
+        self.uni['c']      = 299792.458 * 1e5 #cm/s
+        self.uni['gamma']  = 5./3.
+        self.uni['tg']     = 1.0 # K
+        self.uni['l']      = 1.0e5 # to cm
+        self.uni['rho']    = 1.0 # g cm^-3 
+        self.uni['u']      = 1.0 # cm/s
+        self.uni['b']      = 1.0 # Gauss
+        self.uni['t']      = 1.0 # seconds
+        self.uni['j']      = 1.0 # current density
+   
+    def genvar(self): 
+        '''
+        Dictionary of original variables which will allow to convert to cgs. 
+        '''
+        self.varn={}
+        self.varn['rho']= 'result_prim_0'
+        self.varn['tg'] = 'eosT'
+        self.varn['pg'] = 'eosP'
+        self.varn['ux'] = 'result_prim_1'
+        self.varn['uy'] = 'result_prim_2'
+        self.varn['uz'] = 'result_prim_3'
+        self.varn['e']  = 'result_prim_4'
+        self.varn['bx'] = 'result_prim_5'
+        self.varn['by'] = 'result_prim_6'
+        self.varn['bz'] = 'result_prim_7'
         
     def write_rh15d(self, outfile, desc=None, append=True, writeB=False,
                     sx=slice(None), sy=slice(None), sz=slice(None),
