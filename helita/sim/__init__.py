@@ -15,7 +15,7 @@ except ImportError:
 if found:
     __all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
             "simtools", "synobs", "ebysus", "cipmocct", "laresav", 
-            "pyPluto"]
+            "pypluto"]
 else:
     __all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
             "simtools", "synobs"]
