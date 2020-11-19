@@ -89,7 +89,7 @@ class Cipmocct:
             varu=var.replace('x','')
             varu=varu.replace('y','')
             varu=varu.replace('z','')
-            if var in self.varn.keys(): 
+            if (var in self.varn.keys()) and (varu in self.uni.keys()): 
                 cgsunits = self.uni[varu]
             else: 
                 cgsunits = 1.0
