@@ -291,7 +291,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None):
     #### ASSUMES ifluid is charged AND jfluid is neutral. ####
     #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
     CONST_MULT    = 1.96     #factor in front.
-    CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen #unsure of units.
+    CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen 
     e_charge= 1.602176e-19   #[C]      #elementary charge
     eps0    = 8.854187e-12   #[F m^-1] #epsilon0, standard 
 
@@ -301,19 +301,19 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None):
     spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
     spic1 = spic1[4:]
-    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
+    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) * 1e6 # convert to SI. 
     if np.size(elem) > 2:
       nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
 
     tg = obj.get_var('tg')
     if spic1 == 'e':
-      awg1 = obj.uni.m_electron
+      awg1 = obj.unisi.m_electron
     else:
-      awg1 = obj.uni.weightdic[spic1] * obj.uni.amu
+      awg1 = obj.unisi.weightdic[spic1] * obj.unisi.amu
     if spic1 == 'e':
-      awg2 = obj.uni.m_electron
+      awg2 = obj.unisi.m_electron
     else:
-      awg2 = obj.uni.weightdic[spic2] * obj.uni.amu
+      awg2 = obj.unisi.weightdic[spic2] * obj.unisi.amu
 
     return CONST_MULT * nspic2 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg2 / (eps0 * obj.uni.amusi * awg1 * (awg1 + awg2)))
 
