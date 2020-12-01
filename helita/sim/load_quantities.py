@@ -300,22 +300,22 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None):
     ion1 = ''.join([i for i in elem[0] if i.isdigit()])
     spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
-    spic1 = spic1[4:]
-    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) * 1e6 # convert to SI. 
+    spic1 = spic1[4:] 
+    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) * 1e6 # convert to SI.
     if np.size(elem) > 2:
       nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
 
     tg = obj.get_var('tg')
     if spic1 == 'e':
-      awg1 = obj.unisi.m_electron
+      awg1 = obj.uni.msi_e 
     else:
-      awg1 = obj.unisi.weightdic[spic1] * obj.unisi.amu
+      awg1 = obj.uni.weightdic[spic1] * obj.uni.amusi
     if spic1 == 'e':
-      awg2 = obj.unisi.m_electron
+      awg2 = obj.uni.msi_e
     else:
-      awg2 = obj.unisi.weightdic[spic2] * obj.unisi.amu
+      awg2 = obj.uni.weightdic[spic2] * obj.uni.amusi
 
-    return CONST_MULT * nspic2 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg2 / (eps0 * obj.uni.amusi * awg1 * (awg1 + awg2)))
+    return CONST_MULT * nspic2 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg2 / (eps0 * awg1 * (awg1 + awg2)))
 
   else:
     return None
