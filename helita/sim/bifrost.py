@@ -872,6 +872,44 @@ class BifrostData(object):
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
+    def get_ems(self, axis=2, zcut=None, unitsnorm = 1e27, *args, **kwargs):
+
+        """
+        Calculates emissivity (EM).
+
+        Parameters
+        ----------
+        axis - integer  x = 0, y = 1, z = 2
+        zcut - float    used to cut the convection zone
+        Returns
+        -------
+        array - ndarray
+            Array with the dimensions of the 3D spatial from the simulation
+            of the emission measure c.g.s units.
+        """
+        en = self.get_var('ne') * self.uni.cm_to_m**3  # from SI to cgs. Note helita has a fac to convert from cgs to in SI.
+        rho = self.get_var('r')
+        nh = rho * self.uni.u_r / self.uni.grph
+
+        if axis == 0:
+            ds = self.dx1d * self.uni.uni['l']
+            oper = 'ijk,i->ijk'
+        elif axis == 1:
+            ds = self.dy1d * self.uni.uni['l']
+            oper = 'ijk,j->ijk'
+        else:
+            ds = self.dz1d * self.uni.uni['l']
+            oper = 'ijk,k->ijk'
+
+        nh = np.einsum(oper,nh,ds)
+
+        if (zcut is not None):
+            for iz in range(0, self.nz):
+                if self.z[iz] < zcut:
+                    izcut = iz
+            nh[:, :, izcut:] = 0.0
+        return en * (nh / unitsnorm)
+
     def get_hydrogen_pops(self, sx=slice(None), sy=slice(None), sz=slice(None)):
         """
         Gets hydrogen populations, or total number of hydrogen atoms,
