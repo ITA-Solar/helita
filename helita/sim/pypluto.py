@@ -6,6 +6,8 @@ import numpy as np
 import scipy.ndimage
 import scipy.interpolate
 from scipy.interpolate import UnivariateSpline
+import scipy.constants as ct
+
 #from matplotlib.pyplot import *
 #from matplotlib.mlab import *
 
@@ -17,255 +19,88 @@ except ImportError:
     hasH5 = False
 
 def curdir():
-	""" Get the current working directory.
-	"""
-        curdir = os.getcwd()+'/'
-        return curdir
+    """ Get the current working directory.
+    """
+    curdir = os.getcwd()+'/'
+    return curdir
 
 def get_nstepstr(ns):
-	""" Convert the float input *ns* into a string that would match the data file name.
-
-	**Inputs**:
-
-	 ns -- Integer number that represents the time step number. E.g., The ns for data.0001.dbl is 1.\n
-
-	**Outputs**:
-
-	 Returns the string that would be used to complete the data file name. E.g., for data.0001.dbl, ns = 1 and pyPLUTO.get_nstepstr(1) returns '0001'
-	 """
-	nstepstr = str(ns)
-	while len(nstepstr) < 4:
+    """ Convert the float input *ns* into a string that would match the data file name.
+    **Inputs**:
+    ns -- Integer number that represents the time step number. E.g., The ns for data.0001.dbl is 1.\n
+    **Outputs**:
+    Returns the string that would be used to complete the data file name. E.g., 
+    for data.0001.dbl, ns = 1 and pyPLUTO.get_nstepstr(1) returns '0001'
+    """
+    nstepstr = str(ns)
+    while len(nstepstr) < 4:
            nstepstr= '0'+nstepstr
-	return nstepstr
+    return nstepstr
 
 def nlast_info(w_dir=None,datatype=None):
-	""" Prints the information of the last step of the simulation as obtained from out files
+    """ Prints the information of the last step of the simulation as obtained from out files
 
-	**Inputs**:
-	
-	  w_dir -- path to the directory which has the dbl.out(or flt.out) and the data\n
-	  datatype -- If the data is of 'float' type then datatype = 'float' else by default the datatype is set to 'double'.
+    **Inputs**:
+    
+      w_dir -- path to the directory which has the dbl.out(or flt.out) and the data\n
+      datatype -- If the data is of 'float' type then datatype = 'float' else by default the datatype is set to 'double'.
 
         **Outputs**:
-	
-	  This function returns a dictionary with following keywords - \n
-
-	  nlast -- The ns for the last file saved.\n
-	  time -- The simulation time for the last file saved.\n
-	  dt -- The time step dt for the last file. \n
-	  Nstep -- The Nstep value for the last file saved.
-
-
-	**Usage**:
-	
-	  In case the data is 'float'.
-
-	  ``wdir = /path/to/data/directory``\n
-	  ``import pyPLUTO as pp``\n
-	  ``A = pp.nlast_info(w_dir=wdir,datatype='float')``	
-	"""
-	if w_dir is None: w_dir=curdir()
-	if datatype == 'float':
-		fname_v = w_dir+"flt.out"
-	elif datatype == 'vtk':
-		fname_v = w_dir+"vtk.out"
-	else:
-		fname_v = w_dir+"dbl.out"
-	last_line = file(fname_v,"r").readlines()[-1].split()
-	nlast = int(last_line[0])
-	SimTime =  float(last_line[1])
-	Dt = float(last_line[2])
-	Nstep = int(last_line[3])
-	    
-	print "------------TIME INFORMATION--------------"
-	print 'nlast =',nlast
-	print 'time  =',SimTime
-	print 'dt    =', Dt
-	print 'Nstep =',Nstep
-	print "-------------------------------------------"
-	    
-	return {'nlast':nlast,'time':SimTime,'dt':Dt,'Nstep':Nstep}
-
-
-class PlutoData(pload):
-    """
-    Class to read Pluto vtk or dbl atmosphere
-
-    Parameters
-    ----------
-    fdir : str, optional
-        Directory with snapshots.
-    rootname : str
-        rootname of the file (wihtout params or vars).
-    verbose : bool, optional
-        If True, will print more information.
-    it : integer 
-        snapshot number 
-    """
-    def __init__(self, rootname, it, fdir='./', datatype='dbl', verbose=True,*args, **kwargs):
-
-        super(EbysusData, self).__init__(w_dir=fdir,datatype=datatype, *args, **kwargs)
-
-        #self.rootname = rootname
-        self.fdir = fdir
-        self.it = it 
-        self.info = self.pload(it,w_dir=fdir,datatype=datatype)
-        self.x = self.info.x1
-        self.y = self.info.x2
-        self.z = self.info.x3
-        
-        self.dx = self.x-np.roll(self.x,1) 
-        self.dx[0] = self.dx[1]
-        
-        self.dy = self.y-np.roll(self.y,1) 
-        self.dy[0] = self.dy[1]
-        
-        self.dz = self.z-np.roll(self.z,1) 
-        self.dz[0] = self.dz[1]
-        
-        self.nx = len(self.x)
-        self.ny = len(self.y)
-        self.nz = len(self.z)
-        
-        #self.time =  params['time'] # No uniforme (array)
-        self.units()
-        self.genvar()
-
-    def get_var(self,var,it=None, iix=None, iiy=None, iiz=None, layout=None, cgs=True): 
-        '''
-        Reads the variables from a snapshot (it).
-
-        Parameters
-        ----------
-        var - string
-            Name of the variable to read. Must be Bifrost internal names.
-        it - integer, optional
-            Snapshot number to read. By default reads the loaded snapshot;
-            if a different number is requested, will load that snapshot.
-        cgs- logic 
-            converts into cgs units.         
-        Axes: 
-        -----
-            x-axis is along the loop
-            y and z axes are perperdicular to the loop
-        
-        Variable list: 
-        --------------
-            ro_cube       -- Density (multipy by self.uni['rho'] to get in g/cm^3)
-            te_cube       -- Temperature (multipy by self.uni['tg'] to get in K)
-            vx_cube       -- component x of the velocity (multipy by self.uni['u'] to get in cm/s) 
-            vy_cube       -- component y of the velocity (multipy by self.uni['u'] to get in cm/s)
-            vz_cube       -- component z of the velocity (multipy by self.uni['u'] to get in cm/s)
-            bx_cube       -- component x of the magnetic field (multipy by self.uni['b'] to get in G)
-            by_cube       -- component y of the magnetic field (multipy by self.uni['b'] to get in G)
-            bz_cube       -- component z of the magnetic field (multipy by self.uni['b'] to get in G) 
-        '''
-        if var == '':
-            print(help(self.get_var))
-            print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
-            for ii in self.varn: 
-                print('use ', ii,' for ',self.varn[ii])
-            return None
-        
-        if it != None: 
-            self.it = it
-       
-        if (cgs): 
-            varu=var.replace('x','')
-            varu=varu.replace('y','')
-            varu=varu.replace('z','')
-            if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-                cgsunits = self.uni[varu]
-            else: 
-                cgsunits = 1.0
-        else: 
-            cgsunits = 1.0
-        
-        if var in self.varn.keys(): 
-            self.data = getattr(self.info,self.varn[var]) * cgsunits
-            return self.data 
-        else:
-            print('This variable does not exists')
-            return None 
-
-    def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
-        '''
-        Computes emission meassure in cgs and normalized to unitsnorm
-        '''
-        rho = self.get_var('rho',it=iter,layout=layout) 
-        
-        nh = rho / (wght_per_h * ct.atomic_mass * 1e3)  # from rho to nH and added unitsnorm
-        if axis == 0:
-            ds = self.dx * self.uni['l']
-            oper = 'ijk,i->ijk'
-        elif axis == 1:
-            ds = self.dy * self.uni['l']
-            oper = 'ijk,j->ijk'
-        else:
-            ds = self.dz * self.uni['l']
-            oper = 'ijk,k->ijk'
-
-        print(np.shape(nh),oper,np.shape(ds))
-        en = nh + 2.*nh*(wght_per_h-1.) # this may need a better adjustment.             
-        nh = np.einsum(oper,nh,ds)
-
-        return en * (nh / unitsnorm)
     
-    def units(self): 
-        '''
-        Units and constants in cgs
-        '''
-        self.uni={}
-        self.uni['proton'] = 1.67262158e-24 #gr
-        self.uni['kboltz'] = 1.380658e-16 
-        self.uni['c']      = 299792.458 * 1e5 #cm/s
-        self.uni['gamma']  = 5./3.
-        self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
-        self.uni['tg']     = 1.0e6 # K
-        self.uni['l']      = 1.0e8 # cm 
-        self.uni['rho']    = 1.0e-15 # gr cm^-3 
-        self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
-        self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
-        self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss
-        self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
-        self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
-   
-    def genvar(self): 
-        '''
-        Dictionary of original variables which will allow to convert to cgs. 
-        '''
-        self.varn={}
-        self.varn['rho']= 'rho'
-        self.varn['pg'] = 'prs'
-        self.varn['ux'] = 'vx1'
-        self.varn['uy'] = 'vx2'
-        self.varn['uz'] = 'vx3'
-        self.varn['bx'] = 'bx1'
-        self.varn['by'] = 'bx2'
-        self.varn['bz'] = 'bx3'    
-        self.varn['jx'] = 'j1'
-        self.varn['jy'] = 'j2'
-        self.varn['jz'] = 'j3'   
-        self.varn['vortx'] = 'vort1'   
-        self.varn['vorty'] = 'vort2'   
-        self.varn['vortz'] = 'vort3'   
+      This function returns a dictionary with following keywords - \n
+        nlast -- The ns for the last file saved.\n
+        time -- The simulation time for the last file saved.\n
+        dt -- The time step dt for the last file. \n
+        Nstep -- The Nstep value for the last file saved.
+
+
+    **Usage**:
+    
+      In case the data is 'float'.
+
+      ``wdir = /path/to/data/directory``\n
+      ``import pyPLUTO as pp``\n
+      ``A = pp.nlast_info(w_dir=wdir,datatype='float')``    
+    """
+    if w_dir is None: w_dir=curdir()
+    if datatype == 'float':
+        fname_v = w_dir+"flt.out"
+    elif datatype == 'vtk':
+        fname_v = w_dir+"vtk.out"
+    else:
+        fname_v = w_dir+"dbl.out"
+    last_line = file(fname_v,"r").readlines()[-1].split()
+    nlast = int(last_line[0])
+    SimTime =  float(last_line[1])
+    Dt = float(last_line[2])
+    Nstep = int(last_line[3])
+        
+    print("------------TIME INFORMATION--------------")
+    print('nlast =',nlast)
+    print('time  =',SimTime)
+    print('dt    =', Dt)
+    print('Nstep =',Nstep)
+    print("-------------------------------------------")
+        
+    return {'nlast':nlast,'time':SimTime,'dt':Dt,'Nstep':Nstep}
+  
 
 
 class pload(object):
     def __init__(self, ns, w_dir=None, datatype=None, level = 0, x1range=None, x2range=None, x3range=None):
         """Loads the data.
-	
+
         **Inputs**:
-	  
+
           ns -- Step Number of the data file\n
-	  w_dir -- path to the directory which has the data files\n
+          w_dir -- path to the directory which has the data files\n
           datatype -- Datatype (default = 'double')
-	  
+  
         **Outputs**:
           
           pyPLUTO pload object whose keys are arrays of data values.
 
-	"""
+        """
         self.NStep = ns
         self.Dt = 0.0
 
@@ -293,8 +128,8 @@ class pload(object):
         self.datatype = datatype
 
         if ((not hasH5) and (datatype == 'hdf5')):
-            print 'To read AMR hdf5 files with python'
-            print 'Please install h5py (Python HDF5 Reader)'
+            print('To read AMR hdf5 files with python')
+            print('Please install h5py (Python HDF5 Reader)')
             return
 
         self.level = level
@@ -310,11 +145,11 @@ class pload(object):
     def ReadTimeInfo(self, timefile):
         """ Read time info from the outfiles.
 
-	**Inputs**:
-	  
-	  timefile -- name of the out file which has timing information. 
+        **Inputs**:
+      
+          timefile -- name of the out file which has timing information. 
 
-	"""
+        """
 
         if (self.datatype == 'hdf5'):
             fh5 = h5.File(timefile,'r') 
@@ -333,11 +168,11 @@ class pload(object):
     def ReadVarFile(self, varfile):
         """ Read variable names from the outfiles.
 
-	**Inputs**:
-	  
-	  varfile -- name of the out file which has variable information. 
+        **Inputs**:
+          
+          varfile -- name of the out file which has variable information. 
 
-	"""
+        """
         if (self.datatype == 'hdf5'):
             fh5 = h5.File(varfile,'r') 
             self.filetype = 'single_file' 
@@ -357,11 +192,11 @@ class pload(object):
     def ReadGridFile(self, gridfile):
         """ Read grid values from the grid.out file.
 
-	**Inputs**:
-	  
-	  gridfile -- name of the grid.out file which has information about the grid. 
+        **Inputs**:
+          
+          gridfile -- name of the grid.out file which has information about the grid. 
 
-	"""
+        """
         xL = []
         xR = []
         nmax = []
@@ -445,21 +280,21 @@ class pload(object):
 
     def DataScanVTK(self, fp, n1, n2, n3, endian, dtype):
         """ Scans the VTK data files. 
-	
+    
         **Inputs**:
-	
-	 fp -- Data file pointer\n
-	 n1 -- No. of points in X1 direction\n
-	 n2 -- No. of points in X2 direction\n
-	 n3 -- No. of points in X3 direction\n
-	 endian -- Endianess of the data\n
-	 dtype -- datatype 
-	 
+    
+         fp -- Data file pointer\n
+         n1 -- No. of points in X1 direction\n
+         n2 -- No. of points in X2 direction\n
+         n3 -- No. of points in X3 direction\n
+         endian -- Endianess of the data\n
+         dtype -- datatype 
+ 
         **Output**:
           
           Dictionary consisting of variable names as keys and its values. 
 
-	"""
+        """
         ks = []
         vtkvar = []
         while True:
@@ -499,11 +334,11 @@ class pload(object):
         """ Scans the Chombo HDF5 data files for AMR in PLUTO. 
         
         **Inputs**:
-		
+
           fp     -- Data file pointer\n
           myvars -- Names of the variables to read\n
           ilev   -- required AMR level
-		
+
         **Output**:
         
           Dictionary consisting of variable names as keys and its values. 
@@ -519,7 +354,7 @@ class pload(object):
         il = min(nlev-1,ilev)
         lev  = []
         for i in range(nlev):
-            lev.append('level_'+str(i))	    
+            lev.append('level_'+str(i))        
         freb = np.zeros(nlev,dtype='int')
         for i in range(il+1)[::-1]:
             fl = fp[lev[i]]
@@ -536,7 +371,7 @@ class pload(object):
                     elif (dim == 3):
                         zstr = fl.attrs.get('g_x3stretch')
                 except:
-                    print 'Old HDF5 file, not reading stretch and logr factors'
+                    print('Old HDF5 file, not reading stretch and logr factors')
                 freb[i] = 1
                 x1b = fl.attrs.get('domBeg1')
                 if (dim == 1):
@@ -583,7 +418,7 @@ class pload(object):
             kbeg0 = min(self.x3range)/dx0 ; kend0 = max(self.x3range)/dx0
             kbeg  = max([kbeg, int(kbeg0*freb[0])]) ; kend = min([kend,int(kend0*freb[0]-1)])
             nz = kend-kbeg+1
-	    
+    
         ## Create uniform grids at the required level
         if logr == 0:
             x1 = x1b + (ibeg+np.array(range(nx))+0.5)*dx
@@ -609,7 +444,7 @@ class pload(object):
                             ('x1r',x1r),('x2r',x2r),('x3r',x3r),\
                             ('dx1',dx1),('dx2',dx2),('dx3',dx3),\
                             ('Dt',dt)])
-	    
+    
         # Variables table
         nvar = len(myvars)
         vars = np.zeros((nx,ny,nz,nvar))
@@ -624,12 +459,12 @@ class pload(object):
             boxes = fl['boxes']
             nbox = len(boxes['lo_i'])
             AMRLevel[i]['nbox'] = nbox
-            ncount = 0L
+            ncount = long(0)
             AMRLevel[i]['box']=[]
             for j in range(nbox): # loop on all boxes of a given level
-                AMRLevel[i]['box'].append({'x0':0.,'x1':0.,'ib':0L,'ie':0L,\
-                                           'y0':0.,'y1':0.,'jb':0L,'je':0L,\
-                                           'z0':0.,'z1':0.,'kb':0L,'ke':0L})
+                AMRLevel[i]['box'].append({'x0':0.,'x1':0.,'ib':long(0),'ie':long(0),\
+                                           'y0':0.,'y1':0.,'jb':long(0),'je':long(0),\
+                                           'z0':0.,'z1':0.,'kb':long(0),'ke':long(0)})
                 # Box indexes
                 ib = boxes[j]['lo_i'] ; ie = boxes[j]['hi_i'] ; nbx = ie-ib+1
                 jb = 0 ; je = 0 ; nby = 1
@@ -643,7 +478,7 @@ class pload(object):
                 kb = kb*freb[i] ; ke = (ke+1)*freb[i] - 1
                 jb = jb*freb[i] ; je = (je+1)*freb[i] - 1
                 ib = ib*freb[i] ; ie = (ie+1)*freb[i] - 1
-	    		
+
                 # Skip boxes lying outside ranges
                 if ((ib > iend) or (ie < ibeg) or \
                     (jb > jend) or (je < jbeg) or \
@@ -658,7 +493,7 @@ class pload(object):
                     ib0 = max([ibeg,ib]) ; ie0 = min([iend,ie])
                     jb0 = max([jbeg,jb]) ; je0 = min([jend,je])
                     kb0 = max([kbeg,kb]) ; ke0 = min([kend,ke])
-	            
+            
                     ### Store box corners in the AMRLevel structure
                     if logr == 0:
                         AMRLevel[i]['box'][j]['x0'] = x1b + dx*(ib0)
@@ -700,7 +535,7 @@ class pload(object):
                         vars[ib0-ibeg:ie0-ibeg+1,jb0-jbeg:je0-jbeg+1,kb0-kbeg:ke0-kbeg+1,iv] = \
                             myT.congrid(q1[:,:,:,iv].squeeze(),new_shape,method='linear',minusone=True).reshape((ie0-ib0+1,je0-jb0+1,ke0-kb0+1))
                     ncount = ncount+szb
-	    
+    
         h5vardict={}
         for iv in range(nvar):
             h5vardict[myvars[iv]] = vars[:,:,:,iv].squeeze()
@@ -712,7 +547,7 @@ class pload(object):
 
     
     def DataScan(self, fp, n1, n2, n3, endian, dtype, off=None):
-	""" Scans the data files in all formats. 
+        """ Scans the data files in all formats. 
         
         **Inputs**:
           
@@ -723,12 +558,12 @@ class pload(object):
           endian -- Endianess of the data\n
           dtype -- datatype, eg : double, float, vtk, hdf5\n
           off -- offset (for avoiding staggered B fields) 
-	 
+ 
         **Output**:
          
           Dictionary consisting of variable names as keys and its values. 
 
-	"""
+        """
         if off is not None:
             off_fmt = endian+str(off)+dtype
             nboff = np.dtype(off_fmt).itemsize
@@ -757,11 +592,12 @@ class pload(object):
     def ReadSingleFile(self, datafilename, myvars, n1, n2, n3, endian,
                        dtype, ddict):
         """Reads a single data file, data.****.dtype.
-	
-        **Inputs**:	
+    
+        **Inputs**:    
 
           datafilename -- Data file name\n
-	  myvars -- List of variable names to be read\n
+          
+          myvars -- List of variable names to be read\n
           n1 -- No. of points in X1 direction\n
           n2 -- No. of points in X2 direction\n
           n3 -- No. of points in X3 direction\n
@@ -769,17 +605,17 @@ class pload(object):
           dtype -- datatype\n
           ddict -- Dictionary containing Grid and Time Information
           which is updated
-	 
+ 
         **Output**:
 
           Updated Dictionary consisting of variable names as keys and its values.
-	"""
+        """
         if self.datatype == 'hdf5':
             fp = h5.File(datafilename,'r')
         else:
             fp = open(datafilename, "rb")
         
-        print "Reading Data file : %s"%datafilename
+        print("Reading Data file : %s"%datafilename)
         
         if self.datatype == 'vtk':
             vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
@@ -808,11 +644,12 @@ class pload(object):
     def ReadMultipleFiles(self, nstr, dataext, myvars, n1, n2, n3, endian,
                           dtype, ddict):
         """Reads a  multiple data files, varname.****.dataext.
-	
+    
         **Inputs**:
-	  
+  
           nstr -- File number in form of a string\n
-	  dataext -- Data type of the file, e.g., 'dbl', 'flt' or 'vtk' \n
+          
+          dataext -- Data type of the file, e.g., 'dbl', 'flt' or 'vtk' \n
           myvars -- List of variable names to be read\n
           n1 -- No. of points in X1 direction\n
           n2 -- No. of points in X2 direction\n
@@ -821,12 +658,12 @@ class pload(object):
           dtype -- datatype\n
           ddict -- Dictionary containing Grid and Time Information
           which is updated.
-	 
+ 
         **Output**:
           
           Updated Dictionary consisting of variable names as keys and its values.
-	
-	"""
+
+        """
         for i in range(len(myvars)):
             datafilename = self.wdir+myvars[i]+"."+nstr+dataext
             fp = open(datafilename, "rb")
@@ -840,16 +677,16 @@ class pload(object):
     def ReadDataFile(self, num):
         """Reads the data file generated from PLUTO code.
 
-	**Inputs**:
-	
-	  num -- Data file number in form of an Integer.
+        **Inputs**:
+    
+          num -- Data file number in form of an Integer.
 
         **Outputs**:
-	
-	  Dictionary that contains all information about Grid, Time and 
-	  variables.
+    
+          Dictionary that contains all information about Grid, Time and 
+          variables.
 
-	"""
+        """
         gridfile = self.wdir+"grid.out"
         if self.datatype == "float":
             dtype = "f"
@@ -896,523 +733,719 @@ class pload(object):
             self.ReadMultipleFiles(nstr, dataext, self.vars, self.n1, self.n2,
                                    self.n3, endian, dtype, ddict)
         else:
-            print "Wrong file type : CHECK pluto.ini for file type."
-            print "Only supported are .dbl, .flt, .vtk, .hdf5"
+            print("Wrong file type : CHECK pluto.ini for file type.")
+            print("Only supported are .dbl, .flt, .vtk, .hdf5")
             sys.exit()
 
         return ddict
-      
+    
+    
+
+class PlutoData(object):
+    """
+    Class to read Pluto vtk or dbl atmosphere
+
+    Parameters
+    ----------
+    fdir : str, optional
+        Directory with snapshots.
+    rootname : str
+        rootname of the file (wihtout params or vars).
+    verbose : bool, optional
+        If True, will print more information.
+    it : integer 
+        snapshot number 
+    """
+    def __init__(self, rootname, it, fdir='./', datatype='dbl', verbose=True,*args, **kwargs):
+
+        #super(PlutoData, self).__init__(it, w_dir=fdir, datatype=datatype, *args, **kwargs)
+
+        #self.rootname = rootname
+        self.fdir = fdir
+        self.it = it 
+        self.info = pload(it,w_dir=fdir,datatype=datatype)
+        self.x = self.info.x1
+        self.y = self.info.x2
+        self.z = self.info.x3
+        
+        self.dx = self.x-np.roll(self.x,1) 
+        self.dx[0] = self.dx[1]
+        
+        self.dy = self.y-np.roll(self.y,1) 
+        self.dy[0] = self.dy[1]
+        
+        self.dz = self.z-np.roll(self.z,1) 
+        self.dz[0] = self.dz[1]
+        
+        self.nx = len(self.x)
+        self.ny = len(self.y)
+        self.nz = len(self.z)
+        
+        #self.time =  params['time'] # No uniforme (array)
+        self.units()
+        self.genvar()
+
+    def get_var(self,var,*args, it=None, iix=None, iiy=None, iiz=None, layout=None, cgs=True, **kwargs): 
+        '''
+        Reads the variables from a snapshot (it).
+
+        Parameters
+        ----------
+        var - string
+            Name of the variable to read. Must be Bifrost internal names.
+        it - integer, optional
+            Snapshot number to read. By default reads the loaded snapshot;
+            if a different number is requested, will load that snapshot.
+        cgs- logic 
+            converts into cgs units.         
+        Axes: 
+        -----
+            z-axis is along the loop
+            x and y axes are perperdicular to the loop
+        
+        Variable list: 
+        --------------
+            rho       -- Density (multipy by self.uni['rho'] to get in g/cm^3)
+            prs       -- pressure (multipy by self.uni['pg'] to get in cgs)
+            vx1       -- component x of the velocity (multipy by self.uni['u'] to get in cm/s) 
+            vx2       -- component y of the velocity (multipy by self.uni['u'] to get in cm/s)
+            vx3       -- component z of the velocity (multipy by self.uni['u'] to get in cm/s)
+            bx1       -- component x of the magnetic field (multipy by self.uni['b'] to get in G)
+            bx2       -- component y of the magnetic field (multipy by self.uni['b'] to get in G)
+            bx1       -- component z of the magnetic field (multipy by self.uni['b'] to get in G) 
+        '''
+        if var == '':
+            print(help(self.get_var))
+            print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
+            for ii in self.varn: 
+                print('use ', ii,' for ',self.varn[ii])
+            return None
+        
+        if it != None: 
+            self.it = it
+       
+        if (cgs): 
+            varu=var.replace('x','')
+            varu=varu.replace('y','')
+            varu=varu.replace('z','')
+            if (var in self.varn.keys()) and (varu in self.uni.keys()): 
+                cgsunits = self.uni[varu]
+            else: 
+                cgsunits = 1.0
+        else: 
+            cgsunits = 1.0            
+        
+        if var in self.varn.keys(): 
+            self.data = getattr(self.info,self.varn[var]) * cgsunits
+            return self.data 
+        else:
+            self.get_comp_vars(var, *args, it=it, iix=iix, iiy=iiy, iiz=iiz, layout=layout, cgs=cgs, **kwargs)
+            return self.data 
+
+   
+
+    def get_comp_vars(self, var, *args, it=None, iix=None, iiy=None, iiz=None, layout=None, cgs=True, **kwargs): 
+        '''
+        Computes composite variables. 
+        '''
+        if var == 'tg': 
+            
+            if (cgs): 
+                cgsunits = self.uni['tg']
+            else: 
+                cgsunits = 1.0
+            
+            rho=self.get_var('rho',it=it, cgs=False)
+            pres =  self.get_var('pg',it=it, cgs=False) 
+            self.data = self.get_var('rho',it=it, cgs=False) * self.get_var('pg',it=it, cgs=False) *  cgsunits
+        else: 
+            self.data = None
+           
+
+    def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
+        '''
+        Computes emission meassure in cgs and normalized to unitsnorm
+        '''
+        rho = self.get_var('rho',it=iter,layout=layout) 
+        
+        nh = rho / (wght_per_h * ct.atomic_mass * 1e3)  # from rho to nH and added unitsnorm
+        if axis == 0:
+            ds = self.dx * self.uni['l']
+            oper = 'ijk,i->ijk'
+        elif axis == 1:
+            ds = self.dy * self.uni['l']
+            oper = 'ijk,j->ijk'
+        else:
+            ds = self.dz * self.uni['l']
+            oper = 'ijk,k->ijk'
+
+        en = nh + 2.*nh*(wght_per_h-1.) # this may need a better adjustment.             
+        nh = np.einsum(oper,nh,ds)
+
+        return en * (nh / unitsnorm)
+    
+    def units(self): 
+        '''
+        Units and constants in cgs
+        '''
+        self.uni={}
+        self.uni['proton'] = 1.67262158e-24 #gr
+        self.uni['kboltz'] = 1.380658e-16 
+        self.uni['c']      = 299792.458 * 1e5 #cm/s
+        self.uni['gamma']  = 5./3.
+        self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
+        self.uni['tg']     = 1.0e6 # K
+        self.uni['l']      = 1.0e8 # cm 
+        self.uni['rho']    = 1.0e-15 # gr cm^-3 
+        self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
+        self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
+        self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss
+        self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
+        self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
+        self.uni['gr']     = 2.7e4 # solar gravity in cgs
+        self.uni['gc']     = self.uni['gr'] * self.uni['l'] / self.uni['u'] ** 2 # solar gravity in Code units. 
+        
+   
+    def genvar(self): 
+        '''
+        Dictionary of original variables which will allow to convert to cgs. 
+        '''
+        self.varn={}
+        self.varn['rho']= 'rho'
+        self.varn['pg'] = 'prs'
+        self.varn['ux'] = 'vx1'
+        self.varn['uy'] = 'vx2'
+        self.varn['uz'] = 'vx3'
+        self.varn['bx'] = 'bx1'
+        self.varn['by'] = 'bx2'
+        self.varn['bz'] = 'bx3'    
+        self.varn['jx'] = 'j1'
+        self.varn['jy'] = 'j2'
+        self.varn['jz'] = 'j3'   
+        self.varn['vortx'] = 'vort1'   
+        self.varn['vorty'] = 'vort2'   
+        self.varn['vortz'] = 'vort3' 
+    
 
 class Tools(object):
-	"""
-	
-	This Class has all the functions doing basic mathematical
-	operations to the vector or scalar fields.
-	It is called after pyPLUTO.pload object is defined.
-	
-	"""
+    """
+    
+    This Class has all the functions doing basic mathematical
+    operations to the vector or scalar fields.
+    It is called after pyPLUTO.pload object is defined.
+    
+    """
 
-	def deriv(self,Y,X=None):
-		"""
-		Calculates the derivative of Y with respect to X.
+    def deriv(self,Y,X=None):
+        """
+        Calculates the derivative of Y with respect to X.
 
-		**Inputs:**
+        **Inputs:**
 
-		  Y : 1-D array to be differentiated.\n
-		  X : 1-D array with len(X) = len(Y).\n
+          Y : 1-D array to be differentiated.\n
+          X : 1-D array with len(X) = len(Y).\n
 
-		  If X is not specified then by default X is chosen to be an equally spaced array having same number of elements
-		  as Y.
+          If X is not specified then by default X is chosen to be an equally spaced array having same number of elements
+          as Y.
 
                 **Outputs:**
 
                   This returns an 1-D array having the same no. of elements as Y (or X) and contains the values of dY/dX.
-		
-		"""
-		n = len(Y)
-		n2 = n-2
-		if X==None : X = np.arange(n)
-		Xarr = np.asarray(X,dtype='float')
-		Yarr = np.asarray(Y,dtype='float')
-		x12 = Xarr - np.roll(Xarr,-1)   #x1 - x2
-		x01 = np.roll(Xarr,1) - Xarr    #x0 - x1
-		x02 = np.roll(Xarr,1) - np.roll(Xarr,-1) #x0 - x2
-		DfDx = np.roll(Yarr,1) * (x12 / (x01*x02)) + Yarr * (1./x12 - 1./x01) - np.roll(Yarr,-1) * (x01 / (x02 * x12))
-		# Formulae for the first and last points:
+        
+        """
+        n = len(Y)
+        n2 = n-2
+        if X==None : X = np.arange(n)
+        Xarr = np.asarray(X,dtype='float')
+        Yarr = np.asarray(Y,dtype='float')
+        x12 = Xarr - np.roll(Xarr,-1)   #x1 - x2
+        x01 = np.roll(Xarr,1) - Xarr    #x0 - x1
+        x02 = np.roll(Xarr,1) - np.roll(Xarr,-1) #x0 - x2
+        DfDx = np.roll(Yarr,1) * (x12 / (x01*x02)) + Yarr * (1./x12 - 1./x01) - np.roll(Yarr,-1) * (x01 / (x02 * x12))
+        # Formulae for the first and last points:
 
-		DfDx[0] = Yarr[0] * (x01[1]+x02[1])/(x01[1]*x02[1]) - Yarr[1] * x02[1]/(x01[1]*x12[1]) + Yarr[2] * x01[1]/(x02[1]*x12[1])
-		DfDx[n-1] = -Yarr[n-3] * x12[n2]/(x01[n2]*x02[n2]) + Yarr[n-2]*x02[n2]/(x01[n2]*x12[n2]) - Yarr[n-1]*(x02[n2]+x12[n2])/(x02[n2]*x12[n2])
+        DfDx[0] = Yarr[0] * (x01[1]+x02[1])/(x01[1]*x02[1]) - Yarr[1] * x02[1]/(x01[1]*x12[1]) + Yarr[2] * x01[1]/(x02[1]*x12[1])
+        DfDx[n-1] = -Yarr[n-3] * x12[n2]/(x01[n2]*x02[n2]) + Yarr[n-2]*x02[n2]/(x01[n2]*x12[n2]) - Yarr[n-1]*(x02[n2]+x12[n2])/(x02[n2]*x12[n2])
 
-		return DfDx
-	
-	def Grad(self,phi,x1,x2,dx1,dx2,polar=False):
-		""" This method calculates the gradient of the 2D scalar phi.
+        return DfDx
+    
+    def Grad(self,phi,x1,x2,dx1,dx2,polar=False):
+        """ This method calculates the gradient of the 2D scalar phi.
 
                 **Inputs:**
 
                   phi -- 2D scalar whose gradient is to be determined.\n
-		  x1 -- The 'x' array\n
-		  x2 -- The 'y' array\n
+          x1 -- The 'x' array\n
+          x2 -- The 'y' array\n
                   dx1 -- The grid spacing in 'x' direction.\n
                   dx2 -- The grid spacing in 'y' direction.\n
-                  polar -- The keyword should be set to True inorder to estimate the Gradient in polar co-ordinates. By default it is set to False.
+                  polar -- The keyword should be set to True inorder to 
+                  estimate the Gradient in polar co-ordinates. By default 
+                  it is set to False.
                 
-		**Outputs:**
+        **Outputs:**
 
-                  This routine outputs a 3D array with shape = (len(x1),len(x2),2), such that [:,:,0] element corresponds to the gradient values of phi wrt to x1 and [:,:,1] are the gradient values of phi wrt to x2.
+                  This routine outputs a 3D array with shape = (len(x1),len(x2),2), 
+                  such that [:,:,0] element corresponds to the gradient values of 
+                  phi wrt to x1 and [:,:,1] are the gradient values of phi wrt to x2.
  
-		"""
-		(n1, n2) = phi.shape 
-		grad_phi = np.zeros(shape=(n1,n2,2))
-		h2 = np.ones(shape=(n1,n2))
-		if polar == True:
-			for j in range(n2):
-				h2[:,j] = x1
-		
-		for i in range(n1):
-			scrh1 = phi[i,:]
-			grad_phi[i,:,1] = self.deriv(scrh1,x2)/h2[i,:]
-		for j in range(n2):
-			scrh2 = phi[:,j]
-			grad_phi[:,j,0] = self.deriv(scrh2,x1)
+        """
+        (n1, n2) = phi.shape 
+        grad_phi = np.zeros(shape=(n1,n2,2))
+        h2 = np.ones(shape=(n1,n2))
+        if polar == True:
+            for j in range(n2):
+                h2[:,j] = x1
+        
+        for i in range(n1):
+            scrh1 = phi[i,:]
+            grad_phi[i,:,1] = self.deriv(scrh1,x2)/h2[i,:]
+        for j in range(n2):
+            scrh2 = phi[:,j]
+            grad_phi[:,j,0] = self.deriv(scrh2,x1)
 
-		return grad_phi
+        return grad_phi
 
-	def Div(self,u1,u2,x1,x2,dx1,dx2,geometry=None):
-		""" This method calculates the divergence of the 2D vector fields u1 and u2.
+    def Div(self,u1,u2,x1,x2,dx1,dx2,geometry=None):
+        """ This method calculates the divergence of the 2D vector fields u1 and u2.
 
                 **Inputs:**
 
                   u1 -- 2D vector along x1 whose divergence is to be determined.\n
                   u2 -- 2D vector along x2 whose divergence is to be determined.\n
-		  x1 -- The 'x' array\n
-		  x2 -- The 'y' array\n
+          x1 -- The 'x' array\n
+          x2 -- The 'y' array\n
                   dx1 -- The grid spacing in 'x' direction.\n
                   dx2 -- The grid spacing in 'y' direction.\n
-                  geometry -- The keyword *geometry* is by default set to 'cartesian'. It can be set to either one of the following : *cartesian*, *cylindrical*, *spherical* or *polar*. To calculate the divergence of the vector fields, respective geometric corrections are taken into account based on the value of this keyword.
+                  geometry -- The keyword *geometry* is by default set to 'cartesian'. 
+                  It can be set to either one of the following : *cartesian*, *cylindrical*,
+                  *spherical* or *polar*. To calculate the divergence of the vector 
+                  fields, respective geometric corrections are taken into account based
+                  on the value of this keyword.
 
                 **Outputs:**
 
-		  A 2D array with same shape as u1(or u2) having the values of divergence.
+          A 2D array with same shape as u1(or u2) having the values of divergence.
 
-		"""
-		(n1, n2) = u1.shape
-		Divergence = np.zeros(shape=(n1,n2))
-		du1 = np.zeros(shape=(n1,n2))
-		du2 = np.zeros(shape=(n1,n2))
+        """
+        (n1, n2) = u1.shape
+        Divergence = np.zeros(shape=(n1,n2))
+        du1 = np.zeros(shape=(n1,n2))
+        du2 = np.zeros(shape=(n1,n2))
 
-		A1 = np.zeros(shape=n1)
-		A2 = np.zeros(shape=n2)
+        A1 = np.zeros(shape=n1)
+        A2 = np.zeros(shape=n2)
 
-		dV1 = np.zeros(shape=(n1,n2))
-		dV2 = np.zeros(shape=(n1,n2))
+        dV1 = np.zeros(shape=(n1,n2))
+        dV2 = np.zeros(shape=(n1,n2))
 
-		if geometry == None : geometry = 'cartesian'
-		
-		#------------------------------------------------
-		#  define area and volume elements for the
-		#  different coordinate systems
-		#------------------------------------------------
+        if geometry == None : geometry = 'cartesian'
+        
+        #------------------------------------------------
+        #  define area and volume elements for the
+        #  different coordinate systems
+        #------------------------------------------------
 
-		if geometry == 'cartesian' :
-			A1[:] = 1.0
-			A2[:] = 1.0
-			dV1   = np.outer(dx1,A2)
-			dV2   = np.outer(A1,dx2)
+        if geometry == 'cartesian' :
+            A1[:] = 1.0
+            A2[:] = 1.0
+            dV1   = np.outer(dx1,A2)
+            dV2   = np.outer(A1,dx2)
 
-		if geometry == 'cylindrical' :
-			A1 = x1
-			A2[:] = 1.0
-			dV1 = np.meshgrid(x1*dx1,A2)[0].T*np.meshgrid(x1*dx1,A2)[1].T
-			for i in range(n1) : dV2[i,:] = dx2[:]
-		
-		if geometry == 'polar' :
-			A1    = x1
-			A2[:] = 1.0
-			dV1   = np.meshgrid(x1,A2)[0].T*np.meshgrid(x1,A2)[1].T
-			dV2   = np.meshgrid(x1,dx2)[0].T*np.meshgrid(x1,dx2)[1].T
+        if geometry == 'cylindrical' :
+            A1 = x1
+            A2[:] = 1.0
+            dV1 = np.meshgrid(x1*dx1,A2)[0].T*np.meshgrid(x1*dx1,A2)[1].T
+            for i in range(n1) : dV2[i,:] = dx2[:]
+        
+        if geometry == 'polar' :
+            A1    = x1
+            A2[:] = 1.0
+            dV1   = np.meshgrid(x1,A2)[0].T*np.meshgrid(x1,A2)[1].T
+            dV2   = np.meshgrid(x1,dx2)[0].T*np.meshgrid(x1,dx2)[1].T
 
-		if geometry == 'spherical' :
-			A1 = x1*x1
-			A2 = np.sin(x2)
-			for j in range(n2): dV1[:,j] = A1*dx1
-			dV2   = np.meshgrid(x1,np.sin(x2)*dx2)[0].T*np.meshgrid(x1,np.sin(x2)*dx2)[1].T
+        if geometry == 'spherical' :
+            A1 = x1*x1
+            A2 = np.sin(x2)
+            for j in range(n2): dV1[:,j] = A1*dx1
+            dV2   = np.meshgrid(x1,np.sin(x2)*dx2)[0].T*np.meshgrid(x1,np.sin(x2)*dx2)[1].T
 
-		# ------------------------------------------------
-		#              Make divergence
-		# ------------------------------------------------
-		
-		
-		for i in range(1,n1-1):
-			du1[i,:] = 0.5*(A1[i+1]*u1[i+1,:] - A1[i-1]*u1[i-1,:])/dV1[i,:]
-		for j in range(1,n2-1):
-			du2[:,j] = 0.5*(A2[j+1]*u2[:,j+1] - A2[j-1]*u2[:,j-1])/dV2[:,j]
+        # ------------------------------------------------
+        #              Make divergence
+        # ------------------------------------------------
+        
+        
+        for i in range(1,n1-1):
+            du1[i,:] = 0.5*(A1[i+1]*u1[i+1,:] - A1[i-1]*u1[i-1,:])/dV1[i,:]
+        for j in range(1,n2-1):
+            du2[:,j] = 0.5*(A2[j+1]*u2[:,j+1] - A2[j-1]*u2[:,j-1])/dV2[:,j]
 
-		Divergence = du1 + du2
-		return Divergence
+        Divergence = du1 + du2
+        return Divergence
 
 
 
-	def RTh2Cyl(self,R,Th,X1,X2):
-		""" This method does the transformation from spherical coordinates to cylindrical ones.
-		
+    def RTh2Cyl(self,R,Th,X1,X2):
+        """ This method does the transformation from spherical coordinates to cylindrical ones.
+        
                 **Inputs:**
 
                   R - 2D array of spherical radius coordinates.\n
-	          Th - 2D array of spherical theta-angle coordinates.\n
-		  X1 - 2D array of radial component of given vector\n
-		  X2 - 2D array of thetoidal component of given vector\n
+              Th - 2D array of spherical theta-angle coordinates.\n
+          X1 - 2D array of radial component of given vector\n
+          X2 - 2D array of thetoidal component of given vector\n
                 
-		**Outputs:**
+        **Outputs:**
 
                   This routine outputs two 2D arrays after transformation.
-				  
+                  
                 **Usage:**
 
                   ``import pyPLUTO as pp``\n
-		  ``import numpy as np``\n
+          ``import numpy as np``\n
                   ``D = pp.pload(0)``\n
-		  ``ppt=pp.Tools()``\n
+          ``ppt=pp.Tools()``\n
                   ``TH,R=np.meshgrid(D.x2,D.x1)``\n
-		  ``Br,Bz=ppt.RTh2Cyl(R,TH,D.bx1,D.bx2)``
+          ``Br,Bz=ppt.RTh2Cyl(R,TH,D.bx1,D.bx2)``
 
-                D.bx1 and D.bx2 should be vectors in spherical coordinates. After transformation (Br,Bz) corresponds to vector in cilindrical coordinates.
+                D.bx1 and D.bx2 should be vectors in spherical coordinates. After 
+                transformation (Br,Bz) corresponds to vector in cilindrical coordinates.
 
  
-		"""
-		Y1=X1*np.sin(Th)+X2*np.cos(Th)
-		Y2=X1*np.cos(Th)-X2*np.sin(Th)
-		return Y1,Y2
+        """
+        Y1=X1*np.sin(Th)+X2*np.cos(Th)
+        Y2=X1*np.cos(Th)-X2*np.sin(Th)
+        return Y1,Y2
 
 
 
 
-	def myInterpol(self,RR,N):
-		""" This method interpolates (linear interpolation) vector 1D vector RR to 1D N-length vector. Useful for stretched grid calculations. 
-		
+    def myInterpol(self,RR,N):
+        """ 
+        This method interpolates (linear interpolation) vector 1D vector RR 
+        to 1D N-length vector. Useful for stretched grid calculations. 
+        
                 **Inputs:**
 
                   RR - 1D array to interpolate.\n
-		  N  - Number of grids to interpolate to.\n
-				  
-		**Outputs:**
+          N  - Number of grids to interpolate to.\n
+                  
+        **Outputs:**
 
                   This routine outputs interpolated 1D array to the new grid (len=N).
-				  
+                  
                 **Usage:**
 
                   ``import pyPLUTO as pp``\n
-		  ``import numpy as np``\n
+          ``import numpy as np``\n
                   ``D = pp.pload(0)``\n
-		  ``ppt=pp.Tools()``\n
+          ``ppt=pp.Tools()``\n
                   ``x=linspace(0,1,10) #len(x)=10``\n
-		  ``y=x*x``\n
-		  ``Ri,Ni=ppt.myInterpol(y,100) #len(Ri)=100``
+          ``y=x*x``\n
+          ``Ri,Ni=ppt.myInterpol(y,100) #len(Ri)=100``
 
                   Ri - interpolated numbers;
-		  Ni - grid for Ri
+          Ni - grid for Ri
  
-		"""	
-		
-		NN=np.linspace(0,len(RR)-1,len(RR))
-		spline_fit=UnivariateSpline(RR,NN,k=3,s=0)
-		
-		RRi=np.linspace(RR[0],RR[-1],N)
-		NNi=spline_fit(RRi)
-		NNi[0]=NN[0]+0.00001
-		NNi[-1]=NN[-1]-0.00001
-		return RRi,NNi
-		
-	def getUniformGrid(self,r,th,rho,Nr,Nth):
-		""" This method transforms data with non-uniform grid (stretched) to uniform. Useful for stretched grid calculations. 
-		
+        """    
+        
+        NN=np.linspace(0,len(RR)-1,len(RR))
+        spline_fit=UnivariateSpline(RR,NN,k=3,s=0)
+        
+        RRi=np.linspace(RR[0],RR[-1],N)
+        NNi=spline_fit(RRi)
+        NNi[0]=NN[0]+0.00001
+        NNi[-1]=NN[-1]-0.00001
+        return RRi,NNi
+        
+    def getUniformGrid(self,r,th,rho,Nr,Nth):
+        """ 
+        This method transforms data with non-uniform grid (stretched) to 
+        uniform. Useful for stretched grid calculations. 
+        
                 **Inputs:**
 
-		  r  - 1D vector of X1 coordinate (could be any, e.g D.x1).\n
-		  th - 1D vector of X2 coordinate (could be any, e.g D.x2).\n
-		  rho- 2D array of data.\n
-		  Nr - new size of X1 vector.\n
-		  Nth- new size of X2 vector.\n
-				  
-		**Outputs:**
+          r  - 1D vector of X1 coordinate (could be any, e.g D.x1).\n
+          th - 1D vector of X2 coordinate (could be any, e.g D.x2).\n
+          rho- 2D array of data.\n
+          Nr - new size of X1 vector.\n
+          Nth- new size of X2 vector.\n
+                  
+        **Outputs:**
 
                   This routine outputs 2D uniform array Nr x Nth dimension
-				  
+                  
                 **Usage:**
 
                   ``import pyPLUTO as pp``\n
-		  ``import numpy as np``\n
+          ``import numpy as np``\n
                   ``D = pp.pload(0)``\n
-		  ``ppt=pp.Tools()``\n
-		  ``X1new, X2new, res = ppt.getUniformGrid(D.x1,D.x2,D.rho,20,30)``
+          ``ppt=pp.Tools()``\n
+          ``X1new, X2new, res = ppt.getUniformGrid(D.x1,D.x2,D.rho,20,30)``
 
                   X1new - X1 interpolated grid len(X1new)=20
-		  X2new - X2 interpolated grid len(X2new)=30
-		  res   - 2D array of interpolated variable
+          X2new - X2 interpolated grid len(X2new)=30
+          res   - 2D array of interpolated variable
  
-		"""	
+        """    
 
-		Ri,NRi=self.myInterpol(r,Nr)
-		Ra=np.int32(NRi);Wr=NRi-Ra
+        Ri,NRi=self.myInterpol(r,Nr)
+        Ra=np.int32(NRi);Wr=NRi-Ra
 
-		YY=np.ones([Nr,len(th)])
-		for i in range(len(th)):
-		      YY[:,i]=(1-Wr)*rho[Ra,i] + Wr*rho[Ra+1,i]
+        YY=np.ones([Nr,len(th)])
+        for i in range(len(th)):
+              YY[:,i]=(1-Wr)*rho[Ra,i] + Wr*rho[Ra+1,i]
 
-		THi,NTHi=self.myInterpol(th,Nth)
-		THa=np.int32(NTHi);Wth=NTHi-THa
+        THi,NTHi=self.myInterpol(th,Nth)
+        THa=np.int32(NTHi);Wth=NTHi-THa
 
-		ZZ=np.ones([Nr,Nth])
-		for i in range(Nr):
-		      ZZ[i,:]=(1-Wth)*YY[i,THa] + Wth*YY[i,THa+1]
+        ZZ=np.ones([Nr,Nth])
+        for i in range(Nr):
+              ZZ[i,:]=(1-Wth)*YY[i,THa] + Wth*YY[i,THa+1]
 
-		return Ri,THi,ZZ
-	
-        def sph2cyl(self,D,Dx,rphi=None,theta0=None):
-		""" This method transforms spherical data into cylindrical applying interpolation. Works for stretched grid as well, transforms poloidal (R-Theta) data by default. Fix theta and set rphi=True to get (R-Phi) transformation.
-				
-                **Inputs:**
+        return Ri,THi,ZZ
+    
+    def sph2cyl(self,D,Dx,rphi=None,theta0=None):
+        """ 
+        This method transforms spherical data into cylindrical 
+        applying interpolation. Works for stretched grid as well, 
+        transforms poloidal (R-Theta) data by default. Fix theta 
+        and set rphi=True to get (R-Phi) transformation.
+                
+         **Inputs:**
 
                   D  - structure  from 'pload' method.\n
-		  Dx - variable to be transformed (D.rho for example).\n
-				  
-		**Outputs:**
+          Dx - variable to be transformed (D.rho for example).\n
+                  
+        **Outputs:**
 
                   This routine outputs transformed (sph->cyl) variable and grid.
-				  
+                  
                 **Usage:**
 
                   ``import pyPLUTO as pp``\n
-		  ``import numpy as np``\n
+          ``import numpy as np``\n
                   ``D = pp.pload(0)``\n
-		  ``ppt=pp.Tools()``\n
-		  ``R,Z,res = ppt.sph2cyl(D,D.rho.transpose())``
+          ``ppt=pp.Tools()``\n
+          ``R,Z,res = ppt.sph2cyl(D,D.rho.transpose())``
 
                   R - 2D array with cylindrical radius values
-		  Z - 2D array with cylindrical Z values
-		  res - 2D array of transformed variable
+          Z - 2D array with cylindrical Z values
+          res - 2D array of transformed variable
  
-		"""	
-		
-		if rphi is None or rphi == False:
-		    rx=D.x1
-		    th=D.x2		    
-		else:
-                    rx=D.x1*np.sin(theta0)
-		    th=D.x3
-		    
-		rx,th,Dx=self.getUniformGrid(rx,th,Dx.T,200,200)
-		Dx=Dx.T
-		
-		if rphi is None or rphi == False:
+        """    
+        
+        if rphi is None or rphi == False:
+            rx=D.x1
+            th=D.x2            
+        else:
+            rx=D.x1*np.sin(theta0)
+            th=D.x3
+            
+        rx,th,Dx=self.getUniformGrid(rx,th,Dx.T,200,200)
+        Dx=Dx.T
+        
+        if rphi is None or rphi == False:
                     
-                    r0=np.min(np.sin(th)*rx[0])
-                    rN=rx[-1]
-                    dr=rN-r0
-                    z0=np.min(np.cos(th)*rN)
-                    zN=np.max(np.cos(th)*rN)
-                    dz=zN-z0
-                    dth=th[-1]-th[0]
-                    rl=np.int32(len(rx)*dr/(rx[-1]-rx[0]))  
-                    zl=np.int32(rl* dz/dr)
-                    thl=len(th)
-                    r=np.linspace(r0, rN, rl)
-                    z=np.linspace(z0, zN, zl)
-		else:
-                    r0=np.min([np.sin(th)*rx[0] , np.sin(th)*rx[-1]])
-                    rN=np.max([np.sin(th)*rx[0] , np.sin(th)*rx[-1]])
-                    dr=rN-r0
-                    z0=np.min(np.cos(th)*rN)
-                    zN=np.max(np.cos(th)*rN)
-                    dz=zN-z0
-                    dth=th[-1]-th[0]
-                    rl=np.int32(len(rx)*dr/(rx[-1]-rx[0]))  
-                    zl=np.int32(rl* dz/dr)
-                    thl=len(th)
-                    r=np.linspace(r0, rN, rl)
-                    z=np.linspace(z0, zN, zl)
+            r0=np.min(np.sin(th)*rx[0])
+            rN=rx[-1]
+            dr=rN-r0
+            z0=np.min(np.cos(th)*rN)
+            zN=np.max(np.cos(th)*rN)
+            dz=zN-z0
+            dth=th[-1]-th[0]
+            rl=np.int32(len(rx)*dr/(rx[-1]-rx[0]))  
+            zl=np.int32(rl* dz/dr)
+            thl=len(th)
+            r=np.linspace(r0, rN, rl)
+            z=np.linspace(z0, zN, zl)
+        else:
+            r0=np.min([np.sin(th)*rx[0] , np.sin(th)*rx[-1]])
+            rN=np.max([np.sin(th)*rx[0] , np.sin(th)*rx[-1]])
+            dr=rN-r0
+            z0=np.min(np.cos(th)*rN)
+            zN=np.max(np.cos(th)*rN)
+            dz=zN-z0
+            dth=th[-1]-th[0]
+            rl=np.int32(len(rx)*dr/(rx[-1]-rx[0]))  
+            zl=np.int32(rl* dz/dr)
+            thl=len(th)
+            r=np.linspace(r0, rN, rl)
+            z=np.linspace(z0, zN, zl)
                 
-                R,Z = np.meshgrid(r, z)
-		Rs = np.sqrt(R*R + Z*Z)
-		
-		
-		Th = np.arccos(Z/Rs)
-		kv_34=find(R<0)
-		Th.flat[kv_34]=2*np.pi - Th.flat[kv_34]
-		
-		
-		ddr=rx[1]-rx[0]
-		ddth=th[1]-th[0]
-		
-		Rs_copy=Rs.copy()
-		Th_copy=Th.copy()
-				
-		nR1=find(Rs<rx[0])  
-		Rs.flat[nR1]=rx[0] 
-		nR2=find(Rs>rN)
-		Rs.flat[nR2]=rN
-		
-		nTh1=find(Th>th[-1])
-		Th.flat[nTh1]=th[-1]
-		nTh2=find(Th<th[0])
-		Th.flat[nTh2]=th[0]
-		
-		
-		ra = ((len(rx)-1.001)/(np.max(Rs.flat)-np.min(Rs.flat)) *(Rs-np.min(Rs.flat)))  
-		tha = ((thl-1.001)/dth *(Th-th[0]))  
+        R,Z = np.meshgrid(r, z)
+        Rs = np.sqrt(R*R + Z*Z)
+        
+        
+        Th = np.arccos(Z/Rs)
+        kv_34=find(R<0)
+        Th.flat[kv_34]=2*np.pi - Th.flat[kv_34]
+        
+        
+        ddr=rx[1]-rx[0]
+        ddth=th[1]-th[0]
+        
+        Rs_copy=Rs.copy()
+        Th_copy=Th.copy()
+                
+        nR1=find(Rs<rx[0])  
+        Rs.flat[nR1]=rx[0] 
+        nR2=find(Rs>rN)
+        Rs.flat[nR2]=rN
+        
+        nTh1=find(Th>th[-1])
+        Th.flat[nTh1]=th[-1]
+        nTh2=find(Th<th[0])
+        Th.flat[nTh2]=th[0]
+        
+        
+        ra = ((len(rx)-1.001)/(np.max(Rs.flat)-np.min(Rs.flat)) *(Rs-np.min(Rs.flat)))  
+        tha = ((thl-1.001)/dth *(Th-th[0]))  
 
-		rn = np.int32(ra)
-		thn = np.int32(tha)
-		dra=ra-rn
-		dtha=tha-thn
-		w1=1-dra
-		w2=dra
-		w3=1-dtha
-		w4=dtha
-		lrx=len(rx)
-		NN1=np.int32(rn+thn*lrx)
-		NN2=np.int32((rn+1)+thn*lrx)
-		NN3=np.int32(rn+(thn+1)*lrx)
-		NN4=np.int32((rn+1)+(thn+1)*lrx)
-		n=np.transpose(np.arange(0,np.product(np.shape(R))))
-		DD=Dx.copy()
-		F=R.copy()
-		F.flat[n]=w1.flat[n]*(w3.flat[n]*Dx.flat[NN1.flat[n]] + w4.flat[n]*Dx.flat[NN3.flat[n]] )+\
-		    w2.flat[n]*(w3.flat[n]*Dx.flat[NN2.flat[n]] + w4.flat[n]*Dx.flat[NN4.flat[n]] )
-		    
-		nR1=find(Rs_copy<rx[0]-ddr/1.5)
-		nR2=find(Rs_copy>rN+ddr/1.5)
-		nTh1=find(Th_copy>th[-1]+ddth/1.5)
-		nTh2=find(Th_copy<th[0]-ddth/1.5)
+        rn = np.int32(ra)
+        thn = np.int32(tha)
+        dra=ra-rn
+        dtha=tha-thn
+        w1=1-dra
+        w2=dra
+        w3=1-dtha
+        w4=dtha
+        lrx=len(rx)
+        NN1=np.int32(rn+thn*lrx)
+        NN2=np.int32((rn+1)+thn*lrx)
+        NN3=np.int32(rn+(thn+1)*lrx)
+        NN4=np.int32((rn+1)+(thn+1)*lrx)
+        n=np.transpose(np.arange(0,np.product(np.shape(R))))
+        DD=Dx.copy()
+        F=R.copy()
+        F.flat[n]=w1.flat[n]*(w3.flat[n]*Dx.flat[NN1.flat[n]] + w4.flat[n]*Dx.flat[NN3.flat[n]] )+\
+            w2.flat[n]*(w3.flat[n]*Dx.flat[NN2.flat[n]] + w4.flat[n]*Dx.flat[NN4.flat[n]] )
+            
+        nR1=find(Rs_copy<rx[0]-ddr/1.5)
+        nR2=find(Rs_copy>rN+ddr/1.5)
+        nTh1=find(Th_copy>th[-1]+ddth/1.5)
+        nTh2=find(Th_copy<th[0]-ddth/1.5)
 
-		nmask=np.concatenate((nR1,nR2,nTh1,nTh2))
-		F.flat[nmask]=np.nan;
-		return R,Z,F
+        nmask=np.concatenate((nR1,nR2,nTh1,nTh2))
+        F.flat[nmask]=np.nan;
+        return R,Z,F
         
 
-	def congrid(self, a, newdims, method='linear', centre=False, minusone=False):
-	    """
-	    Arbitrary resampling of source array to new dimension sizes.
-	    Currently only supports maintaining the same number of dimensions.
-	    To use 1-D arrays, first promote them to shape (x,1).
+    def congrid(self, a, newdims, method='linear', centre=False, minusone=False):
+        """
+        Arbitrary resampling of source array to new dimension sizes.
+        Currently only supports maintaining the same number of dimensions.
+        To use 1-D arrays, first promote them to shape (x,1).
 
-	    Uses the same parameters and creates the same co-ordinate lookup points
-	    as IDL''s congrid routine, which apparently originally came from a VAX/VMS
-	    routine of the same name.
+        Uses the same parameters and creates the same co-ordinate lookup points
+        as IDL''s congrid routine, which apparently originally came from a VAX/VMS
+        routine of the same name.
 
-	    **Inputs:**
+        **Inputs:**
 
-	      a -- The 2D array that needs resampling into new dimensions.\n
-	      newdims -- A tuple which represents the shape of the resampled data\n
-	      method -- This keyword decides the method used for interpolation.\n
-	        neighbour - closest value from original data\n
-	        nearest and linear - uses n x 1-D interpolations using scipy.interpolate.interp1d
-	        (see Numerical Recipes for validity of use of n 1-D interpolations)\n
-	        spline - uses ndimage.map_coordinates\n
-	      centre -- This keyword decides the positions of interpolation points.\n
-	        True - interpolation points are at the centres of the bins\n
-	        False - points are at the front edge of the bin\n
-	      minusone -- This prevents extrapolation one element beyond bounds of input array\n
-	        For example- inarray.shape = (i,j) & new dimensions = (x,y)\n
-	        False - inarray is resampled by factors of (i/x) * (j/y)\n
-	        True - inarray is resampled by(i-1)/(x-1) * (j-1)/(y-1)\n
+          a -- The 2D array that needs resampling into new dimensions.\n
+          newdims -- A tuple which represents the shape of the resampled data\n
+          method -- This keyword decides the method used for interpolation.\n
+            neighbour - closest value from original data\n
+            nearest and linear - uses n x 1-D interpolations using scipy.interpolate.interp1d
+            (see Numerical Recipes for validity of use of n 1-D interpolations)\n
+            spline - uses ndimage.map_coordinates\n
+          centre -- This keyword decides the positions of interpolation points.\n
+            True - interpolation points are at the centres of the bins\n
+            False - points are at the front edge of the bin\n
+          minusone -- This prevents extrapolation one element beyond bounds of input array\n
+            For example- inarray.shape = (i,j) & new dimensions = (x,y)\n
+            False - inarray is resampled by factors of (i/x) * (j/y)\n
+            True - inarray is resampled by(i-1)/(x-1) * (j-1)/(y-1)\n
 
             **Outputs:**
 
               A 2D array with resampled data having a shape corresponding to newdims. 
-	    
-	    """
-	    if not a.dtype in [np.float64, np.float32]:
-		a = np.cast[float](a)
-
-	    m1 = np.cast[int](minusone)
-	    ofs = np.cast[int](centre) * 0.5
-	    old = np.array( a.shape )
-	    ndims = len( a.shape )
-	    if len( newdims ) != ndims:
-		print "[congrid] dimensions error. " \
-		      "This routine currently only support " \
-		      "rebinning to the same number of dimensions."
-		return None
-	    newdims = np.asarray( newdims, dtype=float )
-	    dimlist = []
-
-	    if method == 'neighbour':
-		for i in range( ndims ):
-		    base = np.indices(newdims)[i]
-		    dimlist.append( (old[i] - m1) / (newdims[i] - m1) \
-				    * (base + ofs) - ofs )
-		cd = np.array( dimlist ).round().astype(int)
-		newa = a[list( cd )]
-		return newa
-
-	    elif method in ['nearest','linear']:
-		# calculate new dims
-		for i in range( ndims ):
-		    base = np.arange( newdims[i] )
-		    dimlist.append( (old[i] - m1) / (newdims[i] - m1) \
-				    * (base + ofs) - ofs )
-		# specify old dims
-		olddims = [np.arange(i, dtype = np.float) for i in list( a.shape )]
-
-		# first interpolation - for ndims = any
-		mint = scipy.interpolate.interp1d( olddims[-1], a, kind=method )
-		newa = mint( dimlist[-1] )
-
-		trorder = [ndims - 1] + range( ndims - 1 )
-		for i in range( ndims - 2, -1, -1 ):
-		    newa = newa.transpose( trorder )
-
-		    mint = scipy.interpolate.interp1d( olddims[i], newa, kind=method )
-		    newa = mint( dimlist[i] )
-
-		if ndims > 1:
-		    # need one more transpose to return to original dimensions
-		    newa = newa.transpose( trorder )
-
-		return newa
-	    elif method in ['spline']:
-		oslices = [ slice(0,j) for j in old ]
-		oldcoords = np.ogrid[oslices]
-		nslices = [ slice(0,j) for j in list(newdims) ]
-		newcoords = np.mgrid[nslices]
-
-		newcoords_dims = range(n.rank(newcoords))
-		#make first index last
-		newcoords_dims.append(newcoords_dims.pop(0))
-		newcoords_tr = newcoords.transpose(newcoords_dims)
-		# makes a view that affects newcoords
-
-		newcoords_tr += ofs
-
-		deltas = (np.asarray(old) - m1) / (newdims - m1)
-		newcoords_tr *= deltas
-
-		newcoords_tr -= ofs
-
-		newa = scipy.ndimage.map_coordinates(a, newcoords)
-		return newa
-	    else:
-		print "Congrid error: Unrecognized interpolation type.\n", \
-		      "Currently only \'neighbour\', \'nearest\',\'linear\',", \
-		      "and \'spline\' are supported."
-		return None
-
-
         
+        """
+        if not a.dtype in [np.float64, np.float32]:
+            a = np.cast[float](a)
 
+        m1 = np.cast[int](minusone)
+        ofs = np.cast[int](centre) * 0.5
+        old = np.array( a.shape )
+        ndims = len( a.shape )
+        if len( newdims ) != ndims:
+            print("[congrid] dimensions error. ")
+            print("This routine currently only support ")
+            print("rebinning to the same number of dimensions.")
+            return None
+        newdims = np.asarray( newdims, dtype=float )
+        dimlist = []
 
+        if method == 'neighbour':
+            for i in range( ndims ):
+                base = np.indices(newdims)[i]
+                dimlist.append( (old[i] - m1) / (newdims[i] - m1) \
+                        * (base + ofs) - ofs )
+            cd = np.array( dimlist ).round().astype(int)
+            newa = a[list( cd )]
+            return newa
 
+        elif method in ['nearest','linear']:
+            # calculate new dims
+            for i in range( ndims ):
+                base = np.arange( newdims[i] )
+                dimlist.append( (old[i] - m1) / (newdims[i] - m1) \
+                    * (base + ofs) - ofs )
+        # specify old dims
+        olddims = [np.arange(i, dtype = np.float) for i in list( a.shape )]
 
+        # first interpolation - for ndims = any
+        mint = scipy.interpolate.interp1d( olddims[-1], a, kind=method )
+        newa = mint( dimlist[-1] )
 
+        trorder = [ndims - 1] + range( ndims - 1 )
+        for i in range( ndims - 2, -1, -1 ):
+            newa = newa.transpose( trorder )
+
+            mint = scipy.interpolate.interp1d( olddims[i], newa, kind=method )
+            newa = mint( dimlist[i] )
+
+        if ndims > 1:
+            # need one more transpose to return to original dimensions
+            newa = newa.transpose( trorder )
+
+            return newa
+        elif method in ['spline']:
+            oslices = [ slice(0,j) for j in old ]
+            oldcoords = np.ogrid[oslices]
+            nslices = [ slice(0,j) for j in list(newdims) ]
+            newcoords = np.mgrid[nslices]
+
+            newcoords_dims = range(n.rank(newcoords))
+            #make first index last
+            newcoords_dims.append(newcoords_dims.pop(0))
+            newcoords_tr = newcoords.transpose(newcoords_dims)
+            # makes a view that affects newcoords
+
+            newcoords_tr += ofs
+
+            deltas = (np.asarray(old) - m1) / (newdims - m1)
+            newcoords_tr *= deltas
+
+            newcoords_tr -= ofs
+
+            newa = scipy.ndimage.map_coordinates(a, newcoords)
+            return newa
+        else:
+            print("Congrid error: Unrecognized interpolation type.\n")
+            print("Currently only \'neighbour\', \'nearest\',\'linear\',")
+            print("and \'spline\' are supported.")
+            return None
 
 
 
 class Image(object):
     ''' This Class has all the routines for the imaging the data
-	and plotting various contours and fieldlines on these images.
-	CALLED AFTER pyPLUTO.pload object is defined
-	'''
+    and plotting various contours and fieldlines on these images.
+    CALLED AFTER pyPLUTO.pload object is defined
+    '''
     def pldisplay(self, D, var,**kwargs):
         """ This method allows the user to display a 2D data using the 
         matplotlib's pcolormesh.
@@ -1478,10 +1511,10 @@ class Image(object):
     def multi_disp(self,*args,**kwargs):
         mvar = []
         for arg in args:
-            mvar.append(arg.T)    		
+            mvar.append(arg.T)            
         
         xmin = np.min(kwargs.get('x1'))
-        xmax = np.max(kwargs.get('x1'))		
+        xmax = np.max(kwargs.get('x1'))        
         ymin = np.min(kwargs.get('x2'))
         ymax = np.max(kwargs.get('x2'))
         mfig = figure(kwargs.get('fignum',1),figsize=kwargs.get('figsize',[10,10]))
@@ -1576,7 +1609,7 @@ class Image(object):
         The field points are obtained from the method field_line.
 
         **Inputs:**
-		
+        
           var1 -- 2D Vector field in X direction\n
           var2 -- 2D Vector field in Y direction\n
           x -- 1D X array\n
@@ -1684,7 +1717,7 @@ class Image(object):
           False -- plots the fieldlines obtained from the field_line routine. (Default option)
           
         *Optional Keywords:*
-		
+        
           colors -- A list of matplotlib colors to represent the lines. The length of this list should be same as that of x0arr.\n
           lw -- Integer value that determines the linewidth of each line.\n
           ls -- Determines the linestyle of each line.
@@ -1701,8 +1734,8 @@ class Image(object):
           ``I = pp.Image()``\n
           ``I.myfieldlines(D,x0arr,y0arr,colors='k',ls='--',lw=1.0)``
         """
-	       
-        if len(x0arr) != len(y0arr) : print "Input Arrays should have same size"
+           
+        if len(x0arr) != len(y0arr) : print("Input Arrays should have same size")
         QxList=[]
         QyList=[]
         StreamFunction = []
@@ -1714,7 +1747,7 @@ class Image(object):
                 nx = np.abs(X[0,:]-x0arr[i]).argmin()
                 ny = np.abs(X[:,0]-y0arr[i]).argmin()
                 levels.append(X[ny,nx]*Data.Ax3.T[ny,nx])
-			
+            
             contour(X,Y,StreamFunction,levels,colors=kwargs.get('colors'),linewidths=kwargs.get('lw',1),linestyles=kwargs.get('ls','solid'))
         else:
             for i in range(len(x0arr)):
@@ -1733,8 +1766,8 @@ class Image(object):
           datatype -- If the data is of 'float' type then datatype = 'float' else by default the datatype is set to 'double'.
 
         *Optional Keywords*:
-	    
-	  rphi -- [Default] is set to False implies that the r-theta plane is transformed. If set True then the r-phi plane is transformed.\n
+        
+          rphi -- [Default] is set to False implies that the r-theta plane is transformed. If set True then the r-phi plane is transformed.\n
           x2cut -- Applicable for 3D data and it determines the co-ordinate of the x2 plane while r-phi is set to True.\n
           x3cut -- Applicable for 3D data and it determines the co-ordinate of the x3 plane while r-phi is set to False.
         
@@ -1743,7 +1776,7 @@ class Image(object):
         Tool = Tools()
         key_value_pairs = []
         allvars = []
-        if w_dir is None: w_dir = curdir()		    
+        if w_dir is None: w_dir = curdir()            
         for v in Data.vars:
             allvars.append(v)
             
@@ -1752,7 +1785,7 @@ class Image(object):
             if Data.n3 != 1:
                 for variable in allvars:
                     key_value_pairs.append([variable,getattr(Data,variable)[:,kwargs.get('x2cut',0),:].T])
-			
+            
                 SphData = dict(key_value_pairs)
                 if ('bx1' in allvars) or ('bx2' in allvars):
                     (SphData['b1c'],SphData['b3c']) = Tool.RTh2Cyl(R,TH,SphData.get('bx1'),SphData.get('bx3'))
@@ -1763,7 +1796,7 @@ class Image(object):
                     allvars.append('v1c')
                     allvars.append('v3c')
             else:
-                print "No x3 plane for 2D data"
+                print("No x3 plane for 2D data")
         else:
             R,TH = np.meshgrid(Data.x1,Data.x2)
             if Data.n3 != 1:
@@ -1827,7 +1860,7 @@ class Image(object):
         elif ang_coord is D.x3:
             x2r = D.x3r
         else:
-            print "Angular co-ordinate must be given"
+            print("Angular co-ordinate must be given")
             
         rcos = np.outer(np.cos(x2r), D.x1r)
         rsin = np.outer(np.sin(x2r), D.x1r)        
@@ -1842,7 +1875,9 @@ class Image(object):
         return xx, yy
 
     def pltSphData(self,Data,w_dir=None,datatype=None,**kwargs):
-        """This method plots the transformed data obtained from getSphData using the matplotlib's imshow
+        """
+        This method plots the transformed data obtained from 
+        getSphData using the matplotlib's imshow
         
         **Inputs:**
         
@@ -1854,7 +1889,7 @@ class Image(object):
           
           plvar -- A string which represents the plot variable.\n
 
-	*Optional Keywords*:
+        *Optional Keywords*:
 
           logvar -- [Default = False] Set it True for plotting the log of a variable.\n
           rphi -- [Default = False - for plotting in r-theta plane] Set it True for plotting the variable in r-phi plane. 
@@ -1878,27 +1913,27 @@ class Image(object):
         if maxPl>-minPl:
             minPl=-maxPl
         else:
-            maxPl=-minPl	  
+            maxPl=-minPl      
         if (normrange and kwargs.get('plvar')!='rho' and kwargs.get('plvar')!='prs'):
             SphData[kwargs.get('plvar')][-1][-1]=maxPl
             SphData[kwargs.get('plvar')][-1][-2]=minPl
     
         if (kwargs.get('logvar') == True):
             SphData[kwargs.get('plvar')] = np.log10(SphData[kwargs.get('plvar')])
-	
+    
         imshow(SphData[kwargs.get('plvar')], aspect='equal', origin='lower', cmap=cm.jet,extent=extent, interpolation='nearest')
 
 
 
-	
+    
 
-	
-		
-		
+    
+        
+        
 
 
 
-	
+    
 
 
       
@@ -1906,22 +1941,22 @@ class Image(object):
 
 
 
-		    
+            
 
-	    
-    
-	    
-	    
-	    
-	    
-	    
-	    
-
-
-
-	
         
-	  
+    
+        
+        
+        
+        
+        
+        
+
+
+
+    
+        
+      
 
 
 
