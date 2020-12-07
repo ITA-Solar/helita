@@ -22,18 +22,18 @@ class Matsumotosav:
     def __init__(self, rootname, it, fdir='./', verbose=True):
         self.fdir     = fdir        
         self.rootname = rootname
-        savefile = rsav(fdir+rootname+'{:06d}'.format(it)+'.sav')
+        self.savefile = rsav(fdir+rootname+'{:06d}'.format(it)+'.sav')
         self.it       = it
-        self.time     = savefile['v']['time']
-        self.grav     = savefile['v']['gx']
-        self.gamma    = savefile['v']['gm']
-        self.x       = savefile['v']['x']/1e8 # Mm
-        self.y       = savefile['v']['y']/1e8
-        self.z       = savefile['v']['z']/1e8
+        self.time     = self.savefile['v']['time'][0]
+        self.grav     = self.savefile['v']['gx'][0]
+        self.gamma    = self.savefile['v']['gm'][0]
+        self.x        = self.savefile['v']['x'][0]/1e8 # Mm
+        self.y        = self.savefile['v']['y'][0]/1e8
+        self.z        = self.savefile['v']['z'][0]/1e8
         
-        self.dx       = savefile['v']['dx']/1e8
-        self.dy       = savefile['v']['dy']/1e8
-        self.dz       = savefile['v']['dz']/1e8
+        self.dx       = self.savefile['v']['dx'][0]/1e8
+        self.dy       = self.savefile['v']['dy'][0]/1e8
+        self.dz       = self.savefile['v']['dz'][0]/1e8
         
         self.nx = len(self.x)
         self.ny = len(self.y)
@@ -79,9 +79,11 @@ class Matsumotosav:
             for ii in self.varn: 
                 print('use ', ii,' for ',self.varn[ii])
             return None
-        
+
+
         if it != None: 
             self.it = it
+            self.savefile = rsav(self.fdir+self.rootname+'{:06d}'.format(self.it)+'.sav')
         
         if (cgs): 
             varu=var.replace('x','')
@@ -98,11 +100,10 @@ class Matsumotosav:
             varname=self.varn[var]
         else:
             varname=var
-            
-        varfile = rsav(self.fdir+'{:03d}'.format(self.it)+'.sav')
-        self.data = varfile['d'][varname][0] * cgsunits
+
+        self.data = self.savefile['v'][varname][0] * cgsunits
                         
-        return self.data
+        return self.data.T
 
     def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
         
