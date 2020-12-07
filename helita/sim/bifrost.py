@@ -892,16 +892,14 @@ class BifrostData(object):
         nh = rho * self.uni.u_r / self.uni.grph
 
         if axis == 0:
-            ds = self.dx1d * self.uni.uni['l']
-            oper = 'ijk,i->ijk'
+            ds = self.dx * self.uni.uni['l']
+            nh *= ds
         elif axis == 1:
-            ds = self.dy1d * self.uni.uni['l']
-            oper = 'ijk,j->ijk'
+            ds = self.dy * self.uni.uni['l']
+            nh *= ds
         else:
             ds = self.dz1d * self.uni.uni['l']
-            oper = 'ijk,k->ijk'
-
-        nh = np.einsum(oper,nh,ds)
+            nh = np.einsum('ijk,k->ijk',nh,ds)
 
         if (zcut is not None):
             for iz in range(0, self.nz):
