@@ -25,6 +25,7 @@ class MuramAtmos:
                  big_endian=False, prim=False):
         self.prim = prim
         self.fdir = fdir
+        self.verbose = verbose
         # endianness and data type
         if big_endian:
             self.dtype = '>' + dtype
@@ -33,8 +34,10 @@ class MuramAtmos:
         self.read_header("%s/Header%s" % (fdir, template))
         #self.read_atmos(fdir, template)
         self.units()
-        self.snap = 0
+        self.snap = int(template[1:])
+        self.filename=''
         self.siter = template
+        self.file_root = template
         self.genvar()
         
     def read_header(self, headerfile):
