@@ -66,7 +66,7 @@ class Laresav:
         Axes: 
         -----
             x and y axes horizontal plane
-            z-axis is vertical plane
+            z-axis is vertical axis
         
         Variable list: 
         --------------
@@ -156,8 +156,8 @@ class Laresav:
         self.uni['c']      = 299792.458 * 1e5 #cm/s
         self.uni['gamma']  = 5./3.
         self.uni['tg']     = 5.77e9 # K
-        self.uni['l']      = 1.0e6 # Mm -> cm
-        self.uni['rho']      = 1.67e-9 # gr cm^-3 
+        self.uni['l']      = 1.0e8 # Mm -> cm
+        self.uni['rho']    = 1.67e-9 # gr cm^-3 
         self.uni['n']      = self.uni['rho'] / self.uni['proton']/ 2. # cm^-3
         self.uni['u']      = 6.9e8 # cm/s
         self.uni['b']      = 100.0 # Gauss
