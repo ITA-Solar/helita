@@ -19,18 +19,18 @@ class Laresav:
     def __init__(self, it, fdir='./', verbose=True):
 
         self.fdir     = fdir        
-        savefile = rsav(self.fdir+'{:03d}'.format(it)+'.sav')
-        self.rootname = savefile['d']['filename'][0]
+        self.savefile = rsav(self.fdir+'{:03d}'.format(it)+'.sav')
+        self.rootname = self.savefile['d']['filename'][0]
         self.it       = it
-        self.time     = savefile['d']['time'][0]
-        self.time_prev= savefile['d']['time_prev'][0]
-        self.timestep = savefile['d']['timestep'][0]
-        self.dt       = savefile['d']['dt'][0]
-        self.visc_heating= savefile['d']['visc_heating'][0]
-        self.visc3_heating= savefile['d']['visc3_heating'][0]
-        self.x       = savefile['d']['x'][0]
-        self.y       = savefile['d']['y'][0]
-        self.z       = savefile['d']['z'][0]
+        self.time     = self.savefile['d']['time'][0]
+        self.time_prev= self.savefile['d']['time_prev'][0]
+        self.timestep = self.savefile['d']['timestep'][0]
+        self.dt       = self.savefile['d']['dt'][0]
+        self.visc_heating= self.savefile['d']['visc_heating'][0]
+        self.visc3_heating= self.savefile['d']['visc3_heating'][0]
+        self.x       = self.savefile['d']['x'][0]
+        self.y       = self.savefile['d']['y'][0]
+        self.z       = self.savefile['d']['z'][0]
 
         self.dx = self.x-np.roll(self.x,1) 
         self.dx[0] = self.dx[1]
@@ -66,7 +66,7 @@ class Laresav:
         Axes: 
         -----
             x and y axes horizontal plane
-            z-axis is vertical axis
+            z-axis is vertical axis, top corona is last index and positive. 
         
         Variable list: 
         --------------
@@ -93,8 +93,10 @@ class Laresav:
                 print('use ', ii,' for ',self.varn[ii])
             return None
         
+
         if it != None: 
             self.it = it
+            self.savefile = rsav(self.fdir+self.rootname+'{:06d}'.format(self.it)+'.sav')
         
         if (cgs): 
             varu=var.replace('x','')
@@ -112,8 +114,7 @@ class Laresav:
         else:
             varname=var
             
-        varfile = rsav(self.fdir+'{:03d}'.format(self.it)+'.sav')
-        self.data = varfile['d'][varname][0] * cgsunits
+        self.data = self.savefile['d'][varname][0].T * cgsunits
         
         if (np.shape(self.data)[0]>self.nx): 
             self.data = (self.data[1:,:,:] + self.data[:-1,:,:]) / 2

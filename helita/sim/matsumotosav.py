@@ -13,9 +13,11 @@ class Matsumotosav:
     ----------
     fdir : str, optional
         Directory with snapshots.
-    rootname : str, optional
+    rootname : str
         Template for snapshot number.
-
+    it : integer
+        Snapshot number to read. By default reads the loaded snapshot;
+        if a different number is requested, will load that snapshot.
     verbose : bool, optional
         If True, will print more information.
     """
@@ -57,8 +59,8 @@ class Matsumotosav:
             
         Axes: 
         -----
-            x and y axes horizontal plane
-            z-axis is vertical axis
+            y and z axes horizontal plane
+            x-axis is vertical axis, top corona is first index and negative. 
         
         Variable list: 
         --------------
@@ -101,9 +103,9 @@ class Matsumotosav:
         else:
             varname=var
 
-        self.data = self.savefile['v'][varname][0] * cgsunits
+        self.data = self.savefile['v'][varname][0].T * cgsunits
                         
-        return self.data.T
+        return self.data
 
     def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
         
