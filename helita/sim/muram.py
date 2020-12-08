@@ -31,22 +31,33 @@ class MuramAtmos:
             self.dtype = '>' + dtype
         else:
             self.dtype = '<' + dtype
+        # This reads the header file and sets the order of dimensions in self.order
         self.read_header("%s/Header%s" % (fdir, template))
+
         #self.read_atmos(fdir, template)
         self.units()
+        # Snapshot number
         self.snap = int(template[1:])
         self.filename=''
         self.siter = template
         self.file_root = template
-        self.genvar()
+        
+        # This prepares a list of mappings from MHD variable name to file name
+        self.genvar(order=self.order)
         
     def read_header(self, headerfile):
         tmp = np.loadtxt(headerfile)
-        self.nx, self.ny, self.nz = tmp[:3].astype("i")
-        self.dx, self.dy, self.dz, self.time= tmp[3:7] # km
-        self.x = np.arange(self.nx) * self.dx
-        self.y = np.arange(self.ny) * self.dy
-        self.z = np.arange(self.nz) * self.dz
+        dims = tmp[:3].astype("i")
+        deltas = tmp[3:6] #km
+        time= tmp[7] 
+        self.order = tmp[7:10].astype(int)
+        dims = dims[self.order]
+        deltas = deltas[self.order]
+        self.x = np.arange(dims[0])*deltas[0]
+        self.y = np.arange(dims[1])*deltas[1]
+        self.z = np.arange(dims[2])*deltas[2]
+        self.dx, self.dy, self.dz = deltas[0], deltas[1], deltas[2]
+        self.nx, self.ny, self.nz = dims[0], dims[1], dims[2]
 
     def read_atmos(self, fdir, template):
         ashape = (self.nx, self.nz, self.ny)
@@ -196,15 +207,15 @@ class MuramAtmos:
         Variable list: 
         --------------
             result_prim_0 -- Density (g/cm^3)
-            eosT          -- Temperature (K)
             result_prim_1 -- component x of the velocity (cm/s) 
             result_prim_2 -- component y of the velocity (cm/s), vertical in the hgcr
             result_prim_3 -- component z of the velocity (cm/s)
             result_prim_4 -- internal energy (erg)
-            result_prim_5 -- component x of the magnetic field (G)
-            result_prim_6 -- component y of the magnetic field (G)
-            result_prim_7 -- component z of the magnetic field (G)
-            eosP          -- Pressure 
+            result_prim_5 -- component x of the magnetic field (G/sqrt(4*pi))
+            result_prim_6 -- component y of the magnetic field (G/sqrt(4*pi))
+            result_prim_7 -- component z of the magnetic field (G/sqrt(4*pi))
+            eosP          -- Pressure (cgs)
+            eosT          -- Temperature (K)
         '''
         if var == '':
             print(help(self.get_var))
@@ -213,7 +224,11 @@ class MuramAtmos:
                 print('use ', ii,' for ',self.varn[ii])
             return None
         
-        ashape = (self.nx, self.ny, self.nz)
+        ashape = np.array([self.nx, self.ny, self.nz])
+        print(ashape,ashape[self.order])
+        
+        transpose_order = self.order
+        
         if (not it == None): 
             self.siter='.'+inttostring(it)
             self.read_header("%s/Header%s" % (self.fdir, self.siter))
@@ -234,9 +249,11 @@ class MuramAtmos:
         else:
             varname=var
             
-        data = np.memmap(self.fdir+'/'+varname+ self.siter, mode="r", shape=ashape,
+        data = np.memmap(self.fdir+'/'+varname+ self.siter, mode="r", shape=tuple(ashape[self.order]),
                                 dtype=self.dtype,
                                 order="F")
+        data = data.transpose(transpose_order)
+        
         if iix != None: 
             data= data[iix,:,:]
         if iiy != None: 
@@ -245,7 +262,7 @@ class MuramAtmos:
             data= data[:,:,iiz]
         self.data = data
         
-        return self.data
+        return self.data*cgsunits
       
     def read_var_3d(self,var,iter=None,layout=None):
 
@@ -372,11 +389,11 @@ class MuramAtmos:
         self.uni['l']      = 1.0e5 # to cm
         self.uni['rho']    = 1.0 # g cm^-3 
         self.uni['u']      = 1.0 # cm/s
-        self.uni['b']      = 1.0 # Gauss
+        self.uni['b']      = np.sqrt(4.0*np.pi) # convert to Gauss
         self.uni['t']      = 1.0 # seconds
         self.uni['j']      = 1.0 # current density
    
-    def genvar(self): 
+    def genvar(self, order=[0,1,2]): 
         '''
         Dictionary of original variables which will allow to convert to cgs. 
         '''
@@ -384,13 +401,17 @@ class MuramAtmos:
         self.varn['rho']= 'result_prim_0'
         self.varn['tg'] = 'eosT'
         self.varn['pg'] = 'eosP'
-        self.varn['ux'] = 'result_prim_1'
-        self.varn['uy'] = 'result_prim_2'
-        self.varn['uz'] = 'result_prim_3'
+        unames = np.array(['result_prim_1','result_prim_2','result_prim_3'])
+        unames = unames[order]
+        self.varn['ux'] = unames[0]
+        self.varn['uy'] = unames[1]
+        self.varn['uz'] = unames[2]
         self.varn['e']  = 'result_prim_4'
-        self.varn['bx'] = 'result_prim_5'
-        self.varn['by'] = 'result_prim_6'
-        self.varn['bz'] = 'result_prim_7'
+        unames = np.array(['result_prim_5','result_prim_6','result_prim_7'])
+        unames = unames[order]
+        self.varn['bx'] = unames[0]
+        self.varn['by'] = unames[1]
+        self.varn['bz'] = unames[2]
         
     def write_rh15d(self, outfile, desc=None, append=True, writeB=False,
                     sx=slice(None), sy=slice(None), sz=slice(None),
