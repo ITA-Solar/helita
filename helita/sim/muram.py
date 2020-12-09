@@ -62,6 +62,10 @@ class MuramAtmos:
     def read_atmos(self, fdir, template):
         ashape = (self.nx, self.nz, self.ny)
         file_T = "%s/eosT%s" % (fdir, template)
+        #When 0-th dimension is vertical, 1st is x, 2nd is y
+        # when 1st dimension is vertical, 0th is x. 
+        # remember to swap names
+        
         bfact = np.sqrt(4 * np.pi)
         if os.path.isfile(file_T):
             self.tg = np.memmap(file_T, mode="r", shape=ashape,
