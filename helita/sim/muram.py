@@ -225,7 +225,6 @@ class MuramAtmos:
             return None
         
         ashape = np.array([self.nx, self.ny, self.nz])
-        print(ashape,ashape[self.order])
         
         transpose_order = self.order
         
