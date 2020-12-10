@@ -833,49 +833,45 @@ class PlutoData(object):
     if snap != None: 
       self.snap = snap
     
-    if var != '': 
+    if var in self.varn.keys(): 
 
-      if var in self.varn.keys(): 
-
-        if self.sel_units == 'cgs': 
-          varu=var.replace('x','')
-          varu=varu.replace('y','')
-          varu=varu.replace('z','')
-          if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-            cgsunits = self.uni[varu]
-          else: 
-            cgsunits = 1.0
+      if self.sel_units == 'cgs': 
+        varu=var.replace('x','')
+        varu=varu.replace('y','')
+        varu=varu.replace('z','')
+        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
+          cgsunits = self.uni[varu]
         else: 
           cgsunits = 1.0
-
-          self.data = getattr(self.info,self.varn[var]) * cgsunits
-
       else: 
+        cgsunits = 1.0
 
-        self.get_comp_vars(var, *args, it=it, iix=iix, iiy=iiy, iiz=iiz, layout=layout, **kwargs)
-        
-        if np.shape(self.data) == ():
-          # Loading quantities
-          if self.verbose: 
-            print('Loading composite variable',end="\r",flush=True)
-          self.data = load_noeos_quantities(self,var)
+        self.data = getattr(self.info,self.varn[var]) * cgsunits
 
-          if np.shape(self.data) == ():
-            self.data = load_quantities(self,var,PLASMA_QUANT='',
-                    CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                    IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                    DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                    COULOMB_COL_QUANT='', AMB_QUANT='')
-
-            # Loading arithmetic quantities
-            if np.shape(self.data) == ():
-              if self.verbose: 
-                print('Loading arithmetic variable',end="\r",flush=True)
-              self.data = load_arithmetic_quantities(self,var) 
-
-      return self.data 
-    
     else: 
+
+      self.get_comp_vars(var, *args, it=it, iix=iix, iiy=iiy, iiz=iiz, layout=layout, **kwargs)
+      
+      if np.shape(self.data) == ():
+        # Loading quantities
+        if self.verbose: 
+          print('Loading composite variable',end="\r",flush=True)
+        self.data = load_noeos_quantities(self,var)
+
+        if np.shape(self.data) == ():
+          self.data = load_quantities(self,var,PLASMA_QUANT='',
+                  CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                  IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                  DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                  COULOMB_COL_QUANT='', AMB_QUANT='')
+
+          # Loading arithmetic quantities
+          if np.shape(self.data) == ():
+            if self.verbose: 
+              print('Loading arithmetic variable',end="\r",flush=True)
+            self.data = load_arithmetic_quantities(self,var) 
+  
+    if var != '': 
 
       print(help(self.get_var))
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
@@ -884,6 +880,9 @@ class PlutoData(object):
       print(self.description['ALL']) 
 
       return None
+   
+    return self.data
+
 
   def get_comp_vars(self, var, *args, it=None, iix=None, iiy=None, iiz=None, layout=None, cgs=True, **kwargs): 
     '''

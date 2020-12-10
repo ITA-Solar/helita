@@ -98,47 +98,44 @@ class Cipmocct:
     else:
         varname=var
 
-    if var != '':
-      try: 
+    try: 
 
-        if self.sel_units == 'cgs': 
-          varu=var.replace('x','')
-          varu=varu.replace('y','')
-          varu=varu.replace('z','')
-          if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-            cgsunits = self.uni[varu]
-          else: 
-            cgsunits = 1.0
+      if self.sel_units == 'cgs': 
+        varu=var.replace('x','')
+        varu=varu.replace('y','')
+        varu=varu.replace('z','')
+        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
+          cgsunits = self.uni[varu]
         else: 
           cgsunits = 1.0
+      else: 
+        cgsunits = 1.0
 
-        itname = '_'+inttostring(self.snap,ts_size=4)
-      
-        varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
-        self.data = varfile[varname] * cgsunits
-
-      except: 
-        # Loading quantities
-        if self.verbose: 
-          print('Loading composite variable',end="\r",flush=True)
-        self.data = load_noeos_quantities(self,var)
-
-        if np.shape(self.data) == ():
-          self.data = load_quantities(self,var,PLASMA_QUANT='',
-                  CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                  IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                  DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                  COULOMB_COL_QUANT='', AMB_QUANT='')
-
-          # Loading arithmetic quantities
-          if np.shape(self.data) == ():
-            if self.verbose: 
-              print('Loading arithmetic variable',end="\r",flush=True)
-            self.data = load_arithmetic_quantities(self,var) 
-      
-      return self.data
+      itname = '_'+inttostring(self.snap,ts_size=4)
     
-    else: 
+      varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
+      self.data = varfile[varname] * cgsunits
+
+    except: 
+      # Loading quantities
+      if self.verbose: 
+        print('Loading composite variable',end="\r",flush=True)
+      self.data = load_noeos_quantities(self,var)
+
+      if np.shape(self.data) == ():
+        self.data = load_quantities(self,var,PLASMA_QUANT='',
+                CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                COULOMB_COL_QUANT='', AMB_QUANT='')
+
+        # Loading arithmetic quantities
+        if np.shape(self.data) == ():
+          if self.verbose: 
+            print('Loading arithmetic variable',end="\r",flush=True)
+          self.data = load_arithmetic_quantities(self,var) 
+    
+    if var != '': 
 
       print(help(self.get_var))
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
@@ -147,6 +144,8 @@ class Cipmocct:
       print(self.description['ALL']) 
 
       return None
+   
+    return self.data
    
 
   def units(self): 
