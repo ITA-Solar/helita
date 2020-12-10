@@ -29,7 +29,8 @@ class Laresav:
     self.snap = snap 
     self.sel_units = sel_units
     self.verbose = verbose
-
+    self.uni = Laresav_units()
+    
     self.time     = self.savefile['d']['time'][0]
     self.time_prev= self.savefile['d']['time_prev'][0]
     self.timestep = self.savefile['d']['timestep'][0]
@@ -63,7 +64,6 @@ class Laresav:
     self.hion = False # This will not allow to use HION from Bifrost in load
 
     self.genvar()
-    self.units()
 
   def get_var(self,var,snap=None, iix=None, iiy=None, iiz=None, layout=None): 
     '''
@@ -116,8 +116,8 @@ class Laresav:
         varu=var.replace('x','')
         varu=varu.replace('y','')
         varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if (var in self.varn.keys()) and (varu in self.uni.uni.keys()): 
+          cgsunits = self.uni.uni[varu]
         else: 
           cgsunits = 1.0
       else: 
@@ -143,11 +143,14 @@ class Laresav:
 
 
       if np.shape(self.data) == ():
-        self.data = load_quantities(self,var,PLASMA_QUANT='',
-                CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                COULOMB_COL_QUANT='', AMB_QUANT='')
+        self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
+                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                EOSTAB_QUANT='', TAU_QUANT='', DEBYE_LN_QUANT='',
+                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
+                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
+                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
+                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
+                COLCOUMS_QUANT='', COLFREMX_QUANT='')
 
         # Loading arithmetic quantities
         if np.shape(self.data) == ():
@@ -167,27 +170,6 @@ class Laresav:
    
     return self.data
 
-  
-  def units(self): 
-    '''
-    Units and constants in cgs
-    '''
-    self.uni={}
-    self.uni['gamma']  = 5./3.
-    self.uni['tg']     = 5.77e9 # K
-    self.uni['l']      = 1.0e8 # Mm -> cm
-    self.uni['rho']    = 1.67e-9 # gr cm^-3 
-    self.uni['u']      = 6.9e8 # cm/s
-    self.uni['b']      = 100.0 # Gauss
-    self.uni['t']      = 0.145 # seconds
-    
-    # Units and constants in SI
-
-    convertcsgsi(self)
-
-    globalvars(self)
-
-    self.uni['n']      = self.uni['rho'] / self.m_p / 2. # cm^-3
 
   def genvar(self): 
     '''
@@ -247,3 +229,26 @@ class Laresav:
     return var
 
 
+class Laresav_units(object): 
+
+    def __init__(self):
+
+        '''
+        Units and constants in cgs
+        '''
+        self.uni={}
+        self.uni['gamma']  = 5./3.
+        self.uni['tg']     = 5.77e9 # K
+        self.uni['l']      = 1.0e8 # Mm -> cm
+        self.uni['rho']    = 1.67e-9 # gr cm^-3 
+        self.uni['u']      = 6.9e8 # cm/s
+        self.uni['b']      = 100.0 # Gauss
+        self.uni['t']      = 0.145 # seconds
+
+        # Units and constants in SI
+
+        convertcsgsi(self)
+
+        globalvars(self)
+
+        self.uni['n']      = self.uni['rho'] / self.m_p / 2. # cm^-3

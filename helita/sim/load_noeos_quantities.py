@@ -33,7 +33,7 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None):
 
     nh = obj.get_var('rho') / obj.uni.grph
         
-    return  nh + 2.*nh*(obj.grph/obj.m_h-1.) # this may need a better adjustment.        
+    return  nh + 2.*nh*(obj.uni.grph/obj.uni.m_h-1.) # this may need a better adjustment.        
 
   else: 
 

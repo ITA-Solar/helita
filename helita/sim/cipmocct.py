@@ -30,7 +30,8 @@ class Cipmocct:
     self.snap = snap 
     self.sel_units = sel_units
     self.verbose = verbose
-
+    self.uni = Cipmocct_units()
+    
     params = rsav(os.path.join(self.fdir,'params_'+rootname+'.sav'))
     
     self.x = params['x1']
@@ -57,7 +58,6 @@ class Cipmocct:
     self.cstagop = False # This will not allow to use cstagger from Bifrost in load
     self.hion = False # This will not allow to use HION from Bifrost in load
 
-    self.units()
     self.genvar()
 
 
@@ -105,8 +105,8 @@ class Cipmocct:
         varu=var.replace('x','')
         varu=varu.replace('y','')
         varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if (var in self.varn.keys()) and (varu in self.uni.uni.keys()): 
+          cgsunits = self.uni.uni[varu]
         else: 
           cgsunits = 1.0
       else: 
@@ -124,11 +124,14 @@ class Cipmocct:
       self.data = load_noeos_quantities(self,var)
 
       if np.shape(self.data) == ():
-        self.data = load_quantities(self,var,PLASMA_QUANT='',
-                CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                COULOMB_COL_QUANT='', AMB_QUANT='')
+        self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
+                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                EOSTAB_QUANT='', TAU_QUANT='', DEBYE_LN_QUANT='',
+                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
+                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
+                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
+                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
+                COLCOUMS_QUANT='', COLFREMX_QUANT='')
 
         # Loading arithmetic quantities
         if np.shape(self.data) == ():
@@ -148,30 +151,6 @@ class Cipmocct:
    
     return self.data
    
-
-  def units(self): 
-    '''
-    Units and constants in cgs
-    '''
-    self.uni={}
-
-    self.uni['gamma']  = 5./3.
-    self.uni['tg']     = 1.0e6 # K
-    self.uni['fact']   = 2
-    self.uni['l']      = 1000.*self.uni['fact']*1.0e5 # for having a 2000 km wide loop
-    self.uni['n']      = 1.0e9 # cm^-3    
-    self.uni['t']      = 1.0 # seconds
-
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
-
-    self.uni['rho']    = self.uni['n'] * self.uni['proton'] /2. # gr cm^-3 
-    self.uni['u']      = np.sqrt(2*self.uni['gamma']*self.k_b/self.m_p*self.uni['tg']) # cm/s
-    self.uni['b']      = self.uni['u']*np.sqrt(self.uni['rho']) # Gauss
-    self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
-
  
   def genvar(self): 
     '''
@@ -224,5 +203,33 @@ class Cipmocct:
     # also velocities. 
 
     return var
+
+
+
+class Cipmocct_units(object): 
+
+    def __init__(self):
+
+        '''
+        Units and constants in cgs
+        '''
+        self.uni={}
+
+        self.uni['gamma']  = 5./3.
+        self.uni['tg']     = 1.0e6 # K
+        self.uni['fact']   = 2
+        self.uni['l']      = 1000.*self.uni['fact']*1.0e5 # for having a 2000 km wide loop
+        self.uni['n']      = 1.0e9 # cm^-3    
+        self.uni['t']      = 1.0 # seconds
+
+        # Units and constants in SI
+        convertcsgsi(self)
+
+        globalvars(self)
+
+        self.uni['rho']    = self.uni['n'] * self.uni['proton'] /2. # gr cm^-3 
+        self.uni['u']      = np.sqrt(2*self.uni['gamma']*self.k_b/self.m_p*self.uni['tg']) # cm/s
+        self.uni['b']      = self.uni['u']*np.sqrt(self.uni['rho']) # Gauss
+        self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
 
 

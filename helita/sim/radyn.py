@@ -33,6 +33,8 @@ class radyn:
     self.sel_units= sel_units
     self.verbose = verbose
     
+    self.uni = Radyn_units()
+    
     self.dx = 1.0
     self.dy = 1.0
     self.dz = np.copy(self.z)
@@ -52,7 +54,6 @@ class radyn:
     self.cstagop = False # This will not allow to use cstagger from Bifrost in load
     self.hion = False # This will not allow to use HION from Bifrost in load
 
-    self.units()
     self.genvar()
 
   def get_var(self, var, iix=None, iiy=None, iiz=None, layout=None): 
@@ -86,8 +87,8 @@ class radyn:
         varu=var.replace('x','')
         varu=varu.replace('y','')
         varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if (var in self.varn.keys()) and (varu in self.uni.uni.keys()): 
+          cgsunits = self.uni.uni[varu]
         else: 
           cgsunits = 1.0
       else: 
@@ -96,11 +97,14 @@ class radyn:
       self.data = self.rdobj.__getattr__(varname) * cgsunits
     except: 
 
-      self.data = load_quantities(self,var,PLASMA_QUANT='',
-                  CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                  IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                  DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                  COULOMB_COL_QUANT='', AMB_QUANT='')
+      self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
+                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                EOSTAB_QUANT='', TAU_QUANT='', DEBYE_LN_QUANT='',
+                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
+                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
+                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
+                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
+                COLCOUMS_QUANT='', COLFREMX_QUANT='')
 
       if np.shape(self.data) == ():
         if self.verbose: 
@@ -119,27 +123,6 @@ class radyn:
    
     return self.data
 
-
-  def units(self): 
-    '''
-    Units and constants in cgs
-    '''
-    self.uni={}
-
-    self.uni['tg']     = 1.0
-    self.uni['l']      = 1.0
-    self.uni['n']      = 1.0
-    self.uni['rho']    = 1.0
-    self.uni['u']      = 1.0
-    self.uni['b']      = 1.0
-    self.uni['t']      = 1.0 # seconds
-    self.uni['j']      = 1.0
-
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
- 
 
   def genvar(self): 
     '''
@@ -194,3 +177,24 @@ class radyn:
 
     return var
 
+class Laresav_units(object): 
+
+    def __init__(self):
+        '''
+        Units and constants in cgs
+        '''
+        self.uni={}
+
+        self.uni['tg']     = 1.0
+        self.uni['l']      = 1.0
+        self.uni['n']      = 1.0
+        self.uni['rho']    = 1.0
+        self.uni['u']      = 1.0
+        self.uni['b']      = 1.0
+        self.uni['t']      = 1.0 # seconds
+        self.uni['j']      = 1.0
+
+        # Units and constants in SI
+        convertcsgsi(self)
+
+        globalvars(self)

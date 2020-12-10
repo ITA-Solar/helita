@@ -32,8 +32,9 @@ class Matsumotosav:
     self.savefile = rsav(os.path.join(fdir,rootname+'{:06d}'.format(snap)+'.sav'))
     self.snap     = snap
     self.sel_units= sel_units
-    self.verbose = verbose
-
+    self.verbose  = verbose
+    self.uni      = Matsumotosav_units()
+    
     self.time     = self.savefile['v']['time'][0]
     self.grav     = self.savefile['v']['gx'][0]
     self.gamma    = self.savefile['v']['gm'][0]
@@ -55,7 +56,6 @@ class Matsumotosav:
     self.hion = False # This will not allow to use HION from Bifrost in load
 
     self.genvar()
-    self.units()
 
 
   def get_var(self,var,snap=None, iix=None, iiy=None, iiz=None, layout=None): 
@@ -104,8 +104,8 @@ class Matsumotosav:
         varu=var.replace('x','')
         varu=varu.replace('y','')
         varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if (var in self.varn.keys()) and (varu in self.uni.uni.keys()): 
+          cgsunits = self.uni.uni[varu]
         else: 
           cgsunits = 1.0
       else: 
@@ -130,11 +130,14 @@ class Matsumotosav:
       self.data = load_noeos_quantities(self,var)
 
       if np.shape(self.data) == ():
-        self.data = load_quantities(self,var,PLASMA_QUANT='',
-                CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                COULOMB_COL_QUANT='', AMB_QUANT='')
+        self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
+                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                EOSTAB_QUANT='', TAU_QUANT='', DEBYE_LN_QUANT='',
+                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
+                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
+                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
+                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
+                COLCOUMS_QUANT='', COLFREMX_QUANT='')
 
         # Loading arithmetic quantities
         if np.shape(self.data) == ():
@@ -155,27 +158,6 @@ class Matsumotosav:
    
     return self.data
   
-  def units(self): 
-    '''
-    Units and constants in cgs
-    '''
-    self.uni={}
-    self.uni['tg']     = 1.0 # K
-    self.uni['l']      = 1.0e8 # Mm -> cm
-    self.uni['rho']    = 1.0 # gr cm^-3 
-    self.uni['n']      = 1.0 # cm^-3
-    self.uni['u']      = 1.0 # cm/s
-    self.uni['b']      = 1.0 # Gauss
-    self.uni['t']      = 1.0 # seconds
-
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
-
-
-    self.uni['gamma']  = self.gamma 
-
  
   def genvar(self): 
     '''
@@ -229,4 +211,30 @@ class Matsumotosav:
     # also velocities. 
 
     return var
+
+class Cipmocct_units(object): 
+
+    def __init__(self):
+
+
+        '''
+        Units and constants in cgs
+        '''
+        self.uni={}
+        self.uni['tg']     = 1.0 # K
+        self.uni['l']      = 1.0e8 # Mm -> cm
+        self.uni['rho']    = 1.0 # gr cm^-3 
+        self.uni['n']      = 1.0 # cm^-3
+        self.uni['u']      = 1.0 # cm/s
+        self.uni['b']      = 1.0 # Gauss
+        self.uni['t']      = 1.0 # seconds
+
+        # Units and constants in SI
+        convertcsgsi(self)
+
+        globalvars(self)
+
+
+        self.uni['gamma']  = self.gamma 
+
 

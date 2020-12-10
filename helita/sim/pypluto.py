@@ -774,7 +774,7 @@ class PlutoData(object):
     self.snap = snap 
     self.sel_units =sel_units 
     self.verbose = verbose
-
+    self.uni = Pypluto_units()
     self.info = pload(snap,w_dir=fdir,datatype=datatype)
     self.x = self.info.x1
     self.y = self.info.x2
@@ -799,7 +799,6 @@ class PlutoData(object):
     self.hion = False # This will not allow to use HION from Bifrost in load
     
     #self.time =  params['time'] # No uniforme (array)
-    self.units()
     self.genvar()
 
   def get_var(self,var,*args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kwargs): 
@@ -835,20 +834,18 @@ class PlutoData(object):
       self.snap = snap
     
     if var in self.varn.keys(): 
-
       if self.sel_units == 'cgs': 
         varu=var.replace('x','')
         varu=varu.replace('y','')
         varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if (var in self.varn.keys()) and (varu in self.uni.uni.keys()): 
+          cgsunits = self.uni.uni[varu]
         else: 
           cgsunits = 1.0
       else: 
         cgsunits = 1.0
-
-        self.data = getattr(self.info,self.varn[var]) * cgsunits
-
+    
+      self.data = getattr(self.info,self.varn[var]) * cgsunits
     else: 
 
       self.get_comp_vars(var, *args, snap=snap, iix=iix, iiy=iiy, iiz=iiz, layout=layout, **kwargs)
@@ -860,18 +857,20 @@ class PlutoData(object):
         self.data = load_noeos_quantities(self,var)
 
         if np.shape(self.data) == ():
-          self.data = load_quantities(self,var,PLASMA_QUANT='',
-                  CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                  IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                  DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                  COULOMB_COL_QUANT='', AMB_QUANT='')
+          self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
+                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                EOSTAB_QUANT='', TAU_QUANT='', DEBYE_LN_QUANT='',
+                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
+                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
+                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
+                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
+                COLCOUMS_QUANT='', COLFREMX_QUANT='')
 
           # Loading arithmetic quantities
           if np.shape(self.data) == ():
             if self.verbose: 
               print('Loading arithmetic variable',end="\r",flush=True)
             self.data = load_arithmetic_quantities(self,var) 
-  
     if var == '': 
 
       print(help(self.get_var))
@@ -881,7 +880,6 @@ class PlutoData(object):
       print(self.description['ALL']) 
 
       return None
-   
     return self.data
 
 
@@ -892,41 +890,13 @@ class PlutoData(object):
     if var == 'tg': 
       
       if self.sel_units == 'cgs': 
-          cgsunits = self.uni['tg']
+          cgsunits = self.uni.uni['tg']
       else: 
           cgsunits = 1.0
-      print(cgsunits)
-      rho=self.get_var('rho',snap=snap)
-      pres =  self.get_var('pg',snap=snap) 
-      self.data = rho * pres * cgsunits
+
+      self.data = self.get_var('rho',snap=snap) * self.get_var('pg',snap=snap)  * cgsunits
     else: 
       self.data = None
-  
-  def units(self): 
-    '''
-    Units and constants in cgs
-    '''
-    self.uni={}
-    self.uni['tg']     = 1.0e6 # K
-    self.uni['l']      = 1.0e8 # cm 
-    self.uni['rho']    = 1.0e-15 # gr cm^-3 
-    self.uni['kboltz'] =  1.380658E-16 # Boltzman's cst. [erg/K]
-    self.uni['proton'] =  const.m_n / const.gram        # 1.674927471e-24
-    self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
-    self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
-    self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
-    self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss
-    self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
-
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
-
-
-    self.uni['j']      = self.uni['b']/self.uni['l']*self.clight # current density
-    self.uni['gr']     = 2.7e4 # solar gravity in cgs
-    self.uni['gc']     = self.uni['gr'] * self.uni['l'] / self.uni['u'] ** 2 # solar gravity in Code units. 
       
  
   def genvar(self): 
@@ -977,6 +947,37 @@ class PlutoData(object):
 
     return get_var(varname,snap=snap)
 
+
+class Pypluto_units(object): 
+
+    def __init__(self,filename='mhd.in',fdir='./',verbose=True):
+    
+        '''
+        Units and constants in cgs
+        '''
+
+        self.uni={}
+
+        self.uni['tg']     = 1.0e6 # K
+        self.uni['l']      = 1.0e8 # cm 
+        self.uni['rho']    = 1.0e-15 # gr cm^-3 
+        self.uni['kboltz'] =  1.380658E-16 # Boltzman's cst. [erg/K]
+        self.uni['proton'] =  const.m_n / const.gram        # 1.674927471e-24
+        self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
+        self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
+        self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
+        self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss
+        self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
+
+        # Units and constants in SI
+        convertcsgsi(self)
+
+        globalvars(self)
+
+
+        self.uni['j']      = self.uni['b']/self.uni['l']*self.clight # current density
+        self.uni['gr']     = 2.7e4 # solar gravity in cgs
+        self.uni['gc']     = self.uni['gr'] * self.uni['l'] / self.uni['u'] ** 2 # solar gravity in Code units. 
 
 class Tools(object):
   """
