@@ -88,7 +88,8 @@ def units_title(obj):
 def convertcsgsi(obj):
   
   import scipy.constants as const
-  
+  from astropy import constants as aconst
+
   '''
   Conversion from cgs units to SI
   '''
