@@ -157,7 +157,7 @@ class Laresav:
             print('Loading arithmetic variable',end="\r",flush=True)
           self.data = load_arithmetic_quantities(self,var) 
     
-    if var != '': 
+    if var == '': 
 
       print(help(self.get_var))
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
