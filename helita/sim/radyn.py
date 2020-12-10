@@ -73,48 +73,52 @@ class radyn:
     Information about radynpy library: 
     --------------
     '''
-    if var == '':
-      print(help(self.get_var))
-      print(self.rdobj.var_info('*'))
-      print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
-      for ii in self.varn: 
-          print('use ', ii,' for ',self.varn[ii])
-      return None
 
     if var in self.varn.keys(): 
       varname=self.varn[var]
     else:
       varname=var
 
-    try: 
+    if var != '':
+      try: 
 
-      if self.sel_units == 'cgs': 
-        varu=var.replace('x','')
-        varu=varu.replace('y','')
-        varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if self.sel_units == 'cgs': 
+          varu=var.replace('x','')
+          varu=varu.replace('y','')
+          varu=varu.replace('z','')
+          if (var in self.varn.keys()) and (varu in self.uni.keys()): 
+            cgsunits = self.uni[varu]
+          else: 
+            cgsunits = 1.0
         else: 
           cgsunits = 1.0
-      else: 
-        cgsunits = 1.0
 
-      self.data = self.rdobj.__getattr__(varname) * cgsunits
-    except: 
+        self.data = self.rdobj.__getattr__(varname) * cgsunits
+      except: 
 
-      self.data = load_quantities(self,var,PLASMA_QUANT='',
-                  CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                  IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                  DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                  COULOMB_COL_QUANT='', AMB_QUANT='')
+        self.data = load_quantities(self,var,PLASMA_QUANT='',
+                    CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                    IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                    DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                    COULOMB_COL_QUANT='', AMB_QUANT='')
 
-      if np.shape(self.data) == ():
-        if self.verbose: 
-          print('Loading arithmetic variable',end="\r",flush=True)
-        self.data = load_arithmetic_quantities(self,var)    
+        if np.shape(self.data) == ():
+          if self.verbose: 
+            print('Loading arithmetic variable',end="\r",flush=True)
+          self.data = load_arithmetic_quantities(self,var)    
 
-    return self.data
-  
+      return self.data
+    
+    else: 
+
+      print(help(self.get_var))
+      print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
+      for ii in self.varn: 
+          print('use ', ii,' for ',self.varn[ii])
+      print(self.description['ALL']) 
+
+      return None
+
 
   def units(self): 
     '''
@@ -130,7 +134,7 @@ class radyn:
     self.uni['b']      = 1.0
     self.uni['t']      = 1.0 # seconds
     self.uni['j']      = 1.0
-        
+
     # Units and constants in SI
     convertcsgsi(self)
 

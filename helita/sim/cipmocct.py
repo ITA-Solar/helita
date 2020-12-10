@@ -88,12 +88,7 @@ class Cipmocct:
         by_cube       -- component y of the magnetic field (multipy by self.uni['b'] to get in G)
         bz_cube       -- component z of the magnetic field (multipy by self.uni['b'] to get in G) 
     '''
-    if var == '':
-        print(help(self.get_var))
-        print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
-        for ii in self.varn: 
-            print('use ', ii,' for ',self.varn[ii])
-        return None
+
     
     if snap != None: 
         self.snap = snap
@@ -103,45 +98,56 @@ class Cipmocct:
     else:
         varname=var
 
-    try: 
+    if var != '':
+      try: 
 
-      if self.sel_units == 'cgs': 
-        varu=var.replace('x','')
-        varu=varu.replace('y','')
-        varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if self.sel_units == 'cgs': 
+          varu=var.replace('x','')
+          varu=varu.replace('y','')
+          varu=varu.replace('z','')
+          if (var in self.varn.keys()) and (varu in self.uni.keys()): 
+            cgsunits = self.uni[varu]
+          else: 
+            cgsunits = 1.0
         else: 
           cgsunits = 1.0
-      else: 
-        cgsunits = 1.0
 
-      itname = '_'+inttostring(self.snap,ts_size=4)
-    
-      varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
-      self.data = varfile[varname] * cgsunits
+        itname = '_'+inttostring(self.snap,ts_size=4)
+      
+        varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
+        self.data = varfile[varname] * cgsunits
 
-    except: 
-      # Loading quantities
-      if self.verbose: 
-        print('Loading composite variable',end="\r",flush=True)
-      self.data = load_noeos_quantities(self,var)
+      except: 
+        # Loading quantities
+        if self.verbose: 
+          print('Loading composite variable',end="\r",flush=True)
+        self.data = load_noeos_quantities(self,var)
 
-      if np.shape(self.data) == ():
-        self.data = load_quantities(self,var,PLASMA_QUANT='',
-                CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                COULOMB_COL_QUANT='', AMB_QUANT='')
-
-        # Loading arithmetic quantities
         if np.shape(self.data) == ():
-          if self.verbose: 
-            print('Loading arithmetic variable',end="\r",flush=True)
-          self.data = load_arithmetic_quantities(self,var) 
-    
-    return self.data
+          self.data = load_quantities(self,var,PLASMA_QUANT='',
+                  CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                  IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                  DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                  COULOMB_COL_QUANT='', AMB_QUANT='')
 
+          # Loading arithmetic quantities
+          if np.shape(self.data) == ():
+            if self.verbose: 
+              print('Loading arithmetic variable',end="\r",flush=True)
+            self.data = load_arithmetic_quantities(self,var) 
+      
+      return self.data
+    
+    else: 
+
+      print(help(self.get_var))
+      print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
+      for ii in self.varn: 
+          print('use ', ii,' for ',self.varn[ii])
+      print(self.description['ALL']) 
+
+      return None
+   
 
   def units(self): 
     '''
