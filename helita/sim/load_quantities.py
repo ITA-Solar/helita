@@ -89,7 +89,7 @@ def get_em(obj, quant, EM_QUANT = None, unitsnorm = 1e27, *args, **kwargs):
   """
 
   if EM_QUANT is None:
-    EM_QUANT += ['emiss']
+    EM_QUANT = ['emiss']
   obj.description['EM'] = ('emission messure'
     '(in cgs): ' + ', '.join(EM_QUANT))
  
