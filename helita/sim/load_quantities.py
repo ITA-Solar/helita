@@ -94,9 +94,9 @@ def get_em(obj, quant, EM_QUANT = None, unitsnorm = 1e27, *args, **kwargs):
     '(in cgs): ' + ', '.join(EM_QUANT))
  
   if 'ALL' in obj.description.keys():
-    obj.description['ALL'] += "\n" + obj.description['EM_QUANT']
+    obj.description['ALL'] += "\n" + obj.description['EM']
   else:
-    obj.description['ALL'] = obj.description['EM_QUANT']
+    obj.description['ALL'] = obj.description['EM']
 
   if (quant == ''):
     return None
