@@ -113,7 +113,7 @@ def globalvars(obj):
     
   import scipy.constants as const
   from astropy import constants as aconst
-
+  from astropy import units
   
   '''
   Conversion from cgs units to SI
