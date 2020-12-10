@@ -29,6 +29,8 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
 
   val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT)
   if np.shape(val) is ():
+    val = get_em(obj, quant, EM_QUANT=EM_QUANT)  
+  if np.shape(val) is ():
     val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
   if np.shape(val) is ():
     val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
@@ -71,6 +73,44 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
+
+
+def get_em(obj, quant, EM_QUANT = None, unitsnorm = 1e27, *args, **kwargs):
+  """
+  Calculates emission messure (EM).
+
+  Parameters
+  ----------
+  Returns
+  -------
+  array - ndarray
+      Array with the dimensions of the 3D spatial from the simulation
+      of the emission measure c.g.s units.
+  """
+
+  if EM_QUANT is None:
+    EM_QUANT += ['emiss']
+  obj.description['EM'] = ('emission messure'
+    '(in cgs): ' + ', '.join(EM_QUANT))
+ 
+  if 'ALL' in obj.description.keys():
+    obj.description['ALL'] += "\n" + obj.description['EM_QUANT']
+  else:
+    obj.description['ALL'] = obj.description['EM_QUANT']
+
+  if (quant == ''):
+    return None
+
+  sel_units = obj.sel_units
+  obj.sel_units = 'cgs'
+  
+  en = obj.get_var('ne')  
+  rho = obj.get_var('rho')
+  nh = rho / obj.uni.grph
+  
+  obj.sel_units = sel_units
+
+  return en * (nh / unitsnorm)
 
 
 def get_crossections(obj, quant, CROSTAB_QUANT=None):
@@ -166,39 +206,34 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None):
   if (quant == ''):
     return None
 
-
   if quant in EOSTAB_QUANT:
-    # unit conversion to SI
-    # to g/cm^3
-    ur = obj.params['u_r'][obj.snapInd]
-    ue = obj.params['u_ee'][obj.snapInd]        # to erg/g
-    if quant == 'ne':
-      fac = 1.e6  # cm^-3 to m^-3
 
-    if obj.hion and quant == 'ne':
-        return obj.get_var('hionne') * fac
-    rho = obj.get_var('r')
-    rho = rho * ur
-    ee = obj.get_var('ee')
-    ee = ee * ue
-    if obj.verbose:
-        print(quant + ' interpolation...', whsp*7, end="\r", flush=True)
+    if quant == 'tau':
+      return obj.calc_tau()
 
-    fac = 1.0
-    # JMS Why SI?? SI seems to work with bifrost_uvotrt.
-    if quant == 'ne':
-      fac = 1.e6  # cm^-3 to m^-3
+    else: 
+      # bifrost_uvotrt uses SI!
+      fac = 1.0
+      if (quant == 'ne') and (obj.sel_units != 'cgs'):
+        fac = 1.e6  # cm^-3 to m^-3
 
-    return obj.rhoee.tab_interp(
-      rho, ee, order=1, out=quant) * fac
+      if obj.hion and quant == 'ne':
+          return obj.get_var('hionne') * fac
 
-  elif quant == 'tau':
-    return obj.calc_tau()
+      sel_units = obj.sel_units
+      obj.sel_units = 'cgs'
+      rho = obj.get_var('r')
+      ee = obj.get_var('ee')
+      obj.sel_units = sel_units
+
+      if obj.verbose:
+          print(quant + ' interpolation...', whsp*7, end="\r", flush=True)
+
+      return obj.rhoee.tab_interp(
+        rho, ee, order=1, out=quant) * fac
+
   else: 
-   return None
-
-
-
+    return None
 
 
 def get_collision(obj, quant, COLFRE_QUANT=None):

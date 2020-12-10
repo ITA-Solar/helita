@@ -8,24 +8,28 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   if not hasattr(obj,'description'):
     obj.description = {}
 
-  val = get_deriv(obj,quant)
-  if np.shape(val) is ():
-    val = get_center(obj,quant)
-  if np.shape(val) is ():
+  val = get_center(obj,quant)
+  if np.shape(val) == ():
+    if obj.cstagop != False: # this is only for cstagger routines 
+      val = get_deriv(obj,quant)
+  if np.shape(val) == ():
     val = get_module(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_horizontal_average(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_gradients_vect(obj,quant)
-  if np.shape(val) is ():
-    val = get_gradients_scalar(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
+    if obj.cstagop != False:  # this is only for cstagger routines 
+      val = get_gradients_scalar(obj,quant)
+  if np.shape(val) == ():
     val = get_square(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
+    val = get_lg(obj,quant)
+  if np.shape(val) == ():
     val = get_ratios(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_projections(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_vector_product(obj,quant)
   return val
 
@@ -115,7 +119,7 @@ def get_center(obj,quant, *args, **kwargs):
 
     var = obj.get_var(q, **kwargs)
     # 2D
-    if getattr(obj, 'n' + axis) < 5 or obj.cstagop is False:
+    if getattr(obj, 'n' + axis) < 5 or obj.cstagop == False:
       return var
     else:
       if len(transf) == 2:
@@ -384,6 +388,24 @@ def get_square(obj,quant):
       result += obj.get_var(quant[:-1] + 'yc') ** 2
       result += obj.get_var(quant[:-1] + 'zc') ** 2
       return result
+    except:
+      return None
+  else: 
+    return None
+
+
+def get_lg(obj,quant):
+  LG_QUANT = ['lg']  
+  obj.description['LG'] = ('Logarithmic of a variable'
+          ' starts with: ' + ', '.join(LG_QUANT))
+  obj.description['ALL'] += "\n"+ obj.description['LG']
+
+  if (quant == ''):
+    return None
+
+  if quant[:2] in LG_QUANT:
+    try: 
+      return np.log10(obj.get_var(quant[2:]))
     except:
       return None
   else: 

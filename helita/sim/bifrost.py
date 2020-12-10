@@ -14,6 +14,7 @@ from scipy import interpolate
 from scipy.ndimage import map_coordinates
 from .load_quantities import *
 from .load_arithmetic_quantities import *
+from .tools import *
 
 whsp = '  '
 
@@ -77,7 +78,8 @@ class BifrostData(object):
     snap = None
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.', fast=False,
                  verbose=True, dtype='f4', big_endian=False, cstagop=True,
-                 ghost_analyse=False, lowbus=False, numThreads=1, params_only=False):
+                 ghost_analyse=False, lowbus=False, numThreads=1, 
+                 params_only=False, sel_units=None):
         """
         Loads metadata and initialises variables.
         """
@@ -92,6 +94,7 @@ class BifrostData(object):
         self.ghost_analyse = ghost_analyse
         self.cstagop = cstagop
         self.lowbus = lowbus
+        self.sel_units = sel_units 
         self.numThreads = numThreads
         self.fast = fast
         self._fast_skip_flag = False if fast else None #None-> never skip
@@ -211,7 +214,7 @@ class BifrostData(object):
         """
         Reads parameter file (.idl)
         """
-        if np.shape(self.snap) is ():
+        if np.shape(self.snap) == ():
             snap = [self.snap]
             snap_str = [self.snap_str]
         else:
@@ -525,7 +528,7 @@ class BifrostData(object):
         self.varn['bz'] = 'bz'
         
     def get_var(self, var, snap=None, *args, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), cgs=False, **kwargs):
+                iiz=slice(None), **kwargs):
         """
         Reads a variable from the relevant files.
 
@@ -583,7 +586,11 @@ class BifrostData(object):
             self.set_snap(snap)
             self.variables={}
 
-        if (cgs): 
+        
+        if var in self.varn.keys(): 
+            var=self.varn[var]
+
+        if (self.sel_units=='cgs'): 
             varu=var.replace('x','')
             varu=varu.replace('y','')
             varu=varu.replace('z','')
@@ -593,9 +600,6 @@ class BifrostData(object):
                 cgsunits = 1.0
         else: 
             cgsunits = 1.0
-        
-        if var in self.varn.keys(): 
-            var=self.varn[var]
             
         # # check if already in memmory
         if var in self.variables:
@@ -615,7 +619,7 @@ class BifrostData(object):
             # Loading quantities
             val = load_quantities(self,var)
             # Loading arithmetic quantities
-            if np.shape(val) is ():
+            if np.shape(val) == ():
                 val = load_arithmetic_quantities(self,var) 
 
         if var == '':
@@ -623,7 +627,7 @@ class BifrostData(object):
             print(self.description['ALL'])
             return None
 
-            if np.shape(val) is ():
+            if np.shape(val) == ():
                 raise ValueError(('get_var: do not know (yet) how to '
                               'calculate quantity %s. Note that simple_var '
                               'available variables are: %s.\nIn addition, '
@@ -651,6 +655,46 @@ class BifrostData(object):
             val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
 
         return val
+
+
+    def trans2comm(self,varname,snap=None): 
+        '''
+        Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
+        is: 
+
+          - for 3D atmospheres:  the vertical axis
+          - for loop type atmospheres: along the loop 
+          - for 1D atmosphere: the unic dimension is the 3rd axis. 
+
+        All of them should obey the right hand rule 
+
+        In all of them, the vectors (velocity, magnetic field etc) away from the Sun. 
+        
+        For 1D models, first axis could be time. 
+
+        Units: everything is in cgs. 
+
+        '''
+
+        self.sel_units = 'cgs'
+
+        if self.transunits == False:
+          self.transunits == True
+          self.z = -np.reverse(self.z) * 1e8
+          self.dz = -np.reverse(self.dz1d) * 1e8
+
+        sign = 1.0
+        if varname[-1] in ['x','y','z']: 
+            vartemp = varname+'c'
+            if varname[-1] in ['y','z']: 
+                sign = -1.0 
+
+        var = np.reshape(np.sign * get_var(varname,snap=snap), (self.nx, self.ny, self.nz))
+
+        var = np.reverse(var,axis=3)
+
+        return var
+
 
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         """
@@ -872,41 +916,6 @@ class BifrostData(object):
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
-    def get_ems(self, axis=2, zcut=None, unitsnorm = 1e27, *args, **kwargs):
-
-        """
-        Calculates emissivity (EM).
-
-        Parameters
-        ----------
-        axis - integer  x = 0, y = 1, z = 2
-        zcut - float    used to cut the convection zone
-        Returns
-        -------
-        array - ndarray
-            Array with the dimensions of the 3D spatial from the simulation
-            of the emission measure c.g.s units.
-        """
-        en = self.get_var('ne') * self.uni.cm_to_m**3  # from SI to cgs. Note helita has a fac to convert from cgs to in SI.
-        rho = self.get_var('r')
-        nh = rho * self.uni.u_r / self.uni.grph
-
-        if axis == 0:
-            ds = self.dx * self.uni.uni['l']
-            nh *= ds
-        elif axis == 1:
-            ds = self.dy * self.uni.uni['l']
-            nh *= ds
-        else:
-            ds = self.dz1d * self.uni.uni['l']
-            nh = np.einsum('ijk,k->ijk',nh,ds)
-
-        if (zcut is not None):
-            for iz in range(0, self.nz):
-                if self.z[iz] < zcut:
-                    izcut = iz
-            nh[:, :, izcut:] = 0.0
-        return en * (nh / unitsnorm)
 
     def get_hydrogen_pops(self, sx=slice(None), sy=slice(None), sz=slice(None)):
         """
@@ -1237,56 +1246,6 @@ class Create_new_br_files:
         f.close()
 
 
-def polar2cartesian(r, t, grid, x, y, order=3):
-    '''
-    Converts polar grid to cartesian grid
-    '''
-
-
-    X, Y = np.meshgrid(x, y)
-
-    new_r = np.sqrt(X * X + Y * Y)
-    new_t = np.arctan2(X, Y)
-
-    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
-    it = interpolate.interp1d(t, np.arange(len(t)))
-
-    new_ir = ir(new_r.ravel())
-    new_it = it(new_t.ravel())
-
-    new_ir[new_r.ravel() > r.max()] = len(r) - 1
-    new_ir[new_r.ravel() < r.min()] = 0
-
-    return map_coordinates(grid, np.array([new_ir, new_it]),
-                           order=order).reshape(new_r.shape)
-
-
-def cartesian2polar(x, y, grid, r, t, order=3):
-    '''
-    Converts cartesian grid to polar grid
-    '''
-
-    R, T = np.meshgrid(r, t)
-
-    new_x = R * np.cos(T)
-    new_y = R * np.sin(T)
-
-    ix = interpolate.interp1d(x, np.arange(len(x)), bounds_error=False)
-    iy = interpolate.interp1d(y, np.arange(len(y)), bounds_error=False)
-
-    new_ix = ix(new_x.ravel())
-    new_iy = iy(new_y.ravel())
-
-    new_ix[new_x.ravel() > x.max()] = len(x) - 1
-    new_ix[new_x.ravel() < x.min()] = 0
-
-    new_iy[new_y.ravel() > y.max()] = len(y) - 1
-    new_iy[new_y.ravel() < y.min()] = 0
-
-    return map_coordinates(grid, np.array([new_ix, new_iy]),
-                           order=order).reshape(new_x.shape)
-
-
 class Bifrost_units(object):
 
     def __init__(self,filename='mhd.in',fdir='./',verbose=True):
@@ -1344,13 +1303,7 @@ class Bifrost_units(object):
         self.u_ee = self.u_u**2
         self.u_e = self.u_r * self.u_ee
         self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
-        self.mu = 0.8
         self.u_n = 3.00e+10                      # Density number n_0 * 1/cm^3
-        self.k_b = aconst.k_B.to_value('erg/K')  # 1.380658E-16 Boltzman's cst. [erg/K]
-        self.m_h = const.m_n / const.gram        # 1.674927471e-24
-        self.m_he = 6.65e-24
-        self.m_p = self.mu * self.m_h            # Mass per particle
-        self.m_e = aconst.m_e.to_value('g')
         self.u_tg = (self.m_h / self.k_b) * self.u_ee
         self.u_tge = (self.m_e / self.k_b) * self.u_ee
         self.pi = const.pi
@@ -1365,15 +1318,8 @@ class Bifrost_units(object):
         self.uni['e'] = self.u_e
         self.uni['ee'] = self.u_ee
         self.uni['n'] = self.u_n
-        self.uni['kb'] = self.k_b
-        self.uni['mh'] = self.m_h
         self.uni['tg'] = 1.0
         self.uni['b'] = self.u_b
-        self.uni['kr'] = self.u_kr
-
-
-        self.uni['l'] = self.u_l
-
 
         self.usi_l = self.u_l * const.centi  # 1e6
         self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
@@ -1391,72 +1337,9 @@ class Bifrost_units(object):
         self.msi_e = const.m_e  # 9.1093897e-31
         self.usi_b = self.u_b * 1e-4
 
-        # Solar gravity
-        self.gsun = (aconst.GM_sun / aconst.R_sun**2).cgs.value  # solar surface gravity
+        convertcsgsi(self)
 
-        # --- physical constants and other useful quantities
-        self.clight = aconst.c.to_value('cm/s')   # Speed of light [cm/s]
-        self.hplanck = aconst.h.to_value('erg s') # Planck's constant [erg s]
-        self.hplancksi = aconst.h.to_value('J s') # Planck's constant [erg s]
-        self.kboltzmann = aconst.k_B.to_value('erg/K')  # Boltzman's cst. [erg/K]
-        self.amu = aconst.u.to_value('g')        # Atomic mass unit [g]
-        self.amusi = aconst.u.to_value('kg')     # Atomic mass unit [kg]
-        self.m_electron = aconst.m_e.to_value('g')  # Electron mass [g]
-        self.q_electron = aconst.e.esu.value     # Electron charge [esu]
-        self.qsi_electron = aconst.e.value       # Electron charge [C]
-        self.rbohr = aconst.a0.to_value('cm')    #  bohr radius [cm]
-        self.e_rydberg = aconst.Ryd.to_value('erg', equivalencies=units.spectral())
-        self.eh2diss = 4.478007          # H2 dissociation energy [eV]
-        self.pie2_mec = (np.pi * aconst.e.esu **2 / (aconst.m_e * aconst.c)).cgs.value
-        # 5.670400e-5 Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
-        self.stefboltz = aconst.sigma_sb.cgs.value
-        self.mion = self.m_h            # Ion mass [g]
-        self.r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
-
-        # --- Unit conversions
-        self.ev_to_erg = units.eV.to('erg')
-        self.ev_to_j = units.eV.to('J')
-        self.nm_to_m = const.nano   # 1.0e-09
-        self.cm_to_m = const.centi  # 1.0e-02
-        self.km_to_m = const.kilo   # 1.0e+03
-        self.erg_to_joule = const.erg  # 1.0e-07
-        self.g_to_kg = const.gram   # 1.0e-03
-        self.micron_to_nm = units.um.to('nm')
-        self.megabarn_to_m2 = units.Mbarn.to('m2')
-        self.atm_to_pa = const.atm  # 1.0135e+05 atm to pascal (n/m^2)
-        self.dyne_cm2_to_pascal = (units.dyne / units.cm**2).to('Pa')
-        self.k_to_ev = units.K.to('eV', equivalencies=units.temperature_energy())
-        self.ev_to_k = 1. / self.k_to_ev
-        self.ergd2wd = 0.1
-        self.grph = 2.27e-24
-        self.permsi = aconst.eps0.value  # Permitivitty in vacuum (F/m)
-        self.cross_p = 1.59880e-14
-        self.cross_he = 9.10010e-17
-
-        # Dissociation energy of H2 [eV] from Barklem & Collet (2016)
-        self.di = self.eh2diss
-
-        self.atomdic = {'h': 1, 'he': 2, 'c': 3, 'n': 4, 'o': 5, 'ne': 6, 'na': 7,
-                   'mg': 8, 'al': 9, 'si': 10, 's': 11, 'k': 12, 'ca': 13,
-                   'cr': 14, 'fe': 15, 'ni': 16}
-        self.abnddic = {'h': 12.0, 'he': 11.0, 'c': 8.55, 'n': 7.93, 'o': 8.77,
-                   'ne': 8.51, 'na': 6.18, 'mg': 7.48, 'al': 6.4, 'si': 7.55,
-                   's': 5.21, 'k': 5.05, 'ca': 6.33, 'cr': 5.47, 'fe': 7.5,
-                   'ni': 5.08}
-        self.weightdic = {'h': 1.008, 'he': 4.003, 'c': 12.01, 'n': 14.01,
-                     'o': 16.00, 'ne': 20.18, 'na': 23.00, 'mg': 24.32,
-                     'al': 26.97, 'si': 28.06, 's': 32.06, 'k': 39.10,
-                     'ca': 40.08, 'cr': 52.01, 'fe': 55.85, 'ni': 58.69}
-        self.xidic = {'h': 13.595, 'he': 24.580, 'c': 11.256, 'n': 14.529,
-                 'o': 13.614, 'ne': 21.559, 'na': 5.138, 'mg': 7.644,
-                 'al': 5.984, 'si': 8.149, 's': 10.357, 'k': 4.339,
-                 'ca': 6.111, 'cr': 6.763, 'fe': 7.896, 'ni': 7.633}
-        self.u0dic = {'h': 2., 'he': 1., 'c': 9.3, 'n': 4., 'o': 8.7,
-                 'ne': 1., 'na': 2., 'mg': 1., 'al': 5.9, 'si': 9.5, 's': 8.1,
-                 'k': 2.1, 'ca': 1.2, 'cr': 10.5, 'fe': 26.9, 'ni': 29.5}
-        self.u1dic = {'h': 1., 'he': 2., 'c': 6., 'n': 9.,  'o': 4.,  'ne': 5.,
-                 'na': 1., 'mg': 2., 'al': 1., 'si': 5.7, 's': 4.1, 'k': 1.,
-                 'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
+        globalvars(self)
 
 
 class Rhoeetab:
