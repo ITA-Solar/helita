@@ -903,18 +903,20 @@ class PlutoData(object):
     self.uni['tg']     = 1.0e6 # K
     self.uni['l']      = 1.0e8 # cm 
     self.uni['rho']    = 1.0e-15 # gr cm^-3 
-    
+    self.uni['kboltz'] =  1.380658E-16 # Boltzman's cst. [erg/K]
+    self.uni['proton'] =  const.m_n / const.gram        # 1.674927471e-24
+    self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
+    self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
+    self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
+    self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss
+    self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
+
     # Units and constants in SI
     convertcsgsi(self)
 
     globalvars(self)
 
-    self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
 
-    self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
-    self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
-    self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss
-    self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
     self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
     self.uni['gr']     = 2.7e4 # solar gravity in cgs
     self.uni['gc']     = self.uni['gr'] * self.uni['l'] / self.uni['u'] ** 2 # solar gravity in Code units. 
