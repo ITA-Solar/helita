@@ -11,6 +11,7 @@ from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
 from .load_noeos_quantities import *
+import scipy.constants as const
 
 #from matplotlib.pyplot import *
 #from matplotlib.mlab import *
