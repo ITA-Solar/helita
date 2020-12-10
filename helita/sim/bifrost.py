@@ -1296,7 +1296,12 @@ class Bifrost_units(object):
             self.u_r = 1.0e-7
             # --- ideal gas
             self.gamma = 1.667
-        
+  
+        self.uni={}
+
+        convertcsgsi(self)
+        globalvars(self)
+      
         self.u_u = self.u_l / self.u_t
         self.u_p = self.u_r * (self.u_l / self.u_t)**2    # Pressure [dyne/cm2]
         self.u_kr = 1 / (self.u_r * self.u_l)             # Rosseland opacity [cm2/g]
@@ -1309,7 +1314,6 @@ class Bifrost_units(object):
         self.pi = const.pi
         self.u_b = self.u_u * np.sqrt(4. * self.pi * self.u_r)
 
-        self.uni={}
         self.uni['l'] = self.u_l
         self.uni['t'] = self.u_t
         self.uni['rho'] = self.u_r
@@ -1337,9 +1341,7 @@ class Bifrost_units(object):
         self.msi_e = const.m_e  # 9.1093897e-31
         self.usi_b = self.u_b * 1e-4
 
-        convertcsgsi(self)
 
-        globalvars(self)
 
 
 class Rhoeetab:
