@@ -895,10 +895,10 @@ class PlutoData(object):
           cgsunits = self.uni['tg']
       else: 
           cgsunits = 1.0
-      
+      print(cgsunits)
       rho=self.get_var('rho',snap=snap)
       pres =  self.get_var('pg',snap=snap) 
-      self.data = self.get_var('rho',snap=snap) * self.get_var('pg',snap=snap) *  cgsunits
+      self.data = rho * pres * cgsunits
     else: 
       self.data = None
   
