@@ -7,6 +7,10 @@ import scipy.ndimage
 import scipy.interpolate
 from scipy.interpolate import UnivariateSpline
 import scipy.constants as ct
+from .load_quantities import *
+from .load_arithmetic_quantities import *
+from .tools import *
+from .load_noeos_quantities import *
 
 #from matplotlib.pyplot import *
 #from matplotlib.mlab import *
@@ -960,19 +964,8 @@ class PlutoData(object):
 
     if self.transunits == False:
       self.transunits == True
-      #self.x =  # including units conversion 
-      #self.y = 
-      #self.z =
-      #self.dx = 
-      #self.dy = 
-      #self.dz =
 
-    var = get_var(varname,snap=snap)
-
-    #var = transpose(var,(X,X,X))
-    # also velocities. 
-
-    return var
+    return get_var(varname,snap=snap)
 
 
 class Tools(object):

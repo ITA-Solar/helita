@@ -691,7 +691,7 @@ class BifrostData(object):
 
         var = np.reshape(np.sign * get_var(varname,snap=snap), (self.nx, self.ny, self.nz))
 
-        var = np.reverse(var,axis=3)
+        var = np.reverse(var,axis=2)
 
         return var
 
@@ -1251,7 +1251,6 @@ class Bifrost_units(object):
     def __init__(self,filename='mhd.in',fdir='./',verbose=True):
         import scipy.constants as const
         from astropy import constants as aconst
-        from astropy import units
 
         if os.path.isfile(os.path.join(fdir,filename)):
             self.params = read_idl_ascii(os.path.join(fdir,filename),firstime=True)
@@ -1306,7 +1305,7 @@ class Bifrost_units(object):
         self.u_n = 3.00e+10                      # Density number n_0 * 1/cm^3
         self.pi = const.pi
         self.u_b = self.u_u * np.sqrt(4. * self.pi * self.u_r)
-        
+
         self.uni={}
 
         self.uni['l'] = self.u_l
