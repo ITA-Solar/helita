@@ -48,11 +48,14 @@ class MuramAtmos:
     def read_header(self, headerfile):
         tmp = np.loadtxt(headerfile)
         dims = tmp[:3].astype("i")
-        deltas = tmp[3:6] #km
-        time= tmp[7] 
-        self.order = tmp[7:10].astype(int)
+        deltas = tmp[3:6]
+        if len(tmp) == 10: # Old version of MURaM, deltas stored in km
+            self.uno['l'] = 1e5 # 
+        time= tmp[7]
+        self.order = tmp[-3:].astype(int)
         dims = dims[self.order]
         deltas = deltas[self.order]
+
         self.x = np.arange(dims[0])*deltas[0]
         self.y = np.arange(dims[1])*deltas[1]
         self.z = np.arange(dims[2])*deltas[2]
@@ -360,6 +363,17 @@ class MuramAtmos:
         taxis = lgTmin+dellgT*np.arange(0,max_bins+1)
       
       return vlos,taxis,time
+    
+    def get_NeNH(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
+        '''
+        Computes emission meassure in cgs and normalized to unitsnorm
+        '''       
+        rho = self.get_var('rho',it=iter,layout=layout)
+        nh = rho / (wght_per_h * ct.atomic_mass * 1e3)  # from rho to nH and added unitsnorm            
+        en = nh + 2.*nh*(wght_per_h-1.) # this may need a better adjustment.             
+
+        return en * (nh / unitsnorm )
+
 
     def get_ems(self,iter=None,layout=None, wght_per_h=1.4271, unitsnorm = 1e27, axis=2): 
         '''
