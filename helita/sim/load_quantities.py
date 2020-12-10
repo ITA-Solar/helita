@@ -20,7 +20,7 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, 
                 KAPPA_QUANT=None, GYROF_QUANT=None, WAVE_QUANT=None, 
                 FLUX_QUANT=None, CURRENT_QUANT=None, COLCOU_QUANT=None,  
-                COLCOUMS_QUANT=None, COLFREMX_QUANT=None, **kwargs):
+                COLCOUMS_QUANT=None, COLFREMX_QUANT=None, EM_QUANT=None, **kwargs):
 #                HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   quant = quant.lower()
 
