@@ -918,7 +918,7 @@ class PlutoData(object):
     globalvars(self)
 
 
-    self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
+    self.uni['j']      = self.uni['b']/self.uni['l']*self.clight # current density
     self.uni['gr']     = 2.7e4 # solar gravity in cgs
     self.uni['gc']     = self.uni['gr'] * self.uni['l'] / self.uni['u'] ** 2 # solar gravity in Code units. 
       
