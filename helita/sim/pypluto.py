@@ -885,7 +885,7 @@ class PlutoData(object):
     return self.data
 
 
-  def get_comp_vars(self, var, *args, it=None, iix=None, iiy=None, iiz=None, layout=None, cgs=True, **kwargs): 
+  def get_comp_vars(self, var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kwargs): 
     '''
     Computes composite variables. 
     '''
@@ -896,9 +896,9 @@ class PlutoData(object):
       else: 
           cgsunits = 1.0
       
-      rho=self.get_var('rho',it=it, cgs=False)
-      pres =  self.get_var('pg',it=it, cgs=False) 
-      self.data = self.get_var('rho',it=it, cgs=False) * self.get_var('pg',it=it, cgs=False) *  cgsunits
+      rho=self.get_var('rho',snap=snap)
+      pres =  self.get_var('pg',snap=snap) 
+      self.data = self.get_var('rho',snap=snap) * self.get_var('pg',snap=snap) *  cgsunits
     else: 
       self.data = None
   

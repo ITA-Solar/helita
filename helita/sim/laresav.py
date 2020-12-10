@@ -76,8 +76,6 @@ class Laresav:
     snap - integer, optional
         Snapshot number to read. By default reads the loaded snapshot;
         if a different number is requested, will load that snapshot.
-    cgs- logic 
-        converts into cgs units. 
         
     Axes: 
     -----
