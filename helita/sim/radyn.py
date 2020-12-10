@@ -121,11 +121,6 @@ class radyn:
     Units and constants in cgs
     '''
     self.uni={}
-    
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
 
     self.uni['tg']     = 1.0
     self.uni['l']      = 1.0
@@ -135,6 +130,11 @@ class radyn:
     self.uni['b']      = 1.0
     self.uni['t']      = 1.0 # seconds
     self.uni['j']      = 1.0
+        
+    # Units and constants in SI
+    convertcsgsi(self)
+
+    globalvars(self)
  
 
   def genvar(self): 

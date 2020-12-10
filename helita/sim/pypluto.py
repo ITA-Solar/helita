@@ -900,16 +900,17 @@ class PlutoData(object):
     Units and constants in cgs
     '''
     self.uni={}
-
+    self.uni['tg']     = 1.0e6 # K
+    self.uni['l']      = 1.0e8 # cm 
+    self.uni['rho']    = 1.0e-15 # gr cm^-3 
+    
     # Units and constants in SI
     convertcsgsi(self)
 
     globalvars(self)
 
     self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
-    self.uni['tg']     = 1.0e6 # K
-    self.uni['l']      = 1.0e8 # cm 
-    self.uni['rho']    = 1.0e-15 # gr cm^-3 
+
     self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
     self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
     self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss

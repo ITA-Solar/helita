@@ -170,20 +170,21 @@ class Laresav:
     Units and constants in cgs
     '''
     self.uni={}
-    
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
-
     self.uni['gamma']  = 5./3.
     self.uni['tg']     = 5.77e9 # K
     self.uni['l']      = 1.0e8 # Mm -> cm
     self.uni['rho']    = 1.67e-9 # gr cm^-3 
-    self.uni['n']      = self.uni['rho'] / self.uni['proton']/ 2. # cm^-3
     self.uni['u']      = 6.9e8 # cm/s
     self.uni['b']      = 100.0 # Gauss
     self.uni['t']      = 0.145 # seconds
+    
+    # Units and constants in SI
+
+    convertcsgsi(self)
+
+    globalvars(self)
+
+    self.uni['n']      = self.uni['rho'] / self.m_p / 2. # cm^-3
 
   def genvar(self): 
     '''

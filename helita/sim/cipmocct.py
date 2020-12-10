@@ -148,21 +148,22 @@ class Cipmocct:
     Units and constants in cgs
     '''
     self.uni={}
-    
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
 
     self.uni['gamma']  = 5./3.
     self.uni['tg']     = 1.0e6 # K
     self.uni['fact']   = 2
     self.uni['l']      = 1000.*self.uni['fact']*1.0e5 # for having a 2000 km wide loop
-    self.uni['n']      = 1.0e9 # cm^-3
-    self.uni['rho']    = self.uni['n'] * self.uni['proton'] /2. # gr cm^-3 
-    self.uni['u']      = np.sqrt(2*self.uni['gamma']*self.uni['kboltz']/self.uni['proton']*self.uni['tg']) # cm/s
-    self.uni['b']      = self.uni['u']*np.sqrt(self.uni['rho']) # Gauss
+    self.uni['n']      = 1.0e9 # cm^-3    
     self.uni['t']      = 1.0 # seconds
+
+    # Units and constants in SI
+    convertcsgsi(self)
+
+    globalvars(self)
+
+    self.uni['rho']    = self.uni['n'] * self.uni['proton'] /2. # gr cm^-3 
+    self.uni['u']      = np.sqrt(2*self.uni['gamma']*self.k_b/self.m_p*self.uni['tg']) # cm/s
+    self.uni['b']      = self.uni['u']*np.sqrt(self.uni['rho']) # Gauss
     self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
 
  

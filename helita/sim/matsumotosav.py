@@ -156,14 +156,6 @@ class Matsumotosav:
     Units and constants in cgs
     '''
     self.uni={}
-    
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
-
-
-    self.uni['gamma']  = self.gamma 
     self.uni['tg']     = 1.0 # K
     self.uni['l']      = 1.0e8 # Mm -> cm
     self.uni['rho']    = 1.0 # gr cm^-3 
@@ -171,6 +163,14 @@ class Matsumotosav:
     self.uni['u']      = 1.0 # cm/s
     self.uni['b']      = 1.0 # Gauss
     self.uni['t']      = 1.0 # seconds
+        
+    # Units and constants in SI
+    convertcsgsi(self)
+
+    globalvars(self)
+
+
+    self.uni['gamma']  = self.gamma 
 
  
   def genvar(self): 
