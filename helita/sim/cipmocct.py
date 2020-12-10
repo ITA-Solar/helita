@@ -29,6 +29,7 @@ class Cipmocct:
     self.fdir = fdir
     self.snap = snap 
     self.sel_units = sel_units
+    self.verbose = verbose
 
     params = rsav(os.path.join(self.fdir,'params_'+rootname+'.sav'))
     

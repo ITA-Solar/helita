@@ -773,6 +773,7 @@ class PlutoData(object):
     self.fdir = fdir
     self.snap = snap 
     self.sel_units =sel_units 
+    self.verbose = verbose
 
     self.info = pload(snap,w_dir=fdir,datatype=datatype)
     self.x = self.info.x1

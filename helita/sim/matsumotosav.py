@@ -32,6 +32,7 @@ class Matsumotosav:
     self.savefile = rsav(os.path.join(fdir,rootname+'{:06d}'.format(snap)+'.sav'))
     self.snap     = snap
     self.sel_units= sel_units
+    self.verbose = verbose
 
     self.time     = self.savefile['v']['time'][0]
     self.grav     = self.savefile['v']['gx'][0]

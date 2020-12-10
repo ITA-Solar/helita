@@ -28,6 +28,7 @@ class Laresav:
     self.rootname = self.savefile['d']['filename'][0]
     self.snap = snap 
     self.sel_units = sel_units
+    self.verbose = verbose
 
     self.time     = self.savefile['d']['time'][0]
     self.time_prev= self.savefile['d']['time_prev'][0]

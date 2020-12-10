@@ -31,6 +31,7 @@ class radyn:
     self.y = 0.0
     self.z = self.rdobj.__getattr__('zm')
     self.sel_units= sel_units
+    self.verbose = verbose
     
     self.dx = 1.0
     self.dy = 1.0
