@@ -1296,7 +1296,15 @@ class Bifrost_units(object):
             self.u_r = 1.0e-7
             # --- ideal gas
             self.gamma = 1.667
-  
+
+        self.u_u = self.u_l / self.u_t
+        self.u_p = self.u_r * (self.u_l / self.u_t)**2    # Pressure [dyne/cm2]
+        self.u_kr = 1 / (self.u_r * self.u_l)             # Rosseland opacity [cm2/g]
+        self.u_ee = self.u_u**2
+        self.u_e = self.u_r * self.u_ee
+        self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
+        self.u_n = 3.00e+10                      # Density number n_0 * 1/cm^3
+
         self.uni={}
 
         self.uni['l'] = self.u_l
@@ -1310,14 +1318,6 @@ class Bifrost_units(object):
         self.uni['tg'] = 1.0
         self.uni['b'] = self.u_b
 
-        self.u_u = self.u_l / self.u_t
-        self.u_p = self.u_r * (self.u_l / self.u_t)**2    # Pressure [dyne/cm2]
-        self.u_kr = 1 / (self.u_r * self.u_l)             # Rosseland opacity [cm2/g]
-        self.u_ee = self.u_u**2
-        self.u_e = self.u_r * self.u_ee
-        self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
-        self.u_n = 3.00e+10                      # Density number n_0 * 1/cm^3
-
         convertcsgsi(self)
         globalvars(self)
   
@@ -1325,7 +1325,6 @@ class Bifrost_units(object):
         self.u_tge = (self.m_e / self.k_b) * self.u_ee
         self.pi = const.pi
         self.u_b = self.u_u * np.sqrt(4. * self.pi * self.u_r)
-
 
         self.usi_l = self.u_l * const.centi  # 1e6
         self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
@@ -1342,7 +1341,6 @@ class Bifrost_units(object):
         self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
         self.msi_e = const.m_e  # 9.1093897e-31
         self.usi_b = self.u_b * 1e-4
-
 
 
 
