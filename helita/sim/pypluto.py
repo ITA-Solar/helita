@@ -850,7 +850,7 @@ class PlutoData(object):
 
     else: 
 
-      self.get_comp_vars(var, *args, it=it, iix=iix, iiy=iiy, iiz=iiz, layout=layout, **kwargs)
+      self.get_comp_vars(var, *args, snap=snap, iix=iix, iiy=iiy, iiz=iiz, layout=layout, **kwargs)
       
       if np.shape(self.data) == ():
         # Loading quantities
