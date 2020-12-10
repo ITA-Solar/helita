@@ -241,13 +241,6 @@ class MuramAtmos:
         eosP          -- Pressure (cgs)
         eosT          -- Temperature (K)
     '''
-    if var == '':
-      print(help(self.get_var))
-      print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
-      for ii in self.varn: 
-          print('use ', ii,' for ',self.varn[ii])
-      return None
-  
     
     if (not snap == None): 
       self.snap = snap 
@@ -260,54 +253,66 @@ class MuramAtmos:
     else:
       varname=var
 
-    try: 
-    
-      ashape = np.array([self.nx, self.ny, self.nz])
-    
-      transpose_order = self.order
+    if var != '': 
 
-      if self.sel_units == 'cgs': 
-        varu=var.replace('x','')
-        varu=varu.replace('y','')
-        varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+      try: 
+      
+        ashape = np.array([self.nx, self.ny, self.nz])
+      
+        transpose_order = self.order
+
+        if self.sel_units == 'cgs': 
+          varu=var.replace('x','')
+          varu=varu.replace('y','')
+          varu=varu.replace('z','')
+          if (var in self.varn.keys()) and (varu in self.uni.keys()): 
+            cgsunits = self.uni[varu]
+          else: 
+            cgsunits = 1.0
         else: 
           cgsunits = 1.0
-      else: 
-        cgsunits = 1.0
 
-      data = np.memmap(self.fdir+'/'+varname+ self.siter, mode="r", 
-                      shape=tuple(ashape[self.order]),
-                      dtype=self.dtype, order="F")
-      data = data.transpose(transpose_order)
-    
-      if iix != None: 
-        data= data[iix,:,:]
-      if iiy != None: 
-        data= data[:,iiy,:]
-      if iiz != None: 
-        data= data[:,:,iiz]
+        data = np.memmap(self.fdir+'/'+varname+ self.siter, mode="r", 
+                        shape=tuple(ashape[self.order]),
+                        dtype=self.dtype, order="F")
+        data = data.transpose(transpose_order)
+      
+        if iix != None: 
+          data= data[iix,:,:]
+        if iiy != None: 
+          data= data[:,iiy,:]
+        if iiz != None: 
+          data= data[:,:,iiz]
 
-      self.data = data *cgsunits
+        self.data = data *cgsunits
 
-    except:
-      # Loading quantities
-      if self.verbose: 
-        print('Loading composite variable',end="\r",flush=True)
-      self.data = load_quantities(self,var,PLASMA_QUANT='',
-                    CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                    IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                    DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                    COULOMB_COL_QUANT='', AMB_QUANT='')
-      # Loading arithmetic quantities
-      if np.shape(self.data) == ():
+      except:
+        # Loading quantities
         if self.verbose: 
-          print('Loading arithmetic variable',end="\r",flush=True)
-        self.data = load_arithmetic_quantities(self,var) 
+          print('Loading composite variable',end="\r",flush=True)
+        self.data = load_quantities(self,var,PLASMA_QUANT='',
+                      CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                      IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                      DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                      COULOMB_COL_QUANT='', AMB_QUANT='')
+        # Loading arithmetic quantities
+        if np.shape(self.data) == ():
+          if self.verbose: 
+            print('Loading arithmetic variable',end="\r",flush=True)
+          self.data = load_arithmetic_quantities(self,var) 
 
-    return self.data
- 
+      return self.data
+    
+    else: 
+
+      print(help(self.get_var))
+      print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
+      for ii in self.varn: 
+          print('use ', ii,' for ',self.varn[ii])
+      print(self.description['ALL']) 
+
+      return None
+   
 
   def read_var_3d(self,var,iter=None,layout=None):
 
