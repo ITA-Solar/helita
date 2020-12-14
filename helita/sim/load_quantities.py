@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from glob import glob
+import warnings
 
 elemlist = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's',
         'k', 'ca', 'cr', 'fe', 'ni']
@@ -218,7 +219,7 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs):
   if quant in EOSTAB_QUANT:
 
     if quant == 'tau':
-      return obj.calc_tau()
+      return calc_tau(obj)
 
     else: 
       # bifrost_uvotrt uses SI!
@@ -1396,6 +1397,45 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None, **kwargs):
   else:
     return None  
 
+def calc_tau(obj):
+  """
+  Calculates optical depth.
+
+  """
+  warnings.warn("Use of calc_tau is discouraged. It is model-dependent, "
+                "inefficient and slow.")
+
+  # grph = 2.38049d-24 uni.GRPH
+  # bk = 1.38e-16 uni.KBOLTZMANN
+  # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
+  
+
+  units_temp=obj.transunits 
+
+  nel = obj.trans2comm('ne')
+  tg = obj.trans2comm('tg')
+  rho = obj.trans2comm('rho') 
+
+  tau = np.zeros((obj.nx, obj.ny, obj.nz)) + 1.e-16
+  xhmbf = np.zeros((obj.nz))
+  const = (1.03526e-16 / obj.uni.grph) * 2.9256e-17 
+  for iix in range(obj.nx):
+      for iiy in range(obj.ny):
+          for iiz in range(obj.nz):
+              xhmbf[iiz] = const * nel[iix, iiy, iiz] / \
+                  tg[iix, iiy, iiz]**1.5 * np.exp(0.754e0 *
+                  obj.uni.ev_to_erg / obj.uni.kboltzmann /
+                  tg[iix, iiy, iiz]) * rho[iix, iiy, iiz]
+
+          for iiz in range(obj.nz-1,0,-1):
+              tau[iix, iiy, iiz] = tau[iix, iiy, iiz - 1] + 0.5 *\
+                  (xhmbf[iiz] + xhmbf[iiz - 1]) *\
+                  np.abs(obj.dz1d[iiz]) 
+
+  if not units_temp: 
+    obj.trans2noncommaxes
+
+  return tau
 
 def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True, **kwargs):
   '''

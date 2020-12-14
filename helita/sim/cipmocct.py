@@ -208,14 +208,7 @@ class Cipmocct:
 
     self.sel_units = 'cgs'
 
-    if self.transunits == False:
-      self.transunits = True
-      #self.x =  # including units conversion 
-      #self.y = 
-      #self.z =
-      #self.dx = 
-      #self.dy = 
-      #self.dz =
+    self.trans2commaxes 
 
     var = self.get_var(varname,snap=snap)
 
@@ -224,7 +217,22 @@ class Cipmocct:
 
     return var
 
+  def trans2commaxes(self): 
 
+    if self.transunits == False:
+      #self.x =  # including units conversion 
+      #self.y = 
+      #self.z =
+      #self.dx = 
+      #self.dy = 
+      #self.dz =
+      self.transunits = True
+
+  def trans2noncommaxes(self): 
+
+    if self.transunits == True:
+      # opposite to the previous function 
+      self.transunits = False
 
 class Cipmocct_units(object): 
 

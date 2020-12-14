@@ -703,14 +703,9 @@ class BifrostData(object):
         '''
 
         self.sel_units = 'cgs'
-        if self.transunits == False:
-          self.transunits = True
-          self.x =  self.x * 1e8
-          self.dx =  self.dx * 1e8
-          self.y =  self.y * 1e8
-          self.dy =  self.dy * 1e8
-          self.z = - self.z[::-1].copy() * 1e8
-          self.dz = - self.dz1d[::-1].copy() * 1e8  
+        
+        self.trans2commaxes 
+
         sign = 1.0
         if varname[-1] in ['x','y','z']: 
             vartemp = varname+'c'
@@ -724,6 +719,27 @@ class BifrostData(object):
 
         return var
 
+    def trans2commaxes(self): 
+
+        if self.transunits == False:
+          self.transunits = True
+          self.x =  self.x * 1e8
+          self.dx =  self.dx * 1e8
+          self.y =  self.y * 1e8
+          self.dy =  self.dy * 1e8
+          self.z = - self.z[::-1].copy() * 1e8
+          self.dz = - self.dz1d[::-1].copy() * 1e8 
+
+    def trans2noncommaxes(self): 
+
+        if self.transunits == True:
+          self.transunits = False
+          self.x =  self.x / 1e8
+          self.dx =  self.dx / 1e8
+          self.y =  self.y / 1e8
+          self.dy =  self.dy / 1e8
+          self.z = - self.z[::-1].copy() / 1e8
+          self.dz = - self.dz1d[::-1].copy() / 1e8   
 
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         """
@@ -872,55 +888,6 @@ class BifrostData(object):
                 self.params['gamma'][self.snapInd] * np.log(
                     self.get_var('r', *args, **kwargs))
 
-    def calc_tau(self):
-        """
-        Calculates optical depth.
-
-        DEPRECATED, DO NOT USE.
-        """
-        warnings.warn("Use of calc_tau is discouraged. It is model-dependent, "
-                      "inefficient and slow, and will give wrong results in "
-                      "many scenarios. DO NOT USE.")
-
-        if not hasattr(self, 'z'):
-            print('(WWW) get_tau needs the height (z) in Mm (units code)')
-        print('a')
-
-        # grph = 2.38049d-24 uni.GRPH
-        # bk = 1.38e-16 uni.KBOLTZMANN
-        # EV_TO_ERG=1.60217733E-12 uni.EV_TO_ERG
-        if not hasattr(self, 'ne'):
-
-            nel = self.get_var('ne')
-        else:
-            nel = self.ne
-        print('b')
-        if not hasattr(self, 'tg'):
-            tg = self.get_var('tg')
-        else:
-            tg = self.tg
-
-        if not hasattr(self, 'r'):
-            rho = self.get_var('r') * self.uni.u_r
-        else:
-            rho = self.r * self.uni.u_r
-
-        tau = np.zeros((self.nx, self.ny, self.nz)) + 1.e-16
-        xhmbf = np.zeros((self.nz))
-        const = (1.03526e-16 / self.uni.grph) * 2.9256e-17 / 1e6
-        for iix in range(self.nx):
-            for iiy in range(self.ny):
-                for iiz in range(self.nz):
-                    xhmbf[iiz] = const * nel[iix, iiy, iiz] / \
-                        tg[iix, iiy, iiz]**1.5 * np.exp(0.754e0 *
-                        self.uni.ev_to_erg / self.uni.kboltzmann /
-                        tg[iix, iiy, iiz]) * rho[iix, iiy, iiz]
-
-                for iiz in range(1, self.nz):
-                    tau[iix, iiy, iiz] = tau[iix, iiy, iiz - 1] + 0.5 *\
-                        (xhmbf[iiz] + xhmbf[iiz - 1]) *\
-                        np.abs(self.dz1d[iiz]) * 1.0e8
-        return tau
 
     def get_electron_density(self, sx=slice(None), sy=slice(None), sz=slice(None)):
         """

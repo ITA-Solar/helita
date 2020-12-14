@@ -47,7 +47,9 @@ class MuramAtmos:
     self.filename=''
     self.siter = template
     self.file_root = template
-
+    
+    self.transunits = False
+    
     self.cstagop = False # This will not allow to use cstagger from Bifrost in load
     self.hion = False # This will not allow to use HION from Bifrost in load
     tabfile = os.path.join(self.fdir, 'tabparam.in')
@@ -64,7 +66,7 @@ class MuramAtmos:
     deltas = tmp[3:6]
     if len(tmp) == 10: # Old version of MURaM, deltas stored in km
         self.uni.uni['l'] = 1e5 # JMS What is this for? 
-    time= tmp[7]
+    self.time= tmp[7]
     
     self.order = tmp[-3:].astype(int)
     dims = dims[self.order]
@@ -305,7 +307,7 @@ class MuramAtmos:
         print('Loading composite variable',end="\r",flush=True)
       self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
                 COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
-                EOSTAB_QUANT=['ne'], TAU_QUANT='', DEBYE_LN_QUANT='',
+                EOSTAB_QUANT=['ne','tau'], TAU_QUANT='', DEBYE_LN_QUANT='',
                 CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
                 HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
                 KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
@@ -522,22 +524,37 @@ class MuramAtmos:
 
     self.sel_units = 'cgs'
 
+    self.trans2commaxes
+
     return self.get_var(varname,snap=snap)
 
+  def trans2commaxes(self): 
+
+    if self.transunits == False:
+      self.transunits = True
+
+  def trans2noncommaxes(self): 
+
+    if self.transunits == True:
+      self.transunits = False
 
   def trasn2fits(self, varname, snap=None, instrument = 'MURaM', 
-    name='ar098192', origin='HGCR    '): 
+    name='ar098192', origin='HGCR    ', z_tau51m=None ): 
     '''
     converts the original data into fits files following Bifrost publicly available 
     format, i.e., SI, vertical axis, z and top corona is positive and last index. 
     '''
-
-    var = self.trans2comm(varname,snap=snap)
     
-    if varname[-1]=='y': 
-      varname==varname[:-1]+'z'
-    elif varname=='z': 
-      varname==varname[:-1]+'y'
+    if z_tau51m == None: 
+      tau51 = self.trans2comm('tau',snap=snap)
+      z_tau51 = np.zeros((self.nx,self.ny))
+      for ix in range (0,self.nx): 
+        for iy in range(0,self.ny): 
+          z_tau51[ix,iy] = self.z[np.argmin(np.abs(tau51[ix,iy,:]-1.0))]
+
+      z_tau51m = np.mean(z_tau51) / 1e8
+
+    self.datafits = np.transpose(self.trans2comm(varname,snap=snap),(2,1,0))
 
     varu=varname.replace('x','')
     varu=varu.replace('y','')
@@ -550,23 +567,31 @@ class MuramAtmos:
 
     units_title(self)
 
-    self.datafits=np.transpose(var,(1,2,0))
+    if varu == 'ne': 
+      self.fitsunits = 'm^{-3}'
+      siunits = 1e6
+    else: 
+      self.fitsunits = self.unisi_title[varu]
+
     if varname[:2] == 'lg': 
       self.datafits = self.datafits + np.log10(siunits) # cgs -> SI
     else: 
       self.datafits = self.datafits * siunits
 
-    self.fitsunits = self.unisi_title[varu]
 
     self.xfits=self.x / 1e8
-    self.yfits=self.z / 1e8
-    self.zfits=self.y / 1e8
+    self.yfits=self.y / 1e8
+    self.zfits=self.z / 1e8 - z_tau51m
 
+    z0 = np.min(np.abs(self.zfits))
+    self.zfits += z0
+    z_tau51m = -z0
     self.dxfits=self.dx / 1e8
-    self.dyfits=self.dz / 1e8
-    self.dzfits=self.dy / 1e8
+    self.dyfits=self.dy / 1e8
+    self.dzfits=self.dz / 1e8
 
-    writefits(self,varname, instrument = instrument, name=name, origin=origin)
+    writefits(self,varname, instrument = instrument, name=name, 
+      origin=origin, z_tau51m=z_tau51m)
 
  
 class Muram_units(object): 
