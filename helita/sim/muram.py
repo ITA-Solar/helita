@@ -28,7 +28,7 @@ class MuramAtmos:
   """
 
   def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-               big_endian=False, prim=False):
+               sel_units='cgs', big_endian=False, prim=False):
 
     self.prim = prim
     self.fdir = fdir
@@ -39,10 +39,9 @@ class MuramAtmos:
         self.dtype = '>' + dtype
     else:
         self.dtype = '<' + dtype
+    self.uni = Muram_units()
     self.read_header("%s/Header%s" % (fdir, template))
-    
     #self.read_atmos(fdir, template)
-    self.units()
     # Snapshot number
     self.snap = int(template[1:])
     self.filename=''
@@ -64,18 +63,35 @@ class MuramAtmos:
     dims = tmp[:3].astype("i")
     deltas = tmp[3:6]
     if len(tmp) == 10: # Old version of MURaM, deltas stored in km
-        self.uno['l'] = 1e5 # JMS What is this for? 
+        self.uni.uni['l'] = 1e5 # JMS What is this for? 
     time= tmp[7]
+    
     self.order = tmp[-3:].astype(int)
     dims = dims[self.order]
     deltas = deltas[self.order]
+    if self.sel_units=='cgs': 
+        deltas *= self.uni.uni['l']
 
     self.x = np.arange(dims[0])*deltas[0]
     self.y = np.arange(dims[1])*deltas[1]
     self.z = np.arange(dims[2])*deltas[2]
     self.dx, self.dy, self.dz = deltas[0], deltas[1], deltas[2]
     self.nx, self.ny, self.nz = dims[0], dims[1], dims[2]
+    
+    if self.nx > 1:
+        self.dx1d = np.gradient(self.x) 
+    else: 
+        self.dx1d = np.zeros(self.nx)
 
+    if self.ny > 1:            
+        self.dy1d = np.gradient(self.y) 
+    else:
+        self.dy1d = np.zeros(self.ny)
+
+    if self.nz > 1:
+        self.dz1d = np.gradient(self.z)
+    else:
+        self.dz1d = np.zeros(self.nz)
 
   def read_atmos(self, fdir, template):
     ashape = (self.nx, self.nz, self.ny)
@@ -210,7 +226,7 @@ class MuramAtmos:
     return dem,taxis,time
 
 
-  def get_var(self,var,snap=None, iix=None, iiy=None, iiz=None, layout=None): 
+  def get_var(self,var,snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
     '''
     Reads the variables from a snapshot (snap).
 
@@ -253,8 +269,7 @@ class MuramAtmos:
     else:
       varname=var
 
-    try: 
-    
+    if var in self.varn.keys(): 
       ashape = np.array([self.nx, self.ny, self.nz])
     
       transpose_order = self.order
@@ -263,8 +278,8 @@ class MuramAtmos:
         varu=var.replace('x','')
         varu=varu.replace('y','')
         varu=varu.replace('z','')
-        if (var in self.varn.keys()) and (varu in self.uni.keys()): 
-          cgsunits = self.uni[varu]
+        if (var in self.varn.keys()) and (varu in self.uni.uni.keys()): 
+          cgsunits = self.uni.uni[varu]
         else: 
           cgsunits = 1.0
       else: 
@@ -284,20 +299,23 @@ class MuramAtmos:
 
       self.data = data *cgsunits
 
-    except:
+    else:
       # Loading quantities
       if self.verbose: 
         print('Loading composite variable',end="\r",flush=True)
-      self.data = load_quantities(self,var,PLASMA_QUANT='',
-                    CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                    IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                    DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                    COULOMB_COL_QUANT='', AMB_QUANT='')
+      self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
+                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                EOSTAB_QUANT=['ne'], TAU_QUANT='', DEBYE_LN_QUANT='',
+                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
+                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
+                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
+                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
+                COLCOUMS_QUANT='', COLFREMX_QUANT='', **kargs)
       # Loading arithmetic quantities
       if np.shape(self.data) == ():
         if self.verbose: 
           print('Loading arithmetic variable',end="\r",flush=True)
-        self.data = load_arithmetic_quantities(self,var) 
+        self.data = load_arithmetic_quantities(self,var, **kargs) 
  
     if var == '': 
 
@@ -406,25 +424,6 @@ class MuramAtmos:
     return vlos,taxis,time
 
 
-  def units(self): 
-    '''
-    Units and constants in cgs
-    '''
-    self.uni={}
-    self.uni['tg']     = 1.0 # K
-    self.uni['l']      = 1.0e5 # to cm
-    self.uni['rho']    = 1.0 # g cm^-3 
-    self.uni['u']      = 1.0 # cm/s
-    self.uni['b']      = np.sqrt(4.0*np.pi) # convert to Gauss
-    self.uni['t']      = 1.0 # seconds
-    self.uni['j']      = 1.0 # current density 
-
-    # Units and constants in SI
-    convertcsgsi(self)
-
-    globalvars(self)
-
-
   def genvar(self, order=[0,1,2]): 
     '''
     Dictionary of original variables which will allow to convert to cgs. 
@@ -506,21 +505,24 @@ class MuramAtmos:
 
       - for 3D atmospheres:  the vertical axis
       - for loop type atmospheres: along the loop 
-      - for 1D atmosphere: the unic dimension is the 3rd axis. 
+      - for 1D atmosphere: the unique dimension is the 3rd axis. 
+      At least one extra dimension needs to be created artifically. 
 
     All of them should obey the right hand rule 
 
     In all of them, the vectors (velocity, magnetic field etc) away from the Sun. 
-    
-    For 1D models, first axis could be time. 
+
+    If applies, z=0 near the photosphere. 
 
     Units: everything is in cgs. 
+    
+    If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
 
     '''
 
     self.sel_units = 'cgs'
 
-    return get_var(varname,snap=snap)
+    return self.get_var(varname,snap=snap)
 
 
   def trasn2fits(self, varname, snap=None, instrument = 'MURaM', 
@@ -541,8 +543,8 @@ class MuramAtmos:
     varu=varu.replace('y','')
     varu=varu.replace('z','')
     varu=varu.replace('lg','')
-    if (varname in self.varn.keys()) and (varu in self.uni.keys()): 
-      siunits = self.unisi[varu]/self.uni[varu]
+    if (varname in self.varn.keys()) and (varu in self.uni.uni.keys()): 
+      siunits = self.uni.unisi[varu]/self.uni.uni[varu]
     else: 
       siunits = 1.0
 
@@ -566,6 +568,24 @@ class MuramAtmos:
 
     writefits(self,varname, instrument = instrument, name=name, origin=origin)
 
+ 
+class Muram_units(object): 
 
+    def __init__(self):
+        '''
+        Units and constants in cgs
+        '''
+        self.uni={}
+        self.uni['tg']     = 1.0 # K
+        self.uni['l']      = 1.0e5 # to cm
+        self.uni['rho']    = 1.0 # g cm^-3 
+        self.uni['u']      = 1.0 # cm/s
+        self.uni['b']      = np.sqrt(4.0*np.pi) # convert to Gauss
+        self.uni['t']      = 1.0 # seconds
+        self.uni['j']      = 1.0 # current density 
 
+        # Units and constants in SI
+        convertcsgsi(self)
+
+        globalvars(self)
 

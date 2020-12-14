@@ -779,20 +779,31 @@ class PlutoData(object):
     self.x = self.info.x1
     self.y = self.info.x2
     self.z = self.info.x3
-    
-    self.dx = self.x-np.roll(self.x,1) 
-    self.dx[0] = self.dx[1]
-    
-    self.dy = self.y-np.roll(self.y,1) 
-    self.dy[0] = self.dy[1]
-    
-    self.dz = self.z-np.roll(self.z,1) 
-    self.dz[0] = self.dz[1]
-    
+
+    if self.sel_units=='cgs': 
+        self.x *= self.uni.uni['l']
+        self.y *= self.uni.uni['l']
+        self.z *= self.uni.uni['l']
+        
     self.nx = len(self.x)
     self.ny = len(self.y)
     self.nz = len(self.z)
+    
+    if self.nx > 1:
+        self.dx1d = np.gradient(self.x) 
+    else: 
+        self.dx1d = np.zeros(self.nx)
 
+    if self.ny > 1:            
+        self.dy1d = np.gradient(self.y) 
+    else:
+        self.dy1d = np.zeros(self.ny)
+
+    if self.nz > 1:
+        self.dz1d = np.gradient(self.z)
+    else:
+        self.dz1d = np.zeros(self.nz)
+        
     self.transunits = False
 
     self.cstagop = False # This will not allow to use cstagger from Bifrost in load
@@ -801,7 +812,7 @@ class PlutoData(object):
     #self.time =  params['time'] # No uniforme (array)
     self.genvar()
 
-  def get_var(self,var,*args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kwargs): 
+  def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kwargs): 
     '''
     Reads the variables from a snapshot (snap).
 
@@ -854,7 +865,7 @@ class PlutoData(object):
         # Loading quantities
         if self.verbose: 
           print('Loading composite variable',end="\r",flush=True)
-        self.data = load_noeos_quantities(self,var)
+        self.data = load_noeos_quantities(self,var, **kargs)
 
         if np.shape(self.data) == ():
           self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
@@ -864,13 +875,13 @@ class PlutoData(object):
                 HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
                 KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
                 FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
-                COLCOUMS_QUANT='', COLFREMX_QUANT='')
+                COLCOUMS_QUANT='', COLFREMX_QUANT='', **kargs)
 
           # Loading arithmetic quantities
           if np.shape(self.data) == ():
             if self.verbose: 
               print('Loading arithmetic variable',end="\r",flush=True)
-            self.data = load_arithmetic_quantities(self,var) 
+            self.data = load_arithmetic_quantities(self, var, **kargs) 
     if var == '': 
 
       print(help(self.get_var))
@@ -928,29 +939,32 @@ class PlutoData(object):
 
       - for 3D atmospheres:  the vertical axis
       - for loop type atmospheres: along the loop 
-      - for 1D atmosphere: the unic dimension is the 3rd axis. 
+      - for 1D atmosphere: the unique dimension is the 3rd axis. 
+      At least one extra dimension needs to be created artifically. 
 
     All of them should obey the right hand rule 
 
     In all of them, the vectors (velocity, magnetic field etc) away from the Sun. 
-    
-    For 1D models, first axis could be time. 
+
+    If applies, z=0 near the photosphere. 
 
     Units: everything is in cgs. 
+    
+    If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
 
     '''
 
     self.sel_units = 'cgs'
 
     if self.transunits == False:
-      self.transunits == True
+      self.transunits = True
 
-    return get_var(varname,snap=snap)
+    return self.get_var(varname,snap=snap)
 
 
 class Pypluto_units(object): 
 
-    def __init__(self,filename='mhd.in',fdir='./',verbose=True):
+    def __init__(self):
     
         '''
         Units and constants in cgs

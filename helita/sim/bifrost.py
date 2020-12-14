@@ -120,6 +120,7 @@ class BifrostData(object):
                                     "found"))
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
         self.genvar()
+        self.transunits = False
         self.cross_sect = Cross_sect
         if 'tabinputfile' in self.params.keys(): 
             tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
@@ -349,11 +350,33 @@ class BifrostData(object):
             self.dzidzup = np.zeros(self.nz) + 1. / self.dz
             self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
 
-        if self.nz > 1:
-            self.dz1d = np.gradient(self.z)
+        if self.sel_units=='cgs': 
+            self.x *= self.uni.uni['l']
+            self.y *= self.uni.uni['l']
+            self.z *= self.uni.uni['l']
+            self.dx *= self.uni.uni['l']
+            self.dy *= self.uni.uni['l']
+            self.dz *= self.uni.uni['l']
+            self.dz1d *= self.uni.uni['l']
+            
+            self.dxidxup /= self.uni.uni['l']
+            self.dxidxdn /= self.uni.uni['l']
+            self.dyidyup /= self.uni.uni['l']
+            self.dyidydn /= self.uni.uni['l']
+            self.dzidzup /= self.uni.uni['l']
+            self.dzidzdn /= self.uni.uni['l']
+            
+        if self.nx > 1:
+            self.dx1d = np.gradient(self.x) 
+        else: 
+            self.dx1d = np.zeros(self.nx)
+            
+        if self.ny > 1:            
+            self.dy1d = np.gradient(self.y) 
         else:
-            self.dz1d = np.zeros(self.nz)
-
+            self.dy1d = np.zeros(self.ny)
+      
+    
     def _init_vars(self, firstime=False,  fast=None, *args, **kwargs):
         """
         Memmaps "simple" variables, and maps them to methods.
@@ -617,10 +640,10 @@ class BifrostData(object):
             val = self.variables[var]
         else:
             # Loading quantities
-            val = load_quantities(self,var)
+            val = load_quantities(self, var, **kargs)
             # Loading arithmetic quantities
             if np.shape(val) == ():
-                val = load_arithmetic_quantities(self,var) 
+                val = load_arithmetic_quantities(self, var, **kargs) 
 
         if var == '':
             print(help(self.get_var))
@@ -664,34 +687,40 @@ class BifrostData(object):
 
           - for 3D atmospheres:  the vertical axis
           - for loop type atmospheres: along the loop 
-          - for 1D atmosphere: the unic dimension is the 3rd axis. 
+          - for 1D atmosphere: the unique dimension is the 3rd axis. 
+          At least one extra dimension needs to be created artifically. 
 
         All of them should obey the right hand rule 
 
         In all of them, the vectors (velocity, magnetic field etc) away from the Sun. 
-        
-        For 1D models, first axis could be time. 
+
+        If applies, z=0 near the photosphere. 
 
         Units: everything is in cgs. 
+
+        If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
 
         '''
 
         self.sel_units = 'cgs'
-
         if self.transunits == False:
-          self.transunits == True
-          self.z = -np.reverse(self.z) * 1e8
-          self.dz = -np.reverse(self.dz1d) * 1e8
-
+          self.transunits = True
+          self.x =  self.x * 1e8
+          self.dx =  self.dx * 1e8
+          self.y =  self.y * 1e8
+          self.dy =  self.dy * 1e8
+          self.z = - self.z[::-1].copy() * 1e8
+          self.dz = - self.dz1d[::-1].copy() * 1e8  
         sign = 1.0
         if varname[-1] in ['x','y','z']: 
             vartemp = varname+'c'
             if varname[-1] in ['y','z']: 
                 sign = -1.0 
 
-        var = np.reshape(np.sign * get_var(varname,snap=snap), (self.nx, self.ny, self.nz))
+        var = np.reshape( sign * self.get_var(varname,snap=snap), 
+                        (self.nx, self.ny, self.nz)).copy()
 
-        var = np.reverse(var,axis=2)
+        var = var[...,::-1].copy()
 
         return var
 
@@ -1252,40 +1281,50 @@ class Bifrost_units(object):
         import scipy.constants as const
         from astropy import constants as aconst
 
-        if os.path.isfile(os.path.join(fdir,filename)):
-            self.params = read_idl_ascii(os.path.join(fdir,filename),firstime=True)
-            try:
-                self.u_l = self.params['u_l']
-            except:
+        if filename != None:
+            if os.path.isfile(os.path.join(fdir,filename)):
+                self.params = read_idl_ascii(os.path.join(fdir,filename),firstime=True)
+                try:
+                    self.u_l = self.params['u_l']
+                except:
+                    if (verbose): 
+                        print('(WWW) the filename does not have u_l.'
+                            ' Default Solar Bifrost u_l has been selected')
+                    self.u_l = 1.0e8
+
+                try:
+                    self.u_t = self.params['u_t']
+                except:
+                    if (verbose): 
+                        print('(WWW) the filename does not have u_t.'
+                            ' Default Solar Bifrost u_t has been selected')
+                    self.u_t = 1.0e2
+
+                try:
+                    self.u_r = self.params['u_r']
+                except:
+                    if (verbose): 
+                        print('(WWW) the filename does not have u_r.'
+                            ' Default Solar Bifrost u_r has been selected')
+                    self.u_r = 1.0e-7
+
+                try:
+                    self.gamma = self.params['gamma']
+                except:
+                    if (verbose): 
+                        print('(WWW) the filename does not have gamma.'
+                            ' ideal gas has been selected')
+                    self.gamma = 1.667
+
+            else:
                 if (verbose): 
-                    print('(WWW) the filename does not have u_l.'
-                        ' Default Solar Bifrost u_l has been selected')
+                    print('(WWW) selected filename is not available.'
+                          ' Default Solar Bifrost units has been selected')
                 self.u_l = 1.0e8
-
-            try:
-                self.u_t = self.params['u_t']
-            except:
-                if (verbose): 
-                    print('(WWW) the filename does not have u_t.'
-                        ' Default Solar Bifrost u_t has been selected')
                 self.u_t = 1.0e2
-
-            try:
-                self.u_r = self.params['u_r']
-            except:
-                if (verbose): 
-                    print('(WWW) the filename does not have u_r.'
-                        ' Default Solar Bifrost u_r has been selected')
                 self.u_r = 1.0e-7
-
-            try:
-                self.gamma = self.params['gamma']
-            except:
-                if (verbose): 
-                    print('(WWW) the filename does not have gamma.'
-                        ' ideal gas has been selected')
+                # --- ideal gas
                 self.gamma = 1.667
-
         else:
             if (verbose): 
                 print('(WWW) selected filename is not available.'
@@ -1295,7 +1334,7 @@ class Bifrost_units(object):
             self.u_r = 1.0e-7
             # --- ideal gas
             self.gamma = 1.667
-
+            
         self.u_u = self.u_l / self.u_t
         self.u_p = self.u_r * (self.u_l / self.u_t)**2    # Pressure [dyne/cm2]
         self.u_kr = 1 / (self.u_r * self.u_l)             # Rosseland opacity [cm2/g]
@@ -1366,7 +1405,7 @@ class Rhoeetab:
                 try:
                     tmp = find_first_match("mhd.in", fdir)
                 except IndexError:
-                    tmp = ''
+                    tmp = None
                     print("(WWW) init: no .idl or mhd.in files found." +
                           "Units set to 'standard' Bifrost units.")
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
@@ -1528,6 +1567,7 @@ class Rhoeetab:
         rhomax = np.max(rho)
         eimin = np.min(ei)
         eimax = np.max(ei)
+        print(self.params['rhomin'],rhomin)
         if rhomin < self.params['rhomin']:
             print('(WWW) tab_interp: density outside table bounds.' +
                   'Table rho min=%.3e, requested rho min=%.3e' %

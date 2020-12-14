@@ -42,22 +42,33 @@ class Laresav:
     self.x       = self.savefile['d']['x'][0]
     self.y       = self.savefile['d']['y'][0]
     self.z       = self.savefile['d']['z'][0]
+    
+    if self.sel_units=='cgs': 
+        self.x *= self.uni.uni['l']
+        self.y *= self.uni.uni['l']
+        self.z *= self.uni.uni['l']
 
-    self.dx = self.x-np.roll(self.x,1) 
-    self.dx[0] = self.dx[1]
-    
-    self.dy = self.y-np.roll(self.y,1) 
-    self.dy[0] = self.dy[1]
-    
-    self.dz = self.z-np.roll(self.z,1) 
-    self.dz[0] = self.dz[1]
-    
     #GRID            STRUCT    -> <Anonymous> Array[1]
     
     self.nx = len(self.x)
     self.ny = len(self.y)
     self.nz = len(self.z)
 
+    if self.nx > 1:
+        self.dx1d = np.gradient(self.x) 
+    else: 
+        self.dx1d = np.zeros(self.nx)
+
+    if self.ny > 1:            
+        self.dy1d = np.gradient(self.y) 
+    else:
+        self.dy1d = np.zeros(self.ny)
+
+    if self.nz > 1:
+        self.dz1d = np.gradient(self.z)
+    else:
+        self.dz1d = np.zeros(self.nz)
+        
     self.transunits = False
 
     self.cstagop = False # This will not allow to use cstagger from Bifrost in load
@@ -65,7 +76,7 @@ class Laresav:
 
     self.genvar()
 
-  def get_var(self,var,snap=None, iix=None, iiy=None, iiz=None, layout=None): 
+  def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
     '''
     Reads the variables from a snapshot (snap).
 
@@ -139,7 +150,7 @@ class Laresav:
       # Loading quantities
       if self.verbose: 
         print('Loading composite variable',end="\r",flush=True)
-      self.data = load_noeos_quantities(self,var)
+      self.data = load_noeos_quantities(self,var, **kargs)
 
 
       if np.shape(self.data) == ():
@@ -150,13 +161,13 @@ class Laresav:
                 HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
                 KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
                 FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
-                COLCOUMS_QUANT='', COLFREMX_QUANT='')
+                COLCOUMS_QUANT='', COLFREMX_QUANT='', **kargs)
 
         # Loading arithmetic quantities
         if np.shape(self.data) == ():
           if self.verbose: 
             print('Loading arithmetic variable',end="\r",flush=True)
-          self.data = load_arithmetic_quantities(self,var) 
+          self.data = load_arithmetic_quantities(self,var, **kargs) 
     
     if var == '': 
 
@@ -198,22 +209,25 @@ class Laresav:
 
       - for 3D atmospheres:  the vertical axis
       - for loop type atmospheres: along the loop 
-      - for 1D atmosphere: the unic dimension is the 3rd axis. 
+      - for 1D atmosphere: the unique dimension is the 3rd axis. 
+      At least one extra dimension needs to be created artifically. 
 
     All of them should obey the right hand rule 
 
     In all of them, the vectors (velocity, magnetic field etc) away from the Sun. 
-    
-    For 1D models, first axis could be time. 
+
+    If applies, z=0 near the photosphere. 
 
     Units: everything is in cgs. 
+    
+    If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
 
     '''
 
     self.sel_units = 'cgs'
 
     if self.transunits == False:
-      self.transunits == True
+      self.transunits = True
       #self.x =  # including units conversion 
       #self.y = 
       #self.z =
@@ -221,7 +235,7 @@ class Laresav:
       #self.dy = 
       #self.dz =
 
-    var = get_var(varname,snap=snap)
+    var = self.get_var(varname,snap=snap)
 
     #var = transpose(var,(X,X,X))
     # also velocities. 

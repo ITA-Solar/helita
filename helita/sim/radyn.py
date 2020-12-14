@@ -147,22 +147,25 @@ class radyn:
 
       - for 3D atmospheres:  the vertical axis
       - for loop type atmospheres: along the loop 
-      - for 1D atmosphere: the unic dimension is the 3rd axis. 
+      - for 1D atmosphere: the unique dimension is the 3rd axis. 
+      At least one extra dimension needs to be created artifically. 
 
     All of them should obey the right hand rule 
 
     In all of them, the vectors (velocity, magnetic field etc) away from the Sun. 
-    
-    For 1D models, first axis could be time. 
+
+    If applies, z=0 near the photosphere. 
 
     Units: everything is in cgs. 
+    
+    If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
 
     '''
 
     self.sel_units = 'cgs'
 
     if self.transunits == False:
-      self.transunits == True
+      self.transunits = True
       #self.x =  # including units conversion 
       #self.y = 
       #self.z =
@@ -177,7 +180,7 @@ class radyn:
 
     return var
 
-class Laresav_units(object): 
+class Radyn_units(object): 
 
     def __init__(self):
         '''

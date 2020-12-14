@@ -27,55 +27,58 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
   if not hasattr(obj, 'description'):
     obj.description = {}
 
-  val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT)
-  if np.shape(val) is ():
-    val = get_em(obj, quant, EM_QUANT=EM_QUANT)  
-  if np.shape(val) is ():
+  if EM_QUANT != '':
+    val = get_em(obj, quant, EM_QUANT=EM_QUANT, **kwargs)  
+  else: 
+    val = None
+  if np.shape(val) == () and COULOMB_COL_QUANT != '':
+    val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT)
+  if np.shape(val) == () and COLFRE_QUANT != '':
     val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and CROSTAB_QUANT != '':
     val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and COLFRI_QUANT != '':
     val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and CURRENT_QUANT != '':
     val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and FLUX_QUANT != '':
     val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and PLASMA_QUANT != '':
     val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and WAVE_QUANT != '':
     val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and CYCL_RES != '':
     val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES)
-  if np.shape(val) is ():
+  if np.shape(val) == () and GYROF_QUANT != '':
     val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and KAPPA_QUANT != '':
     val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and DEBYE_LN_QUANT != '':
     val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and IONP_QUANT != '':
     val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and AMB_QUANT != '':
     val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and HALL_QUANT != '':
     val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT)
-  if np.shape(val) is ():
+  if np.shape(val) == () and BATTERY_QUANT != '':
     val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT)  
-  if np.shape(val) is ():
+  if np.shape(val) == () and SPITZER_QUANT != '':
     val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT) 
-  if np.shape(val) is (): 
+  if np.shape(val) == () and EOSTAB_QUANT != '': 
     val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT)
-  if np.shape(val) is (): 
+  if np.shape(val) == () and COLCOU_QUANT != '': 
     val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT)
-  if np.shape(val) is (): 
+  if np.shape(val) == () and COLCOUMS_QUANT != '': 
     val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT)
-  if np.shape(val) is (): 
+  if np.shape(val) == () and COLFREMX_QUANT != '': 
     val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
 
 
-def get_em(obj, quant, EM_QUANT = None, unitsnorm = 1e27, *args, **kwargs):
+def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
   """
   Calculates emission messure (EM).
 
@@ -87,7 +90,11 @@ def get_em(obj, quant, EM_QUANT = None, unitsnorm = 1e27, *args, **kwargs):
       Array with the dimensions of the 3D spatial from the simulation
       of the emission measure c.g.s units.
   """
-
+  unitsnorm = 1e27
+  for key, value in kwargs.items():
+        if key == 'unitsnorm':
+            unitsnorm = value
+                
   if EM_QUANT is None:
     EM_QUANT = ['emiss']
   obj.description['EM'] = ('emission messure'
@@ -101,19 +108,21 @@ def get_em(obj, quant, EM_QUANT = None, unitsnorm = 1e27, *args, **kwargs):
   if (quant == ''):
     return None
 
-  sel_units = obj.sel_units
-  obj.sel_units = 'cgs'
-  
-  en = obj.get_var('ne')  
-  rho = obj.get_var('rho')
-  nh = rho / obj.uni.grph
-  
-  obj.sel_units = sel_units
+  if quant in EM_QUANT: 
+      sel_units = obj.sel_units
+      obj.sel_units = 'cgs'
 
-  return en * (nh / unitsnorm)
+      rho = obj.get_var('rho')
+      en = obj.get_var('ne')  
+      nh = rho / obj.uni.grph
 
+      obj.sel_units = sel_units
 
-def get_crossections(obj, quant, CROSTAB_QUANT=None):
+      return en * (nh / unitsnorm)
+  else:
+    return None
+
+def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
 
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = CROSTAB_LIST
@@ -185,7 +194,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None):
   else:
     return None
 
-def get_eosparam(obj, quant, EOSTAB_QUANT=None): 
+def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs): 
 
   if (EOSTAB_QUANT == None):
       EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
@@ -222,8 +231,9 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None):
 
       sel_units = obj.sel_units
       obj.sel_units = 'cgs'
-      rho = obj.get_var('r')
-      ee = obj.get_var('ee')
+      rho = obj.get_var('rho')
+      ee = obj.get_var('e')/rho
+    
       obj.sel_units = sel_units
 
       if obj.verbose:
@@ -236,7 +246,7 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None):
     return None
 
 
-def get_collision(obj, quant, COLFRE_QUANT=None):
+def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
 
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_LIST]
@@ -301,7 +311,7 @@ def get_collision(obj, quant, COLFRE_QUANT=None):
 
 
 
-def get_collision_maxw(obj, quant, COLFREMX_QUANT=None):
+def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
   '''
   MAxwell molecular collision
   '''
@@ -356,7 +366,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None):
     return None
 
 
-def get_collcoul(obj, quant, COLCOU_QUANT=None):
+def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
 
   if COLCOU_QUANT is None:
     COLCOU_QUANT = ['nucou' + clist for clist in CROSTAB_LIST]
@@ -399,7 +409,7 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None):
   else:
     return None
 
-def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None):
+def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
 
   if (COLCOUMS_QUANT == None):
     COLCOUMS_QUANT = ['nucou_ei', 'nucou_ii']
@@ -444,7 +454,7 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None):
   else:
     return None
 
-def get_collision_ms(obj, quant, COLFRI_QUANT=None):
+def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
 
   if (COLFRI_QUANT == None):
     COLFRI_QUANT = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
@@ -567,7 +577,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None):
     return None
 
 
-def get_coulomb(obj, quant, COULOMB_COL_QUANT=None):
+def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
 
   if COULOMB_COL_QUANT is None:
     COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
@@ -601,7 +611,7 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None):
     return None
 
 
-def get_current(obj, quant, CURRENT_QUANT=None):
+def get_current(obj, quant, CURRENT_QUANT=None, **kwargs):
 
   if CURRENT_QUANT is None:
     CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
@@ -648,7 +658,7 @@ def get_current(obj, quant, CURRENT_QUANT=None):
     return None
 
 
-def get_flux(obj, quant, FLUX_QUANT=None):
+def get_flux(obj, quant, FLUX_QUANT=None, **kwargs):
 
   if FLUX_QUANT is None:
     FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
@@ -691,7 +701,7 @@ def get_flux(obj, quant, FLUX_QUANT=None):
     return None
 
 
-def get_plasmaparam(obj, quant, PLASMA_QUANT=None):
+def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
 
   if PLASMA_QUANT is None:
     PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
@@ -760,7 +770,7 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None):
     return None
 
 
-def get_wavemode(obj, quant, WAVE_QUANT=None):
+def get_wavemode(obj, quant, WAVE_QUANT=None, **kwargs):
 
   if WAVE_QUANT is None:
     WAVE_QUANT = ['alf', 'fast', 'long']
@@ -816,7 +826,7 @@ def get_wavemode(obj, quant, WAVE_QUANT=None):
     return None
 
 
-def get_cyclo_res(obj, quant, CYCL_RES=None):
+def get_cyclo_res(obj, quant, CYCL_RES=None, **kwargs):
 
   if (CYCL_RES is None):
     CYCL_RES = ['n6nhe2', 'n6nhe3', 'nhe2nhe3']
@@ -854,7 +864,7 @@ def get_cyclo_res(obj, quant, CYCL_RES=None):
     return None
 
 
-def get_gyrof(obj, quant, GYROF_QUANT=None):
+def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
 
   if (GYROF_QUANT is None):
     GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
@@ -883,7 +893,7 @@ def get_gyrof(obj, quant, GYROF_QUANT=None):
     return None
 
 
-def get_kappa(obj, quant, KAPPA_QUANT=None):
+def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
 
   if (KAPPA_QUANT is None):
     KAPPA_QUANT = ['kappanorm_', 'kappae'] + \
@@ -916,7 +926,7 @@ def get_kappa(obj, quant, KAPPA_QUANT=None):
     return None
 
 
-def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None):
+def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
 
   if (DEBYE_LN_QUANT is None):
     DEBYE_LN_QUANT = ['debye_ln']
@@ -947,7 +957,7 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None):
     return None
 
 
-def get_ionpopulations(obj, quant, IONP_QUANT=None):
+def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
 
   if (IONP_QUANT is None):
     IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
@@ -1043,7 +1053,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None):
     return None
 
 
-def get_ambparam(obj, quant, AMB_QUANT=None):
+def get_ambparam(obj, quant, AMB_QUANT=None, **kwargs):
 
   if (AMB_QUANT is None):
     AMB_QUANT = ['uambx', 'uamby', 'uambz', 'ambx', 'amby', 'ambz',
@@ -1216,7 +1226,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None):
   else:
     return None
 
-def get_hallparam(obj, quant, HALL_QUANT=None):
+def get_hallparam(obj, quant, HALL_QUANT=None, **kwargs):
 
   if (HALL_QUANT is None):
     HALL_QUANT = ['uhallx', 'uhally', 'uhallz', 'hallx', 'hally', 'hallz',
@@ -1256,7 +1266,7 @@ def get_hallparam(obj, quant, HALL_QUANT=None):
   else:
     return None
 
-def get_batteryparam(obj, quant, BATTERY_QUANT=None):
+def get_batteryparam(obj, quant, BATTERY_QUANT=None, **kwargs):
   if (BATTERY_QUANT is None):
     BATTERY_QUANT = ['bb_constqe', 'dxpe', 'dype', 'dzpe', 'bb_batx',
                     'bb_baty', 'bb_batz']
@@ -1301,7 +1311,7 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None):
     return None
 
 
-def get_spitzerparam(obj, quant, SPITZER_QUANT=None):
+def get_spitzerparam(obj, quant, SPITZER_QUANT=None, **kwargs):
   if (SPITZER_QUANT is None):
     SPITZER_QUANT = ['fcx','fcy','fcz','qspitz']
 
@@ -1387,7 +1397,7 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None):
     return None  
 
 
-def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
+def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True, **kwargs):
   '''
   rho is supposed to be in Bifrost units.
   tg in [K]
@@ -1448,7 +1458,7 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True):
                                            uni.amusi))
 
 
-def find_first_match(name, path,incl_path=False):
+def find_first_match(name, path,incl_path=False, **kwargs):
   '''
   This will find the first match,
   name : string, e.g., 'patern*'
