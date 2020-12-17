@@ -776,7 +776,7 @@ class PlutoData(object):
     self.verbose = verbose
     self.typemodel = typemodel
     if self.typemodel == 'Kostas': 
-        self.uni = Pypluto_units()
+        self.uni = Pypluto_kostas_units()
     elif (self.typemodel == 'Paolo'): 
         self.uni = Pypluto_paolo_units()
     self.info = pload(snap,w_dir=fdir,datatype=datatype)
@@ -974,26 +974,27 @@ class PlutoData(object):
         
     self.trans2commaxes
 
-    return self.get_var(varname,snap=snap)
+    return var
 
 
   def trans2commaxes(self): 
 
     if self.transunits == False:
       self.transunits = True
-      self.z = - self.z[::-1].copy() 
-      self.dz = - self.dz1d[::-1].copy() 
+      print('happens!')
+      self.z = self.z[::-1].copy() 
+      self.dz1d = self.dz1d[::-1].copy() 
 
   def trans2noncommaxes(self): 
 
     if self.transunits == True:
       self.transunits = False
-      self.z = - self.z[::-1].copy() 
-      self.dz = - self.dz1d[::-1].copy() 
+      self.z = self.z[::-1].copy() 
+      self.dz1d = self.dz1d[::-1].copy() 
 
 
 
-class Pypluto_units(object): 
+class Pypluto_kostas_units(object): 
 
     def __init__(self):
     
