@@ -23,7 +23,7 @@ class Laresav:
   def __init__(self, snap, fdir='.', sel_units = 'cgs', verbose=True):
 
     self.fdir     = fdir        
-    self.savefile = rsav(os.path.join(self.fdir,'{:03d}'.format(it)+'.sav'))
+    self.savefile = rsav(os.path.join(self.fdir,'{:03d}'.format(snap)+'.sav'))
 
     self.rootname = self.savefile['d']['filename'][0]
     self.snap = snap 
@@ -31,17 +31,17 @@ class Laresav:
     self.verbose = verbose
     self.uni = Laresav_units()
     
-    self.time     = self.savefile['d']['time'][0]
-    self.time_prev= self.savefile['d']['time_prev'][0]
-    self.timestep = self.savefile['d']['timestep'][0]
-    self.dt       = self.savefile['d']['dt'][0]
+    self.time     = self.savefile['d']['time'][0].copy()
+    self.time_prev= self.savefile['d']['time_prev'][0].copy()
+    self.timestep = self.savefile['d']['timestep'][0].copy()
+    self.dt       = self.savefile['d']['dt'][0].copy()
 
-    self.visc_heating= self.savefile['d']['visc_heating'][0]
-    self.visc3_heating= self.savefile['d']['visc3_heating'][0]
+    self.visc_heating= self.savefile['d']['visc_heating'][0].copy()
+    self.visc3_heating= self.savefile['d']['visc3_heating'][0].copy()
 
-    self.x       = self.savefile['d']['x'][0]
-    self.y       = self.savefile['d']['y'][0]
-    self.z       = self.savefile['d']['z'][0]
+    self.x       = self.savefile['d']['x'][0].copy()
+    self.y       = self.savefile['d']['y'][0].copy()
+    self.z       = self.savefile['d']['z'][0].copy()
     
     if self.sel_units=='cgs': 
         self.x *= self.uni.uni['l']
@@ -138,13 +138,13 @@ class Laresav:
       self.data = self.savefile['d'][varname][0].T * cgsunits
       
       if (np.shape(self.data)[0]>self.nx): 
-          self.data = (self.data[1:,:,:] + self.data[:-1,:,:]) / 2
+          self.data = ((self.data[1:,:,:] + self.data[:-1,:,:]) / 2).copy()
       
       if (np.shape(self.data)[1]>self.ny): 
-          self.data = (self.data[:,1:,:] + self.data[:,:-1,:]) / 2
+          self.data = ((self.data[:,1:,:] + self.data[:,:-1,:]) / 2).copy()
       
       if (np.shape(self.data)[2]>self.nz): 
-          self.data = (self.data[:,:,1:] + self.data[:,:,:-1]) / 2
+          self.data = ((self.data[:,:,1:] + self.data[:,:,:-1]) / 2).copy()
 
     except: 
       # Loading quantities
