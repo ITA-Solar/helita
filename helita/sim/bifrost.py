@@ -121,7 +121,7 @@ class BifrostData(object):
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
 
         self.set_snap(snap,True,params_only=params_only)
-            
+        
         if self.sel_units=='cgs': 
             self.x *= self.uni.uni['l']
             self.y *= self.uni.uni['l']
@@ -1544,7 +1544,6 @@ class Rhoeetab:
         rhomax = np.max(rho)
         eimin = np.min(ei)
         eimax = np.max(ei)
-        print(self.params['rhomin'],rhomin)
         if rhomin < self.params['rhomin']:
             print('(WWW) tab_interp: density outside table bounds.' +
                   'Table rho min=%.3e, requested rho min=%.3e' %
