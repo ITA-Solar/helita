@@ -6,8 +6,8 @@ import warnings
 elemlist = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's',
         'k', 'ca', 'cr', 'fe', 'ni']
 
-CROSTAB_LIST = ['h_' + clist for clist in elemlist]
-CROSTAB_LIST += ['e_' + clist for clist in elemlist]
+CROSTAB_LIST = ['e_' + clist for clist in elemlist]
+CROSTAB_LIST += [clist+'_e' for clist in elemlist]
 for iel in elemlist:
   CROSTAB_LIST = CROSTAB_LIST + [
     iel + '_' + clist for clist in elemlist]
@@ -33,47 +33,47 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
   else: 
     val = None
   if np.shape(val) == () and COULOMB_COL_QUANT != '':
-    val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT)
+    val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT, **kwargs)
   if np.shape(val) == () and COLFRE_QUANT != '':
-    val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
+    val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT,**kwargs)
   if np.shape(val) == () and CROSTAB_QUANT != '':
-    val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
+    val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT,**kwargs)
   if np.shape(val) == () and COLFRI_QUANT != '':
-    val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT)
+    val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT, **kwargs)
   if np.shape(val) == () and CURRENT_QUANT != '':
-    val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT)
+    val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT, **kwargs)
   if np.shape(val) == () and FLUX_QUANT != '':
-    val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT)
+    val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT, **kwargs)
   if np.shape(val) == () and PLASMA_QUANT != '':
-    val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
+    val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT, **kwargs)
   if np.shape(val) == () and WAVE_QUANT != '':
-    val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT)
+    val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT, **kwargs)
   if np.shape(val) == () and CYCL_RES != '':
-    val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES)
+    val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES, **kwargs)
   if np.shape(val) == () and GYROF_QUANT != '':
-    val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT)
+    val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT, **kwargs)
   if np.shape(val) == () and KAPPA_QUANT != '':
-    val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT)
+    val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT, **kwargs)
   if np.shape(val) == () and DEBYE_LN_QUANT != '':
-    val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT)
+    val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT, **kwargs)
   if np.shape(val) == () and IONP_QUANT != '':
-    val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT)
+    val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT, **kwargs)
   if np.shape(val) == () and AMB_QUANT != '':
-    val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT)
+    val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT, **kwargs)
   if np.shape(val) == () and HALL_QUANT != '':
-    val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT)
+    val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT, **kwargs)
   if np.shape(val) == () and BATTERY_QUANT != '':
-    val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT)  
+    val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT, **kwargs)  
   if np.shape(val) == () and SPITZER_QUANT != '':
-    val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT) 
+    val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT, **kwargs) 
   if np.shape(val) == () and EOSTAB_QUANT != '': 
-    val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT)
+    val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT, **kwargs)
   if np.shape(val) == () and COLCOU_QUANT != '': 
-    val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT)
+    val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT, **kwargs)
   if np.shape(val) == () and COLCOUMS_QUANT != '': 
-    val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT)
+    val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT, **kwargs)
   if np.shape(val) == () and COLFREMX_QUANT != '': 
-    val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT)
+    val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT, **kwargs)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
@@ -127,7 +127,6 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
 
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = CROSTAB_LIST
-    CROSTAB_QUANT += ['p_h','h_h2','p_h2']
   obj.description['CROSTAB'] = ('Cross section between species'
     '(in cgs): ' + ', '.join(CROSTAB_QUANT))
  
@@ -139,7 +138,9 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   if (quant == ''):
     return None
 
-  if quant in CROSTAB_QUANT:
+  quant_elem = ''.join([i for i in quant if not i.isdigit()])
+
+  if quant_elem in CROSTAB_QUANT:
     tg = obj.get_var('tg')
     elem = quant.split('_')
 
@@ -147,51 +148,58 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
     #spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
     spic1 = elem[0]
     spic2 = elem[1]
+    spic1_ele = ''.join([i for i in spic1 if not i.isdigit()])
+    spic2_ele = ''.join([i for i in spic2 if not i.isdigit()])
 
-    cross_tab = ''
-    crossunits = 2.8e-17
+    cross_tab=None
+    cross_dict = {}
+    cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
+    cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
+    cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
+    cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
+    cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
+    maxwell = False
 
-    if (([spic1, spic2] == ['p', 'h']) or ([spic1, spic2] == ['h', 'p'])):
-        cross_tab = 'p-h-elast.txt'
-    elif ([spic1, spic2] == ['h', 'h']): 
-        cross_tab = 'h-h-data2.txt'
-    elif ([spic1, spic2] == ['h', 'h2']): 
-        cross_tab = 'h-h2-data.txt'
-    elif ([spic1, spic2] == ['p', 'h2']): 
-        cross_tab = 'h-h2-data.txt'
-    elif (([spic1, spic2] == ['h', 'he']) or ([spic2, spic1] == ['h', 'he'])):
-      cross_tab = 'p-he.txt'
-    elif ([spic1, spic2] == ['he', 'he']):
-      cross_tab = 'he-he.txt'
-    elif (([spic1, spic2] == ['e', 'he']) or ([spic2, spic1] == ['e', 'he'])):
-      cross_tab = 'e-he.txt'
-    elif (([spic1, spic2] == ['e', 'h']) or ([spic2, spic1] == ['e', 'h']) or ([spic1, spic2] == ['e', 'p']) or  ([spic2, spic1] == ['e', 'p'])):
-      cross_tab = 'e-h.txt'
-    elif (spic1 == 'h'):
-      cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['h'] * \
-            obj.uni.cross_p * np.ones(np.shape(tg))
-    elif (spic2 == 'h'):
-      cross = obj.uni.weightdic[spic1] / obj.uni.weightdic['h'] * \
-            obj.uni.cross_p * np.ones(np.shape(tg))
-    elif (spic1 == 'he'):
-      cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['he'] * \
-            obj.uni.cross_he * np.ones(np.shape(tg))
-    elif (spic2 == 'he'):
-      cross = obj.uni.weightdic[spic1] / obj.uni.weightdic['he'] * \
-            obj.uni.cross_he * np.ones(np.shape(tg))
-    else: 
-       cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['h'] * \
-            obj.uni.cross_p / (np.pi*obj.uni.weightdic[spic2])**2 * \
-            np.ones(np.shape(tg))
+    for key, value in kwargs.items():
+      if key == 'cross_tab':
+        cross_tab = value
+      if key == 'cross_dict': 
+        cross_dict = value 
+      if key == 'maxwell':
+        maxwell = value
 
-    if cross_tab != '':
+    if cross_tab == None: 
+      try: 
+        cross_tab = cross_dict[spic1,spic2]
+      except:  
+        if not(maxwell): 
+          if (spic1_ele == 'h'):
+            cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['h'] * \
+                obj.uni.cross_p * np.ones(np.shape(tg))
+          elif (spic2_ele == 'h'):
+            cross = obj.uni.weightdic[spic1_ele] / obj.uni.weightdic['h'] * \
+                obj.uni.cross_p * np.ones(np.shape(tg))
+          elif (spic1_ele == 'he'):
+            cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['he'] * \
+                obj.uni.cross_he * np.ones(np.shape(tg))
+          elif (spic2_ele == 'he'):
+            cross = obj.uni.weightdic[spic1_ele] / obj.uni.weightdic['he'] * \
+                obj.uni.cross_he * np.ones(np.shape(tg))
+          else: 
+            cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['h'] * \
+                obj.uni.cross_p / (np.pi*obj.uni.weightdic[spic2_ele])**2 * \
+                np.ones(np.shape(tg))
+
+    if cross_tab != None:
       crossobj = obj.cross_sect(cross_tab=[cross_tab])
       cross = crossobj.cross_tab[0]['crossunits'] * crossobj.tab_interp(tg)
 
     try:
       return cross
     except Exception:
-      print('(WWW) cross-section: wrong combination of species')
+      print('(WWW) cross-section: wrong combination of species', end="\r",
+              flush=True)
+      return None 
   else:
     return None
 
@@ -232,8 +240,8 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs):
 
       sel_units = obj.sel_units
       obj.sel_units = 'cgs'
-      rho = obj.get_var('rho')
-      ee = obj.get_var('e')/rho
+      rho = obj.get_var('rho') 
+      ee = obj.get_var('e') / rho
     
       obj.sel_units = sel_units
 
@@ -276,37 +284,29 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
     spic1 = spic1[2:]
     
-    trans=False
-    trans2=False 
-    if ((spic1 == 'h') and (int(ion1) > 1) and (spic2 == 'h')): 
-      spic1 = 'p'
-      trans=True
-    elif ((spic2 == 'h') and (int(ion2) > 1) and (spic1 == 'h')): 
-      spic2 = 'p'
-      trans2=True
+    crossarr = get_crossections(obj,'%s%s_%s%s' % (spic1,ion1,spic2,ion2), **kwargs)
 
-    crossarr = obj.get_var('%s_%s' % (spic1, spic2))
-    if trans: 
-      spic1 = 'h'
-    if trans2: 
-      spic2 = 'h'
-    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
-    if np.size(elem) > 2:
-      nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
+    if np.any(crossarr) == None: 
+      return get_collision_maxw(obj,'numx'+quant[2:], **kwargs)
+    else: 
 
-    tg = obj.get_var('tg')
-    if spic1 == 'e':
-      awg1 = obj.uni.m_electron
-    else:
-      awg1 = obj.uni.weightdic[spic1] * obj.uni.amu
-    if spic1 == 'e':
-      awg2 = obj.uni.m_electron
-    else:
-      awg2 = obj.uni.weightdic[spic2] * obj.uni.amu
-    scr1 = np.sqrt(8.0 * obj.uni.kboltzmann * tg / obj.uni.pi)
+      nspic2 = obj.get_var('n%s-%s' % (spic2, ion2))
+      if np.size(elem) > 2:
+        nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
 
-    return crossarr * np.sqrt((awg1 + awg2) / (awg1 * awg2)) *\
-      scr1 * nspic2  # * (awg1 / (awg1 + awg1))
+      tg = obj.get_var('tg')
+      if spic1 == 'e':
+        awg1 = obj.uni.m_electron
+      else:
+        awg1 = obj.uni.weightdic[spic1] * obj.uni.amu
+      if spic1 == 'e':
+        awg2 = obj.uni.m_electron
+      else:
+        awg2 = obj.uni.weightdic[spic2] * obj.uni.amu
+      scr1 = np.sqrt(8.0 * obj.uni.kboltzmann * tg / obj.uni.pi)
+
+      return crossarr * np.sqrt((awg1 + awg2) / (awg1 * awg2)) *\
+        scr1 * nspic2  # * (awg1 / (awg1 + awg1))
   else:
     return None
 
@@ -347,7 +347,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
     spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
     spic1 = spic1[4:] 
-    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) * 1e6 # convert to SI.
+    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) / (obj.uni.cm_to_m**3)  # convert to SI.
     if np.size(elem) > 2:
       nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
 
@@ -493,12 +493,12 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
 
         result += obj.uni.amu * obj.uni.weightdic[ielem] * \
                 obj.get_var('n%s-1' % ielem) * const * \
-                obj.get_var('nu%s1_i%s'% (ielem,mag))
+                obj.get_var('nu%s1_i%s'% (ielem,mag), **kwargs)
 
         if ((ielem in elemlist[2:]) and ('_mag' in quant)): 
           result += obj.uni.amu * obj.uni.weightdic[ielem] * \
                 obj.get_var('n%s-2' % ielem) * const * \
-                obj.get_var('nu%s2_i%s'% (ielem,mag))
+                obj.get_var('nu%s2_i%s'% (ielem,mag), **kwargs)
 
 
     if ((quant == 'numx_ni_mag') or (quant == 'numx_ni')):
@@ -513,12 +513,12 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
 
         result += obj.uni.amu * obj.uni.weightdic[ielem] * \
                 obj.get_var('n%s-1' % ielem) * const * \
-                obj.get_var('numx%s1_i%s'% (ielem,mag))
+                obj.get_var('numx%s1_i%s'% (ielem,mag), **kwargs)
 
         if ((ielem in elemlist[2:]) and ('_mag' in quant)): 
           result += obj.uni.amu * obj.uni.weightdic[ielem] * \
                 obj.get_var('n%s-2' % ielem) * const * \
-                obj.get_var('numx%s2_i%s'% (ielem,mag))                
+                obj.get_var('numx%s2_i%s'% (ielem,mag), **kwargs)                
 
     if ((quant == 'nu_in_mag') or (quant == 'nu_in')):
       result = np.zeros(np.shape(obj.r))
@@ -531,10 +531,10 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
           mag=''
 
         result += obj.uni.amu * obj.uni.weightdic[ielem] * const * \
-            obj.get_var('n%s-2' % ielem) * obj.get_var('nu%s2_n%s' % (ielem,mag))
+            obj.get_var('n%s-2' % ielem) * obj.get_var('nu%s2_n%s' % (ielem,mag), **kwargs)
       if obj.heion:
         result += obj.uni.amu * obj.uni.weightdic['he'] * obj.get_var('nhe-3') * \
-            obj.get_var('nuhe3_n%s'% mag)
+            obj.get_var('nuhe3_n%s'% mag, **kwargs)
 
 
     elif quant == 'nu_ei':
@@ -552,7 +552,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
       for ielem in elemlist:
         if ielem in ['h', 'he']:
           result += obj.get_var('%s_%s%s' %
-                         ('nue', ielem, lvl))
+                         ('nue', ielem, lvl), **kwargs)
 
     elif quant[-2:] == '_i' or quant[-2:] == '_n' or quant[-6:] == '_i_mag' or quant[-6:] == '_n_mag':
       addtxt = ''
@@ -567,7 +567,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
       for ielem in elemlist:
         if elem[0][2:] != '%s%s' % (ielem, lvl):
           result += obj.get_var('%s_%s%s%s' %
-                  (elem[0], ielem, lvl, addtxt)) #* obj.uni.weightdic[ielem] /\
+                  (elem[0], ielem, lvl, addtxt), **kwargs) #* obj.uni.weightdic[ielem] /\
                   #(obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
       #if obj.heion and quant[-3:] == '_i':
         #result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) * obj.uni.weightdic['he'] /\
@@ -1041,15 +1041,19 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
       return mass * obj.get_var('nhe%s' % lvl)
 
     else:
-      tg = obj.get_var('tg')
-      r = obj.get_var('r')
-      nel = np.copy(obj.get_var('ne')) # already takes into account NEQ (SI)
+      sel_units = obj.sel_units
+      obj.sel_units = 'cgs'
+      rho = obj.get_var('rho')
+      nel = np.copy(obj.get_var('ne')) # cgs
+      tg = obj.get_var('tg')    
+      obj.sel_units = sel_units
 
       if quant[0] == 'n':
         dens = False
       else:
         dens = True
-      return ionpopulation(obj, r, nel, tg, elem=spic[1:], lvl=lvl, dens=dens) /1e6 # to convert in cm^3
+
+      return ionpopulation(obj, rho, nel, tg, elem=spic[1:], lvl=lvl, dens=dens) # cm^3
   else:
     return None
 
@@ -1058,7 +1062,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None, **kwargs):
 
   if (AMB_QUANT is None):
     AMB_QUANT = ['uambx', 'uamby', 'uambz', 'ambx', 'amby', 'ambz',
-              'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5','eta_amb6',
+              'eta_amb1', 'eta_amb2', 'eta_amb3', 'eta_amb4', 'eta_amb5',
               'eta_amb5a', 'eta_amb5b', 'nchi', 'npsi', 'nchi_red', 'npsi_red',
               'rchi', 'rpsi', 'rchi_red', 'rpsi_red','alphai','betai']
 
@@ -1073,23 +1077,22 @@ def get_ambparam(obj, quant, AMB_QUANT=None, **kwargs):
   if (quant == ''):
     return None
 
+  if obj.sel_units == 'cgs': 
+    u_b = 1.0
+  else: 
+    u_b = obj.uni.u_b
+
   if (quant in AMB_QUANT):
     axis = quant[-1]
     if quant == 'eta_amb1':  # version from other
-      result = (obj.get_var('rneu') / obj.get_var('r') * obj.uni.u_b)**2
-      result /= (4.0 * obj.uni.pi * obj.get_var('nu_ni') + 1e-20)
-      result *= obj.get_var('b2') #/ 1e7
-
-    elif quant == 'eta_amb6':  # version from other
-      result = (obj.get_var('rneu') / obj.get_var('r') * obj.uni.u_b)**2
-      bla=obj.get_var('numx_ni')
-      result /= (4.0 * obj.uni.pi * obj.get_var('numx_ni') + 1e-20)
+      result = (obj.get_var('rneu') / obj.get_var('rho') * u_b)**2
+      result /= (4.0 * obj.uni.pi * obj.get_var('nu_ni', **kwargs) + 1e-20)
       result *= obj.get_var('b2') #/ 1e7
 
     # This should be the same and eta_amb2 except that eta_amb2 has many more species involved.
     elif quant == 'eta_amb2':
-      result = (obj.get_var('rneu') / obj.r * obj.uni.u_b)**2 / (
-          4.0 * obj.uni.pi * obj.get_var('nu_in') + 1e-20)
+      result = (obj.get_var('rneu') / obj.get_var('rho') * u_b)**2 / (
+          4.0 * obj.uni.pi * obj.get_var('nu_in', **kwargs) + 1e-20)
       result *= obj.get_var('b2') #/ 1e7
 
     elif quant == 'eta_amb3':  # This version takes into account the magnetization
@@ -1439,10 +1442,10 @@ def calc_tau(obj):
 
 def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True, **kwargs):
   '''
-  rho is supposed to be in Bifrost units.
+  rho is cgs.
   tg in [K]
-  nel in SI. 
-  The output, is in SI
+  nel in cgs. 
+  The output, is in cgs
   '''
 
   print('ionpopulation: reading species %s and level %s' % (elem, lvl), whsp,
@@ -1462,7 +1465,6 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True, **kwargs):
         print("(WWW) init: no .idl or mhd.in files found." +
               "Units set to 'standard' Bifrost units.")
   '''
-  nelcgs = nel * 1e-6
   uni = obj.uni
 
   totconst = 2.0 * uni.pi * uni.m_electron * uni.k_b / \
@@ -1485,17 +1487,15 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True, **kwargs):
 
   if dens:
     if lvl == '1':
-      return (1.0 - ifracpos) * c2 * uni.usi_r 
+      return (1.0 - ifracpos) * c2 
     else:
-      return ifracpos * c2 * uni.usi_r
+      return ifracpos * c2 
 
   else:
     if lvl == '1':
-      return (1.0 - ifracpos) * c2 * (uni.usi_r / (uni.weightdic[elem] *
-                                                   uni.amusi))
+      return (1.0 - ifracpos) * c2  / uni.weightdic[elem] / uni.amu
     else:
-      return ifracpos * c2 * (uni.usi_r / (uni.weightdic[elem] *
-                                           uni.amusi))
+      return ifracpos * c2 /uni.weightdic[elem] / uni.amu
 
 
 def find_first_match(name, path,incl_path=False, **kwargs):
