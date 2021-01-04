@@ -41,8 +41,10 @@ class radyn:
     self.nt = np.shape(self.z)[0]
     self.nz = np.shape(self.z)[1]
     for it in range(0,self.nt):
-      self.dz[it,:] = np.roll(self.z[it,:],1)-self.dz[it,:] 
-      self.dz[it,:] = self.dz[it,1]
+      self.dz[it,:] = np.gradient(self.z[it,:])
+    
+    self.dx1d = 1.0
+    self.dy1d = 1.0
     
     self.nx = np.shape(self.x)
     self.ny = np.shape(self.y)
@@ -164,10 +166,12 @@ class radyn:
 
     self.sel_units = 'cgs'
 
-    self.trans2commaxes 
+    if self.snap != snap: 
+        self.snap=snap
+        self.trans2commaxes()
 
-    var = get_var(varname,snap=snap)
-
+    var = get_var(varname)[:,snap]
+    # it needs to be converted in a 3D box. 
     #var = transpose(var,(X,X,X))
     # also velocities. 
 
@@ -176,12 +180,12 @@ class radyn:
   def trans2commaxes(self): 
 
     if self.transunits == False:
-      #self.x =  # including units conversion 
+      #self.x = self.x # including units conversion 
       #self.y = 
       #self.z =
-      #self.dx = 
-      #self.dy = 
-      #self.dz =
+      self.dx1d = self.dx
+      self.dy1d = self.dy
+      self.dz1d = self.dz
       self.transunits = True
 
   def trans2noncommaxes(self): 

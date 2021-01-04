@@ -106,7 +106,7 @@ class BifrostData(object):
             self.dtype = '<' + dtype
         self.hion = False
         self.heion = False
-        self.set_snap(snap,True,params_only=params_only)
+
         try:
             tmp = find_first_match("%s*idl" % file_root, fdir)
         except IndexError:
@@ -119,6 +119,27 @@ class BifrostData(object):
                     raise ValueError(("(EEE) init: no .idl or mhd.in files "
                                     "found"))
         self.uni = Bifrost_units(filename=tmp,fdir=fdir)
+
+        self.set_snap(snap,True,params_only=params_only)
+        
+        if self.sel_units=='cgs': 
+            self.x *= self.uni.uni['l']
+            self.y *= self.uni.uni['l']
+            self.z *= self.uni.uni['l']
+            self.dx *= self.uni.uni['l']
+            self.dy *= self.uni.uni['l']
+            self.dz *= self.uni.uni['l']
+            self.dx1d *= self.uni.uni['l']
+            self.dy1d *= self.uni.uni['l']
+            self.dz1d *= self.uni.uni['l']
+            
+            self.dxidxup /= self.uni.uni['l']
+            self.dxidxdn /= self.uni.uni['l']
+            self.dyidyup /= self.uni.uni['l']
+            self.dyidydn /= self.uni.uni['l']
+            self.dzidzup /= self.uni.uni['l']
+            self.dzidzdn /= self.uni.uni['l']  
+        
         self.genvar()
         self.transunits = False
         self.cross_sect = Cross_sect
@@ -350,22 +371,6 @@ class BifrostData(object):
             self.dzidzup = np.zeros(self.nz) + 1. / self.dz
             self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
 
-        if self.sel_units=='cgs': 
-            self.x *= self.uni.uni['l']
-            self.y *= self.uni.uni['l']
-            self.z *= self.uni.uni['l']
-            self.dx *= self.uni.uni['l']
-            self.dy *= self.uni.uni['l']
-            self.dz *= self.uni.uni['l']
-            self.dz1d *= self.uni.uni['l']
-            
-            self.dxidxup /= self.uni.uni['l']
-            self.dxidxdn /= self.uni.uni['l']
-            self.dyidyup /= self.uni.uni['l']
-            self.dyidydn /= self.uni.uni['l']
-            self.dzidzup /= self.uni.uni['l']
-            self.dzidzdn /= self.uni.uni['l']
-            
         if self.nx > 1:
             self.dx1d = np.gradient(self.x) 
         else: 
@@ -375,7 +380,12 @@ class BifrostData(object):
             self.dy1d = np.gradient(self.y) 
         else:
             self.dy1d = np.zeros(self.ny)
-      
+
+        if self.nz > 1:            
+            self.dz1d = np.gradient(self.z) 
+        else:
+            self.dz1d = np.zeros(self.nz)
+
     
     def _init_vars(self, firstime=False,  fast=None, *args, **kwargs):
         """
@@ -613,21 +623,23 @@ class BifrostData(object):
         if var in self.varn.keys(): 
             var=self.varn[var]
 
-        if (self.sel_units=='cgs'): 
-            varu=var.replace('x','')
-            varu=varu.replace('y','')
-            varu=varu.replace('z','')
-            if (var in self.varn.keys()) and (varu in self.uni.uni.keys()): 
-                cgsunits = self.uni.uni[varu]
-            else: 
-                cgsunits = 1.0
-        else: 
-            cgsunits = 1.0
-            
         # # check if already in memmory
         if var in self.variables:
-            return self.variables[var] * cgsunits
+            return self.variables[var] 
         elif var in self.simple_vars:  # is variable already loaded?
+            
+            if (self.sel_units=='cgs'): 
+                varu=var.replace('x','')
+                varu=varu.replace('y','')
+                varu=varu.replace('z','')
+                if varu == 'r': 
+                    varu = 'rho'
+                if (varu in self.uni.uni.keys()): 
+                    cgsunits = self.uni.uni[varu]
+                else: 
+                    cgsunits = 1.0
+            else: 
+                cgsunits = 1.0
             val = self._get_simple_var(var, *args, **kwargs) * cgsunits
             if self.verbose:
                 print('(get_var): reading simple ', np.shape(val), whsp*5,
@@ -635,15 +647,15 @@ class BifrostData(object):
         elif var in self.auxxyvars:
             val = self._get_simple_var_xy(var, *args, **kwargs)
         elif var in self.compvars:  # add to variable list
-            self.variables[var] = self._get_composite_var(var, *args, **kwargs) * cgsunits
+            self.variables[var] = self._get_composite_var(var, *args, **kwargs)
             setattr(self, var, self.variables[var])
             val = self.variables[var]
         else:
             # Loading quantities
-            val = load_quantities(self, var, **kargs)
+            val = load_quantities(self, var, **kwargs)
             # Loading arithmetic quantities
             if np.shape(val) == ():
-                val = load_arithmetic_quantities(self, var, **kargs) 
+                val = load_arithmetic_quantities(self, var, **kwargs) 
 
         if var == '':
             print(help(self.get_var))
@@ -704,12 +716,11 @@ class BifrostData(object):
 
         self.sel_units = 'cgs'
         
-        self.trans2commaxes 
-
+        self.trans2commaxes() 
         sign = 1.0
         if varname[-1] in ['x','y','z']: 
-            vartemp = varname+'c'
-            if varname[-1] in ['y','z']: 
+            varname = varname+'c'
+            if varname[-2] in ['y','z']: 
                 sign = -1.0 
 
         var = np.reshape( sign * self.get_var(varname,snap=snap), 
@@ -720,26 +731,25 @@ class BifrostData(object):
         return var
 
     def trans2commaxes(self): 
-
         if self.transunits == False:
           self.transunits = True
-          self.x =  self.x * 1e8
-          self.dx =  self.dx * 1e8
-          self.y =  self.y * 1e8
-          self.dy =  self.dy * 1e8
-          self.z = - self.z[::-1].copy() * 1e8
-          self.dz = - self.dz1d[::-1].copy() * 1e8 
+          self.x =  self.x 
+          self.dx =  self.dx 
+          self.y =  self.y 
+          self.dy =  self.dy 
+          self.z = - self.z[::-1].copy() 
+          self.dz = - self.dz1d[::-1].copy() 
 
     def trans2noncommaxes(self): 
 
         if self.transunits == True:
           self.transunits = False
-          self.x =  self.x / 1e8
-          self.dx =  self.dx / 1e8
-          self.y =  self.y / 1e8
-          self.dy =  self.dy / 1e8
-          self.z = - self.z[::-1].copy() / 1e8
-          self.dz = - self.dz1d[::-1].copy() / 1e8   
+          self.x =  self.x 
+          self.dx =  self.dx 
+          self.y =  self.y 
+          self.dy =  self.dy
+          self.z = - self.z[::-1].copy()
+          self.dz = - self.dz1d[::-1].copy()
 
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         """
@@ -1317,7 +1327,7 @@ class Bifrost_units(object):
         self.uni['l'] = self.u_l
         self.uni['t'] = self.u_t
         self.uni['rho'] = self.u_r
-        self.uni['p'] = self.u_p
+        self.uni['p'] = self.u_r * self.u_u # self.u_p
         self.uni['u'] = self.u_u
         self.uni['e'] = self.u_e
         self.uni['ee'] = self.u_ee
@@ -1534,7 +1544,6 @@ class Rhoeetab:
         rhomax = np.max(rho)
         eimin = np.min(ei)
         eimax = np.max(ei)
-        print(self.params['rhomin'],rhomin)
         if rhomin < self.params['rhomin']:
             print('(WWW) tab_interp: density outside table bounds.' +
                   'Table rho min=%.3e, requested rho min=%.3e' %

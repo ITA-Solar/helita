@@ -55,7 +55,7 @@ class Matsumotosav:
         self.dx       = self.savefile['v']['dx'][0]/1e8
         self.dy       = self.savefile['v']['dy'][0]/1e8
         self.dz       = self.savefile['v']['dz'][0]/1e8
-        
+    
     self.nx = len(self.x)
     self.ny = len(self.y)
     self.nz = len(self.z)
@@ -138,7 +138,7 @@ class Matsumotosav:
 
       
       self.data = self.savefile['v'][varname][0].T * cgsunits
-      
+      '''
       if (np.shape(self.data)[0]>self.nx): 
           self.data = (self.data[1:,:,:] + self.data[:-1,:,:]) / 2
       
@@ -147,7 +147,7 @@ class Matsumotosav:
       
       if (np.shape(self.data)[2]>self.nz): 
           self.data = (self.data[:,:,1:] + self.data[:,:,:-1]) / 2
-
+      '''
     except: 
       # Loading quantities
       if self.verbose: 
@@ -223,34 +223,48 @@ class Matsumotosav:
     '''
 
     self.sel_units = 'cgs'
-
-    self.trans2commaxes 
     
     var = self.get_var(varname,snap=snap)
 
-    #var = transpose(var,(X,X,X))
-    # also velocities. 
+    self.order = np.array((1,2,0))
 
-    return var
+    self.trans2commaxes() 
+
+    return np.transpose(self.get_var(varname,snap=snap), 
+                    self.order).copy()
 
   def trans2commaxes(self): 
 
     if self.transunits == False:
-      #self.x =  # including units conversion 
-      #self.y = 
-      #self.z =
-      #self.dx = 
-      #self.dy = 
-      #self.dz =
+      # including units conversion 
+      axisarrs= np.array(((self.x),(self.y),(self.z)))
+      daxisarrs= np.array(((self.dx),(self.dy),(self.dz)))
+      self.x = axisarrs[self.order[0]].copy()
+      self.y = axisarrs[self.order[1]].copy()
+      self.z = (- axisarrs[self.order[2]])[::-1].copy()
+      self.dx = daxisarrs[self.order[0]].copy()
+      self.dy = daxisarrs[self.order[1]].copy()
+      self.dz = (- axisarrs[self.order[2]])[::-1].copy()
+      self.dx1d, self.dy1d, self.dz1d = np.gradient(self.x).copy(), np.gradient(self.y).copy(), np.gradient(self.z).copy()
+      self.nx, self.ny, self.nz = np.size(self.x), np.size(self.dy), np.size(self.dz)
       self.transunits = True
 
   def trans2noncommaxes(self): 
 
     if self.transunits == True:
-      # opposite to the previous function 
+      # opposite to the previous function      
+      axisarrs= np.array(((self.x),(self.y),(self.z)))
+      self.x = axisarrs[self.order[0]].copy()
+      self.y = axisarrs[self.order[1]].copy()
+      self.z = (- axisarrs[self.order[2]])[::-1].copy()
+      self.dx = (daxisarrs[self.order[0]]).copy()
+      self.dy = daxisarrs[self.order[1]].copy()
+      self.dz = (- axisarrs[self.order[2]])[::-1].copy()
+      self.dx1d, self.dy1d, self.dz1d = np.gradient(self.x).copy(), np.gradient(self.y).copy(), np.gradient(self.z).copy()
+      self.nx, self.ny, self.nz = np.size(self.x), np.size(self.dy), np.size(self.dz)
       self.transunits = False
 
-class Cipmocct_units(object): 
+class Matsumotosav_units(object): 
 
     def __init__(self):
 
@@ -272,7 +286,6 @@ class Cipmocct_units(object):
 
         globalvars(self)
 
-
-        self.uni['gamma']  = self.gamma 
+        self.uni['gamma']  = 5./3.
 
 

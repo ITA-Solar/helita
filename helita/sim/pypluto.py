@@ -776,7 +776,7 @@ class PlutoData(object):
     self.verbose = verbose
     self.typemodel = typemodel
     if self.typemodel == 'Kostas': 
-        self.uni = Pypluto_units()
+        self.uni = Pypluto_kostas_units()
     elif (self.typemodel == 'Paolo'): 
         self.uni = Pypluto_paolo_units()
     self.info = pload(snap,w_dir=fdir,datatype=datatype)
@@ -908,8 +908,11 @@ class PlutoData(object):
           cgsunits = self.uni.uni['tg']
       else: 
           cgsunits = 1.0
-
-      self.data = self.get_var('rho',snap=snap) * self.get_var('pg',snap=snap)  * cgsunits
+      sel_units = self.sel_units
+      self.sel_units = 'none'
+    
+      self.data = self.get_var('pg',snap=snap) / self.get_var('rho',snap=snap) * cgsunits
+      self.sel_units = sel_units
     else: 
       self.data = None
       
@@ -960,29 +963,38 @@ class PlutoData(object):
 
     self.sel_units = 'cgs'
 
+    sign = 1.0
+    if varname[-1] in ['y','z']: 
+        sign = -1.0 
+
+    var = np.reshape( sign * self.get_var(varname,snap=snap), 
+                    (self.nx, self.ny, self.nz)).copy()
+
+    var = var[...,::-1].copy()
+        
     self.trans2commaxes
 
-    return self.get_var(varname,snap=snap)
+    return var
 
 
   def trans2commaxes(self): 
 
     if self.transunits == False:
-      #self.x =  # including units conversion 
-      #self.y = 
-      #self.z =
-      #self.dx = 
-      #self.dy = 
-      #self.dz =
       self.transunits = True
+      print('happens!')
+      self.z = self.z[::-1].copy() 
+      self.dz1d = self.dz1d[::-1].copy() 
 
   def trans2noncommaxes(self): 
 
     if self.transunits == True:
-      # opposite to the previous function 
       self.transunits = False
+      self.z = self.z[::-1].copy() 
+      self.dz1d = self.dz1d[::-1].copy() 
 
-class Pypluto_units(object): 
+
+
+class Pypluto_kostas_units(object): 
 
     def __init__(self):
     
@@ -1012,7 +1024,6 @@ class Pypluto_units(object):
         self.uni['j']      = self.uni['b']/self.uni['l']*self.clight # current density
         self.uni['gr']     = 2.7e4 # solar gravity in cgs
         self.uni['gc']     = self.uni['gr'] * self.uni['l'] / self.uni['u'] ** 2 # solar gravity in Code units. 
-
 
 class Pypluto_paolo_units(object): 
 
