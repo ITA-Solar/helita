@@ -105,13 +105,18 @@ def convertcsgsi(obj):
   obj.unisi['tg']     = obj.uni['tg'] # K
   obj.unisi['t']      = obj.uni['t'] # seconds
   obj.unisi['l']      = obj.uni['l'] * const.centi # m
-  obj.unisi['rho']    = obj.uni['rho'] * const.gram / const.centi**3 # kg m^-3 
-  obj.unisi['u']      = obj.uni['u'] * const.centi # m/s
-  obj.unisi['b']      = obj.uni['b'] * 1e-4 # T
   obj.unisi['j']      = 1.0 # current density  
-  obj.unisi['pg']     = obj.unisi['rho'] * (obj.unisi['l'] / obj.unisi['t'])**2
-  obj.unisi['ee']     = obj.unisi['u']**2
-  obj.unisi['e']      = obj.unisi['rho'] * obj.unisi['ee'] 
+
+  try:  
+      obj.unisi['rho']    = obj.uni['rho'] * const.gram / const.centi**3 # kg m^-3 
+      obj.unisi['pg']     = obj.unisi['rho'] * (obj.unisi['l'] / obj.unisi['t'])**2
+      obj.unisi['u']      = obj.uni['u'] * const.centi # m/s
+      obj.unisi['ee']     = obj.unisi['u']**2
+      obj.unisi['e']      = obj.unisi['rho'] * obj.unisi['ee'] 
+      obj.unisi['b']      = obj.uni['b'] * 1e-4 # T
+  except:  
+    if obj.verbose: 
+        print('Some unisi did not run')
 
 
 def globalvars(obj):
