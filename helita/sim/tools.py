@@ -255,3 +255,18 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     return map_coordinates(grid, np.array([new_ix, new_iy]),
                            order=order).reshape(new_x.shape)
 
+
+def refine(s,q,factor=2,unscale=lambda x:x):
+    """
+    Given 1D function q(s), interpolate so we have factor x many points.
+    factor = 2 by default
+    """
+    ds = s[-1]-s[0]
+    ss = np.arange(factor*len(s)+1)/(factor*len(s))*ds+s[0]
+    if ds > 0.0:
+        qq = unscale(np.interp(ss, s, q))
+        return ss, qq
+    elif ds < 0.0:
+        qq = unscale(np.interp(ss[::-1], s[::-1], q[::-1]))
+        qq = qq[::-1]
+        return ss, qq
