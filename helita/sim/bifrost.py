@@ -191,7 +191,7 @@ class BifrostData(object):
         """
         Reads parameter file (.idl)
         """
-        if np.shape(self.snap) is ():
+        if np.shape(self.snap) == ():
             snap = [self.snap]
             snap_str = [self.snap_str]
         else:
@@ -1757,18 +1757,20 @@ class BifrostData(object):
         x = self.x[sx] * ul
         y = self.y[sy] * ul
         z = self.z[sz] * (-ul)
-        nh = self.get_hydrogen_pops(sx, sy, sz).to_value('1/cm3')
         ne = self.get_electron_density(sx, sy, sz).to_value('1/cm3')
         # write to file
         print('Write to file...')
         nx, ny, nz = temp.shape
-        fout = Multi3dAtmos(outfile, nx, ny, nz, mode="w+")
+        fout = Multi3dAtmos(outfile, nx, ny, nz, mode="w+", read_nh=self.hion)
         fout.ne[:] = ne
         fout.temp[:] = temp
         fout.vx[:] = vx
         fout.vy[:] = vy
         fout.vz[:] = vz
         fout.rho[:] = rho
+        if self.hion:
+            nh = self.get_hydrogen_pops(sx, sy, sz).to_value('1/cm3')
+            fout.nh[:] = np.transpose(nh, axes=(1, 2, 3, 0))
         # write mesh?
         if mesh:
             fout2 = open(mesh, "w")
