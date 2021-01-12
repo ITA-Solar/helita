@@ -996,14 +996,14 @@ class PlutoData(object):
 
 class Pypluto_kostas_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
     
         '''
         Units and constants in cgs
         '''
 
         self.uni={}
-
+        self.verbose=verbose
         self.uni['tg']     = 1.0e6 # K
         self.uni['l']      = 1.0e8 # cm 
         self.uni['rho']    = 1.0e-15 # gr cm^-3 
@@ -1027,7 +1027,7 @@ class Pypluto_kostas_units(object):
 
 class Pypluto_paolo_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
     
         '''
         Units and constants in cgs
@@ -1036,7 +1036,7 @@ class Pypluto_paolo_units(object):
         rsun= 6.960e10
         proton_mass=1.672623110e-24
         self.uni={}
-
+        self.verbose=verbose
         self.uni['l']      = 6.960e10 # cm 
         self.uni['u']      = 1.0e7 # cm/s
         self.uni['rho']    = 2e10*1.2650*proton_mass # gr cm^-3 

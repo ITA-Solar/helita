@@ -34,13 +34,13 @@ class Cipmocct:
     
     params = rsav(os.path.join(self.fdir,'params_'+rootname+'.sav'))
     
-    self.x = params['x1']
-    self.y = params['x2']
-    self.z = params['x3']
+    self.x = params['x1'].copy()
+    self.y = params['x2'].copy()
+    self.z = params['x3'].copy()
     
-    self.nx = len(params['x1'])
-    self.ny = len(params['x2'])
-    self.nz = len(params['x3'])
+    self.nx = len(self.x)
+    self.ny = len(self.y)
+    self.nz = len(self.z)
 
     if self.sel_units=='cgs': 
         self.x *= self.uni.uni['l']
@@ -236,14 +236,16 @@ class Cipmocct:
 
 class Cipmocct_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
+        import scipy.constants as const
 
         '''
         Units and constants in cgs
         '''
         self.uni={}
-
+        self.verbose=verbose
         self.uni['gamma']  = 5./3.
+        self.uni['proton'] = 1.67262158e-24 # g
         self.uni['tg']     = 1.0e6 # K
         self.uni['fact']   = 2
         self.uni['l']      = 1000.*self.uni['fact']*1.0e5 # for having a 2000 km wide loop
@@ -258,6 +260,14 @@ class Cipmocct_units(object):
         self.uni['rho']    = self.uni['n'] * self.uni['proton'] /2. # gr cm^-3 
         self.uni['u']      = np.sqrt(2*self.uni['gamma']*self.k_b/self.m_p*self.uni['tg']) # cm/s
         self.uni['b']      = self.uni['u']*np.sqrt(self.uni['rho']) # Gauss
-        self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
+        self.uni['j']      = self.uni['b']/self.uni['l']*self.clight # current density
+        
+        self.unisi['rho']  = self.uni['rho'] * const.gram / const.centi**3 # kg m^-3 
+        self.unisi['pg']   = self.unisi['rho'] * (self.unisi['l'] / self.unisi['t'])**2
+        self.unisi['u']    = self.uni['u'] * const.centi # m/s
+        self.unisi['ee']   = self.unisi['u']**2
+        self.unisi['e']    = self.unisi['rho'] * self.unisi['ee'] 
+
+
 
 
