@@ -1043,8 +1043,8 @@ class Pypluto_paolo_units(object):
         self.uni['b']      = self.uni['u']*np.sqrt(4.0 * np.pi * self.uni['rho']) # Gauss
         self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
         self.uni['pg']     = self.uni['rho'] * self.uni['u']**2 # erg cm^-3 
-        #self.uni['tg']     = 1.203e6/2.0*1.26506 # K
-        self.uni['tg']     =  1.3747056e22 # K        
+        self.uni['tg']     = 1.203e6/2.0*1.26506 # K
+        #self.uni['tg']     =  1.3747056e22 # K        
         self.uni['kboltz'] =  1.380658E-16 # Boltzman's cst. [erg/K]
         self.uni['proton'] =  const.m_n / const.gram        # 1.674927471e-24
         self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
