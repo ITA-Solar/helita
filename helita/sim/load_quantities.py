@@ -347,9 +347,54 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
     spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
     spic1 = spic1[4:] 
-    nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) / (obj.uni.cm_to_m**3)  # convert to SI.
-    if np.size(elem) > 2:
-      nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
+
+    polarizability_dict = []
+    polarizability_dict['h']  = 6.68E-31
+    polarizability_dict['he'] = 2.05E-31
+    polarizability_dict['li'] = 2.43E-29
+    polarizability_dict['be'] = 5.59E-30
+    polarizability_dict['b']  = 3.04E-30
+    polarizability_dict['c']  = 1.67E-30
+    polarizability_dict['n']  = 1.10E-30
+    polarizability_dict['o']  = 7.85E-31
+    polarizability_dict['f']  = 5.54E-31
+    polarizability_dict['ne']  = 3.94E-31
+    polarizability_dict['na']  = 2.41E-29
+    polarizability_dict['mg']  = 1.06E-29
+    polarizability_dict['al']  = 8.57E-30
+    polarizability_dict['si']  = 5.53E-30
+    polarizability_dict['p']  = 3.70E-30
+    polarizability_dict['s']  = 2.87E-30
+    polarizability_dict['cl']  = 2.16E-30
+    polarizability_dict['ar']  = 1.64E-30
+    polarizability_dict['k']  = 4.29E-29
+    polarizability_dict['ca']  = 2.38E-29
+    polarizability_dict['sc']  = 1.44E-29
+    polarizability_dict['ti']  = 1.48E-29
+    polarizability_dict['v']  = 1.29E-29
+    polarizability_dict['cr']  = 1.23E-29
+    polarizability_dict['mn']  = 1.01E-29
+    polarizability_dict['fe']  = 9.19E-30
+    polarizability_dict['co']  = 8.15E-30
+    polarizability_dict['ni']  = 7.26E-30
+    polarizability_dict['cu']  = 6.89E-30
+    polarizability_dict['zn']  = 5.73E-30
+    polarizability_dict['ga']  = 7.41E-30
+    polarizability_dict['ge']  = 5.93E-30
+    polarizability_dict['as']  = 4.45E-30
+    polarizability_dict['se']  = 4.28E-30
+    polarizability_dict['br']  = 3.11E-30
+    polarizability_dict['kr']  = 2.49E-30
+    polarizability_dict['rb']  = 4.74E-29
+    polarizability_dict['sr']  = 2.92E-29
+    polarizability_dict['y']  = 2.40E-29
+    polarizability_dict['zr']  = 1.66E-29
+    polarizability_dict['nb']  = 1.45E-29
+    polarizability_dict['mo']  = 1.29E-29
+    polarizability_dict['tc']  = 1.17E-29
+    polarizability_dict['ru']  = 1.07E-29
+    polarizability_dict['rh']  = 9.78E-30
+    polarizability_dict['pd']  = 3.87E-30
 
     tg = obj.get_var('tg')
     if spic1 == 'e':
@@ -361,8 +406,23 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
     else:
       awg2 = obj.uni.weightdic[spic2] * obj.uni.amusi
 
-    return CONST_MULT * nspic2 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg2 / (eps0 * awg1 * (awg1 + awg2)))
-
+    if (ion1==0 and ion2!=0):
+      CONST_ALPHA_N=polarizability_dict[spic1]
+      nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) / (obj.uni.cm_to_m**3)  # convert to SI.
+      if np.size(elem) > 2:
+        nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
+      return CONST_MULT * nspic2 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg2 / (eps0 * awg1 * (awg1 + awg2)))  
+    elif (ion2==0 and ion1!=0):
+      CONST_ALPHA_N=polarizability_dict[spic2]
+      nspic1 = obj.get_var('n%s-%s' % (spic1, ion1)) / (obj.uni.cm_to_m**3)  # convert to SI.
+      if np.size(elem) > 2:
+        nspic1 *= (1.0-obj.get_var('kappanorm_%s' % spic2))  
+      return CONST_MULT * nspic1 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg1 / (eps0 * awg2 * (awg1 + awg2)))   
+    else:
+      nspic2 = obj.get_var('n%s-%s' % (spic2, ion2)) / (obj.uni.cm_to_m**3)  # convert to SI.
+      if np.size(elem) > 2:
+        nspic2 *= (1.0-obj.get_var('kappanorm_%s' % spic2))
+      return CONST_MULT * nspic2 * np.sqrt(CONST_ALPHA_N * e_charge**2 * awg2 / (eps0 * awg1 * (awg1 + awg2)))  
   else:
     return None
 
