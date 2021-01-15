@@ -783,7 +783,8 @@ class PlutoData(object):
     self.x = self.info.x1
     self.y = self.info.x2
     self.z = self.info.x3
-
+    self.zorig=self.z
+    
     if self.sel_units=='cgs': 
         self.x *= self.uni.uni['l']
         self.y *= self.uni.uni['l']
@@ -895,6 +896,9 @@ class PlutoData(object):
       print(self.description['ALL']) 
 
       return None
+
+    self.trans2noncommaxes()
+
     return self.data
 
 
@@ -968,12 +972,17 @@ class PlutoData(object):
         sign = -1.0 
 
     var = np.reshape( sign * self.get_var(varname,snap=snap), 
-                    (self.nx, self.ny, self.nz)).copy()
+                    (self.nx, self.ny, self.zorig.shape[0])).copy()
 
     var = var[...,::-1].copy()
         
-    self.trans2commaxes
-
+    if self.typemodel == 'Paolo': 
+        nznew=int(self.zorig.shape[0]/2)
+    
+        var = var[:,:,0:nznew-1]
+    
+    self.trans2commaxes()
+    
     return var
 
 
@@ -981,17 +990,20 @@ class PlutoData(object):
 
     if self.transunits == False:
       self.transunits = True
-      print('happens!')
       self.z = self.z[::-1].copy() 
-      self.dz1d = self.dz1d[::-1].copy() 
-
+      if self.typemodel == 'Paolo': 
+        nznew=int(self.z.shape[0]/2)
+        self.z = self.z[0:nznew-1]
+        self.nz = np.size(self.z)
+      self.dz1d = np.gradient(self.z)
+    
   def trans2noncommaxes(self): 
 
     if self.transunits == True:
       self.transunits = False
-      self.z = self.z[::-1].copy() 
-      self.dz1d = self.dz1d[::-1].copy() 
-
+      self.z = self.zorig 
+      self.dz1d = np.gradient(self.z)
+      self.nz = np.size(self.z)
 
 
 class Pypluto_kostas_units(object): 
