@@ -210,15 +210,15 @@ class radyn(object):
         do_expscale = value
       if key == 'sparse': 
         self.trans_sparse = value
-        
+
     # Semicircular loop
-    z = self.zorig
-    good = z >=0.0
-    z = z[good]
+    s = self.rdobj.zm[snap]
+    good = s >=0.0
+    s = s[good]
     var = var[good]
-    zmax = self.rdobj.cdf['zll'][self.snap]
-    R = 2*zmax/np.pi
-    
+    smax = self.rdobj.cdf['zll'][self.snap]
+    R = 2*smax/np.pi
+
     # JMS we are assuming here that self.z.min() = 0
     shape = (ceil(self.x.max()/self.trans_dx), 1, ceil(self.z.max()/self.trans_dx))
     
@@ -231,12 +231,12 @@ class radyn(object):
             
     if self.gridfactor > 1:
         if do_expscale: 
-            zz, var= refine(z, np.log(var),factor=self.gridfactor, unscale=np.exp)
+            ss, var= refine(s, np.log(var),factor=self.gridfactor, unscale=np.exp)
         else: 
-            zz, var= refine(z, var,factor=self.gridfactor)
+            ss, var= refine(s, var,factor=self.gridfactor)
     else:
-        zz = z
-    omega = zz/R
+        ss = s
+    omega = ss/R
     
     # Arc lengths (in radians)
     dA=  np.abs(omega[1:]-omega[0:-1])
@@ -263,10 +263,10 @@ class radyn(object):
     row = xind*shape[2]+zind
 
     if self.trans_sparse:
-        M = coo_matrix((dA/(self.trans_dx*self.trans_dz), (row,col)),shape=(shape[0]*shape[2], len(self.z)), dtype=np.float)
+        M = coo_matrix((dA/(self.trans_dx*self.trans_dz), (row,col)),shape=(shape[0]*shape[2], len(ss)), dtype=np.float)
         M = M.tocsr()
     else:
-        M = np.zeros(shape=(shape[0]*shape[2], len(self.z)), dtype=np.float)
+        M = np.zeros(shape=(shape[0]*shape[2], len(ss)), dtype=np.float)
         M[row,col] = dA/(self.dx1d*self.dz1d.max())  #weighting by area of arc segment
    
     # The final quantity at each Cartesian grid cell is an area-weighted 
@@ -291,15 +291,17 @@ class radyn(object):
         if key == 'dz':
           self.trans_dz = value
             
-      # Semicircular loop
+      # Semicircular loop    
       self.zorig = (self.rdobj.__getattr__('zm'))[self.snap]
-      z = np.copy(self.zorig)
-      good = z >=0.0
-      z = z[good]
-      zmax = self.rdobj.cdf['zll'][self.snap]
-      x = np.sqrt(zmax**2 - z*z)
+      s = np.copy(self.zorig)
+      good = s >=0.0
+      s = s[good]
+      smax = self.rdobj.cdf['zll'][self.snap]
+      R = 2*smax/np.pi
+      x = np.cos(s/R)*R
+      z = np.sin(s/R)*R
     
-      shape = (ceil(x.max()/self.trans_dx), ceil(zmax/self.trans_dz))
+      shape = (ceil(x.max()/self.trans_dx), ceil(z.max()/self.trans_dz))
     
       # In the RADYN model in the corona, successive grid points may be several pixels away from each other.
       # In this case, need to refine loop.
@@ -308,7 +310,8 @@ class radyn(object):
     
             
       if self.gridfactor > 1:
-        self.z, self.x = refine(z, x, factor=self.gridfactor)
+        ss, self.x = refine(s,x, factor=self.gridfactor)
+        ss, self.z = refine(s,z, factor=self.gridfactor)
       else:
         self.z = z
         self.x = x
