@@ -6,8 +6,18 @@ from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
 from .load_noeos_quantities import *
+from math import ceil, floor
+from scipy.sparse import coo_matrix
+import torch
+import imp
+try:
+    imp.find_module('pycuda')
+    found = True
+except ImportError:
+    found = False
+    
 
-class radyn:
+class radyn(object):
   """
   Class to read cipmocct atmosphere
 
@@ -22,8 +32,9 @@ class radyn:
   it : integer 
       snapshot number 
   """
-  def __init__(self, filename, fdir='.', sel_units = 'cgs', verbose=True):
-    
+  def __init__(self, filename, *args, fdir='.', 
+               sel_units = 'cgs', verbose=True, **kwargs):
+        
     self.filename = filename
     self.fdir = fdir
     self.rdobj = rd.cdf.LazyRadynData(filename)
@@ -32,7 +43,7 @@ class radyn:
     self.z = self.rdobj.__getattr__('zm')
     self.sel_units= sel_units
     self.verbose = verbose
-    
+    self.snap = None
     self.uni = Radyn_units()
     
     self.dx = 1.0
@@ -42,7 +53,7 @@ class radyn:
     self.nz = np.shape(self.z)[1]
     for it in range(0,self.nt):
       self.dz[it,:] = np.gradient(self.z[it,:])
-    
+    self.dz1d = self.dz
     self.dx1d = 1.0
     self.dy1d = 1.0
     
@@ -120,11 +131,14 @@ class radyn:
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
       print(self.description['ALL']) 
-
+      print('\n radyn obj is self.rdobj, self.rdobj.var_info is as follows')
+      print(self.rdobj.var_info)
+    
       return None
-   
-    return self.data
 
+    self.trans2noncommaxes()
+    
+    return self.data
 
   def genvar(self): 
     '''
@@ -142,7 +156,7 @@ class radyn:
     self.varn['ne']= 'ne1'
 
 
-  def trans2comm(self,varname,snap=None): 
+  def trans2comm(self,varname,snap=0, **kwargs): 
     '''
     Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
     is: 
@@ -166,42 +180,180 @@ class radyn:
 
     self.sel_units = 'cgs'
 
+    for key, value in kwargs.items():
+      if key == 'dx': 
+        if hasattr(self,'trans_dx'):
+            if value != self.trans_dx: 
+              self.transunits = False
+      if key == 'dz': 
+        if hasattr(self,'trans_dz'):
+            if value != self.trans_dz: 
+              self.transunits = False
+
     if self.snap != snap: 
         self.snap=snap
-        self.trans2commaxes()
+        self.transunits = False
+    
+    var = self.get_var(varname)[self.snap]
+    
+    self.trans2commaxes(**kwargs)
+    
+    if not hasattr(self,'trans_loop_width'):   
+        self.trans_loop_width=1.0
+    if not hasattr(self,'trans_sparse'):   
+        self.trans_sparse=3e7
+            
+    for key, value in kwargs.items():
+      if key == 'loop_width': 
+        self.trans_loop_width = value
+      if key == 'unscale': 
+        do_expscale = value
+      if key == 'sparse': 
+        self.trans_sparse = value
 
-    var = get_var(varname)[:,snap]
-    # it needs to be converted in a 3D box. 
-    #var = transpose(var,(X,X,X))
-    # also velocities. 
+    # Semicircular loop
+    s = self.rdobj.zm[snap]
+    good = s >=0.0
+    s = s[good]
+    var = var[good]
+    smax = self.rdobj.cdf['zll'][self.snap]
+    R = 2*smax/np.pi
+
+    # JMS we are assuming here that self.z.min() = 0
+    shape = (ceil(self.x.max()/self.trans_dx), 1, ceil(self.z.max()/self.trans_dx))
+    
+    # In the RADYN model in the corona, successive grid points may be several pixels away from each other.
+    # In this case, need to refine loop.
+    do_expscale = False
+    for key, value in kwargs.items():
+        if key == 'unscale': 
+            do_expscale = value
+            
+    if self.gridfactor > 1:
+        if do_expscale: 
+            ss, var= refine(s, np.log(var),factor=self.gridfactor, unscale=np.exp)
+        else: 
+            ss, var= refine(s, var,factor=self.gridfactor)
+    else:
+        ss = s
+    omega = ss/R
+    
+    # Arc lengths (in radians)
+    dA=  np.abs(omega[1:]-omega[0:-1])
+    dA = dA.tolist()
+    dA.insert(0,dA[0])
+    dA.append(dA[-1])
+    dA = np.array(dA)
+    dA = 0.5*(dA[1:]+dA[0:-1])
+    #dA = R*dA*(loop_width*dx)
+    dA = 0.5*dA*((R+0.5*self.trans_loop_width*self.trans_dx)**2-(R-0.5*self.trans_loop_width*self.trans_dx)**2)
+    
+    #Componnets of velocity in the x and z directions
+    if varname == 'ux': 
+        var = -var*np.sin(omega)
+    if varname == 'uz': 
+        var =  var*np.cos(omega)
+
+    xind = np.floor(self.x/self.trans_dx).astype(np.int64)
+    zind = np.clip(np.floor(self.z/self.trans_dz).astype(np.int64),0,shape[2]-1)
+
+    # Define matrix with column coordinate corresponding to point along loop
+    # and row coordinate corresponding to position in Cartesian grid
+    col = np.arange(len(self.z),dtype=np.int64)
+    row = xind*shape[2]+zind
+
+    if self.trans_sparse:
+        M = coo_matrix((dA/(self.trans_dx*self.trans_dz), (row,col)),shape=(shape[0]*shape[2], len(ss)), dtype=np.float)
+        M = M.tocsr()
+    else:
+        M = np.zeros(shape=(shape[0]*shape[2], len(ss)), dtype=np.float)
+        M[row,col] = dA/(self.dx1d*self.dz1d.max())  #weighting by area of arc segment
+   
+    # The final quantity at each Cartesian grid cell is an area-weighted 
+    # average of values from loop passing through this grid cell
+    # This arrays are not actually used for VDEM extraction
+    var = (M@var).reshape(shape)
 
     return var
 
-  def trans2commaxes(self): 
+  def trans2commaxes(self, **kwargs): 
 
     if self.transunits == False:
-      #self.x = self.x # including units conversion 
-      #self.y = 
-      #self.z =
-      self.dx1d = self.dx
-      self.dy1d = self.dy
-      self.dz1d = self.dz
+
+      if not hasattr(self,'trans_dx'):   
+        self.trans_dx=3e7
+      if not hasattr(self,'trans_dz'):   
+        self.trans_dz=3e7
+
+      for key, value in kwargs.items():
+        if key == 'dx':
+          self.trans_dx = value
+        if key == 'dz':
+          self.trans_dz = value
+            
+      # Semicircular loop    
+      self.zorig = (self.rdobj.__getattr__('zm'))[self.snap]
+      s = np.copy(self.zorig)
+      good = s >=0.0
+      s = s[good]
+      smax = self.rdobj.cdf['zll'][self.snap]
+      R = 2*smax/np.pi
+      x = np.cos(s/R)*R
+      z = np.sin(s/R)*R
+    
+      shape = (ceil(x.max()/self.trans_dx), ceil(z.max()/self.trans_dz))
+    
+      # In the RADYN model in the corona, successive grid points may be several pixels away from each other.
+      # In this case, need to refine loop.
+      maxdl = np.abs(z[1:]-z[0:-1]).max()
+      self.gridfactor = ceil(2*maxdl/np.min([self.trans_dx,self.trans_dz]))
+    
+            
+      if self.gridfactor > 1:
+        ss, self.x = refine(s,x, factor=self.gridfactor)
+        ss, self.z = refine(s,z, factor=self.gridfactor)
+      else:
+        self.z = z
+        self.x = x
+      
+      self.y = 1.0        
+        
+      self.dx1d = self.x[1] - self.x[0]
+      self.dy1d = 1.0
+      self.dz1d = np.gradient(self.z)
+        
       self.transunits = True
 
   def trans2noncommaxes(self): 
 
     if self.transunits == True:
-      # opposite to the previous function 
+      self.x = 0.0
+      self.y = 0.0
+      self.z = self.rdobj.__getattr__('zm')
+
+      self.dx = 1.0
+      self.dy = 1.0
+      self.dz = np.copy(self.z)
+      self.nz = np.shape(self.z)[1]
+      for it in range(0,self.nt):
+        self.dz[it,:] = np.gradient(self.z[it,:])
+      self.dz1d = self.dz
+      self.dx1d = 1.0
+      self.dy1d = 1.0
+
+      self.nx = np.shape(self.x)
+      self.ny = np.shape(self.y)
       self.transunits = False
 
+    
 class Radyn_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
         '''
         Units and constants in cgs
         '''
         self.uni={}
-
+        self.verbose = verbose 
         self.uni['tg']     = 1.0
         self.uni['l']      = 1.0
         self.uni['n']      = 1.0

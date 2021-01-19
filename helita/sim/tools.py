@@ -105,13 +105,18 @@ def convertcsgsi(obj):
   obj.unisi['tg']     = obj.uni['tg'] # K
   obj.unisi['t']      = obj.uni['t'] # seconds
   obj.unisi['l']      = obj.uni['l'] * const.centi # m
-  obj.unisi['rho']    = obj.uni['rho'] * const.gram / const.centi**3 # kg m^-3 
-  obj.unisi['u']      = obj.uni['u'] * const.centi # m/s
-  obj.unisi['b']      = obj.uni['b'] * 1e-4 # T
   obj.unisi['j']      = 1.0 # current density  
-  obj.unisi['pg']     = obj.unisi['rho'] * (obj.unisi['l'] / obj.unisi['t'])**2
-  obj.unisi['ee']     = obj.unisi['u']**2
-  obj.unisi['e']      = obj.unisi['rho'] * obj.unisi['ee'] 
+
+  try:  
+      obj.unisi['rho']    = obj.uni['rho'] * const.gram / const.centi**3 # kg m^-3 
+      obj.unisi['pg']     = obj.unisi['rho'] * (obj.unisi['l'] / obj.unisi['t'])**2
+      obj.unisi['u']      = obj.uni['u'] * const.centi # m/s
+      obj.unisi['ee']     = obj.unisi['u']**2
+      obj.unisi['e']      = obj.unisi['rho'] * obj.unisi['ee'] 
+      obj.unisi['b']      = obj.uni['b'] * 1e-4 # T
+  except:  
+    if obj.verbose: 
+        print('Some unisi did not run')
 
 
 def globalvars(obj):
@@ -255,3 +260,18 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     return map_coordinates(grid, np.array([new_ix, new_iy]),
                            order=order).reshape(new_x.shape)
 
+
+def refine(s,q,factor=2,unscale=lambda x:x):
+    """
+    Given 1D function q(s), interpolate so we have factor x many points.
+    factor = 2 by default
+    """
+    ds = s[-1]-s[0]
+    ss = np.arange(factor*len(s)+1)/(factor*len(s))*ds+s[0]
+    if ds > 0.0:
+        qq = unscale(np.interp(ss, s, q))
+        return ss, qq
+    elif ds < 0.0:
+        qq = unscale(np.interp(ss[::-1], s[::-1], q[::-1]))
+        qq = qq[::-1]
+        return ss, qq

@@ -266,13 +266,14 @@ class Matsumotosav:
 
 class Matsumotosav_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
 
 
         '''
         Units and constants in cgs
         '''
         self.uni={}
+        self.verbose=verbose
         self.uni['tg']     = 1.0 # K
         self.uni['l']      = 1.0e8 # Mm -> cm
         self.uni['rho']    = 1.0 # gr cm^-3 

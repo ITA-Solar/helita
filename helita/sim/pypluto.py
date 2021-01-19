@@ -783,7 +783,8 @@ class PlutoData(object):
     self.x = self.info.x1
     self.y = self.info.x2
     self.z = self.info.x3
-
+    self.zorig=self.z
+    
     if self.sel_units=='cgs': 
         self.x *= self.uni.uni['l']
         self.y *= self.uni.uni['l']
@@ -895,6 +896,9 @@ class PlutoData(object):
       print(self.description['ALL']) 
 
       return None
+
+    self.trans2noncommaxes()
+
     return self.data
 
 
@@ -968,12 +972,17 @@ class PlutoData(object):
         sign = -1.0 
 
     var = np.reshape( sign * self.get_var(varname,snap=snap), 
-                    (self.nx, self.ny, self.nz)).copy()
+                    (self.nx, self.ny, self.zorig.shape[0])).copy()
 
     var = var[...,::-1].copy()
         
-    self.trans2commaxes
-
+    if self.typemodel == 'Paolo': 
+        nznew=int(self.zorig.shape[0]/2)
+    
+        var = var[:,:,0:nznew-1]
+    
+    self.trans2commaxes()
+    
     return var
 
 
@@ -981,29 +990,32 @@ class PlutoData(object):
 
     if self.transunits == False:
       self.transunits = True
-      print('happens!')
       self.z = self.z[::-1].copy() 
-      self.dz1d = self.dz1d[::-1].copy() 
-
+      if self.typemodel == 'Paolo': 
+        nznew=int(self.z.shape[0]/2)
+        self.z = self.z[0:nznew-1]
+        self.nz = np.size(self.z)
+      self.dz1d = np.gradient(self.z)
+    
   def trans2noncommaxes(self): 
 
     if self.transunits == True:
       self.transunits = False
-      self.z = self.z[::-1].copy() 
-      self.dz1d = self.dz1d[::-1].copy() 
-
+      self.z = self.zorig 
+      self.dz1d = np.gradient(self.z)
+      self.nz = np.size(self.z)
 
 
 class Pypluto_kostas_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
     
         '''
         Units and constants in cgs
         '''
 
         self.uni={}
-
+        self.verbose=verbose
         self.uni['tg']     = 1.0e6 # K
         self.uni['l']      = 1.0e8 # cm 
         self.uni['rho']    = 1.0e-15 # gr cm^-3 
@@ -1025,33 +1037,34 @@ class Pypluto_kostas_units(object):
         self.uni['gr']     = 2.7e4 # solar gravity in cgs
         self.uni['gc']     = self.uni['gr'] * self.uni['l'] / self.uni['u'] ** 2 # solar gravity in Code units. 
 
-
 class Pypluto_paolo_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
     
         '''
         Units and constants in cgs
         '''
 
+        rsun= 6.960e10
+        proton_mass=1.672623110e-24
         self.uni={}
-
-        self.uni['tg']     = 1.0e6 # K
-        self.uni['l']      = 1.0e8 # cm 
-        self.uni['rho']    = 1.0e-15 # gr cm^-3 
+        self.verbose=verbose
+        self.uni['l']      = 6.960e10 # cm 
+        self.uni['u']      = 1.0e7 # cm/s
+        self.uni['rho']    = 2e10*1.2650*proton_mass # gr cm^-3 
+        self.uni['b']      = self.uni['u']*np.sqrt(4.0 * np.pi * self.uni['rho']) # Gauss
+        self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
+        self.uni['pg']     = self.uni['rho'] * self.uni['u']**2 # erg cm^-3 
+        self.uni['tg']     = 1.203e6/2.0*1.26506 # K
+        #self.uni['tg']     =  1.3747056e22 # K        
         self.uni['kboltz'] =  1.380658E-16 # Boltzman's cst. [erg/K]
         self.uni['proton'] =  const.m_n / const.gram        # 1.674927471e-24
         self.uni['R_spec'] = self.uni['kboltz'] / (0.5e0 * self.uni['proton'])
-        self.uni['u']      = np.sqrt(self.uni['R_spec']*self.uni['tg']) # cm/s
-        self.uni['pg']     = self.uni['rho'] * self.uni['u']**2
-        self.uni['b']      = np.sqrt(4.0 * np.pi * self.uni['pg']) # Gauss
-        self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
 
         # Units and constants in SI
         convertcsgsi(self)
 
         globalvars(self)
-
 
         self.uni['j']      = self.uni['b']/self.uni['l']*self.clight # current density
         self.uni['gr']     = 2.7e4 # solar gravity in cgs

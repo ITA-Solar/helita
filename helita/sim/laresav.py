@@ -39,9 +39,9 @@ class Laresav:
     self.visc_heating= self.savefile['d']['visc_heating'][0].copy()
     self.visc3_heating= self.savefile['d']['visc3_heating'][0].copy()
 
-    self.x       = self.savefile['d']['x'][0].copy()
-    self.y       = self.savefile['d']['y'][0].copy()
-    self.z       = self.savefile['d']['z'][0].copy()
+    self.x       = self.savefile['d']['x'][0].copy().byteswap('=').newbyteorder('=')
+    self.y       = self.savefile['d']['y'][0].copy().byteswap('=').newbyteorder('=')
+    self.z       = self.savefile['d']['z'][0].copy().byteswap('=').newbyteorder('=')
     
     if self.sel_units=='cgs': 
         self.x *= self.uni.uni['l']
@@ -135,7 +135,7 @@ class Laresav:
         cgsunits = 1.0
 
       
-      self.data = self.savefile['d'][varname][0].T * cgsunits
+      self.data = (self.savefile['d'][varname][0].T).copy().byteswap('=').newbyteorder('=') * cgsunits
       
       if (np.shape(self.data)[0]>self.nx): 
           self.data = ((self.data[1:,:,:] + self.data[:-1,:,:]) / 2).copy()
@@ -228,7 +228,7 @@ class Laresav:
 
     self.trans2commaxes
 
-    var = self.get_var(varname,snap=snap)
+    var = self.get_var(varname,snap=snap).copy()
 
     #var = transpose(var,(X,X,X))
     # also velocities. 
@@ -254,12 +254,13 @@ class Laresav:
 
 class Laresav_units(object): 
 
-    def __init__(self):
+    def __init__(self,verbose=False):
 
         '''
         Units and constants in cgs
         '''
         self.uni={}
+        self.verbose=verbose
         self.uni['gamma']  = 5./3.
         self.uni['tg']     = 5.77e9 # K
         self.uni['l']      = 1.0e8 # Mm -> cm
