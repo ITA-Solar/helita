@@ -539,22 +539,18 @@ class MuramAtmos:
       self.transunits = False
 
   def trasn2fits(self, varname, snap=None, instrument = 'MURaM', 
-    name='ar098192', origin='HGCR    ', z_tau51m=None ): 
+    name='ar098192', origin='HGCR    ', z_tau51m=None, iz0=None ): 
     '''
     converts the original data into fits files following Bifrost publicly available 
     format, i.e., SI, vertical axis, z and top corona is positive and last index. 
     '''
     
-    if z_tau51m == None: 
-      tau51 = self.trans2comm('tau',snap=snap)
-      z_tau51 = np.zeros((self.nx,self.ny))
-      for ix in range (0,self.nx): 
-        for iy in range(0,self.ny): 
-          z_tau51[ix,iy] = self.z[np.argmin(np.abs(tau51[ix,iy,:]-1.0))]
+    if varname[-1] == 'x': 
+      varname=varname.replace('x','z')
+    elif varname[-1] == 'z': 
+      varname=varname.replace('z','x')
 
-      z_tau51m = np.mean(z_tau51) / 1e8
-
-    self.datafits = np.transpose(self.trans2comm(varname,snap=snap),(2,1,0))
+    self.datafits = self.trans2comm(varname,snap=snap)
 
     varu=varname.replace('x','')
     varu=varu.replace('y','')
@@ -568,7 +564,7 @@ class MuramAtmos:
     units_title(self)
 
     if varu == 'ne': 
-      self.fitsunits = 'm^{-3}'
+      self.fitsunits = 'm^(-3)'
       siunits = 1e6
     else: 
       self.fitsunits = self.unisi_title[varu]
@@ -578,14 +574,24 @@ class MuramAtmos:
     else: 
       self.datafits = self.datafits * siunits
 
-
     self.xfits=self.x / 1e8
     self.yfits=self.y / 1e8
-    self.zfits=self.z / 1e8 - z_tau51m
+    self.zfits=self.z / 1e8 
 
-    z0 = np.min(np.abs(self.zfits))
-    self.zfits += z0
-    z_tau51m = -z0
+    if iz0 != None: 
+      self.zfits -= self.z[iz0]/1e8
+
+    if z_tau51m == None: 
+      tau51 = self.trans2comm('tau',snap=snap)
+      z_tau51 = np.zeros((self.nx,self.ny))
+      for ix in range (0,self.nx): 
+        for iy in range(0,self.ny): 
+          z_tau51[ix,iy] = self.zfits[np.argmin(np.abs(tau51[ix,iy,:]-1.0))]
+
+      z_tau51m = np.mean(z_tau51) 
+
+    print(z_tau51m)
+
     self.dxfits=self.dx / 1e8
     self.dyfits=self.dy / 1e8
     self.dzfits=self.dz / 1e8
