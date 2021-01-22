@@ -7,7 +7,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 from ipywidgets import interact, fixed, Dropdown, IntSlider, FloatSlider
-from scipy.integrate.quadrature import cumtrapz
+from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
 from astropy import units as u
 from ..utils.utilsmath import planck, voigt
