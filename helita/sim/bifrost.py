@@ -1630,7 +1630,7 @@ class BifrostData(object):
         return Quantity(nh, unit='1/cm3')
 
     def write_rh15d(self, outfile, desc=None, append=True, sx=slice(None),
-                    sy=slice(None), sz=slice(None)):
+                    sy=slice(None), sz=slice(None), write_all_v=False):
         """
         Writes snapshot in RH 1.5D format.
         Parameters
@@ -1646,6 +1646,8 @@ class BifrostData(object):
             Slice objects for x, y, and z dimensions, when not all points
             are needed. E.g. use slice(None) for all points, slice(0, 100, 2)
             for every second point up to 100.
+        write_all_v - bool, optional
+            If true, will write also the vx and vy components.
         Returns
         -------
         None.
@@ -1687,6 +1689,14 @@ class BifrostData(object):
 
         vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
+        if write_all_v:
+            vx = cstagger.xup(self.px)[sx, sy, sz] / rho
+            vx *= uv
+            vy = cstagger.yup(self.py)[sx, sy, sz] / rho
+            vy *= -uv
+        else:
+            vx = None
+            vy = None
         x = self.x[sx] * ul
         y = self.y[sy] * (-ul)
         z = self.z[sz] * (-ul)
@@ -1708,8 +1718,8 @@ class BifrostData(object):
             pbar.update()
             pbar.set_description("Writing to file")
         rh15d.make_xarray_atmos(outfile, temp, vz, z, nH=nh, ne=ne, x=x, y=y,
-                                append=append, Bx=Bx, By=By, Bz=Bz, desc=desc,
-                                snap=self.snap)
+                                vx=vx, vy=vy, Bx=Bx, By=By, Bz=Bz, desc=desc,
+                                append=append, snap=self.snap)
         if verbose:
             pbar.update()
 
