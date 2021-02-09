@@ -122,24 +122,6 @@ class BifrostData(object):
 
         self.set_snap(snap,True,params_only=params_only)
         
-        if self.sel_units=='cgs': 
-            self.x *= self.uni.uni['l']
-            self.y *= self.uni.uni['l']
-            self.z *= self.uni.uni['l']
-            self.dx *= self.uni.uni['l']
-            self.dy *= self.uni.uni['l']
-            self.dz *= self.uni.uni['l']
-            self.dx1d *= self.uni.uni['l']
-            self.dy1d *= self.uni.uni['l']
-            self.dz1d *= self.uni.uni['l']
-            
-            self.dxidxup /= self.uni.uni['l']
-            self.dxidxdn /= self.uni.uni['l']
-            self.dyidyup /= self.uni.uni['l']
-            self.dyidydn /= self.uni.uni['l']
-            self.dzidzup /= self.uni.uni['l']
-            self.dzidzdn /= self.uni.uni['l']  
-        
         self.genvar()
         self.transunits = False
         self.cross_sect = Cross_sect
@@ -385,8 +367,27 @@ class BifrostData(object):
             self.dz1d = np.gradient(self.z) 
         else:
             self.dz1d = np.zeros(self.nz)
-
-    
+        
+        if self.sel_units=='cgs': 
+            self.x *= self.uni.uni['l']
+            self.y *= self.uni.uni['l']
+            self.z *= self.uni.uni['l']
+            self.dx *= self.uni.uni['l']
+            self.dy *= self.uni.uni['l']
+            self.dz *= self.uni.uni['l']
+            self.dx1d *= self.uni.uni['l']
+            self.dy1d *= self.uni.uni['l']
+            self.dz1d *= self.uni.uni['l']
+            
+            self.dxidxup /= self.uni.uni['l']
+            self.dxidxdn /= self.uni.uni['l']
+            self.dyidyup /= self.uni.uni['l']
+            self.dyidydn /= self.uni.uni['l']
+            self.dzidzup /= self.uni.uni['l']
+            self.dzidzdn /= self.uni.uni['l']  
+        
+        self.transunits = False
+        
     def _init_vars(self, firstime=False,  fast=None, *args, **kwargs):
         """
         Memmaps "simple" variables, and maps them to methods.
@@ -733,23 +734,31 @@ class BifrostData(object):
     def trans2commaxes(self): 
         if self.transunits == False:
           self.transunits = True
-          self.x =  self.x 
-          self.dx =  self.dx 
-          self.y =  self.y 
-          self.dy =  self.dy 
-          self.z = - self.z[::-1].copy() 
-          self.dz = - self.dz1d[::-1].copy() 
+          if self.sel_units == 'cgs':
+            cte=1.0
+          else: 
+            cte=1.0e8
+          self.x =  self.x*cte
+          self.dx =  self.dx*cte
+          self.y =  self.y*cte
+          self.dy =  self.dy*cte
+          self.z = - self.z[::-1].copy()*cte
+          self.dz = - self.dz1d[::-1].copy()*cte 
 
     def trans2noncommaxes(self): 
 
         if self.transunits == True:
           self.transunits = False
-          self.x =  self.x 
-          self.dx =  self.dx 
-          self.y =  self.y 
-          self.dy =  self.dy
-          self.z = - self.z[::-1].copy()
-          self.dz = - self.dz1d[::-1].copy()
+          if self.sel_units == 'cgs':
+            cte=1.0
+          else: 
+            cte=1.0e8
+          self.x =  self.x/cte
+          self.dx =  self.dx/cte
+          self.y =  self.y/cte
+          self.dy =  self.dy/cte
+          self.z = - self.z[::-1].copy()/cte
+          self.dz = - self.dz1d[::-1].copy()/cte
 
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         """
