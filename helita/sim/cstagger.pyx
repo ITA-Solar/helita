@@ -165,18 +165,22 @@ cpdef zup(np.ndarray[FLOAT_t, ndim=3] inarr):
     o = <FLOAT_t *> outarr.data
     tmp = <FLOAT_t *> zz.data
     # Pure C part
-    for k in range(mz):
-        m = k - 2
-        if (k < 3):
-            m = 0
-        if (k > mz - 4):
-            m = mz - 6
-        for j in range(my):
-            for i in range(mx):
-                d = 0
-                for l in range(6):
-                    d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i]
-                o[(k * my + j) * mx + i] = d
+    if (mz != 1):
+        for k in range(mz):
+            m = k - 2
+            if (k < 3):
+                m = 0
+            if (k > mz - 4):
+                m = mz - 6
+            for j in range(my):
+                for i in range(mx):
+                    d = 0
+                    for l in range(6):
+                        d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i]
+                    o[(k * my + j) * mx + i] = d
+    else : 
+        o = f
+
     return outarr
 
 
@@ -332,18 +336,22 @@ cpdef zdn(np.ndarray[FLOAT_t, ndim=3] inarr):
     o = <FLOAT_t *> outarr.data
     tmp = <FLOAT_t *> zz.data
     # Pure C part
-    for k in range(mz):
-        m = k-3
-        if (k < 3):
-            m = 0
-        if (k > mz-4):
-            m = mz-6
-        for j in range(my):
-            for i in range(mx):
-                d = 0
-                for l in range(6):
-                    d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i];
-                o[(k * my + j) * mx + i] = d
+    if (mz != 1):
+        for k in range(mz):
+            m = k-3
+            if (k < 3):
+                m = 0
+            if (k > mz-4):
+                m = mz-6
+            for j in range(my):
+                for i in range(mx):
+                    d = 0
+                    for l in range(6):
+                        d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i];
+                    o[(k * my + j) * mx + i] = d
+    else:
+        o = f
+
     return outarr
 
 
@@ -754,55 +762,57 @@ def init_stagger(int mz, FLOAT_t dx, FLOAT_t dy, np.ndarray[FLOAT_t, ndim=1] z,
 
     cdef np.ndarray[FLOAT_t, ndim=1] zh = np.sort(np.concatenate([z,zdn]))
     cdef np.ndarray[FLOAT_t, ndim=1] a = np.zeros(6, dtype=z.dtype)
-
+    print("hello")
     iordl = np.array([1, 3, 4, 5])
     iordu = np.array([1, 3, 4, 5])
     dordl = np.array([2, 3, 4, 5])
     dordu = np.array([2, 3, 4, 5])
 
-    for k in range(1, 4):
-        for j in range(6):
-            a[j] = zh[2 * j] - zh[k*2 - 1]
-        calc_stagger_inv(a, iordl[k], 0, 0, zupc[k-1])
-        calc_stagger_inv(a, dordl[k], 1, 0, dzupc[k-1])
-        for j in range(6):
-            a[j] = zh[2*j + 1] - zh[k*2 - 2]
-        calc_stagger_inv(a, iordl[k-1], 0, 0, zdnc[k-1])
-        calc_stagger_inv(a, dordl[k-1], 1, 0, dzdnc[k-1])
+    if (nz != 1):
+        for k in range(1, 4):
+            for j in range(6):
+                a[j] = zh[2 * j] - zh[k*2 - 1]
+            calc_stagger_inv(a, iordl[k], 0, 0, zupc[k-1])
+            calc_stagger_inv(a, dordl[k], 1, 0, dzupc[k-1])
+            for j in range(6):
+                a[j] = zh[2*j + 1] - zh[k*2 - 2]
+            calc_stagger_inv(a, iordl[k-1], 0, 0, zdnc[k-1])
+            calc_stagger_inv(a, dordl[k-1], 1, 0, dzdnc[k-1])
 
-    for k in range(4, mz - 2):
-        for j in range(6):
-            a[j] = zh[2 * (k-2+j) - 2] - zh[k*2 - 1]
-        calc_stagger_inv(a, 5, 0, 0, zupc[k-1])
-        calc_stagger_inv(a, 5, 1, 0, dzupc[k-1])
-        for j in range(6):
-            a[j] = zh[2 * (k-3+j) - 1] - zh[k*2 - 2];
-        calc_stagger_inv(a, 5, 0, 0, zdnc[k-1])
-        calc_stagger_inv(a, 5, 1, 0, dzdnc[k-1])
+        for k in range(4, mz - 2):
+            for j in range(6):
+                a[j] = zh[2 * (k-2+j) - 2] - zh[k*2 - 1]
+            calc_stagger_inv(a, 5, 0, 0, zupc[k-1])
+            calc_stagger_inv(a, 5, 1, 0, dzupc[k-1])
+            for j in range(6):
+                a[j] = zh[2 * (k-3+j) - 1] - zh[k*2 - 2];
+            calc_stagger_inv(a, 5, 0, 0, zdnc[k-1])
+            calc_stagger_inv(a, 5, 1, 0, dzdnc[k-1])
 
-    for k in range(mz-2, mz+1):
-        for j in range(iordu[mz - k] + 1):
-            a[j] = zh[2 * (mz + j - iordu[mz-k]) - 2] - zh[k*2 - 1]
-        for j in range(iordu[mz - k] + 1, 6):
-            a[j] = 0
-        calc_stagger_inv(a, iordu[mz - k], 0, 5 - iordu[mz - k], zupc[k - 1])
-        for j in range(dordu[mz - k] + 1):
-            a[j] = zh[2 * (mz + j - dordu[mz - k]) - 2] - zh[k*2 - 1]
-        for j in range(dordu[mz-k]+1, 6):
-            a[j] = 0
-        calc_stagger_inv(a, dordu[mz - k], 1, 5 - dordu[mz - k], dzupc[k - 1])
-        for j in range(iordu[mz - k + 1] + 1):
-            a[j] = zh[2 * (mz + j - iordu[mz - k + 1]) - 1] - zh[k*2 - 2]
-        for j in range(iordu[mz - k + 1] + 1, 6):
-            a[j] = 0
-        calc_stagger_inv(a, iordu[mz - k + 1], 0, 5 - iordu[mz - k + 1],
-                         zdnc[k - 1])
-        for j in range(dordu[mz - k + 1] + 1):
-            a[j] = zh[2 * (mz + j - dordu[mz - k + 1]) - 1] - zh[k*2 - 2]
-        for j in range(dordu[mz - k + 1] + 1, 6):
-            a[j] = 0
-        calc_stagger_inv(a, dordu[mz - k + 1], 1, 5 - iordu[mz - k + 1],
-                         dzdnc[k - 1])
+        for k in range(mz-2, mz+1):
+            for j in range(iordu[mz - k] + 1):
+                a[j] = zh[2 * (mz + j - iordu[mz-k]) - 2] - zh[k*2 - 1]
+            for j in range(iordu[mz - k] + 1, 6):
+                a[j] = 0
+            calc_stagger_inv(a, iordu[mz - k], 0, 5 - iordu[mz - k], zupc[k - 1])
+            for j in range(dordu[mz - k] + 1):
+                a[j] = zh[2 * (mz + j - dordu[mz - k]) - 2] - zh[k*2 - 1]
+            for j in range(dordu[mz-k]+1, 6):
+                a[j] = 0
+            calc_stagger_inv(a, dordu[mz - k], 1, 5 - dordu[mz - k], dzupc[k - 1])
+            for j in range(iordu[mz - k + 1] + 1):
+                a[j] = zh[2 * (mz + j - iordu[mz - k + 1]) - 1] - zh[k*2 - 2]
+            for j in range(iordu[mz - k + 1] + 1, 6):
+                a[j] = 0
+            calc_stagger_inv(a, iordu[mz - k + 1], 0, 5 - iordu[mz - k + 1],
+                            zdnc[k - 1])
+            for j in range(dordu[mz - k + 1] + 1):
+                a[j] = zh[2 * (mz + j - dordu[mz - k + 1]) - 1] - zh[k*2 - 2]
+            for j in range(dordu[mz - k + 1] + 1, 6):
+                a[j] = 0
+            calc_stagger_inv(a, dordu[mz - k + 1], 1, 5 - iordu[mz - k + 1],
+                            dzdnc[k - 1])
+ 
     return
 
 
