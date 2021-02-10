@@ -28,7 +28,7 @@ class Laresav:
     except: 
         self.savefile = rsav(os.path.join(self.fdir,'{:04d}'.format(snap)+'.sav'))
 
-    self.rootname = self.savefile['d']['filename'][0]
+    self.root_name = self.savefile['d']['filename'][0]
     self.snap = snap 
     self.sel_units = sel_units
     self.verbose = verbose
