@@ -35,26 +35,26 @@ class Matsumotosav:
     self.verbose  = verbose
     self.uni      = Matsumotosav_units()
     
-    self.time     = self.savefile['v']['time'][0]
-    self.grav     = self.savefile['v']['gx'][0]
-    self.gamma    = self.savefile['v']['gm'][0]
+    self.time     = self.savefile['v']['time'][0].copy()
+    self.grav     = self.savefile['v']['gx'][0].copy()
+    self.gamma    = self.savefile['v']['gm'][0].copy()
     
     if self.sel_units=='cgs': 
-        self.x        = self.savefile['v']['x'][0] # cm
-        self.y        = self.savefile['v']['y'][0]
-        self.z        = self.savefile['v']['z'][0]
+        self.x        = self.savefile['v']['x'][0].copy() # cm
+        self.y        = self.savefile['v']['y'][0].copy()
+        self.z        = self.savefile['v']['z'][0].copy()
 
-        self.dx       = self.savefile['v']['dx'][0]
-        self.dy       = self.savefile['v']['dy'][0]
-        self.dz       = self.savefile['v']['dz'][0]
+        self.dx       = self.savefile['v']['dx'][0].copy()
+        self.dy       = self.savefile['v']['dy'][0].copy()
+        self.dz       = self.savefile['v']['dz'][0].copy()
     else: 
-        self.x        = self.savefile['v']['x'][0]/1e8 # Mm
-        self.y        = self.savefile['v']['y'][0]/1e8
-        self.z        = self.savefile['v']['z'][0]/1e8
+        self.x        = self.savefile['v']['x'][0].copy()/1e8 # Mm
+        self.y        = self.savefile['v']['y'][0].copy()/1e8
+        self.z        = self.savefile['v']['z'][0].copy()/1e8
 
-        self.dx       = self.savefile['v']['dx'][0]/1e8
-        self.dy       = self.savefile['v']['dy'][0]/1e8
-        self.dz       = self.savefile['v']['dz'][0]/1e8
+        self.dx       = self.savefile['v']['dx'][0].copy()/1e8
+        self.dy       = self.savefile['v']['dy'][0].copy()/1e8
+        self.dz       = self.savefile['v']['dz'][0].copy()/1e8
     
     self.nx = len(self.x)
     self.ny = len(self.y)
@@ -224,8 +224,14 @@ class Matsumotosav:
 
     self.sel_units = 'cgs'
     
-    var = self.get_var(varname,snap=snap)
-
+    if varname[-1] in ['x','y','z']: 
+        if varname[-1] == 'x': 
+            varname=varname.replace(varname[len(varname)-1], 'y')
+        elif varname[-1] == 'y':
+            varname=varname.replace(varname[len(varname)-1], 'z')
+        else: 
+            varname=varname.replace(varname[len(varname)-1], 'x')
+            
     self.order = np.array((1,2,0))
 
     self.trans2commaxes() 
@@ -241,10 +247,10 @@ class Matsumotosav:
       daxisarrs= np.array(((self.dx),(self.dy),(self.dz)))
       self.x = axisarrs[self.order[0]].copy()
       self.y = axisarrs[self.order[1]].copy()
-      self.z = (- axisarrs[self.order[2]])[::-1].copy()
+      self.z = axisarrs[self.order[2]].copy() + np.max(np.abs(axisarrs[self.order[2]]))
       self.dx = daxisarrs[self.order[0]].copy()
       self.dy = daxisarrs[self.order[1]].copy()
-      self.dz = (- axisarrs[self.order[2]])[::-1].copy()
+      self.dz = -axisarrs[self.order[2]].copy()
       self.dx1d, self.dy1d, self.dz1d = np.gradient(self.x).copy(), np.gradient(self.y).copy(), np.gradient(self.z).copy()
       self.nx, self.ny, self.nz = np.size(self.x), np.size(self.dy), np.size(self.dz)
       self.transunits = True
@@ -256,10 +262,10 @@ class Matsumotosav:
       axisarrs= np.array(((self.x),(self.y),(self.z)))
       self.x = axisarrs[self.order[0]].copy()
       self.y = axisarrs[self.order[1]].copy()
-      self.z = (- axisarrs[self.order[2]])[::-1].copy()
+      self.z = (- axisarrs[self.order[2]]).copy() - np.max(np.abs(axisarrs[self.order[2]]))
       self.dx = (daxisarrs[self.order[0]]).copy()
       self.dy = daxisarrs[self.order[1]].copy()
-      self.dz = (- axisarrs[self.order[2]])[::-1].copy()
+      self.dz = (- axisarrs[self.order[2]]).copy()
       self.dx1d, self.dy1d, self.dz1d = np.gradient(self.x).copy(), np.gradient(self.y).copy(), np.gradient(self.z).copy()
       self.nx, self.ny, self.nz = np.size(self.x), np.size(self.dy), np.size(self.dz)
       self.transunits = False
