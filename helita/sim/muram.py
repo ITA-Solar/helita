@@ -64,13 +64,17 @@ class MuramAtmos:
     tmp = np.loadtxt(headerfile)
     dims = tmp[:3].astype("i")
     deltas = tmp[3:6]
-    if len(tmp) == 10: # Old version of MURaM, deltas stored in km
-        self.uni.uni['l'] = 1e5 # JMS What is this for? 
+    #if len(tmp) == 10: # Old version of MURaM, deltas stored in km
+    #    self.uni.uni['l'] = 1e5 # JMS What is this for? 
+        
     self.time= tmp[7]
-    
-    self.order = tmp[-3:].astype(int)
+    print('layout.order')
+    layout = np.loadtxt('layout.order')
+    self.order = layout[0:3].astype(int)
+    #self.order = tmp[-3:].astype(int)
     dims = dims[self.order]
     deltas = deltas[self.order]
+
     if self.sel_units=='cgs': 
         deltas *= self.uni.uni['l']
 
@@ -609,7 +613,7 @@ class Muram_units(object):
         self.uni={}
         self.verbose=verbose
         self.uni['tg']     = 1.0 # K
-        self.uni['l']      = 1.0e5 # to cm
+        self.uni['l']      = 1.0 # to cm
         self.uni['rho']    = 1.0 # g cm^-3 
         self.uni['u']      = 1.0 # cm/s
         self.uni['b']      = np.sqrt(4.0*np.pi) # convert to Gauss
