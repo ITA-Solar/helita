@@ -273,8 +273,9 @@ class BifrostData(object):
         self.params = {}
         for key in self.paramList[0]:
             self.params[key] = np.array(
-                [self.paramList[i][key] for i in range(
-                    0, len(self.paramList))])
+                [self.paramList[i][key] for i in range(0, len(self.paramList))    \
+                    if key in self.paramList[i].keys()])
+                    #the if statement is required in case extra params in self.ParmList[0]
 
     def __read_mesh(self, meshfile, firstime=False):
         """
