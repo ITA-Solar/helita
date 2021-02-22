@@ -373,6 +373,7 @@ class BifrostData(object):
             self.x *= self.uni.uni['l']
             self.y *= self.uni.uni['l']
             self.z *= self.uni.uni['l']
+            self.zdn *= self.uni.uni['l']
             self.dx *= self.uni.uni['l']
             self.dy *= self.uni.uni['l']
             self.dz *= self.uni.uni['l']
