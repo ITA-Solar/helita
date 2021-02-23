@@ -280,20 +280,20 @@ class Mah:
           self.input_dat2[iv][:,:,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat2[iv][...,0])))*reshape((
                             self.input_ini['ntube'],self.input_ini['nza2sav'],self.input_ini['kmaxt'])).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
         for idx,iv in enumerate(varlistb):
           self.input_dat2[iv][:,:,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat2[iv][...,0])))*reshape((
                             self.input_ini['ntube'],self.input_ini['nzb2sav'],self.input_ini['kmaxt'])).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
         for idx,iv in enumerate(varlistc):
           self.input_dat2[iv][:,:,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat2[iv][...,0])))*reshape((
                             self.input_ini['nzc2sav'],self.input_ini['kmaxt'])).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
       except: 
         self.input_ini['nt2sav'] = it        
 
@@ -312,10 +312,10 @@ class Mah:
           self.input_dat3[iv][:,:,it] = (np.fromfile(f,dtype='float32',count=
                                           np.size(self.input_dat3[iv][...,0]))).reshape((
                                                 self.input_ini['nzc'],self.input_ini['nm3sav'])).T
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
       except: 
         self.input_ini['nt2sav'] = it
-      varnamenew2=['unk18','unk19'] 
-      input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
 
   def read_dat5(self):
     f = open('%s.dat5'%self.rootname,'rb')
@@ -345,20 +345,20 @@ class Mah:
           self.input_dat5[iv][...,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat5[iv][...,0]))).reshape((
                             self.input_ini['nzc'],self.input_ini['ngridc'])).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
         for idx,iv in enumerate(varlistb):
           self.input_dat5[iv][...,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat5[iv][...,0]))).reshape((
                             self.input_ini['nzc5sav'],self.input_ini['ngridc'],self.input_ini['ngridc'])).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
         for idx,iv in enumerate(varlistc):
           self.input_dat5[iv][...,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat5[iv][...,0]))).reshape((
                             self.input_ini['nzc5sav'],self.input_ini['num_pts'])).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
       #except: 
       #  self.input_ini['nt5sav'] = it        
 
@@ -396,22 +396,22 @@ class Mah:
                         np.size(self.input_dat6[iv][...,0])))*reshape((
                             self.input_ini['ntube'],self.input_ini['nza'],
                             self.input_ini['ngridt']+1,self.input_ini['ngridt']+1)).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
         for idx,iv in enumerate(varlistb):
           self.input_dat6[iv][:,:,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat6[iv][...,0])))*reshape((
                             self.input_ini['ntube'],self.input_ini['nzb'],
                             self.input_ini['ngridt']+1,self.input_ini['ngridt']+1)).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
         for idx,iv in enumerate(varlistc):
           self.input_dat6[iv][:,:,it] = (np.fromfile(f,dtype='float32',count=
                         np.size(self.input_dat6[iv][...,0])))*reshape((
                             self.input_ini['nzb'],self.input_ini['ngridt']+1,
                             self.input_ini['ngridt']+1)).T
-        varnamenew2=['unk18','unk19'] 
-        input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
+          varnamenew2=['unk18','unk19'] 
+          input2 = np.fromfile(f,dtype='int32',count=np.size(varnamenew2))
       except: 
         self.input_ini['nt6sav'] = it        
                                                  
@@ -489,19 +489,31 @@ class Mah:
         cgsunits = 1.0
 
     if var in self.varn.keys():
-        self.data = (self.input_ini[varname])#[:,self.snap]
+        self.data = (self.input_ini[varname])
     elif var in self.varn1.keys(): 
-        self.data = self.input_dat1[varname]
+        self.data = (self.input_dat1[varname])
+        if snap != None: 
+            self.data = self.data[...,self.snap]
     elif var in self.varn2.keys(): 
-        self.data = self.input_dat2[varname]
+        self.data = (self.input_dat2[varname])
+        if snap != None: 
+            self.data = self.data[...,self.snap]
     elif var in self.varn3.keys(): 
-        self.data = self.input_dat3[varname]
+        self.data = (self.input_dat3[varname])
+        if snap != None: 
+            self.data = self.data[...,self.snap]
     elif var in self.varn4.keys(): 
-        self.data = self.input_dat4[varname]
+        self.data = (self.input_dat4[varname])
+        if snap != None: 
+            self.data = self.data[...,self.snap]
     elif var in self.varn5.keys(): 
-        self.data = self.input_dat5[varname]
+        self.data = (self.input_dat5[varname])
+        if snap != None: 
+            self.data = self.data[...,self.snap]
     elif var in self.varn6.keys(): 
-        self.data = self.input_dat6[varname]
+        self.data = (self.input_dat6[varname])
+        if snap != None: 
+            self.data = self.data[...,self.snap]
         '''
         except: 
           # Loading quantities
