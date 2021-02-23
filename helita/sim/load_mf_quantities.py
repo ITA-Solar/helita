@@ -308,7 +308,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
       cross = obj.get_var('cross')  # units are in cm^2.
       #calculate & return nu_ij:
-      return n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
+      return 8./3. * n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
     
     elif var == "nu_ij_mx":
       #### ASSUMES one fluid is charged & other is neutral. ####
@@ -497,10 +497,10 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
     cross_tab = ''
     crossunits = 2.8e-17
     if ([spic1, spic2] == ['h', 'h']):
-      cross_tab = 'p-h-elast.txt'
+      cross_tab = 'h-p-bruno-fits.txt'
     elif (([spic1, spic2] == ['h', 'he']) or
           ([spic2, spic1] == ['h', 'he'])):
-      cross_tab = 'p-he.txt'
+      cross_tab = 'he-p-bruno-fits.txt'
     elif ([spic1, spic2] == ['he', 'he']):
       cross_tab = 'he-he.txt'
     elif (([spic1, spic2] == ['e', 'he']) or

@@ -615,17 +615,15 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
-        try:
-            if (snap is not None):
-                if (np.size(snap) == np.size(self.snap)):
-                    if (any(snap != self.snap)):
-                        self.set_snap(snap)
-                        self.variables={}
-                else:
+        snap = np.array(snap, copy=False) #converts snap to np.array unless it already is one.
+        if (snap is not None):
+            if (np.size(snap) == np.size(self.snap)):
+                if (any(snap != self.snap)):
                     self.set_snap(snap)
                     self.variables={}
-        except ValueError:
-            print('WWW: snap has to be a numpy.arrange parameter')
+            else:
+                self.set_snap(snap)
+                self.variables={}
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
@@ -683,15 +681,10 @@ class EbysusData(BifrostData):
 
         for it in range(0, snapLen):
             self.snapInd = 0
-            try:
-                value[..., it] = self.get_var(var, snap=snap[it],
-                    iix=self.iix, iiy=self.iiy, iiz=self.iiz,
-                    mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
-                    mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
-            except:
-                print("Error at not-fully-tested spot in get_varTime (~line 680 of helita/sim/ebysus.py).")
-                print("Consider whether error may be related to not doing _init_vars & _set_snapvars.")
-                raise
+            value[..., it] = self.get_var(var, snap=snap[it],
+                iix=self.iix, iiy=self.iiy, iiz=self.iiz,
+                mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
+                mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
 
         try:
             if ((snap is not None) and (snap != self.snap)):

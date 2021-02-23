@@ -8,24 +8,28 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   if not hasattr(obj,'description'):
     obj.description = {}
 
-  val = get_deriv(obj,quant)
-  if np.shape(val) is ():
-    val = get_center(obj,quant)
-  if np.shape(val) is ():
+  val = get_center(obj,quant)
+  if np.shape(val) == ():
+    if obj.cstagop != False: # this is only for cstagger routines 
+      val = get_deriv(obj,quant)
+  if np.shape(val) == ():
     val = get_module(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_horizontal_average(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_gradients_vect(obj,quant)
-  if np.shape(val) is ():
-    val = get_gradients_scalar(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
+    if obj.cstagop != False:  # this is only for cstagger routines 
+      val = get_gradients_scalar(obj,quant)
+  if np.shape(val) == ():
     val = get_square(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
+    val = get_lg(obj,quant)
+  if np.shape(val) == ():
     val = get_ratios(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_projections(obj,quant)
-  if np.shape(val) is ():
+  if np.shape(val) == ():
     val = get_vector_product(obj,quant)
   return val
 
@@ -33,7 +37,7 @@ def get_deriv(obj,quant):
   quant = quant.lower()
 
   DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
-  obj.description['DERIV'] = ('Spatial derivative (Bifrost units). '
+  obj.description['DERIV'] = ('Spatial derivative. '
                                'It must start with d and end with: ' +
                                ', '.join(DERIV_QUANT))
   if 'ALL' in obj.description.keys():
@@ -90,8 +94,8 @@ def get_deriv(obj,quant):
 def get_center(obj,quant, *args, **kwargs):
 
   CENTER_QUANT = ['xc', 'yc', 'zc']
-  obj.description['CENTER'] = ('Allows to center any vector(Bifrost'
-                                ' units). It must end with ' +
+  obj.description['CENTER'] = ('Allows to center any vector for Bifrost.'
+                                'It must end with ' +
                                 ', '.join(CENTER_QUANT))
   obj.description['ALL'] += "\n"+ obj.description['CENTER']
 
@@ -115,7 +119,7 @@ def get_center(obj,quant, *args, **kwargs):
 
     var = obj.get_var(q, **kwargs)
     # 2D
-    if getattr(obj, 'n' + axis) < 5 or obj.cstagop is False:
+    if getattr(obj, 'n' + axis) < 5 or obj.cstagop == False:
       return var
     else:
       if len(transf) == 2:
@@ -170,7 +174,7 @@ def get_module(obj,quant):
 
   MODULE_QUANT = ['mod', 'h']  # This one must be called the last
   obj.description['MODULE'] = ('Module (starting with mod) or horizontal '
-                   '(ending with h) component of vectors (Bifrost units)')
+                   '(ending with h) component of vectors')
   obj.description['ALL'] += "\n"+ obj.description['MODULE']
 
   if (quant == ''):
@@ -199,7 +203,7 @@ def get_module(obj,quant):
 
 def get_horizontal_average(obj,quant):
     HORVAR_QUANT = ['horvar']
-    obj.description['HORVAR'] = ('Horizontal average (Bifrost units).'
+    obj.description['HORVAR'] = ('Horizontal average.'
                                   ' Starting with: ' + ', '.join(HORVAR_QUANT))
     obj.description['ALL'] += "\n"+ obj.description['HORVAR']
 
@@ -223,7 +227,6 @@ def get_horizontal_average(obj,quant):
 def get_gradients_vect(obj,quant):
   GRADVECT_QUANT = ['div', 'rot', 'she', 'chkdiv', 'chbdiv', 'chhdiv']
   obj.description['GRADVECT'] = ('Vectorial derivative opeartions '
-      '(Bifrost units). '
       'The following show divergence, rotational, shear, ratio of the '
       'divergence with the maximum of the abs of each spatial derivative, '
       'with the sum of the absolute of each spatial derivative, with '
@@ -346,7 +349,7 @@ def get_gradients_vect(obj,quant):
 
 def get_gradients_scalar(obj,quant):
   GRADSCAL_QUANT = ['gra']
-  obj.description['GRADSCAL'] = ('Gradient of a scalar (Bifrost units)'
+  obj.description['GRADSCAL'] = ('Gradient of a scalar '
           ' starts with: ' + ', '.join(GRADSCAL_QUANT))
   obj.description['ALL'] += "\n"+ obj.description['GRADSCAL']
 
@@ -371,7 +374,7 @@ def get_gradients_scalar(obj,quant):
 
 def get_square(obj,quant):
   SQUARE_QUANT = ['2']  # This one must be called the towards the last
-  obj.description['SQUARE'] = ('Square of a variable (Bifrost units)'
+  obj.description['SQUARE'] = ('Square of a variable '
           ' ends with: ' + ', '.join(SQUARE_QUANT))
   obj.description['ALL'] += "\n"+ obj.description['SQUARE']
 
@@ -390,9 +393,27 @@ def get_square(obj,quant):
     return None
 
 
+def get_lg(obj,quant):
+  LG_QUANT = ['lg']  
+  obj.description['LG'] = ('Logarithmic of a variable'
+          ' starts with: ' + ', '.join(LG_QUANT))
+  obj.description['ALL'] += "\n"+ obj.description['LG']
+
+  if (quant == ''):
+    return None
+
+  if quant[:2] in LG_QUANT:
+    try: 
+      return np.log10(obj.get_var(quant[2:]))
+    except:
+      return None
+  else: 
+    return None
+
+
 def get_ratios(obj,quant):
   RATIO_QUANT = 'rat'
-  obj.description['RATIO'] = ('Ratio of two variables (Bifrost units)'
+  obj.description['RATIO'] = ('Ratio of two variables '
           'have in between: ' + ', '.join(RATIO_QUANT))
   obj.description['ALL'] += "\n"+ obj.description['RATIO']
 
@@ -417,7 +438,7 @@ def get_ratios(obj,quant):
 
 def get_projections(obj,quant):
   PROJ_QUANT = ['par', 'per']
-  obj.description['PROJ'] = ('Projected vectors (Bifrost units).'
+  obj.description['PROJ'] = ('Projected vectors.'
       ' Parallel and perpendicular have in the middle the following: ' +
       ', '.join(PROJ_QUANT))
   obj.description['ALL'] += "\n"+ obj.description['PROJ']
@@ -464,7 +485,7 @@ def get_projections(obj,quant):
 
 def get_vector_product(obj,quant):
   VECO_QUANT = ['times']
-  obj.description['VECO'] = ('vectorial products (Bifrost units).'
+  obj.description['VECO'] = ('vectorial products.'
       ' have in the middle the following: ' +
       ', '.join(VECO_QUANT))
   obj.description['ALL'] += "\n"+ obj.description['VECO']
