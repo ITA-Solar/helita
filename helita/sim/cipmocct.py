@@ -25,9 +25,9 @@ class Cipmocct:
         self.it = it 
         params = rsav(self.fdir+'params_'+rootname+'.sav')
         
-        self.x = params['x2']
+        self.x = params['x1']
         self.y = params['x3']
-        self.z = params['x1']
+        self.z = params['x2']
         
         self.dx = self.x-np.roll(self.x,1) 
         self.dx[0] = self.dx[1]
@@ -38,11 +38,11 @@ class Cipmocct:
         self.dz = self.z-np.roll(self.z,1) 
         self.dz[0] = self.dz[1]
         
-        self.nx = len(params['x2'])
+        self.nx = len(params['x1'])
         self.ny = len(params['x3'])
-        self.nz = len(params['x1'])
+        self.nz = len(params['x2'])
         
-        self.time =  params['time'] # No uniforme (array)
+        self.time =  params['time'] # No uniform (array)
         self.units()
         self.genvar()
 
@@ -61,8 +61,8 @@ class Cipmocct:
             converts into cgs units.         
         Axes: 
         -----
-            x-axis is along the loop
-            y and z axes are perperdicular to the loop
+            y-axis is along the loop
+            x and z axes are perperdicular to the loop
         
         Variable list: 
         --------------
@@ -104,7 +104,7 @@ class Cipmocct:
         itname = '_'+inttostring(self.it)
         
         varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
-        self.data = varfile[varname] * cgsunits
+        self.data = np.transpose(varfile[varname]) * cgsunits
         
         return self.data
 
@@ -147,7 +147,7 @@ class Cipmocct:
         self.uni['rho']    = self.uni['n'] * self.uni['proton'] /2. # gr cm^-3 
         self.uni['u']      = np.sqrt(2*self.uni['gamma']*self.uni['kboltz']/self.uni['proton']*self.uni['tg']) # cm/s
         self.uni['b']      = self.uni['u']*np.sqrt(self.uni['rho']) # Gauss
-        self.uni['t']      = 1.0 # seconds
+        self.uni['t']      = self.uni['l']/self.uni['u'] # seconds
         self.uni['j']      = self.uni['b']/self.uni['l']*self.uni['c'] # current density
    
     def genvar(self): 
@@ -163,7 +163,7 @@ class Cipmocct:
         self.varn['bx'] = 'bx_cube'
         self.varn['by'] = 'by_cube'
         self.varn['bz'] = 'bz_cube'
-        
+ 
 def inttostring(ii,ts_size=4):
 
   str_num = str(ii)
