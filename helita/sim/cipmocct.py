@@ -40,7 +40,29 @@ class Cipmocct:
         self.nx = len(params['x1'])
         self.ny = len(params['x3'])
         self.nz = len(params['x2'])
-            
+        dx = self.x[6]-self.x[5]
+        dy = self.y[6]-self.y[5]        
+        self.x[4] = self.x[5]-dx
+        self.x[3] = self.x[4]-dx
+        self.x[2] = self.x[3]-dx
+        self.x[1] = self.x[2]-dx
+        self.x[0] = self.x[1]-dx
+        self.x[507] = self.x[506]+dx
+        self.x[508] = self.x[507]+dx
+        self.x[509] = self.x[508]+dx
+        self.x[510] = self.x[509]+dx
+        self.x[511] = self.x[510]+dx
+        self.y[4] = self.y[5]-dy
+        self.y[3] = self.y[4]-dy
+        self.y[2] = self.y[3]-dy
+        self.y[1] = self.y[2]-dy
+        self.y[0] = self.y[1]-dy
+        self.y[507] = self.y[506]+dy
+        self.y[508] = self.y[507]+dy
+        self.y[509] = self.y[508]+dy
+        self.y[510] = self.y[509]+dy
+        self.y[511] = self.y[510]+dy
+
         if self.sel_units=='cgs': 
             self.x *= self.uni.uni['l']
             self.y *= self.uni.uni['l']
@@ -102,13 +124,7 @@ class Cipmocct:
             by_cube       -- component y of the magnetic field (multipy by self.uni['b'] to get in G)
             bz_cube       -- component z of the magnetic field (multipy by self.uni['b'] to get in G) 
         '''
-        if var == '':
-            print(help(self.get_var))
-            print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
-            for ii in self.varn: 
-                print('use ', ii,' for ',self.varn[ii])
-            return None
-        
+
         if snap != None: 
             self.snap = snap
 
@@ -133,7 +149,7 @@ class Cipmocct:
 
           itname = '{:04d}'.format(self.snap)
 
-          varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
+          varfile = rsav(self.fdir+'vars_'+self.rootname+'_'+itname+'.sav')
           self.data = np.transpose(varfile[varname]) * cgsunits
 
         except: 
@@ -178,14 +194,11 @@ class Cipmocct:
         self.varn['rho']= 'ro_cube'
         self.varn['tg'] = 'te_cube'
         self.varn['ux'] = 'vx_cube'
-        self.varn['uy'] = 'vy_cube'
-        self.varn['uz'] = 'vz_cube'
+        self.varn['uy'] = 'vz_cube'
+        self.varn['uz'] = 'vy_cube'
         self.varn['bx'] = 'bx_cube'
-        self.varn['by'] = 'by_cube'
-        self.varn['bz'] = 'bz_cube'
-        
-
-
+        self.varn['by'] = 'bz_cube'
+        self.varn['bz'] = 'by_cube'
 
     def trans2comm(self,varname,snap=None): 
         '''
