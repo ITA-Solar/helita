@@ -276,7 +276,10 @@ class BifrostData(object):
                 [self.paramList[i][key] for i in range(0, len(self.paramList))    \
                     if key in self.paramList[i].keys()])
                     #the if statement is required in case extra params in self.ParmList[0]
-
+        self.time = self.params['t']
+        if self.sel_units=='cgs': 
+            self.time *= self.uni.uni['t']
+        
     def __read_mesh(self, meshfile, firstime=False):
         """
         Reads mesh file
@@ -691,7 +694,7 @@ class BifrostData(object):
 
             # ensuring that dimensions of size 1 are retained
             val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
-
+        
         return val
 
 
