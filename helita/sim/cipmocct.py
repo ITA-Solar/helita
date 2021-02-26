@@ -32,41 +32,80 @@ class Cipmocct:
         self.uni = Cipmocct_units()
         
         params = rsav(os.path.join(self.fdir,'params_'+rootname+'.sav'))
-        
-        self.x = params['x1'].copy()
-        self.y = params['x3'].copy()
-        self.z = params['x2'].copy()
-        
-        self.nx = len(params['x1'])
-        self.ny = len(params['x3'])
-        self.nz = len(params['x2'])
-        dx = self.x[6]-self.x[5]
-        dy = self.y[6]-self.y[5]        
-        self.x[4] = self.x[5]-dx
-        self.x[3] = self.x[4]-dx
-        self.x[2] = self.x[3]-dx
-        self.x[1] = self.x[2]-dx
-        self.x[0] = self.x[1]-dx
-        self.x[507] = self.x[506]+dx
-        self.x[508] = self.x[507]+dx
-        self.x[509] = self.x[508]+dx
-        self.x[510] = self.x[509]+dx
-        self.x[511] = self.x[510]+dx
-        self.y[4] = self.y[5]-dy
-        self.y[3] = self.y[4]-dy
-        self.y[2] = self.y[3]-dy
-        self.y[1] = self.y[2]-dy
-        self.y[0] = self.y[1]-dy
-        self.y[507] = self.y[506]+dy
-        self.y[508] = self.y[507]+dy
-        self.y[509] = self.y[508]+dy
-        self.y[510] = self.y[509]+dy
-        self.y[511] = self.y[510]+dy
+        if snap == None: 
+            self.x = params['x1'].copy()
+            self.y = params['x2'].copy()
+            self.z = params['time'].copy()
+            self.nx = len(params['x1'])
+            self.ny = len(params['x3'])
+            self.nz = len(params['time'])
+            dx = self.x[6]-self.x[5]
+            dy = self.y[6]-self.y[5]        
+            self.x[4] = self.x[5]-dx
+            self.x[3] = self.x[4]-dx
+            self.x[2] = self.x[3]-dx
+            self.x[1] = self.x[2]-dx
+            self.x[0] = self.x[1]-dx
+            self.x[-5] = self.x[-6]+dx
+            self.x[-4] = self.x[-5]+dx
+            self.x[-3] = self.x[-4]+dx
+            self.x[-2] = self.x[-3]+dx
+            self.x[-1] = self.x[-2]+dx
+            self.y[4] = self.y[5]-dy
+            self.y[3] = self.y[4]-dy
+            self.y[2] = self.y[3]-dy
+            self.y[1] = self.y[2]-dy
+            self.y[0] = self.y[1]-dy
+            self.y[-5] = self.y[-6]+dy
+            self.y[-4] = self.y[-5]+dy
+            self.y[-3] = self.y[-4]+dy
+            self.y[-2] = self.y[-3]+dy
+            self.y[-1] = self.y[-2]+dy
 
-        if self.sel_units=='cgs': 
-            self.x *= self.uni.uni['l']
-            self.y *= self.uni.uni['l']
-            self.z *= self.uni.uni['l']
+            if self.sel_units=='cgs': 
+                self.x *= self.uni.uni['l']
+                self.y *= self.uni.uni['l']
+                
+            self.time =  params['time'] # No uniform (array)
+            self.varfile = rsav(os.path.join(self.fdir,'variables_'+self.rootname+'.sav'))
+        else: 
+
+            self.x = params['x1'].copy()
+            self.y = params['x3'].copy()
+            self.z = params['x2'].copy()
+
+            self.nx = len(params['x1'])
+            self.ny = len(params['x3'])
+            self.nz = len(params['x2'])
+            dx = self.x[6]-self.x[5]
+            dy = self.y[6]-self.y[5]        
+            self.x[4] = self.x[5]-dx
+            self.x[3] = self.x[4]-dx
+            self.x[2] = self.x[3]-dx
+            self.x[1] = self.x[2]-dx
+            self.x[0] = self.x[1]-dx
+            self.x[-5] = self.x[-6]+dx
+            self.x[-4] = self.x[-5]+dx
+            self.x[-3] = self.x[-4]+dx
+            self.x[-2] = self.x[-3]+dx
+            self.x[-1] = self.x[-2]+dx
+            self.y[4] = self.y[5]-dy
+            self.y[3] = self.y[4]-dy
+            self.y[2] = self.y[3]-dy
+            self.y[1] = self.y[2]-dy
+            self.y[0] = self.y[1]-dy
+            self.y[-5] = self.y[-6]+dy
+            self.y[-4] = self.y[-5]+dy
+            self.y[-3] = self.y[-4]+dy
+            self.y[-2] = self.y[-3]+dy
+            self.y[-1] = self.y[-2]+dy
+
+            if self.sel_units=='cgs': 
+                self.x *= self.uni.uni['l']
+                self.y *= self.uni.uni['l']
+                self.z *= self.uni.uni['l']
+
+            self.time =  params['time'] # No uniform (array)
 
         if self.nx > 1:
             self.dx1d = np.gradient(self.x) 
@@ -81,20 +120,18 @@ class Cipmocct:
         else:
             self.dy1d = np.zeros(self.ny)
             self.dy = self.dy1d
+
         if self.nz > 1:
             self.dz1d = np.gradient(self.z)
             self.dz = self.dz1d
         else:
             self.dz1d = np.zeros(self.nz)
             self.dz = self.dz1d
-        
 
         self.transunits = False
 
         self.cstagop = False # This will not allow to use cstagger from Bifrost in load
         self.hion = False # This will not allow to use HION from Bifrost in load  
-
-        self.time =  params['time'] # No uniform (array)
         self.genvar()
 
     def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
@@ -146,10 +183,14 @@ class Cipmocct:
           else: 
             cgsunits = 1.0
 
+          if self.snap == None: 
+              varfile = self.varfile
 
-          itname = '{:04d}'.format(self.snap)
+          else: 
+              itname = '{:04d}'.format(self.snap)
 
-          varfile = rsav(self.fdir+'vars_'+self.rootname+'_'+itname+'.sav')
+              varfile = rsav(os.path.join(self.fdir,self.rootname+'_'+itname+'.sav'))
+            
           self.data = np.transpose(varfile[varname]) * cgsunits
 
         except: 
