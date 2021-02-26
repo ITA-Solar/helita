@@ -615,13 +615,9 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
-        if (snap is not None):
-            snap = np.array(snap, copy=False) #converts snap to np.array unless it already is one.
-            if (np.size(snap) == np.size(self.snap)):
-                if (any(snap != self.snap)):
-                    self.set_snap(snap)
-                    self.variables={}
-            else:
+        if snap is not None:
+            snap = np.array(snap, copy=False)
+            if not np.array_equal(snap, self.snap):
                 self.set_snap(snap)
                 self.variables={}
 
@@ -686,13 +682,8 @@ class EbysusData(BifrostData):
                 mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
                 mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
 
-        try:
-            if ((snap is not None) and (snap != self.snap)):
-                self.set_snap(snap)
-
-        except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
                 
         return value
 
