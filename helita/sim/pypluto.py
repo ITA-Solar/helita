@@ -848,6 +848,7 @@ class PlutoData(object):
     
     if snap != None: 
       self.snap = snap
+      self.info = pload(snap,w_dir=fdir,datatype=datatype)
     
     if var in self.varn.keys(): 
       if self.sel_units == 'cgs': 
@@ -990,12 +991,13 @@ class PlutoData(object):
 
     if self.transunits == False:
       self.transunits = True
-      self.z = self.z[::-1].copy() 
+      #self.z = self.z[::-1].copy() 
       if self.typemodel == 'Paolo': 
         nznew=int(self.z.shape[0]/2)
         self.z = self.z[0:nznew-1]
         self.nz = np.size(self.z)
       self.dz1d = np.gradient(self.z)
+      #self.dz1d = self.dz1d[::-1].copy()
     
   def trans2noncommaxes(self): 
 
@@ -1003,6 +1005,7 @@ class PlutoData(object):
       self.transunits = False
       self.z = self.zorig 
       self.dz1d = np.gradient(self.z)
+      #self.dz1d = self.dz1d[::-1].copy()
       self.nz = np.size(self.z)
 
 
