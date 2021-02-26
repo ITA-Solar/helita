@@ -615,8 +615,8 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
-        snap = np.array(snap, copy=False) #converts snap to np.array unless it already is one.
         if (snap is not None):
+            snap = np.array(snap, copy=False) #converts snap to np.array unless it already is one.
             if (np.size(snap) == np.size(self.snap)):
                 if (any(snap != self.snap)):
                     self.set_snap(snap)
