@@ -437,7 +437,7 @@ class BifrostData(object):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
+    def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None, 
                     *args, **kwargs):
         """
         Reads a given variable as a function of time.
@@ -460,11 +460,10 @@ class BifrostData(object):
         self.iiy = iiy
         self.iiz = iiz
 
-        if snap is not None:
-            snap = np.array(snap, copy=False)
-            if not np.array_equal(snap, self.snap):
-                self.set_snap(snap)
-                self.variables={}
+        snap = np.array(snap, copy=False)
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
+            self.variables={}
 
         # lengths for dimensions of return array
         self.xLength = 0

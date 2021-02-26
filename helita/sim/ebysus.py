@@ -600,7 +600,7 @@ class EbysusData(BifrostData):
                     mode=mode,
                     shape=(self.nx, self.ny, self.nzb, self.mf_arr_size))
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
+    def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None,
                     mf_jlevel=None,order='F',
                     mode='r', *args, **kwargs):
@@ -615,11 +615,10 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
-        if snap is not None:
-            snap = np.array(snap, copy=False)
-            if not np.array_equal(snap, self.snap):
-                self.set_snap(snap)
-                self.variables={}
+        snap = np.array(snap, copy=False)
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
+            self.variables={}
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
