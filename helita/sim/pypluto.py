@@ -623,7 +623,7 @@ class pload(object):
     else:
         fp = open(datafilename, "rb")
     
-    print("Reading Data file : %s"%datafilename)
+    print("Reading Data file : %s"%datafilename, end="\r", flush=True)
     
     if self.datatype == 'vtk':
         vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
@@ -775,6 +775,7 @@ class PlutoData(object):
     self.sel_units =sel_units 
     self.verbose = verbose
     self.typemodel = typemodel
+    self.datatype=datatype
     if self.typemodel == 'Kostas': 
         self.uni = Pypluto_kostas_units()
     elif (self.typemodel == 'Paolo'): 
@@ -848,7 +849,7 @@ class PlutoData(object):
     
     if snap != None: 
       self.snap = snap
-      self.info = pload(snap,w_dir=fdir,datatype=datatype)
+      self.info = pload(snap,w_dir=self.fdir,datatype=self.datatype)
     
     if var in self.varn.keys(): 
       if self.sel_units == 'cgs': 
