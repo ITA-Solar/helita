@@ -133,7 +133,7 @@ class Cipmocct:
 
           itname = '{:04d}'.format(self.snap)
 
-          varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
+          varfile = rsav(self.fdir+'vars_'+self.rootname+'_'+itname+'.sav')
           self.data = np.transpose(varfile[varname]) * cgsunits
 
         except: 
@@ -178,11 +178,11 @@ class Cipmocct:
         self.varn['rho']= 'ro_cube'
         self.varn['tg'] = 'te_cube'
         self.varn['ux'] = 'vx_cube'
-        self.varn['uy'] = 'vy_cube'
-        self.varn['uz'] = 'vz_cube'
+        self.varn['uy'] = 'vz_cube'
+        self.varn['uz'] = 'vy_cube'
         self.varn['bx'] = 'bx_cube'
-        self.varn['by'] = 'by_cube'
-        self.varn['bz'] = 'bz_cube'
+        self.varn['by'] = 'bz_cube'
+        self.varn['bz'] = 'by_cube'
         
 
 
