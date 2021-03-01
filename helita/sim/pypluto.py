@@ -990,7 +990,7 @@ class PlutoData(object):
 
     if self.transunits == False:
       self.transunits = True
-      self.z = self.z[::-1].copy() 
+      #self.z = self.z[::-1].copy() 
       if self.typemodel == 'Paolo': 
         nznew=int(self.z.shape[0]/2)
         self.z = self.z[0:nznew-1]
