@@ -28,12 +28,13 @@ class MuramAtmos:
   """
 
   def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-               sel_units='cgs', big_endian=False, prim=False):
+               sel_units='cgs', big_endian=False, prim=False, iz0=None):
 
     self.prim = prim
     self.fdir = fdir
     self.verbose = verbose
     self.sel_units  = sel_units
+    self.iz0 = iz0
     # endianness and data type
     if big_endian:
         self.dtype = '>' + dtype
@@ -57,23 +58,26 @@ class MuramAtmos:
     if os.access(tabfile, os.R_OK):
         self.rhoee = Rhoeetab(tabfile=tabfile,fdir=fdir,radtab=False)
 
-    self.genvar()
+    self.genvar(order=self.order)
 
       
   def read_header(self, headerfile):
     tmp = np.loadtxt(headerfile)
+    #self.dims_orig = tmp[:3].astype("i")
     dims = tmp[:3].astype("i")
     deltas = tmp[3:6]
     #if len(tmp) == 10: # Old version of MURaM, deltas stored in km
     #    self.uni.uni['l'] = 1e5 # JMS What is this for? 
         
-    self.time= tmp[7]
-    print('layout.order')
+    self.time= tmp[6]
     layout = np.loadtxt('layout.order')
     self.order = layout[0:3].astype(int)
     #self.order = tmp[-3:].astype(int)
-    dims = dims[self.order]
+    # dims = [1,2,0] 0=z, 
+    #dims = np.array((self.dims_orig[self.order[2]],self.dims_orig[self.order[0]],self.dims_orig[self.order[1]]))
+    #deltas = np.array((deltas[self.order[2]],deltas[self.order[0]],deltas[self.order[1]])).astype('float32')
     deltas = deltas[self.order]
+    dims = dims[self.order]
 
     if self.sel_units=='cgs': 
         deltas *= self.uni.uni['l']
@@ -81,6 +85,8 @@ class MuramAtmos:
     self.x = np.arange(dims[0])*deltas[0]
     self.y = np.arange(dims[1])*deltas[1]
     self.z = np.arange(dims[2])*deltas[2]
+    if self.iz0 != None: 
+        self.z = self.z - self.z[self.iz0]
     self.dx, self.dy, self.dz = deltas[0], deltas[1], deltas[2]
     self.nx, self.ny, self.nz = dims[0], dims[1], dims[2]
     
@@ -266,7 +272,7 @@ class MuramAtmos:
     
     if (not snap == None): 
       self.snap = snap 
-      self.siter = '.'+inttostring(snap)
+      self.siter = '.{:06d}'.format(snap)
       self.read_header("%s/Header%s" % (self.fdir, self.siter))
    
     
@@ -274,8 +280,8 @@ class MuramAtmos:
       varname=self.varn[var]
     else:
       varname=var
-
-    if var in self.varn.keys(): 
+        
+    if ((var in self.varn.keys()) and os.path.isfile(self.fdir+'/'+varname+ self.siter)): 
       ashape = np.array([self.nx, self.ny, self.nz])
     
       transpose_order = self.order
@@ -290,9 +296,11 @@ class MuramAtmos:
           cgsunits = 1.0
       else: 
         cgsunits = 1.0
-
+      #orderfiles = [self.order[2],self.order[0],self.order[1]]
+        
+      # self.order = [2,0,1]
       data = np.memmap(self.fdir+'/'+varname+ self.siter, mode="r", 
-                      shape=tuple(ashape[self.order]),
+                      shape=tuple(ashape[self.order[self.order]]),
                       dtype=self.dtype, order="F")
       data = data.transpose(transpose_order)
     
@@ -307,6 +315,8 @@ class MuramAtmos:
 
     else:
       # Loading quantities
+      if (var == 'ne'): 
+        print('WWW: Reading ne from Bifrost EOS',end="\r",flush=True)
       if self.verbose: 
         print('Loading composite variable',end="\r",flush=True)
       self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
@@ -338,7 +348,7 @@ class MuramAtmos:
   def read_var_3d(self,var,iter=None,layout=None):
 
     if (not iter == None): 
-      self.siter='.'+inttostring(iter)
+      self.siter=snapname = '.{:06d}'.format(iter)
       self.read_header("%s/Header%s" % (self.fdir, self.siter))
 
     tmp = np.fromfile(self.fdir+'/'+var+ self.siter)
@@ -438,6 +448,8 @@ class MuramAtmos:
     self.varn['rho']= 'result_prim_0'
     self.varn['tg'] = 'eosT'
     self.varn['pg'] = 'eosP'
+    self.varn['ne'] = 'eosne'
+
     unames = np.array(['result_prim_1','result_prim_2','result_prim_3']) 
     unames = unames[order]
     self.varn['ux'] = unames[0]
