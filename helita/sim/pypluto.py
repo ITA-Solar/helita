@@ -967,19 +967,14 @@ class PlutoData(object):
 
     self.sel_units = 'cgs'
 
-    sign = 1.0
-    if varname[-1] in ['y','z']: 
-        sign = -1.0 
-
     var = np.reshape( sign * self.get_var(varname,snap=snap), 
                     (self.nx, self.ny, self.zorig.shape[0])).copy()
 
     var = var[...,::-1].copy()
         
     if self.typemodel == 'Paolo': 
-        nznew=int(self.zorig.shape[0]/2)
-    
-        var = var[:,:,0:nznew-1]
+        #nznew=int(self.zorig.shape[0]/2)
+        #var = var[:,:,0:nznew-1]
     
     self.trans2commaxes()
     
@@ -990,10 +985,11 @@ class PlutoData(object):
 
     if self.transunits == False:
       self.transunits = True
-      self.z = self.z[::-1].copy() 
+      #self.z = self.z[::-1].copy() 
       if self.typemodel == 'Paolo': 
-        nznew=int(self.z.shape[0]/2)
-        self.z = self.z[0:nznew-1]
+        #nznew=int(self.z.shape[0]/2)
+        #self.z = self.z[0:nznew-1]
+        self.z -= self.z[0]
         self.nz = np.size(self.z)
       self.dz1d = np.gradient(self.z)
     
