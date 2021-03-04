@@ -847,7 +847,7 @@ class PlutoData(object):
         bx1       -- component z of the magnetic field (multipy by self.uni['b'] to get in G) 
     '''
     
-    if snap != None: 
+    if ((snap != None) and (self.snap != snap)): 
       self.snap = snap
       self.info = pload(snap,w_dir=self.fdir,datatype=self.datatype)
     
@@ -969,12 +969,13 @@ class PlutoData(object):
 
     self.sel_units = 'cgs'
 
-    var = np.reshape( sign * self.get_var(varname,snap=snap), 
-                    (self.nx, self.ny, self.zorig.shape[0])).copy()
+    #var = np.reshape( sign * self.get_var(varname,snap=snap), 
+    #                (self.nx, self.ny, self.zorig.shape[0])).copy()
+    var = self.get_var(varname,snap=snap)
 
-    var = var[...,::-1].copy()
+    #var = var[...,::-1].copy()
         
-    if self.typemodel == 'Paolo': 
+    #if self.typemodel == 'Paolo': 
         #nznew=int(self.zorig.shape[0]/2)
         #var = var[:,:,0:nznew-1]
     
