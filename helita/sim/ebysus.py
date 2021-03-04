@@ -233,24 +233,40 @@ class EbysusData(BifrostData):
         elif not hasattr(self, 'mf_jlevel'):
             self.mf_jlevel = 1
 
-    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), mf_ispecies=None, mf_ilevel=None,
-                mf_jspecies=None, mf_jlevel=None, panic=False, *args, **kwargs):
+    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
+                mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
+                ifluid=None, jfluid=None,
+                panic=False, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
+
+        returns the data for the variable (as a 3D array with axes 0,1,2 <-> x,y,z).
 
         Parameters
         ----------
         var - string
-            Name of the variable to read. Must be Bifrost internal names.
-        mf_ispecies - integer [1, 28]
-            Species ID
-        mf_ilevel - integer
-            Ionization level
+            Name of the variable to read.
         snap - integer, optional
             Snapshot number to read. By default reads the loaded snapshot;
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
+        mf_ispecies - integer, or None (default)
+            Species ID
+            if None, set using other fluid kwargs (see ifluid, iSL, iS).
+            if still None, use self.mf_ispecies
+        mf_ilevel - integer, or None (default)
+            Ionization level
+            if None, set using other fluid kwargs (see ifluid, iSL, iL).
+            if still None, use self.mf_ilevel
+        ifluid - tuple of integers, or None (default)
+            if not None: (mf_ispecies, mf_ilevel) = ifluid
+        **kwargs may contain the following:
+            iSL    - alias for ifluid
+            jSL    - alias for jfluid
+            iS, iL - alias for ifluid[0], ifluid[1]
+            jS, jL - alias for jfluid[0], jfluid[1]
+        extra **kwargs are passed to NOWHERE.
+        extra *args are passed to NOWHERE.
         """
         if var == '':
             print(help(self.get_var))
@@ -267,6 +283,9 @@ class EbysusData(BifrostData):
                 mf_ilevel = 2
                 print("Warning: mfc is only for ionized species."
                       " Level changed to 2")
+
+        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
+            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
 
         #if var not in self.snapevars:
         #    if (mf_ispecies is None):
@@ -600,30 +619,46 @@ class EbysusData(BifrostData):
                     mode=mode,
                     shape=(self.nx, self.ny, self.nzb, self.mf_arr_size))
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
-                    mf_ispecies=None, mf_ilevel=None, mf_jspecies=None,
-                    mf_jlevel=None,order='F',
-                    mode='r', *args, **kwargs):
+    def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None,
+                    mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
+                    ifluid=None, jfluid=None,
+                    *args, **kwargs):
         """ Gets and returns the value of var over multiple snaps.
 
-        snap should be a np.array of the snapshot numbers to read.
+        returns the data for the variable (as a 4D array with axes 0,1,2,3 <-> x,y,z,t).
 
-        return array will have dimensions of [*var_dimensions, len(snap)].
-            (e.g. var.shape==[32,10,20], snap=[4,5,6], --> result is shape [32,10,20,3])
+        Parameters
+        ----------
+        var - string
+            Name of the variable to read.
+        snap - list of snapshots
+            Snapshot numbers to read.
+        mf_ispecies - integer, or None (default)
+            Species ID
+            if None, set using other fluid kwargs (see ifluid, iSL, iS).
+            if still None, use self.mf_ispecies
+        mf_ilevel - integer, or None (default)
+            Ionization level
+            if None, set using other fluid kwargs (see ifluid, iSL, iL).
+            if still None, use self.mf_ilevel
+        ifluid - tuple of integers, or None (default)
+            if not None: (mf_ispecies, mf_ilevel) = ifluid
+        **kwargs may contain the following:
+            iSL    - alias for ifluid
+            jSL    - alias for jfluid
+            iS, iL - alias for ifluid[0], ifluid[1]
+            jS, jL - alias for jfluid[0], jfluid[1]
+        extra **kwargs are passed to NOWHERE.
+        extra *args are passed to NOWHERE.
         """
         self.iix = iix
         self.iiy = iiy
         self.iiz = iiz
 
-        snap = np.array(snap, copy=False) #converts snap to np.array unless it already is one.
-        if (snap is not None):
-            if (np.size(snap) == np.size(self.snap)):
-                if (any(snap != self.snap)):
-                    self.set_snap(snap)
-                    self.variables={}
-            else:
-                self.set_snap(snap)
-                self.variables={}
+        snap = np.array(snap, copy=False)
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
+            self.variables={}
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
@@ -636,6 +671,9 @@ class EbysusData(BifrostData):
                 self.variables={}
                 print("Warning: mfc is only for ionized species."
                       "Level changed to 2")
+
+        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
+            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
 
         #if var not in self.snapevars:
         #    if (mf_ispecies is None):
@@ -686,25 +724,110 @@ class EbysusData(BifrostData):
                 mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
                 mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
 
-        try:
-            if ((snap is not None) and (snap != self.snap)):
-                self.set_snap(snap)
-
-        except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
                 
         return value
 
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
+##################
+#  FLUID KWARGS  #
+##################
+
+def _interpret_kw_fluids(mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
+                         ifluid=None, jfluid=None, iSL=None, jSL=None,
+                         iS=None, iL=None, jS=None, jL=None,
+                         **kw__None):
+    '''interpret kwargs entered for fluids. Returns (mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel).
+    kwargs are meant to be shorthand notation. If conflicting kwargs are entered, raise ValueError.
+    **kw__None are ignored; it is part of the function def'n so that it will not break if extra kwargs are entered.
+    Meanings for non-None kwargs (similar for j, only writing for i here):
+        mf_ispecies, mf_ilevel = ifluid
+        mf_ispecies, mf_ilevel = iSL
+        mf_ispecies, mf_ilevel = iS, iL
+    Examples:
+        These all return (1,2,3,4) (they are equivalent):
+            _interpret_kw_fluids(mf_ispecies=1, mf_ilevel=2, mf_jspecies=3, mf_jlevel=4)
+            _interpret_kw_fluids(ifluid=(1,2), jfluid=(3,4))
+            _interpret_kw_fluids(iSL=(1,2), jSL=(3,4))
+            _interpret_kw_fluids(iS=1, iL=2, jS=3, jL=4)
+        Un-entered fluids will be returned as None:
+            _interpret_kw_fluids(ifluid=(1,2))
+            >> (1,2,None,None)
+        Conflicting non-None kwargs will cause ValueError:
+            _interpret_kw_fluids(mf_ispecies=3, ifluid=(1,2))
+            >> ValueError('mf_ispecies (==3) was incompatible with ifluid[0] (==1)')
+            _interpret_kw_fluids(mf_ispecies=1, ifluid=(1,2))
+            >> (1,2,None,None)
+    '''
+    si, li = _interpret_kw_fluid(mf_ispecies, mf_ilevel, ifluid, iSL, iS, iL, i='i')
+    sj, lj = _interpret_kw_fluid(mf_jspecies, mf_jlevel, jfluid, jSL, jS, jL, i='j')
+    return (si, li, sj, lj)
+
+def _interpret_kw_ifluid(mf_ispecies=None, mf_ilevel=None, ifluid=None, iSL=None, iS=None, iL=None, None_ok=True):
+    '''interpret kwargs entered for ifluid. See _interpret_kw_fluids for more documentation.'''
+    return _interpret_kw_fluid(mf_ispecies, mf_ilevel, ifluid, iSL, iS, iL, None_ok=None_ok, i='i')
+
+def _interpret_kw_jfluid(mf_jspecies=None, mf_jlevel=None, jfluid=None, jSL=None, jS=None, jL=None, None_ok=True):
+    '''interpret kwargs entered for jfluid. See _interpret_kw_fluids for more documentation.'''
+    return _interpret_kw_fluid(mf_jspecies, mf_jlevel, jfluid, jSL, jS, jL, None_ok=None_ok, i='j')
+
+def _interpret_kw_fluid(mf_species=None, mf_level=None, fluid=None, SL=None, S=None, L=None, i='', None_ok=True):
+    '''interpret kwargs entered for fluid. Returns (mf_ispecies, mf_ilevel).
+    See _interpret_kw_fluids for more documentation.
+    i      : 'i', or 'j'; Used to make clearer error messages, if entered.
+    None_ok: True (default) or False;
+        whether to allow answer of None or species and/or level.
+        if False and species and/or level is None, raise TypeError.
+    '''
+    s  , l   = None, None
+    kws, kwl = '', ''
+    def set_sl(news, newl, newkws, newkwl, olds, oldl, oldkws, oldkwl, i):
+        newkws, newkwl = newkws.format(i), newkwl.format(i)
+        errmsg = 'Two incompatible fluid kwargs entered! {oldkw:} and {newkw:} must be equal ' + \
+                 '(unless one is None), but got {oldkw:}={oldval:} and {newkw:}={newval:}'
+        if (olds is not None):
+            if (news is not None):
+                if (news != olds):
+                    raise ValueError(errmsg.format(newkw=newkws, newval=news, oldkw=oldkws, oldval=olds))
+            else:
+                news = olds
+        if (oldl is not None):
+            if (newl is not None):
+                if (newl != oldl):
+                    raise ValueError(errmsg.format(newkw=newkwl, newval=newl, oldkw=oldkwl, oldval=oldl))
+            else:
+                newl = oldl
+        return news, newl, newkws, newkwl
+
+    if fluid is None: fluid = (None, None)
+    if SL    is None: SL    = (None, None)
+    s, l, kws, kwl = set_sl(mf_species, mf_level, 'mf_{:}species', 'mf_{:}level', s, l, kws, kwl, i)
+    s, l, kws, kwl = set_sl(fluid[0]  , fluid[1], '{:}fluid[0]'  , '{:}fluid[1]', s, l, kws, kwl, i)
+    s, l, kws, kwl = set_sl(SL[0]     , SL[1]   , '{:}SL[0]'     , '{:}SL[1]'   , s, l, kws, kwl, i)
+    s, l, kws, kwl = set_sl(S         , L       , '{:}S'         , '{:}L'       , s, l, kws, kwl, i)
+    if not None_ok:
+        if s is None or l is None:
+            raise TypeError('{0:}species and {0:}level cannot be None, but got: '.format(i) +
+                            'mf_{0:}species={1:}; mf_{0:}level={2:}.'.format(i, s, l))
+    return s, l
+
 ###########
 #  TOOLS  #
 ###########
 
-
-def write_mfr(rootname,inputdata,mf_ispecies,mf_ilevel):
+def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
+    '''write density. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputdata = array of shape (nx, ny, nz)
+        mass density [in ebysus units] of ifluid
+    ifluid must be entered. If not entered, raise TypeError. ifluid can be entered via one of:
+        - (mf_ispecies and mf_ilevel)
+        - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
+    '''
+    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -717,7 +840,17 @@ def write_mfr(rootname,inputdata,mf_ispecies,mf_ilevel):
     data[...,0] = inputdata
     data.flush()
 
-def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
+def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
+    '''write momentum. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputdata = arrays of shape (nx, ny, nz)
+        momentum [in ebysus units] of ifluid
+        inputdatax is x-momentum, px; (px, py, pz) = (inputdatax, inputdatay, inputdataz)
+    ifluid must be entered. If not entered, raise TypeError. ifluid can be entered via one of:
+        - (mf_ispecies and mf_ilevel)
+        - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
+    '''
+    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -732,7 +865,17 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies,mf_ilevel):
     data[...,2] = inputdataz
     data.flush()
 
-def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,test):
+def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,xyz):
+    '''write momentum. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputdataxyz = array of shape (nx, ny, nz)
+        momentum [in ebysus units] of ifluid, in x, y, OR z direction
+        (direction determined by parameter xyz)
+    mf_ispecies, mf_ilevel = int, int
+        species number and level number for ifluid.
+    xyz = 0 (for x), 1 (for y), 2 (for z)
+        determines which axis to write momentum along; e.g. xyz = 0  ->  inputdataxyz is written to px.
+    '''
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -742,13 +885,22 @@ def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,test):
     if not os.path.exists(directory):
         os.makedirs(directory)
     data = np.memmap(directory+'/%s_mfp_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
-    data[...,test] = inputdataxyz
+    data[...,xyz] = inputdataxyz
     #data[...,1] = inputdatay
     #data[...,2] = inputdataz
     data.flush()
 
 
-def write_mfe(rootname,inputdata,mf_ispecies,mf_ilevel):
+def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
+    '''write energy. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputdata = array of shape (nx, ny, nz)
+        energy [in ebysus units] of ifluid
+    ifluid must be entered. If not entered, raise TypeError. ifluid can be entered via one of:
+        - mf_ispecies and mf_ilevel
+        - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
+    '''
+    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -762,6 +914,14 @@ def write_mfe(rootname,inputdata,mf_ispecies,mf_ilevel):
     data.flush()
 
 def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
+    '''write common (?? what is this ??). (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputdata = arrays of shape (nx, ny, nz)
+        data for common.
+        inputdatax is x-common; (commonx, commony, commonz) = (inputdatax, inputdatay, inputdataz)
+    inputdatae = array of shape (nx, ny, nz), or None (default)
+        if non-None, written to common[...,3].
+    '''
     directory = '%s.io/mf_common' % (rootname)
     nx, ny, nz = inputdatax.shape
     if not os.path.exists(directory):
@@ -779,17 +939,29 @@ def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
         data[...,3] = inputdataz
     data.flush()
 
-def write_mf_commonxyz(rootname,inputdataxyz,test):
+def write_mf_commonxyz(rootname,inputdataxyz,xyz):
+    '''write common (?? what is this ??). (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputdataxyz = array of shape (nx, ny, nz)
+        data for common.
+        (direction determined by parameter xyz)
+    xyz = 0 (for x), 1 (for y), 2 (for z)
+        determines which axis to write common along; e.g. xyz = 0  ->  inputdataxyz is written to commonx.
+    '''
     directory = '%s.io/mf_common' % (rootname)
     nx, ny, nz = inputdataxyz.shape
     if not os.path.exists(directory):
         os.makedirs(directory)
     data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,4))
-    data[...,test] = inputdataxyz
+    data[...,xyz] = inputdataxyz
     data.flush()
 
-
 def write_mf_e(rootname,inputdata):
+    ''' write electron energy. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputdata = array of shape (nx, ny, nz)
+        energy [in ebysus units] of electrons.
+    '''
     directory = '%s.io/mf_e/' % (rootname)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -799,6 +971,7 @@ def write_mf_e(rootname,inputdata):
     data.flush()
 
 def printi(fdir='./',rootname='',it=1):
+    '''?? print data about snapshot i ?? (seems to not work though; SE checked on Mar 2, 2021).'''
     dd=EbysusData(rootname,fdir=fdir,verbose=False)
     nspecies=len(dd.mf_tabparam['SPECIES'])
     for ispecies in range(0,nspecies):

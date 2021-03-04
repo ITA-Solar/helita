@@ -623,7 +623,7 @@ class pload(object):
     else:
         fp = open(datafilename, "rb")
     
-    print("Reading Data file : %s"%datafilename)
+    print("Reading Data file : %s"%datafilename, end="\r", flush=True)
     
     if self.datatype == 'vtk':
         vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
@@ -775,6 +775,7 @@ class PlutoData(object):
     self.sel_units =sel_units 
     self.verbose = verbose
     self.typemodel = typemodel
+    self.datatype=datatype
     if self.typemodel == 'Kostas': 
         self.uni = Pypluto_kostas_units()
     elif (self.typemodel == 'Paolo'): 
@@ -848,6 +849,7 @@ class PlutoData(object):
     
     if snap != None: 
       self.snap = snap
+      self.info = pload(snap,w_dir=self.fdir,datatype=self.datatype)
     
     if var in self.varn.keys(): 
       if self.sel_units == 'cgs': 
@@ -992,6 +994,7 @@ class PlutoData(object):
         self.z -= self.z[0]
         self.nz = np.size(self.z)
       self.dz1d = np.gradient(self.z)
+      #self.dz1d = self.dz1d[::-1].copy()
     
   def trans2noncommaxes(self): 
 
@@ -999,6 +1002,7 @@ class PlutoData(object):
       self.transunits = False
       self.z = self.zorig 
       self.dz1d = np.gradient(self.z)
+      #self.dz1d = self.dz1d[::-1].copy()
       self.nz = np.size(self.z)
 
 

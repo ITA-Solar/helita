@@ -32,19 +32,36 @@ class Cipmocct:
         self.uni = Cipmocct_units()
         
         params = rsav(os.path.join(self.fdir,'params_'+rootname+'.sav'))
-        
-        self.x = params['x1'].copy()
-        self.y = params['x3'].copy()
-        self.z = params['x2'].copy()
-        
-        self.nx = len(params['x1'])
-        self.ny = len(params['x3'])
-        self.nz = len(params['x2'])
-            
-        if self.sel_units=='cgs': 
-            self.x *= self.uni.uni['l']
-            self.y *= self.uni.uni['l']
-            self.z *= self.uni.uni['l']
+        if snap == None: 
+            self.x = params['x1'].copy()
+            self.y = params['x3'].copy()
+            self.z = params['time'].copy()
+            self.nx = len(params['x1'])
+            self.ny = len(params['x3'])
+            self.nz = len(params['time'])
+
+            if self.sel_units=='cgs': 
+                self.x *= self.uni.uni['l']
+                self.y *= self.uni.uni['l']
+                
+            self.time =  params['time'] # No uniform (array)
+            self.varfile = rsav(os.path.join(self.fdir,'variables_'+self.rootname+'.sav'))
+        else: 
+
+            self.x = params['x1'].copy()
+            self.y = params['x3'].copy()
+            self.z = params['x2'].copy()
+
+            self.nx = len(params['x1'])
+            self.ny = len(params['x3'])
+            self.nz = len(params['x2'])
+
+            if self.sel_units=='cgs': 
+                self.x *= self.uni.uni['l']
+                self.y *= self.uni.uni['l']
+                self.z *= self.uni.uni['l']
+
+            self.time =  params['time'] # No uniform (array)
 
         if self.nx > 1:
             self.dx1d = np.gradient(self.x) 
@@ -59,20 +76,18 @@ class Cipmocct:
         else:
             self.dy1d = np.zeros(self.ny)
             self.dy = self.dy1d
+
         if self.nz > 1:
             self.dz1d = np.gradient(self.z)
             self.dz = self.dz1d
         else:
             self.dz1d = np.zeros(self.nz)
             self.dz = self.dz1d
-        
 
         self.transunits = False
 
         self.cstagop = False # This will not allow to use cstagger from Bifrost in load
         self.hion = False # This will not allow to use HION from Bifrost in load  
-
-        self.time =  params['time'] # No uniform (array)
         self.genvar()
 
     def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
@@ -102,13 +117,7 @@ class Cipmocct:
             by_cube       -- component y of the magnetic field (multipy by self.uni['b'] to get in G)
             bz_cube       -- component z of the magnetic field (multipy by self.uni['b'] to get in G) 
         '''
-        if var == '':
-            print(help(self.get_var))
-            print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
-            for ii in self.varn: 
-                print('use ', ii,' for ',self.varn[ii])
-            return None
-        
+
         if snap != None: 
             self.snap = snap
 
@@ -130,11 +139,20 @@ class Cipmocct:
           else: 
             cgsunits = 1.0
 
+          if self.snap == None: 
+              varfile = self.varfile
+              self.data = np.transpose(varfile[varname]) * cgsunits
 
-          itname = '{:04d}'.format(self.snap)
+          else: 
+              itname = '{:04d}'.format(self.snap)
+              varfile = rsav(self.fdir+'vars_'+self.rootname+'_'+itname+'.sav')
+              self.data = np.transpose(varfile[varname]) * cgsunits
 
-          varfile = rsav(self.fdir+'vars_'+self.rootname+itname+'.sav')
-          self.data = np.transpose(varfile[varname]) * cgsunits
+
+
+
+#          varfile = rsav(os.path.join(self.fdir,self.rootname+'_'+itname+'.sav'))
+            
 
         except: 
           # Loading quantities
@@ -178,14 +196,11 @@ class Cipmocct:
         self.varn['rho']= 'ro_cube'
         self.varn['tg'] = 'te_cube'
         self.varn['ux'] = 'vx_cube'
-        self.varn['uy'] = 'vy_cube'
-        self.varn['uz'] = 'vz_cube'
+        self.varn['uy'] = 'vz_cube'
+        self.varn['uz'] = 'vy_cube'
         self.varn['bx'] = 'bx_cube'
-        self.varn['by'] = 'by_cube'
-        self.varn['bz'] = 'bz_cube'
-        
-
-
+        self.varn['by'] = 'bz_cube'
+        self.varn['bz'] = 'by_cube'
 
     def trans2comm(self,varname,snap=None): 
         '''
