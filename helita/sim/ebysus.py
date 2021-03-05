@@ -50,6 +50,8 @@ class EbysusData(BifrostData):
         self.varsmfc = [v for v in self.auxvars if v.startswith('mfc_')]
         self.varsmf = [v for v in self.auxvars if v.startswith('mf_')]
         self.varsmm = [v for v in self.auxvars if v.startswith('mm_')]
+        self.varsmfr = [v for v in self.auxvars if v.startswith('mfr_')]
+        self.varsmfp = [v for v in self.auxvars if v.startswith('mfp_')]
         self.varsmfe = [v for v in self.auxvars if v.startswith('mfe_')]
 
         if (self.mf_epf):
@@ -68,6 +70,8 @@ class EbysusData(BifrostData):
                 self.snapelvars=['r', 'px', 'py', 'pz', 'e']
 
         for var in (
+                self.varsmfr +
+                self.varsmfp +
                 self.varsmfe +
                 self.varsmfc +
                 self.varsmf +
@@ -81,10 +85,12 @@ class EbysusData(BifrostData):
         if os.path.exists('%s.io' % self.file_root):
             self.simple_vars = self.snaprvars + self.snappvars + \
                 self.snapevars + self.mhdvars + self.auxvars + \
-                self.varsmf + self.varsmfe + self.varsmfc + self.varsmm
+                self.varsmf + self.varsmfr + self.varsmfp + self.varsmfe + \
+                self.varsmfc + self.varsmm
         else:
             self.simple_vars = self.snapvars + self.snapevars + \
-                self.mhdvars + self.auxvars + self.varsmf + self.varsmfe + \
+                self.mhdvars + self.auxvars + self.varsmf + \
+                self.varsmfr + self.varsmfp + self.varsmfe + \
                 self.varsmfc + self.varsmm
 
         self.auxxyvars = []
@@ -496,6 +502,18 @@ class EbysusData(BifrostData):
                             jdx += 1
                         elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
                             jdx += 1
+            elif var in self.varsmfr:
+                idx = self.varsmfr.index(var)
+                fsuffix_a = '.aux'
+                dirvars = '%s.io/mf_%02i_%02i/mfr/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
+                filename = self.mfr_file % (self.mf_ispecies, self.mf_ilevel)
+            elif var in self.varsmfp:
+                idx = self.varsmfp.index(var)
+                fsuffix_a = '.aux'
+                dirvars = '%s.io/mf_%02i_%02i/mfp/' % (self.file_root,
+                        self.mf_ispecies, self.mf_ilevel)
+                filename = self.mfp_file % (self.mf_ispecies, self.mf_ilevel)
             elif var in self.varsmfe:
                 idx = self.varsmfe.index(var)
                 fsuffix_a = '.aux'
@@ -549,6 +567,14 @@ class EbysusData(BifrostData):
                         elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
                             jdx += 1
 
+            elif var in self.varsmfr:
+                idx = self.varsmfr.index(var)
+                fsuffix_a = '.aux'
+                filename = self.mfr_file % (self.mf_ispecies, self.mf_ilevel)
+            elif var in self.varsmfp:
+                idx = self.varsmfp.index(var)
+                fsuffix_a = '.aux'
+                filename = self.mfp_file % (self.mf_ispecies, self.mf_ilevel)
             elif var in self.varsmfe:
                 idx = self.varsmfe.index(var)
                 fsuffix_a = '.aux'
