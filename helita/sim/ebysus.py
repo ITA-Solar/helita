@@ -280,6 +280,9 @@ class EbysusData(BifrostData):
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
+        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
+            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
+
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
                 mf_ilevel = 2
@@ -289,9 +292,6 @@ class EbysusData(BifrostData):
                 mf_ilevel = 2
                 print("Warning: mfc is only for ionized species."
                       " Level changed to 2")
-
-        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
 
         #if var not in self.snapevars:
         #    if (mf_ispecies is None):
@@ -686,6 +686,9 @@ class EbysusData(BifrostData):
             self.set_snap(snap)
             self.variables={}
 
+        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
+            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
+
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
                 mf_ilevel = 2
@@ -697,9 +700,6 @@ class EbysusData(BifrostData):
                 self.variables={}
                 print("Warning: mfc is only for ionized species."
                       "Level changed to 2")
-
-        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
 
         #if var not in self.snapevars:
         #    if (mf_ispecies is None):
