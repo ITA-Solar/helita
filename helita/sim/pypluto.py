@@ -623,7 +623,7 @@ class pload(object):
     else:
         fp = open(datafilename, "rb")
     
-    print("Reading Data file : %s"%datafilename)
+    print("Reading Data file : %s"%datafilename, end="\r", flush=True)
     
     if self.datatype == 'vtk':
         vtkd = self.DataScanVTK(fp, n1, n2, n3, endian, dtype)
@@ -775,6 +775,7 @@ class PlutoData(object):
     self.sel_units =sel_units 
     self.verbose = verbose
     self.typemodel = typemodel
+    self.datatype=datatype
     if self.typemodel == 'Kostas': 
         self.uni = Pypluto_kostas_units()
     elif (self.typemodel == 'Paolo'): 
@@ -846,8 +847,9 @@ class PlutoData(object):
         bx1       -- component z of the magnetic field (multipy by self.uni['b'] to get in G) 
     '''
     
-    if snap != None: 
+    if ((snap != None) and (self.snap != snap)): 
       self.snap = snap
+      self.info = pload(snap,w_dir=self.fdir,datatype=self.datatype)
     
     if var in self.varn.keys(): 
       if self.sel_units == 'cgs': 
@@ -967,19 +969,15 @@ class PlutoData(object):
 
     self.sel_units = 'cgs'
 
-    sign = 1.0
-    if varname[-1] in ['y','z']: 
-        sign = -1.0 
+    #var = np.reshape( sign * self.get_var(varname,snap=snap), 
+    #                (self.nx, self.ny, self.zorig.shape[0])).copy()
+    var = self.get_var(varname,snap=snap)
 
-    var = np.reshape( sign * self.get_var(varname,snap=snap), 
-                    (self.nx, self.ny, self.zorig.shape[0])).copy()
-
-    var = var[...,::-1].copy()
+    #var = var[...,::-1].copy()
         
-    if self.typemodel == 'Paolo': 
-        nznew=int(self.zorig.shape[0]/2)
-    
-        var = var[:,:,0:nznew-1]
+    #if self.typemodel == 'Paolo': 
+        #nznew=int(self.zorig.shape[0]/2)
+        #var = var[:,:,0:nznew-1]
     
     self.trans2commaxes()
     
@@ -990,12 +988,14 @@ class PlutoData(object):
 
     if self.transunits == False:
       self.transunits = True
-      self.z = self.z[::-1].copy() 
+      #self.z = self.z[::-1].copy() 
       if self.typemodel == 'Paolo': 
-        nznew=int(self.z.shape[0]/2)
-        self.z = self.z[0:nznew-1]
+        #nznew=int(self.z.shape[0]/2)
+        #self.z = self.z[0:nznew-1]
+        self.z -= self.z[0]
         self.nz = np.size(self.z)
       self.dz1d = np.gradient(self.z)
+      #self.dz1d = self.dz1d[::-1].copy()
     
   def trans2noncommaxes(self): 
 
@@ -1003,6 +1003,7 @@ class PlutoData(object):
       self.transunits = False
       self.z = self.zorig 
       self.dz1d = np.gradient(self.z)
+      #self.dz1d = self.dz1d[::-1].copy()
       self.nz = np.size(self.z)
 
 

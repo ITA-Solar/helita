@@ -37,10 +37,7 @@ class Laresav:
     self.verbose = verbose
     self.uni = Laresav_units()
     
-    self.time     = self.savefile['d']['time'][0].copy()
-    self.time_prev= self.savefile['d']['time_prev'][0].copy()
-    self.timestep = self.savefile['d']['timestep'][0].copy()
-    self.dt       = self.savefile['d']['dt'][0].copy()
+    self.set_time()
 
     self.visc_heating= self.savefile['d']['visc_heating'][0].copy()
     self.visc3_heating= self.savefile['d']['visc3_heating'][0].copy()
@@ -82,6 +79,13 @@ class Laresav:
 
     self.genvar()
 
+  def set_time(self): 
+    
+    self.time     = self.savefile['d']['time'][0].copy()
+    self.time_prev= self.savefile['d']['time_prev'][0].copy()
+    self.timestep = self.savefile['d']['timestep'][0].copy()
+    self.dt       = self.savefile['d']['dt'][0].copy()
+    
   def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
     '''
     Reads the variables from a snapshot (snap).
@@ -129,6 +133,7 @@ class Laresav:
         self.savefile = rsav(os.path.join(self.fdir,'{:03d}'.format(snap)+'.sav'))
       except: 
         self.savefile = rsav(os.path.join(self.fdir,'{:04d}'.format(snap)+'.sav'))
+      self.set_time()
 
     try: 
 
