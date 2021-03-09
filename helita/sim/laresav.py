@@ -22,19 +22,22 @@ class Laresav:
   """
   def __init__(self, snap, fdir='.', sel_units = 'cgs', verbose=True):
 
-    self.fdir     = fdir        
-    self.savefile = rsav(os.path.join(self.fdir,'{:03d}'.format(snap)+'.sav'))
+    self.fdir     = fdir
+    try: 
+        self.savefile = rsav(os.path.join(self.fdir,'{:03d}'.format(snap)+'.sav'))
+        self.root_name = '{:03d}'.format(snap)
+    except: 
+        self.savefile = rsav(os.path.join(self.fdir,'{:04d}'.format(snap)+'.sav'))
+        self.root_name = '{:04d}'.format(snap)
 
-    self.rootname = self.savefile['d']['filename'][0]
+    self.filename = self.savefile['d']['filename'][0]
+    
     self.snap = snap 
     self.sel_units = sel_units
     self.verbose = verbose
     self.uni = Laresav_units()
     
-    self.time     = self.savefile['d']['time'][0].copy()
-    self.time_prev= self.savefile['d']['time_prev'][0].copy()
-    self.timestep = self.savefile['d']['timestep'][0].copy()
-    self.dt       = self.savefile['d']['dt'][0].copy()
+    self.set_time()
 
     self.visc_heating= self.savefile['d']['visc_heating'][0].copy()
     self.visc3_heating= self.savefile['d']['visc3_heating'][0].copy()
@@ -76,6 +79,13 @@ class Laresav:
 
     self.genvar()
 
+  def set_time(self): 
+    
+    self.time     = self.savefile['d']['time'][0].copy()
+    self.time_prev= self.savefile['d']['time_prev'][0].copy()
+    self.timestep = self.savefile['d']['timestep'][0].copy()
+    self.dt       = self.savefile['d']['dt'][0].copy()
+    
   def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
     '''
     Reads the variables from a snapshot (snap).
@@ -119,7 +129,11 @@ class Laresav:
         
     if snap != None: 
       self.snap = snap
-      self.savefile = rsav(os.path.join(self.fdir,'{:03d}'.format(snap)+'.sav'))
+      try: 
+        self.savefile = rsav(os.path.join(self.fdir,'{:03d}'.format(snap)+'.sav'))
+      except: 
+        self.savefile = rsav(os.path.join(self.fdir,'{:04d}'.format(snap)+'.sav'))
+      self.set_time()
 
     try: 
 
@@ -261,18 +275,20 @@ class Laresav_units(object):
         '''
         self.uni={}
         self.verbose=verbose
-        self.uni['gamma']  = 5./3.
-        self.uni['tg']     = 5.77e9 # K
+        self.uni['b']      = 2.0 # Gauss
         self.uni['l']      = 1.0e8 # Mm -> cm
-        self.uni['rho']    = 1.67e-9 # gr cm^-3 
-        self.uni['u']      = 6.9e8 # cm/s
-        self.uni['b']      = 100.0 # Gauss
-        self.uni['t']      = 0.145 # seconds
-
-        # Units and constants in SI
-
-        convertcsgsi(self)
+        self.uni['gamma']  = 5./3.
+        self.uni['rho']    = 1.67e-15 # gr cm^-3 
 
         globalvars(self)
+        
+        mu0=4.e-7*np.pi
+        
+        self.uni['u']      = self.uni['b']*1e-3 / np.sqrt(mu0 * self.uni['rho']*1e3) * 1e2 # cm/s
+        self.uni['tg']     = (self.uni['u']*1e-2)**2 * self.msi_h / self.ksi_b # K
+        self.uni['t']      = self.uni['l'] / self.uni['u']  # seconds
+        
+        # Units and constants in SI
+        convertcsgsi(self)
 
         self.uni['n']      = self.uni['rho'] / self.m_p / 2. # cm^-3

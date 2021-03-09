@@ -28,12 +28,14 @@ class MuramAtmos:
   """
 
   def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-               sel_units='cgs', big_endian=False, prim=False, inttostring=(lambda x: '{0:06d}'.format(x))):
+               sel_units='cgs', big_endian=False, prim=False, izo=None, inttostring=(lambda x: '{0:06d}'.format(x))):
+
 
     self.prim = prim
     self.fdir = fdir
     self.verbose = verbose
     self.sel_units  = sel_units
+    self.iz0 = iz0
     # endianness and data type
     if big_endian:
         self.dtype = '>' + dtype
@@ -58,23 +60,27 @@ class MuramAtmos:
     if os.access(tabfile, os.R_OK):
         self.rhoee = Rhoeetab(tabfile=tabfile,fdir=fdir,radtab=False)
 
-    self.genvar()
+    self.genvar(order=self.order)
 
       
   def read_header(self, headerfile):
     tmp = np.loadtxt(headerfile)
+    #self.dims_orig = tmp[:3].astype("i")
     dims = tmp[:3].astype("i")
     deltas = tmp[3:6]
     #if len(tmp) == 10: # Old version of MURaM, deltas stored in km
     #    self.uni.uni['l'] = 1e5 # JMS What is this for? 
         
     self.time= tmp[6]
-    print('layout.order')
+
     layout = np.loadtxt('layout.order')
     self.order = layout[0:3].astype(int)
     #self.order = tmp[-3:].astype(int)
-    dims = dims[self.order]
+    # dims = [1,2,0] 0=z, 
+    #dims = np.array((self.dims_orig[self.order[2]],self.dims_orig[self.order[0]],self.dims_orig[self.order[1]]))
+    #deltas = np.array((deltas[self.order[2]],deltas[self.order[0]],deltas[self.order[1]])).astype('float32')
     deltas = deltas[self.order]
+    dims = dims[self.order]
 
     if self.sel_units=='cgs': 
         deltas *= self.uni.uni['l']
@@ -82,6 +88,8 @@ class MuramAtmos:
     self.x = np.arange(dims[0])*deltas[0]
     self.y = np.arange(dims[1])*deltas[1]
     self.z = np.arange(dims[2])*deltas[2]
+    if self.iz0 != None: 
+        self.z = self.z - self.z[self.iz0]
     self.dx, self.dy, self.dz = deltas[0], deltas[1], deltas[2]
     self.nx, self.ny, self.nz = dims[0], dims[1], dims[2]
     
@@ -275,8 +283,8 @@ class MuramAtmos:
       varname=self.varn[var]
     else:
       varname=var
-
-    if var in self.varn.keys(): 
+        
+    if ((var in self.varn.keys()) and os.path.isfile(self.fdir+'/'+varname+ self.siter)): 
       ashape = np.array([self.nx, self.ny, self.nz])
     
       transpose_order = self.order
@@ -291,7 +299,9 @@ class MuramAtmos:
           cgsunits = 1.0
       else: 
         cgsunits = 1.0
-
+      #orderfiles = [self.order[2],self.order[0],self.order[1]]
+        
+      # self.order = [2,0,1]
       data = np.memmap(self.fdir+'/'+varname+ self.siter, mode="r", 
                       shape=tuple(ashape[self.order[self.order]]),
                       dtype=self.dtype, order="F")
@@ -308,6 +318,8 @@ class MuramAtmos:
 
     else:
       # Loading quantities
+      if (var == 'ne'): 
+        print('WWW: Reading ne from Bifrost EOS',end="\r",flush=True)
       if self.verbose: 
         print('Loading composite variable',end="\r",flush=True)
       self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
@@ -439,6 +451,8 @@ class MuramAtmos:
     self.varn['rho']= 'result_prim_0'
     self.varn['tg'] = 'eosT'
     self.varn['pg'] = 'eosP'
+    self.varn['ne'] = 'eosne'
+
     unames = np.array(['result_prim_1','result_prim_2','result_prim_3']) 
     unames = unames[order]
     self.varn['ux'] = unames[0]
@@ -544,22 +558,18 @@ class MuramAtmos:
       self.transunits = False
 
   def trasn2fits(self, varname, snap=None, instrument = 'MURaM', 
-    name='ar098192', origin='HGCR    ', z_tau51m=None ): 
+    name='ar098192', origin='HGCR    ', z_tau51m=None, iz0=None ): 
     '''
     converts the original data into fits files following Bifrost publicly available 
     format, i.e., SI, vertical axis, z and top corona is positive and last index. 
     '''
     
-    if z_tau51m == None: 
-      tau51 = self.trans2comm('tau',snap=snap)
-      z_tau51 = np.zeros((self.nx,self.ny))
-      for ix in range (0,self.nx): 
-        for iy in range(0,self.ny): 
-          z_tau51[ix,iy] = self.z[np.argmin(np.abs(tau51[ix,iy,:]-1.0))]
+    if varname[-1] == 'x': 
+      varname=varname.replace('x','z')
+    elif varname[-1] == 'z': 
+      varname=varname.replace('z','x')
 
-      z_tau51m = np.mean(z_tau51) / 1e8
-
-    self.datafits = np.transpose(self.trans2comm(varname,snap=snap),(2,1,0))
+    self.datafits = self.trans2comm(varname,snap=snap)
 
     varu=varname.replace('x','')
     varu=varu.replace('y','')
@@ -573,7 +583,7 @@ class MuramAtmos:
     units_title(self)
 
     if varu == 'ne': 
-      self.fitsunits = 'm^{-3}'
+      self.fitsunits = 'm^(-3)'
       siunits = 1e6
     else: 
       self.fitsunits = self.unisi_title[varu]
@@ -583,14 +593,24 @@ class MuramAtmos:
     else: 
       self.datafits = self.datafits * siunits
 
-
     self.xfits=self.x / 1e8
     self.yfits=self.y / 1e8
-    self.zfits=self.z / 1e8 - z_tau51m
+    self.zfits=self.z / 1e8 
 
-    z0 = np.min(np.abs(self.zfits))
-    self.zfits += z0
-    z_tau51m = -z0
+    if iz0 != None: 
+      self.zfits -= self.z[iz0]/1e8
+
+    if z_tau51m == None: 
+      tau51 = self.trans2comm('tau',snap=snap)
+      z_tau51 = np.zeros((self.nx,self.ny))
+      for ix in range (0,self.nx): 
+        for iy in range(0,self.ny): 
+          z_tau51[ix,iy] = self.zfits[np.argmin(np.abs(tau51[ix,iy,:]-1.0))]
+
+      z_tau51m = np.mean(z_tau51) 
+
+    print(z_tau51m)
+
     self.dxfits=self.dx / 1e8
     self.dyfits=self.dy / 1e8
     self.dzfits=self.dz / 1e8

@@ -38,24 +38,24 @@ class radyn(object):
     self.filename = filename
     self.fdir = fdir
     self.rdobj = rd.cdf.LazyRadynData(filename)
-    self.x = 0.0
-    self.y = 0.0
-    self.z = self.rdobj.__getattr__('zm')
+    self.x = np.array([0.0])
+    self.y = np.array([0.0])
+    self.z = np.flip(self.rdobj.__getattr__('zm'))
     self.sel_units= sel_units
     self.verbose = verbose
     self.snap = None
     self.uni = Radyn_units()
     
-    self.dx = 1.0
-    self.dy = 1.0
+    self.dx = np.array([1.0])
+    self.dy = np.array([1.0])
     self.dz = np.copy(self.z)
     self.nt = np.shape(self.z)[0]
     self.nz = np.shape(self.z)[1]
     for it in range(0,self.nt):
       self.dz[it,:] = np.gradient(self.z[it,:])
     self.dz1d = self.dz
-    self.dx1d = 1.0
-    self.dy1d = 1.0
+    self.dx1d = np.array([1.0])
+    self.dy1d = np.array([1.0])
     
     self.nx = np.shape(self.x)
     self.ny = np.shape(self.y)
@@ -220,7 +220,7 @@ class radyn(object):
     R = 2*smax/np.pi
 
     # JMS we are assuming here that self.z.min() = 0
-    shape = (ceil(self.x.max()/self.trans_dx), 1, ceil(self.z.max()/self.trans_dx))
+    shape = (ceil(self.x_loop.max()/self.trans_dx), 1, ceil(self.z_loop.max()/self.trans_dx))
     
     # In the RADYN model in the corona, successive grid points may be several pixels away from each other.
     # In this case, need to refine loop.
@@ -254,12 +254,12 @@ class radyn(object):
     if varname == 'uz': 
         var =  var*np.cos(omega)
 
-    xind = np.floor(self.x/self.trans_dx).astype(np.int64)
-    zind = np.clip(np.floor(self.z/self.trans_dz).astype(np.int64),0,shape[2]-1)
+    xind = np.floor(self.x_loop/self.trans_dx).astype(np.int64)
+    zind = np.clip(np.floor(self.z_loop/self.trans_dz).astype(np.int64),0,shape[2]-1)
 
     # Define matrix with column coordinate corresponding to point along loop
     # and row coordinate corresponding to position in Cartesian grid
-    col = np.arange(len(self.z),dtype=np.int64)
+    col = np.arange(len(self.z_loop),dtype=np.int64)
     row = xind*shape[2]+zind
 
     if self.trans_sparse:
@@ -274,6 +274,13 @@ class radyn(object):
     # This arrays are not actually used for VDEM extraction
     var = (M@var).reshape(shape)
 
+    self.x = np.linspace(self.x_loop.min(),self.x_loop.max(),np.shape(var)[0])
+    self.z = np.linspace(self.z_loop.min(),self.z_loop.max(),np.shape(var)[-1])
+    
+    self.dx1d = np.gradient(self.x)
+    self.dy1d = 1.0
+    self.dz1d = np.gradient(self.z)
+        
     return var
 
   def trans2commaxes(self, **kwargs): 
@@ -292,7 +299,7 @@ class radyn(object):
           self.trans_dz = value
             
       # Semicircular loop    
-      self.zorig = (self.rdobj.__getattr__('zm'))[self.snap]
+      self.zorig = self.rdobj.__getattr__('zm')[self.snap]
       s = np.copy(self.zorig)
       good = s >=0.0
       s = s[good]
@@ -307,39 +314,38 @@ class radyn(object):
       # In this case, need to refine loop.
       maxdl = np.abs(z[1:]-z[0:-1]).max()
       self.gridfactor = ceil(2*maxdl/np.min([self.trans_dx,self.trans_dz]))
-    
             
       if self.gridfactor > 1:
-        ss, self.x = refine(s,x, factor=self.gridfactor)
-        ss, self.z = refine(s,z, factor=self.gridfactor)
+        ss, self.x_loop = refine(s,x, factor=self.gridfactor)
+        ss, self.z_loop = refine(s,z, factor=self.gridfactor)
       else:
-        self.z = z
-        self.x = x
+        self.z_loop = z
+        self.x_loop = x
       
-      self.y = 1.0        
+      self.y = np.array([0.0])
         
-      self.dx1d = self.x[1] - self.x[0]
+      self.dx1d_loop = np.gradient(self.x_loop)
       self.dy1d = 1.0
-      self.dz1d = np.gradient(self.z)
+      self.dz1d_loop = np.gradient(self.z_loop)
         
       self.transunits = True
 
   def trans2noncommaxes(self): 
 
     if self.transunits == True:
-      self.x = 0.0
-      self.y = 0.0
+      self.x = np.array([0.0])
+      self.y = np.array([0.0])
       self.z = self.rdobj.__getattr__('zm')
 
-      self.dx = 1.0
-      self.dy = 1.0
+      self.dx = np.array([1.0])
+      self.dy = np.array([1.0])
       self.dz = np.copy(self.z)
       self.nz = np.shape(self.z)[1]
       for it in range(0,self.nt):
         self.dz[it,:] = np.gradient(self.z[it,:])
       self.dz1d = self.dz
-      self.dx1d = 1.0
-      self.dy1d = 1.0
+      self.dx1d = np.array([1.0])
+      self.dy1d = np.array([1.0])
 
       self.nx = np.shape(self.x)
       self.ny = np.shape(self.y)

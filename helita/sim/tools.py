@@ -1,5 +1,6 @@
 from astropy.io import fits
 import numpy as np
+import os, fnmatch
 
 def writefits(obj, varname, snap=None, instrument = 'MURaM', 
               name='ar098192', origin='HGCR    ', z_tau51m = None): 
@@ -65,6 +66,15 @@ def writefits(obj, varname, snap=None, instrument = 'MURaM',
   hdul = fits.HDUList([hdu,hdu1])
   hdul.writeto(instrument+'_'+name+'_'+varname+'_'+inttostring(obj.snap,ts_size=3)+'.fits')
 
+def allsnap2fits(dd,iz0=116,z_tau51m=0.03045166015624971,rootname = "result_prim_0.*",patern='.'):
+  varlist=['ux','uy','uz','bx','by','bz','lge','lgne','lgpg','lgrho','lgtg']
+  listOfFiles = os.listdir('.') # folder
+  snaplist=[int(entry[entry.find(patern)+1:]) for entry in listOfFiles if fnmatch.fnmatch(entry, rootname)]
+  for snap in snaplist: 
+    snapname = '.{:07d}'.format(snap)
+    for var in varlist: 
+      print(var)
+      dens = dd.trasn2fits(var,snap,iz0=116,z_tau51m=0.03045166015624971)
 
 def inttostring(ii,ts_size=7):
 

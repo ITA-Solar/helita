@@ -122,24 +122,6 @@ class BifrostData(object):
 
         self.set_snap(snap,True,params_only=params_only)
         
-        if self.sel_units=='cgs': 
-            self.x *= self.uni.uni['l']
-            self.y *= self.uni.uni['l']
-            self.z *= self.uni.uni['l']
-            self.dx *= self.uni.uni['l']
-            self.dy *= self.uni.uni['l']
-            self.dz *= self.uni.uni['l']
-            self.dx1d *= self.uni.uni['l']
-            self.dy1d *= self.uni.uni['l']
-            self.dz1d *= self.uni.uni['l']
-            
-            self.dxidxup /= self.uni.uni['l']
-            self.dxidxdn /= self.uni.uni['l']
-            self.dyidyup /= self.uni.uni['l']
-            self.dyidydn /= self.uni.uni['l']
-            self.dzidzup /= self.uni.uni['l']
-            self.dzidzdn /= self.uni.uni['l']  
-        
         self.genvar()
         self.transunits = False
         self.cross_sect = Cross_sect
@@ -291,9 +273,13 @@ class BifrostData(object):
         self.params = {}
         for key in self.paramList[0]:
             self.params[key] = np.array(
-                [self.paramList[i][key] for i in range(
-                    0, len(self.paramList))])
-
+                [self.paramList[i][key] for i in range(0, len(self.paramList))    \
+                    if key in self.paramList[i].keys()])
+                    #the if statement is required in case extra params in self.ParmList[0]
+        self.time = self.params['t']
+        if self.sel_units=='cgs': 
+            self.time *= self.uni.uni['t']
+        
     def __read_mesh(self, meshfile, firstime=False):
         """
         Reads mesh file
@@ -385,8 +371,28 @@ class BifrostData(object):
             self.dz1d = np.gradient(self.z) 
         else:
             self.dz1d = np.zeros(self.nz)
-
-    
+        
+        if self.sel_units=='cgs': 
+            self.x *= self.uni.uni['l']
+            self.y *= self.uni.uni['l']
+            self.z *= self.uni.uni['l']
+            self.zdn *= self.uni.uni['l']
+            self.dx *= self.uni.uni['l']
+            self.dy *= self.uni.uni['l']
+            self.dz *= self.uni.uni['l']
+            self.dx1d *= self.uni.uni['l']
+            self.dy1d *= self.uni.uni['l']
+            self.dz1d *= self.uni.uni['l']
+            
+            self.dxidxup /= self.uni.uni['l']
+            self.dxidxdn /= self.uni.uni['l']
+            self.dyidyup /= self.uni.uni['l']
+            self.dyidydn /= self.uni.uni['l']
+            self.dzidzup /= self.uni.uni['l']
+            self.dzidzdn /= self.uni.uni['l']  
+        
+        self.transunits = False
+        
     def _init_vars(self, firstime=False,  fast=None, *args, **kwargs):
         """
         Memmaps "simple" variables, and maps them to methods.
@@ -431,7 +437,7 @@ class BifrostData(object):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
+    def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None, 
                     *args, **kwargs):
         """
         Reads a given variable as a function of time.
@@ -454,17 +460,10 @@ class BifrostData(object):
         self.iiy = iiy
         self.iiz = iiz
 
-        try:
-            if snap is not None:
-                if np.size(snap) == np.size(self.snap):
-                    if any(snap != self.snap):
-                        self.set_snap(snap)
-                        self.variables={}
-                else:
-                    self.set_snap(snap)
-                    self.variables={}
-        except ValueError:
-            print('WWW: snap has to be a numpy.arrange parameter')
+        snap = np.array(snap, copy=False)
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
+            self.variables={}
 
         # lengths for dimensions of return array
         self.xLength = 0
@@ -494,13 +493,8 @@ class BifrostData(object):
                                          iiy=self.iiy, iiz=self.iiz)
 
 
-        try:
-            if ((snap is not None) and (snap != self.snap)):
-                self.set_snap(snap)
-
-        except ValueError:
-            if ((snap is not None) and any(snap != self.snap)):
-                self.set_snap(snap)
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
                         
         return value
 
@@ -688,7 +682,7 @@ class BifrostData(object):
 
             # ensuring that dimensions of size 1 are retained
             val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
-
+        
         return val
 
 
@@ -733,23 +727,31 @@ class BifrostData(object):
     def trans2commaxes(self): 
         if self.transunits == False:
           self.transunits = True
-          self.x =  self.x 
-          self.dx =  self.dx 
-          self.y =  self.y 
-          self.dy =  self.dy 
-          self.z = - self.z[::-1].copy() 
-          self.dz = - self.dz1d[::-1].copy() 
+          if self.sel_units == 'cgs':
+            cte=1.0
+          else: 
+            cte=1.0e8
+          self.x =  self.x*cte
+          self.dx =  self.dx*cte
+          self.y =  self.y*cte
+          self.dy =  self.dy*cte
+          self.z = - self.z[::-1].copy()*cte
+          self.dz = - self.dz1d[::-1].copy()*cte 
 
     def trans2noncommaxes(self): 
 
         if self.transunits == True:
           self.transunits = False
-          self.x =  self.x 
-          self.dx =  self.dx 
-          self.y =  self.y 
-          self.dy =  self.dy
-          self.z = - self.z[::-1].copy()
-          self.dz = - self.dz1d[::-1].copy()
+          if self.sel_units == 'cgs':
+            cte=1.0
+          else: 
+            cte=1.0e8
+          self.x =  self.x/cte
+          self.dx =  self.dx/cte
+          self.y =  self.y/cte
+          self.dy =  self.dy/cte
+          self.z = - self.z[::-1].copy()/cte
+          self.dz = - self.dz1d[::-1].copy()/cte
 
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         """
