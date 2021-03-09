@@ -28,7 +28,7 @@ class MuramAtmos:
   """
 
   def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-               sel_units='cgs', big_endian=False, prim=False, izo=None, inttostring=(lambda x: '{0:06d}'.format(x))):
+               sel_units='cgs', big_endian=False, prim=False, iz0=None, inttostring=(lambda x: '{0:06d}'.format(x))):
 
 
     self.prim = prim
