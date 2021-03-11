@@ -216,7 +216,7 @@ class radyn(object):
     good = s >=0.0
     s = s[good]
     var = var[good]
-    smax = self.rdobj.cdf['zll'][self.snap]
+    smax = np.max(self.rdobj.__getattr__('zm'))#self.rdobj.cdf['zll'][self.snap]
     R = 2*smax/np.pi
 
     # JMS we are assuming here that self.z.min() = 0
@@ -303,7 +303,10 @@ class radyn(object):
       s = np.copy(self.zorig)
       good = s >=0.0
       s = s[good]
-      smax = self.rdobj.cdf['zll'][self.snap]
+      #smax = self.rdobj.cdf['zll'][self.snap]
+      # Sometimes zll is slightly different to the max of zm which causes problems on the assumption of a 1/4 loop. 
+      # max(zm) fix the problem
+      smax = np.max(self.rdobj.__getattr__('zm'))
       R = 2*smax/np.pi
       x = np.cos(s/R)*R
       z = np.sin(s/R)*R
