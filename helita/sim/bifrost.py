@@ -93,7 +93,6 @@ class BifrostData(object):
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
         self.cstagop = cstagop
-        self.lowbus = lowbus
         self.sel_units = sel_units 
         self.numThreads = numThreads
         self.fast = fast
@@ -612,28 +611,28 @@ class BifrostData(object):
                     end="\r",flush=True)
             self.set_snap(snap)
             self.variables={}
-
         
         if var in self.varn.keys(): 
             var=self.varn[var]
 
-        # # check if already in memmory
-        if var in self.variables:
-            return self.variables[var] 
-        elif var in self.simple_vars:  # is variable already loaded?
-            
-            if (self.sel_units=='cgs'): 
-                varu=var.replace('x','')
-                varu=varu.replace('y','')
-                varu=varu.replace('z','')
-                if varu == 'r': 
-                    varu = 'rho'
-                if (varu in self.uni.uni.keys()): 
-                    cgsunits = self.uni.uni[varu]
-                else: 
-                    cgsunits = 1.0
+        if (self.sel_units=='cgs'): 
+            varu=var.replace('x','')
+            varu=varu.replace('y','')
+            varu=varu.replace('z','')
+            if varu == 'r': 
+                varu = 'rho'
+            if (varu in self.uni.uni.keys()): 
+                cgsunits = self.uni.uni[varu]
             else: 
                 cgsunits = 1.0
+        else: 
+            cgsunits = 1.0
+                
+        # # check if already in memmory
+        if var in self.variables:
+            val = self.variables[var] * cgsunits
+        elif var in self.simple_vars:  # is variable already loaded?
+            
             val = self._get_simple_var(var, *args, **kwargs) * cgsunits
             if self.verbose:
                 print('(get_var): reading simple ', np.shape(val), whsp*5,
@@ -664,13 +663,11 @@ class BifrostData(object):
                               'see e.g. help(self.get_var) or get_var('')) for guidance'
                               '.' % (var, repr(self.simple_vars))))
             #val = self.get_quantity(var, *args, **kwargs)
-
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
             if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
                 # x axis may be squeezed out, axes for take()
                 axes = [0, -2, -1]
-
                 for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
                     if (np.size(getattr(self, dim)) > 1 or
                             getattr(self, dim) != slice(None)):
@@ -686,7 +683,7 @@ class BifrostData(object):
         return val
 
 
-    def trans2comm(self,varname,snap=None): 
+    def trans2comm(self,varname,snap=None, *args, **kwargs): 
         '''
         Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
         is: 
@@ -716,9 +713,9 @@ class BifrostData(object):
             varname = varname+'c'
             if varname[-2] in ['y','z']: 
                 sign = -1.0 
-
-        var = np.reshape( sign * self.get_var(varname,snap=snap), 
-                        (self.nx, self.ny, self.nz)).copy()
+        
+        var = self.get_var(varname,snap=snap, *args, **kwargs)
+        var = sign * var
 
         var = var[...,::-1].copy()
 
