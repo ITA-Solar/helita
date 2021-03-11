@@ -451,7 +451,9 @@ class MuramAtmos:
     self.varn['rho']= 'result_prim_0'
     self.varn['tg'] = 'eosT'
     self.varn['pg'] = 'eosP'
-    self.varn['ne'] = 'eosne'
+    if os.path.isfile(self.fdir+'/eosne'+ self.siter):
+        print('here')
+        self.varn['ne'] = 'eosne'
 
     unames = np.array(['result_prim_1','result_prim_2','result_prim_3']) 
     unames = unames[order]
