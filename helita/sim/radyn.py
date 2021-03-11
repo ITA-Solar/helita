@@ -216,10 +216,13 @@ class radyn(object):
     good = s >=0.0
     s = s[good]
     var = var[good]
-    smax = np.max(self.rdobj.__getattr__('zm'))#self.rdobj.cdf['zll'][self.snap]
+    ## GSK -- smax was changed 12th March 2021. See comment in trans2commaxes
+    #smax = self.rdobj.cdf['zll'][self.snap]
+    smax = np.max(self.rdobj.__getattr__('zm'))
     R = 2*smax/np.pi
 
-    # JMS we are assuming here that self.z.min() = 0
+    ## JMS we are assuming here that self.z.min() = 0
+    ## GSK: This isn't true, if you mean the minimum height in RADYN. Z can go sub-photosphere (~60km)
     shape = (ceil(self.x_loop.max()/self.trans_dx), 1, ceil(self.z_loop.max()/self.trans_dx))
     
     # In the RADYN model in the corona, successive grid points may be several pixels away from each other.
@@ -303,9 +306,9 @@ class radyn(object):
       s = np.copy(self.zorig)
       good = s >=0.0
       s = s[good]
+      ##JMS -- Sometimes zll is slightly different to the max of zm which causes problems on the assumption of a 1/4 loop. 
+      ##        max(zm) fix the problem
       #smax = self.rdobj.cdf['zll'][self.snap]
-      # Sometimes zll is slightly different to the max of zm which causes problems on the assumption of a 1/4 loop. 
-      # max(zm) fix the problem
       smax = np.max(self.rdobj.__getattr__('zm'))
       R = 2*smax/np.pi
       x = np.cos(s/R)*R
