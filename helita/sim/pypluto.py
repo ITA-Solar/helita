@@ -12,6 +12,7 @@ from .load_arithmetic_quantities import *
 from .tools import *
 from .load_noeos_quantities import *
 import scipy.constants as const
+from scipy.ndimage import rotate
 
 #from matplotlib.pyplot import *
 #from matplotlib.mlab import *
@@ -781,6 +782,7 @@ class PlutoData(object):
     elif (self.typemodel == 'Paolo'): 
         self.uni = Pypluto_paolo_units()
     self.info = pload(snap,w_dir=fdir,datatype=datatype)
+    self.time=self.info.SimTime
     self.x = self.info.x1
     self.y = self.info.x2
     self.z = self.info.x3
@@ -850,6 +852,7 @@ class PlutoData(object):
     if ((snap != None) and (self.snap != snap)): 
       self.snap = snap
       self.info = pload(snap,w_dir=self.fdir,datatype=self.datatype)
+      self.time=self.info.SimTime
     
     if var in self.varn.keys(): 
       if self.sel_units == 'cgs': 
@@ -945,7 +948,7 @@ class PlutoData(object):
 
 
 
-  def trans2comm(self,varname,snap=None): 
+  def trans2comm(self, varname, snap=None, angle=45): 
     '''
     Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
     is: 
@@ -965,22 +968,35 @@ class PlutoData(object):
     
     If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
 
+    INPUT: 
+    varname - string
+    snap - integer
+    angle - real (degrees). Any number -90 to 90, default = 45
     '''
 
     self.sel_units = 'cgs'
 
-    #var = np.reshape( sign * self.get_var(varname,snap=snap), 
-    #                (self.nx, self.ny, self.zorig.shape[0])).copy()
-    var = self.get_var(varname,snap=snap)
+    self.trans2commaxes 
 
-    #var = var[...,::-1].copy()
-        
-    #if self.typemodel == 'Paolo': 
-        #nznew=int(self.zorig.shape[0]/2)
-        #var = var[:,:,0:nznew-1]
-    
-    self.trans2commaxes()
-    
+    if angle != 0: 
+        if varname[0] in ['u']: 
+            if varname[-1] in ['x']: 
+                varx = self.get_var(varname,snap=snap)
+                vary = self.get_var(varname,snap=snap)
+                var = varx * np.cos(angle/90.0*np.pi/2.0) - vary * np.sin(angle/90.0*np.pi/2.0)
+            elif varname[-1] in ['y']: 
+                vary = self.get_var(varname,snap=snap)
+                varx = self.get_var(varname[0]+'x',snap=snap)
+                var = vary * np.cos(angle/90.0*np.pi/2.0) + varx * np.sin(angle/90.0*np.pi/2.0)
+            else:  # component z
+                var = self.get_var(varname,snap=snap)
+            var = rotate(var, angle=angle, reshape=False, axes=(0,1))
+        else: 
+            var = self.get_var(varname,snap=snap)
+            var = rotate(var, angle=angle, reshape=False, mode='nearest',axes=(0,1))
+    else: 
+        var = self.get_var(varname,snap=snap)
+            
     return var
 
 
