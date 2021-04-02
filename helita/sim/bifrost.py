@@ -83,7 +83,7 @@ class BifrostData(object):
         """
         Loads metadata and initialises variables.
         """
-        self.fdir = fdir
+        self.fdir = os.path.abspath(fdir)
         self.verbose = verbose
         self.cstagop = cstagop
         self.lowbus = lowbus
