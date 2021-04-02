@@ -652,6 +652,10 @@ class BifrostData(object):
 
         if var == '':
             print(help(self.get_var))
+            print('Variables from snap or aux files:')
+            print(self.simple_vars)
+            print('Variables from xy aux files:')
+            print(self.auxxyvars)
             print(self.description['ALL'])
             return None
 
