@@ -58,10 +58,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     else: 
       obj.varlist['ALL'] = GLOBAL_QUANT
   
-  if not('GLOBAL_QUANT' in obj.varlist.keys()): 
-    obj.mf_description['GLOBAL_QUANT'] = ('\n These variables are calculate looping'
-                                        'either speciess or levels: \n' +
-                                        ', '.join(GLOBAL_QUANT))
+    obj.mf_description['GLOBAL_QUANT'] = ('\nThese variables are calculate looping'
+                                        ' either species or levels: \n' +
+                                        ' '.join(GLOBAL_QUANT))
     if 'ALL' in obj.mf_description.keys():
       obj.mf_description['ALL'] += "\n" + obj.mf_description['GLOBAL_QUANT']
     else:
@@ -153,7 +152,7 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
     NDENS_QUANT = ['nr']
 
   obj.mf_description['NDENS_QUANT'] = ('\n These variables are calculate looping'
-                                       'either speciess or levels \n' +
+                                       ' either species or levels \n' +
                                        ' '.join(NDENS_QUANT))
   if 'ALL' in obj.mf_description.keys():
     obj.mf_description['ALL'] += "\n" + obj.mf_description['NDENS_QUANT']
