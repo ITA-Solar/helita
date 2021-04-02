@@ -47,13 +47,24 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
       GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel', 'pe', 'rc','rne']
+  
+  if not(hasattr(obj,'varlist')): 
+    obj.varlist={}
 
-  obj.mf_description['GLOBAL_QUANT'] = ('These variables are calculate looping'
-                                        'either speciess or levels' +
+  if not('GLOBAL_QUANT' in obj.varlist.keys()): 
+    obj.varlist['GLOBAL_QUANT'] = GLOBAL_QUANT
+    if 'ALL' in obj.varlist.keys():
+      obj.varlist['ALL'] += GLOBAL_QUANT
+    else: 
+      obj.varlist['ALL'] = GLOBAL_QUANT
+  
+  if not('GLOBAL_QUANT' in obj.varlist.keys()): 
+    obj.mf_description['GLOBAL_QUANT'] = ('\n These variables are calculate looping'
+                                        'either speciess or levels: \n' +
                                         ', '.join(GLOBAL_QUANT))
-  if 'ALL' in obj.mf_description.keys():
+    if 'ALL' in obj.mf_description.keys():
       obj.mf_description['ALL'] += "\n" + obj.mf_description['GLOBAL_QUANT']
-  else:
+    else:
       obj.mf_description['ALL'] = obj.mf_description['GLOBAL_QUANT']
 
   if (var == ''):
@@ -141,9 +152,9 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
   if NDENS_QUANT is None:
     NDENS_QUANT = ['nr']
 
-  obj.mf_description['NDENS_QUANT'] = ('These variables are calculate looping'
-                                       'either speciess or levels' +
-                                       ', '.join(NDENS_QUANT))
+  obj.mf_description['NDENS_QUANT'] = ('\n These variables are calculate looping'
+                                       'either speciess or levels \n' +
+                                       ' '.join(NDENS_QUANT))
   if 'ALL' in obj.mf_description.keys():
     obj.mf_description['ALL'] += "\n" + obj.mf_description['NDENS_QUANT']
   else:

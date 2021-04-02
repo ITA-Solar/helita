@@ -24,9 +24,12 @@ class EbysusData(BifrostData):
         super(EbysusData, self).__init__(*args, **kwargs)
 
         self.att = {}
-        self.mf_nspecies = len(self.mf_tabparam['SPECIES'])
+        if len(np.shape(self.mf_tabparam['SPECIES']))==1:
+            self.mf_nspecies = 1
+        else:
+            self.mf_nspecies = len(self.mf_tabparam['SPECIES'])
         self.mf_total_nlevel=0
-        for ispecies in range(1,self.mf_nspecies+1):
+        for ispecies in range(1,int(self.mf_nspecies)+1):
             if (self.mf_nspecies == 1):
                 self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][2],fdir=self.fdir)
             else:
