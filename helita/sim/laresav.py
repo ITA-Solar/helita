@@ -45,6 +45,7 @@ class Laresav:
     self.x       = self.savefile['d']['x'][0].copy().byteswap('=').newbyteorder('=')
     self.y       = self.savefile['d']['y'][0].copy().byteswap('=').newbyteorder('=')
     self.z       = self.savefile['d']['z'][0].copy().byteswap('=').newbyteorder('=')
+    self.z -= np.min(self.z)
     
     if self.sel_units=='cgs': 
         self.x *= self.uni.uni['l']

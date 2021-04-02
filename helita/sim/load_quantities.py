@@ -311,7 +311,6 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
     return None
 
 
-
 def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
   '''
   MAxwell molecular collision
@@ -348,7 +347,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
     ion2 = ''.join([i for i in elem[1] if i.isdigit()])
     spic1 = spic1[4:] 
 
-    polarizability_dict = []
+    polarizability_dict = {}
     polarizability_dict['h']  = 6.68E-31
     polarizability_dict['he'] = 2.05E-31
     polarizability_dict['li'] = 2.43E-29

@@ -28,7 +28,8 @@ class MuramAtmos:
   """
 
   def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-               sel_units='cgs', big_endian=False, prim=False, iz0=None):
+               sel_units='cgs', big_endian=False, prim=False, iz0=None, inttostring=(lambda x: '{0:06d}'.format(x))):
+
 
     self.prim = prim
     self.fdir = fdir
@@ -46,6 +47,7 @@ class MuramAtmos:
     # Snapshot number
     self.snap = int(template[1:])
     self.filename=''
+    self.inttostring=inttostring
     self.siter = template
     self.file_root = template
     
@@ -70,6 +72,7 @@ class MuramAtmos:
     #    self.uni.uni['l'] = 1e5 # JMS What is this for? 
         
     self.time= tmp[6]
+
     layout = np.loadtxt('layout.order')
     self.order = layout[0:3].astype(int)
     #self.order = tmp[-3:].astype(int)
@@ -272,7 +275,7 @@ class MuramAtmos:
     
     if (not snap == None): 
       self.snap = snap 
-      self.siter = '.{:06d}'.format(snap)
+      self.siter = '.'+self.inttostring(snap)
       self.read_header("%s/Header%s" % (self.fdir, self.siter))
    
     
@@ -348,7 +351,7 @@ class MuramAtmos:
   def read_var_3d(self,var,iter=None,layout=None):
 
     if (not iter == None): 
-      self.siter=snapname = '.{:06d}'.format(iter)
+      self.siter='.'+self.inttostring(iter)
       self.read_header("%s/Header%s" % (self.fdir, self.siter))
 
     tmp = np.fromfile(self.fdir+'/'+var+ self.siter)
@@ -448,7 +451,9 @@ class MuramAtmos:
     self.varn['rho']= 'result_prim_0'
     self.varn['tg'] = 'eosT'
     self.varn['pg'] = 'eosP'
-    self.varn['ne'] = 'eosne'
+    if os.path.isfile(self.fdir+'/eosne'+ self.siter):
+        print('here')
+        self.varn['ne'] = 'eosne'
 
     unames = np.array(['result_prim_1','result_prim_2','result_prim_3']) 
     unames = unames[order]

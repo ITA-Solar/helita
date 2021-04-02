@@ -6,6 +6,7 @@ from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
 from .load_noeos_quantities import *
+from scipy.ndimage import rotate
 
 class Cipmocct:
     """
@@ -50,7 +51,7 @@ class Cipmocct:
 
             self.x = params['x1'].copy()
             self.y = params['x3'].copy()
-            self.z = params['x2'].copy()
+            self.z = params['x2'].copy() 
 
             self.nx = len(params['x1'])
             self.ny = len(params['x3'])
@@ -202,7 +203,7 @@ class Cipmocct:
         self.varn['by'] = 'bz_cube'
         self.varn['bz'] = 'by_cube'
 
-    def trans2comm(self,varname,snap=None): 
+    def trans2comm(self,varname, snap=None, angle=45): 
         '''
         Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
         is: 
@@ -222,17 +223,35 @@ class Cipmocct:
 
         If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
 
+        INPUT: 
+        varname - string
+        snap - integer
+        angle - real (degrees). Any number -90 to 90, default = 45
         '''
 
         self.sel_units = 'cgs'
 
         self.trans2commaxes 
-
-        var = self.get_var(varname,snap=snap)
-
-        #var = transpose(var,(X,X,X))
-        # also velocities. 
-
+        
+        if angle != 0: 
+            if varname[0] in ['u']: 
+                if varname[-1] in ['x']: 
+                    varx = self.get_var(varname,snap=snap)
+                    vary = self.get_var(varname,snap=snap)
+                    var = varx * np.cos(angle/90.0*np.pi/2.0) - vary * np.sin(angle/90.0*np.pi/2.0)
+                elif varname[-1] in ['y']: 
+                    vary = self.get_var(varname,snap=snap)
+                    varx = self.get_var(varname[0]+'x',snap=snap)
+                    var = vary * np.cos(angle/90.0*np.pi/2.0) + varx * np.sin(angle/90.0*np.pi/2.0)
+                else:  # component z
+                    var = self.get_var(varname,snap=snap)
+                var = rotate(var, angle=angle, reshape=False, axes=(0,1))
+            else: 
+                var = self.get_var(varname,snap=snap)
+                var = rotate(var, angle=angle, reshape=False, mode='nearest',axes=(0,1))
+        else: 
+            var = self.get_var(varname,snap=snap)
+            
         return var
 
     def trans2commaxes(self): 
