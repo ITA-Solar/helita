@@ -1,5 +1,7 @@
 import numpy as np
+from . import document_vars
 
+print('imported mfquant')
 
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
                       NDENS_QUANT=None, CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
@@ -46,25 +48,22 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel', 'pe', 'rc','rne']
-  
-  if not(hasattr(obj,'varlist')): 
-    obj.varlist={}
+      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel', 'pe', 'rc','rneu']
 
-  if not('GLOBAL_QUANT' in obj.varlist.keys()): 
-    obj.varlist['GLOBAL_QUANT'] = GLOBAL_QUANT
-    if 'ALL' in obj.varlist.keys():
-      obj.varlist['ALL'] += GLOBAL_QUANT
-    else: 
-      obj.varlist['ALL'] = GLOBAL_QUANT
-  
-    obj.mf_description['GLOBAL_QUANT'] = ('\nThese variables are calculate looping'
-                                        ' either species or levels: \n' +
-                                        ' '.join(GLOBAL_QUANT))
-    if 'ALL' in obj.mf_description.keys():
-      obj.mf_description['ALL'] += "\n" + obj.mf_description['GLOBAL_QUANT']
-    else:
-      obj.mf_description['ALL'] = obj.mf_description['GLOBAL_QUANT']
+  docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT)
+  docvar('nel',  'electron number density [cm^-3]')
+  docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
+  docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
+  docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
+  #TODO: docvar for all the other vars here.  Eventually... remove obj.mf_description architecture.
+
+  obj.mf_description['GLOBAL_QUANT'] = ('\nThese variables are calculate looping'
+                                      ' either species or levels: \n' +
+                                      ' '.join(GLOBAL_QUANT))
+  if 'ALL' in obj.mf_description.keys():
+    obj.mf_description['ALL'] += "\n" + obj.mf_description['GLOBAL_QUANT']
+  else:
+    obj.mf_description['ALL'] = obj.mf_description['GLOBAL_QUANT']
 
   if (var == ''):
       return None
@@ -86,7 +85,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
             output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
       return output
 
-    elif var == 'rneu':  # total ionized density
+    elif var == 'rneu':  # total neutral density
       for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
         for ilevel in range(1,nlevels+1):
@@ -151,6 +150,9 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
   if NDENS_QUANT is None:
     NDENS_QUANT = ['nr']
 
+  docvar = document_vars.vars_documenter(obj, 'NDENS_QUANT', NDENS_QUANT)
+  docvar('nr', 'number density [cm^-3]')
+
   obj.mf_description['NDENS_QUANT'] = ('\n These variables are calculate looping'
                                        ' either species or levels \n' +
                                        ' '.join(NDENS_QUANT))
@@ -170,6 +172,10 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   if SPITZERTERM_QUANT is None:
     SPITZERTERM_QUANT = ['kappaq','dxTe','dyTe','dzTe','rhs']
+
+  docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT)
+  docvar('rhs', 'Someone who knows what this means should put a description here.')
+  #docvar('kappaq', '???')
 
   obj.mf_description['SPITZERTERM_QUANT'] = ('These variables are calculate spitzer conductivities'
                                        'either speciess or levels' +
