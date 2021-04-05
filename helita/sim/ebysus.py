@@ -390,7 +390,7 @@ class EbysusData(BifrostData):
             if np.shape(val) is ():
                 val = load_arithmetic_quantities(self,var)
             if np.shape(val) is ():
-                val =  load_mf_quantities(self,var)
+                val = load_mf_quantities(self,var)
 
         if document_vars.creating_vardict(self):
             return None
@@ -399,8 +399,8 @@ class EbysusData(BifrostData):
             print(self.simple_vars)
             print('Variables from xy aux files:')
             print(self.auxxyvars)
-            print(self.description['ALL'])
-            pprint.pprint(self.vardict)
+            if hasattr(self,'vardict'):
+                pprint.pprint(self.vardict)
             return None
 
         if np.shape(val) is ():

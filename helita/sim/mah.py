@@ -6,6 +6,7 @@ from .load_noeos_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
 from scipy.io import FortranFile
+import pprint
 
 class Mah:
   """
@@ -543,7 +544,8 @@ class Mah:
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
-      #print(self.description['ALL']) 
+    if hasattr(self,'vardict'):
+        pprint.pprint(self.vardict)
 
       return None
    

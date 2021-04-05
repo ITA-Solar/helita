@@ -15,6 +15,7 @@ from scipy.ndimage import map_coordinates
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
+import pprint
 
 whsp = '  '
 
@@ -656,7 +657,8 @@ class BifrostData(object):
             print(self.simple_vars)
             print('Variables from xy aux files:')
             print(self.auxxyvars)
-            print(self.description['ALL'])
+            if hasattr(self,'vardict'):
+                pprint.pprint(self.vardict)
             return None
 
             if np.shape(val) == ():

@@ -4,8 +4,7 @@ def load_noeos_quantities(obj, quant, *args,  EOSTAB_QUANT=None,  **kwargs):
 
   quant = quant.lower()
 
-  if not hasattr(obj, 'description'):
-    obj.description = {}
+  document_vars.set_meta_quant(obj, 'noeosquantities', 'Computes some variables without EOS tables')
 
   val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT)
 
@@ -13,28 +12,18 @@ def load_noeos_quantities(obj, quant, *args,  EOSTAB_QUANT=None,  **kwargs):
 
 
 def get_eosparam(obj, quant, EOSTAB_QUANT=None): 
-
+  '''Computes some variables without EOS tables '''
   if (EOSTAB_QUANT == None):
       EOSTAB_QUANT = ['ne']
-      if not hasattr(obj,'description'):
-          obj.description={}
   
-  obj.description['EOSTAB'] = ('Electron density in cgs: ' + ', '.join(EOSTAB_QUANT))
-
-  if 'ALL' in obj.description.keys():
-    obj.description['ALL'] += "\n" + obj.description['EOSTAB']
-  else:
-    obj.description['ALL'] = obj.description['EOSTAB']
-
-  if (quant == ''):
+  docvar = document_vars.vars_documenter(obj, 'EOSTAB_QUANT', EOSTAB_QUANT, get_eosparam.__doc__)
+  docvar('ne', "electron density [cm^-3]")
+  
+  if (quant == '') or not quant in EOSTAB_QUANT:
     return None
 
-  if quant in EOSTAB_QUANT:
+  nh = obj.get_var('rho') / obj.uni.grph
+      
+  return  nh + 2.*nh*(obj.uni.grph/obj.uni.m_h-1.) # this may need a better adjustment.        
 
-    nh = obj.get_var('rho') / obj.uni.grph
-        
-    return  nh + 2.*nh*(obj.uni.grph/obj.uni.m_h-1.) # this may need a better adjustment.        
 
-  else: 
-
-    return None

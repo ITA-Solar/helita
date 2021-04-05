@@ -6,6 +6,7 @@ from .tools import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .bifrost import Rhoeetab 
+import pprint
 
 class MuramAtmos:
   """
@@ -342,7 +343,8 @@ class MuramAtmos:
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
-      print(self.description['ALL']) 
+      if hasattr(self,'vardict'):
+        pprint.pprint(self.vardict)
 
       return None
    

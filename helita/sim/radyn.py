@@ -10,6 +10,8 @@ from math import ceil, floor
 from scipy.sparse import coo_matrix
 import torch
 import imp
+import pprint
+
 try:
     imp.find_module('pycuda')
     found = True
@@ -130,7 +132,8 @@ class radyn(object):
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
-      print(self.description['ALL']) 
+      if hasattr(self,'vardict'):
+        pprint.pprint(self.vardict)
       print('\n radyn obj is self.rdobj, self.rdobj.var_info is as follows')
       print(self.rdobj.var_info)
     

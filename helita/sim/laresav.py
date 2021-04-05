@@ -6,6 +6,7 @@ from .load_quantities import *
 from .load_noeos_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
+import pprint
 
 class Laresav:
   """
@@ -190,7 +191,8 @@ class Laresav:
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
-      print(self.description['ALL']) 
+      if hasattr(self,'vardict'):
+        pprint.pprint(self.vardict)
 
       return None
    
