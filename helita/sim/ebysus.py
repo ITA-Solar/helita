@@ -2,15 +2,25 @@
 Set of programs to read and interact with output from Multifluid/multispecies
 """
 
-import numpy as np
+# import built-in modules
 import os
+
+# import local modules
 from .bifrost import BifrostData, Rhoeetab, Bifrost_units, Cross_sect
 from .bifrost import read_idl_ascii, subs2grph
 from . import cstagger
-from at_tools import atom_tools as at
 from .load_mf_quantities import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
+from . import document_vars
+
+# import external public modules
+import numpy as np
+
+# import external private modules
+from at_tools import atom_tools as at
+
+print('reloaded')
 
 class EbysusData(BifrostData):
 
@@ -35,6 +45,8 @@ class EbysusData(BifrostData):
             else:
                 self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2],fdir=self.fdir)
             self.mf_total_nlevel+=self.att[ispecies].params.nlevel
+
+        document_vars.create_vardict(self)
 
     def _set_snapvars(self,firstime=False):
 
@@ -279,8 +291,8 @@ class EbysusData(BifrostData):
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
         """
-        if var == '':
-            print(help(self.get_var))
+        if var == '' and not document_vars.creating_vardict(self):
+            help(self.get_var)
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
@@ -381,8 +393,9 @@ class EbysusData(BifrostData):
             if np.shape(val) is ():
                 val =  load_mf_quantities(self,var)
 
-        if var == '':
-            print(help(self.get_var))
+        if document_vars.creating_vardict(self):
+            return None
+        elif var == '':
             print('Variables from snap or aux files:')
             print(self.simple_vars)
             print('Variables from xy aux files:')

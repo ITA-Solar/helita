@@ -6,6 +6,7 @@ Purpose: helper functions for documentation of variables.
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
+CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are running get_var('') to create vardict.
 
 def _vardict(obj):
     '''create obj.vardict if necessary. return obj.vardict.'''
@@ -44,6 +45,16 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, rewrite=False):
             '''
             return
         return dont_document_var
+
+def create_vardict(obj):
+    '''call obj.get_var('') but with prints turned off. Afterwards, obj.vardict will be full of documentation.'''
+    setattr(obj, CREATING_VARDICT, True)
+    obj.get_var('')
+    setattr(obj, CREATING_VARDICT, False)
+
+def creating_vardict(obj, default=False):
+    '''return whether obj is currently creating vardict. If unsure, return <default>.'''
+    return getattr(obj, CREATING_VARDICT, default)
 
 # TODO: make something which helps tell new users how to use vardict.
 #   (maybe? I mean, it's just a dictionary, which shouldn't be too complicated.)
