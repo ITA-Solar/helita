@@ -50,6 +50,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 
   docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT)
   docvar('nel',  'electron number density [cm^-3]')
+  docvar('grph',  'grams per hydrogen atom')
+  docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
+  docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
   docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
   docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
   docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
@@ -58,10 +61,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   obj.mf_description['GLOBAL_QUANT'] = ('\nThese variables are calculate looping'
                                       ' either species or levels: \n' +
                                       ' '.join(GLOBAL_QUANT))
-  if 'ALL' in obj.mf_description.keys():
-    obj.mf_description['ALL'] += "\n" + obj.mf_description['GLOBAL_QUANT']
-  else:
-    obj.mf_description['ALL'] = obj.mf_description['GLOBAL_QUANT']
 
   if (var == ''):
       return None
@@ -135,11 +134,13 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     elif var == 'mu':
       for ispecies in obj.att:
         nlevels = obj.att[ispecies].params.nlevel
+        weight = obj.att[ispecies].params.atomic_weight * \
+              obj.uni.amu / obj.uni.u_r
         for mf_ilevel in range(1,nlevels+1):
           output += obj.get_var('r', mf_ispecies=ispecies,
-              mf_ilevel=mf_ilevel)
+              mf_ilevel=mf_ilevel) / weight 
 
-    return output
+    return output / obj.get_var('tot_part')
   else:
     return None
 
@@ -154,10 +155,6 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
   obj.mf_description['NDENS_QUANT'] = ('\n These variables are calculate looping'
                                        ' either species or levels \n' +
                                        ' '.join(NDENS_QUANT))
-  if 'ALL' in obj.mf_description.keys():
-    obj.mf_description['ALL'] += "\n" + obj.mf_description['NDENS_QUANT']
-  else:
-    obj.mf_description['ALL'] = obj.mf_description['NDENS_QUANT']
 
   if (var == ''):
     return None
@@ -178,10 +175,6 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   obj.mf_description['SPITZERTERM_QUANT'] = ('These variables are calculate spitzer conductivities'
                                        'either speciess or levels' +
                                        ', '.join(SPITZERTERM_QUANT))
-  if 'ALL' in obj.mf_description.keys():
-    obj.mf_description['ALL'] += "\n" + obj.mf_description['SPITZERTERM_QUANT']
-  else:
-    obj.mf_description['ALL'] = obj.mf_description['SPITZERTERM_QUANT']
 
   if (var == ''):
     return None
@@ -258,13 +251,6 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
                                         '1dcolslope := -(nu_ij + nu_ji).\n'
                                         'C_tot_per_vol := number of collisions per volume = '
                                         'nu_ij * n_j / mu_ji = nu_ji * n_i / mu_ij.')
-
-  if 'ALL' in obj.mf_description.keys():
-    if not obj.mf_description['COLFRE_QUANT'] in obj.mf_description['ALL']:
-    #SE added ^this^ line so that info will only be added to ALL if not in ALL already.
-        obj.mf_description['ALL'] += "\n" + obj.mf_description['COLFRE_QUANT']
-  else:
-    obj.mf_description['ALL'] = obj.mf_description['COLFRE_QUANT']
 
   if (var == ''):
     return None
@@ -419,19 +405,13 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
     LOGCUL_QUANT = ['logcul']  
 
   docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT)
-  #docvar('logcul', 'someone who knows what this means should describe it here & uncomment line.')
+  docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.')
 
     # JMS in obj.mf_description
     # you could describe what is what with the detail or definitions that you desire.
 
   obj.mf_description['LOGCUL_QUANT'] = ('Logcul')
 
-  if 'ALL' in obj.mf_description.keys():
-    if not obj.mf_description['LOGCUL_QUANT'] in obj.mf_description['ALL']:
-    #SE added ^this^ line so that info will only be added to ALL if not in ALL already.
-        obj.mf_description['ALL'] += "\n" + obj.mf_description['LOGCUL_QUANT']
-  else:
-    obj.mf_description['ALL'] = obj.mf_description['LOGCUL_QUANT']
 
   if (var == ''):
     return None
@@ -468,11 +448,6 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
   obj.mf_description['DRIFT_QUANT'] = (
       'Drift between two fluids ' + ', '.join(DRIFT_QUANT))
 
-  if 'ALL' in obj.mf_description.keys():
-    obj.mf_description['ALL'] += "\n" + obj.mf_description['DRIFT_QUANT']
-  else:
-    obj.mf_description['ALL'] = obj.mf_description['DRIFT_QUANT']
-
   if (var == ''):
     return None
 
@@ -498,10 +473,6 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   obj.mf_description['CROSTAB_QUANT'] = ('Cross section between species'
                                          '(in cgs): ' + ', '.join(CROSTAB_QUANT))
 
-  if 'ALL' in obj.mf_description.keys():
-    obj.mf_description['ALL'] += "\n" + obj.mf_description['CROSTAB_QUANT']
-  else:
-    obj.mf_description['ALL'] = obj.mf_description['CROSTAB_QUANT']
 
   if (var == ''):
     return None
@@ -585,7 +556,6 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
         'pressure scale height, and each component of the total energy'
         'flux (if applicable, Bifrost units): ' +
         ', '.join(PLASMA_QUANT))
-    obj.description['ALL'] += "\n" + obj.description['PLASMA']
 
   docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT)
   docvar('beta', "plasma beta")
@@ -595,19 +565,19 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   docvar('ke', "kinetic energy density of ifluid [simu. units]")
   docvar('mn', "mach number (using sound speed)")
   docvar('man', "mach number (using alfven speed)")
+  docvar('hp', "Pressure scale height")
   for var in ['vax', 'vay', 'vaz']:
     docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
   for var in ['kx', 'ky', 'kz']:
     docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
                 "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
 
-
   if (quant == ''):
     return None
 
   if quant in PLASMA_QUANT:
     if quant in ['hp', 's', 'cs', 'beta']:
-      var = obj.get_var('p')   #SE: is p supposed to be pressure? I tried get_var('p') and it didn't work.
+      var = obj.get_var('mfe_p')   #SE: is p supposed to be pressure? I tried get_var('p') and it didn't work.
       if quant == 'hp':
         if getattr(obj, 'nx') < 5:
           return np.zeros_like(var)

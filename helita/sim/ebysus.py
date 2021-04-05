@@ -13,6 +13,7 @@ from .load_mf_quantities import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import document_vars
+import pprint
 
 # import external public modules
 import numpy as np
@@ -399,7 +400,7 @@ class EbysusData(BifrostData):
             print('Variables from xy aux files:')
             print(self.auxxyvars)
             print(self.description['ALL'])
-            print(self.mf_description['ALL'])
+            pprint.pprint(self.vardict)
             return None
 
         if np.shape(val) is ():
