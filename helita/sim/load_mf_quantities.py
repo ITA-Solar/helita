@@ -8,8 +8,7 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 
   quant = quant.lower()
 
-  if not hasattr(obj, document_vars.VARDICT):
-    setattr(obj, document_vars.VARDICT, dict())
+  document_vars.set_meta_quant(obj, 'mf_quantities', 'These are the multi-fluid quantities')
 
   val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
   if np.shape(val) is ():
