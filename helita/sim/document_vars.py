@@ -6,26 +6,24 @@ Purpose: helper functions for documentation of variables.
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
+QUANTDOC = '_DOC_QUANT'                 #key for dd.vardict[TYPE_QUANT] containing doc for what TYPE_QUANT means.
 CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are running get_var('') to create vardict.
 
-def _vardict(obj):
-    '''create obj.vardict if necessary. return obj.vardict.'''
-    if not hasattr(obj, VARDICT):
-        setattr(obj, VARDICT, dict())
-    return getattr(obj, VARDICT)
-
-def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, rewrite=False):
+def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, rewrite=False):
     '''function factory; returns function which documents a var for obj in obj.vardict[TYPE_QUANT].
     if QUANT_VARS is not None, also documents all the vars in varnames with vardoc=NONEDOC.
 
     if not rewrite, and TYPE_QUANT already in obj.vardict.keys() (when vars_documenter is called),
         instead do nothing and return a function which does nothing.
+
+    also sets vardict[TYPE_QUANT][document_vars.QUANTDOC] = QUANT_DOC.
     '''
     # get vardict[TYPE_QUANT], creating if necessary.
-    vardict         = _vardict(obj)
+    vardict = getattr(obj, VARDICT)
     write = rewrite
     if not TYPE_QUANT in vardict.keys():
         vardict[TYPE_QUANT] = dict()
+        vardict[TYPE_QUANT][QUANTDOC] = QUANT_DOC
         write = True
     if write:
         # define function (which will be returned)
