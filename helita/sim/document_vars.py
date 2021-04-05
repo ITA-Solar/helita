@@ -5,7 +5,7 @@ Purpose: helper functions for documentation of variables.
 """
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
-NONEDOC = None        #default documentation if none is provided.
+NONEDOC = '(not yet documented)'        #default documentation if none is provided.
 
 def _vardict(obj):
     '''create obj.vardict if necessary. return obj.vardict.'''
@@ -13,28 +13,37 @@ def _vardict(obj):
         setattr(obj, VARDICT, dict())
     return getattr(obj, VARDICT)
 
-def _TYPE_QUANT(vardict, TYPE_QUANT):
-    '''create vardict[TYPE_QUANT] if necessary. return vardict[TYPE_QUANT].'''
-    if not TYPE_QUANT in vardict.keys():
-        vardict[TYPE_QUANT] = dict()
-    return vardict[TYPE_QUANT]
-
-def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None):
+def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, rewrite=False):
     '''function factory; returns function which documents a var for obj in obj.vardict[TYPE_QUANT].
     if QUANT_VARS is not None, also documents all the vars in varnames with vardoc=NONEDOC.
+
+    if not rewrite, and TYPE_QUANT already in obj.vardict.keys() (when vars_documenter is called),
+        instead do nothing and return a function which does nothing.
     '''
     # get vardict[TYPE_QUANT], creating if necessary.
     vardict         = _vardict(obj)
-    type_quant_dict = _TYPE_QUANT(vardict, TYPE_QUANT)
-    # define function (which will be returned)
-    def document_var(varname, vardoc):
-        '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].'''
-        type_quant_dict[varname] = vardoc
-    # initialize documentation to NONEDOC for var in QUANT_VARS
-    if QUANT_VARS is not None:
-        for varname in QUANT_VARS:
-            document_var(varname, vardoc=NONEDOC)
-    return document_var
+    write = rewrite
+    if not TYPE_QUANT in vardict.keys():
+        vardict[TYPE_QUANT] = dict()
+        write = True
+    if write:
+        # define function (which will be returned)
+        def document_var(varname, vardoc):
+            '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].'''
+            vardict[TYPE_QUANT][varname] = vardoc
+        # initialize documentation to NONEDOC for var in QUANT_VARS
+        if QUANT_VARS is not None:
+            for varname in QUANT_VARS:
+                document_var(varname, vardoc=NONEDOC)
+        return document_var
+    else:
+        # do nothing and return a function which does nothing.
+        def dont_document_var(varname, vardoc):
+            '''does nothing.
+            (because obj.vardict[TYPE_QUANT] already existed when vars_documenter was called).
+            '''
+            return
+        return dont_document_var
 
 # TODO: make something which helps tell new users how to use vardict.
 #   (maybe? I mean, it's just a dictionary, which shouldn't be too complicated.)
