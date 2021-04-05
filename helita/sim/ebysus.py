@@ -20,8 +20,6 @@ import numpy as np
 # import external private modules
 from at_tools import atom_tools as at
 
-print('reloaded')
-
 class EbysusData(BifrostData):
 
     """
