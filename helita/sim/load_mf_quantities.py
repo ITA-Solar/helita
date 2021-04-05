@@ -421,7 +421,7 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = ['cross']
 
-  docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', QUANT_DOC=get_mf_cross.__doc__)
+  docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__)
   docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
 
   if var=='' or var not in CROSTAB_QUANT:
