@@ -1,8 +1,6 @@
 import numpy as np
 from . import document_vars
 
-print('imported mfquant')
-
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
                       NDENS_QUANT=None, CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
                       SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
@@ -241,6 +239,13 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     COLFRE_QUANT = ['c_tot_per_vol', '1dcolslope',
                     'nu_ij','nu_en','nu_ei','nu_ij_mx']  
 
+  docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT)
+  momtrans_start = 'momentum transfer collision frequenc{:} [s^-1] between '
+  colfreqnote = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
+  docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote)
+  docvar('nu_ei', momtrans_start.format('y') + 'electrons & a single ion ifluid.' + colfreqnote)
+  docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote)
+
     # JMS in obj.mf_description
     # you could describe what is what with the detail or definitions that you desire.
 
@@ -413,6 +418,9 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
   if LOGCUL_QUANT is None:
     LOGCUL_QUANT = ['logcul']  
 
+  docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT)
+  #docvar('logcul', 'someone who knows what this means should describe it here & uncomment line.')
+
     # JMS in obj.mf_description
     # you could describe what is what with the detail or definitions that you desire.
 
@@ -446,6 +454,17 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
   if DRIFT_QUANT is None:
     DRIFT_QUANT = ['ud', 'pd', 'ed', 'rd', 'tgd']
 
+  docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT)
+  def doc_start(var):
+    return '"drift" for quantity ("{var}"). I.e. ({va_} for ifluid) - ({va_} for jfluid). '.format(var=var, va_=var[:-1])
+  def doc_axis(var):
+    return ' Must append x, y, or z; e.g. {var}x for (ifluid {va_}x) - (jfluid {va_}x).'.format(var=var, va_=var[:-1])
+  docvar('ud', doc_start(var='ud') + 'u = velocity [simu. units].' + doc_axis(var='ud'))
+  docvar('pd', doc_start(var='pd') + 'p = momentum density [simu. units].' + doc_axis(var='pd'))
+  docvar('ed', doc_start(var='ed') + 'e = energy (density??) [simu. units].')
+  docvar('rd', doc_start(var='rd') + 'r = mass density [simu. units].')
+  docvar('tgd', doc_start(var='tgd') + 'tg = temperature [K].')
+
   obj.mf_description['DRIFT_QUANT'] = (
       'Drift between two fluids ' + ', '.join(DRIFT_QUANT))
 
@@ -472,6 +491,9 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
 def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = ['cross']
+
+  docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT')
+  docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
 
   obj.mf_description['CROSTAB_QUANT'] = ('Cross section between species'
                                          '(in cgs): ' + ', '.join(CROSTAB_QUANT))
@@ -565,12 +587,27 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
         ', '.join(PLASMA_QUANT))
     obj.description['ALL'] += "\n" + obj.description['PLASMA']
 
+  docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT)
+  docvar('beta', "plasma beta")
+  docvar('va', "alfven speed [simu. units]")
+  docvar('cs', "sound speed [simu. units]")
+  docvar('s', "entropy [log of quantities in simu. units]")
+  docvar('ke', "kinetic energy density of ifluid [simu. units]")
+  docvar('mn', "mach number (using sound speed)")
+  docvar('man', "mach number (using alfven speed)")
+  for var in ['vax', 'vay', 'vaz']:
+    docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
+  for var in ['kx', 'ky', 'kz']:
+    docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
+                "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
+
+
   if (quant == ''):
     return None
 
   if quant in PLASMA_QUANT:
     if quant in ['hp', 's', 'cs', 'beta']:
-      var = obj.get_var('p')
+      var = obj.get_var('p')   #SE: is p supposed to be pressure? I tried get_var('p') and it didn't work.
       if quant == 'hp':
         if getattr(obj, 'nx') < 5:
           return np.zeros_like(var)
