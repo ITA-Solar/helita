@@ -66,7 +66,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       nlevels = obj.att[ispecies].params.nlevel
       for ilevel in range(1,nlevels+1):
         output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
-    return output
 
   elif var == 'rc':  # total ionized density
     for ispecies in obj.att:
@@ -74,7 +73,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       for ilevel in range(1,nlevels+1):
         if (obj.att[ispecies].params.levels['stage'][ilevel-1] > 1): 
           output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
-    return output
 
   elif var == 'rneu':  # total neutral density
     for ispecies in obj.att:
@@ -82,7 +80,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       for ilevel in range(1,nlevels+1):
         if (obj.att[ispecies].params.levels['stage'][ilevel-1] == 1): 
           output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
-    return output
 
   elif var == 'nel':
     for ispecies in obj.att:
@@ -133,8 +130,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       for mf_ilevel in range(1,nlevels+1):
         output += obj.get_var('r', mf_ispecies=ispecies,
             mf_ilevel=mf_ilevel) / weight 
+    output = output / obj.get_var('tot_part')
 
-  return output / obj.get_var('tot_part')
+  return output
 
 
 def get_mf_ndens(obj, var, NDENS_QUANT=None):
