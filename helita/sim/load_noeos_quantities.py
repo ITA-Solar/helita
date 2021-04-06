@@ -1,4 +1,5 @@
 import numpy as np
+from . import document_vars
 
 def load_noeos_quantities(obj, quant, *args,  EOSTAB_QUANT=None,  **kwargs):
 
