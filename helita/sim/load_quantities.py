@@ -91,6 +91,12 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
       Array with the dimensions of the 3D spatial from the simulation
       of the emission measure c.g.s units.
   """
+  if EM_QUANT == '': 
+        return None
+
+  if EM_QUANT is None:
+    EM_QUANT = ['emiss']
+    
   unitsnorm = 1e27
   for key, value in kwargs.items():
         if key == 'unitsnorm':
@@ -99,8 +105,7 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
   docvar = document_vars.vars_documenter(obj, 'EM_QUANT', EM_QUANT, get_em.__doc__)
   docvar('emiss',  'emission messure [cgs]')
 
-
-  if (quant == '') or quant not in EM_QUANT:
+  if (quant == '') or not quant in EM_QUANT:
     return None
 
   
@@ -128,7 +133,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
  
   quant_elem = ''.join([i for i in quant if not i.isdigit()])
 
-  if (quant == '') or quant_elem not in CROSTAB_QUANT:
+  if (quant == '') or not quant_elem in CROSTAB_QUANT:
     return None
 
   tg = obj.get_var('tg')
@@ -212,7 +217,7 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs):
   docvar('ent',  'entropy')
 
 
-  if (quant == '') or quant not in EOSTAB_QUANT:
+  if (quant == '') or not quant in EOSTAB_QUANT:
     return None
 
   if quant == 'tau':
