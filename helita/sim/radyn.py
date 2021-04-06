@@ -10,7 +10,6 @@ from math import ceil, floor
 from scipy.sparse import coo_matrix
 import torch
 import imp
-import pprint
 
 try:
     imp.find_module('pycuda')
@@ -133,7 +132,7 @@ class radyn(object):
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
       if hasattr(self,'vardict'):
-        pprint.pprint(self.vardict)
+        self.vardocs()
       print('\n radyn obj is self.rdobj, self.rdobj.var_info is as follows')
       print(self.rdobj.var_info)
     

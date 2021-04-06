@@ -13,7 +13,6 @@ from .tools import *
 from .load_noeos_quantities import *
 import scipy.constants as const
 from scipy.ndimage import rotate
-import pprint
 
 #from matplotlib.pyplot import *
 #from matplotlib.mlab import *
@@ -900,7 +899,7 @@ class PlutoData(object):
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
       if hasattr(self,'vardict'):
-        pprint.pprint(self.vardict)
+        self.vardocs()
 
       return None
 

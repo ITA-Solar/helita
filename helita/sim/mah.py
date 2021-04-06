@@ -6,7 +6,6 @@ from .load_noeos_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
 from scipy.io import FortranFile
-import pprint
 
 class Mah:
   """
@@ -545,7 +544,7 @@ class Mah:
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
     if hasattr(self,'vardict'):
-        pprint.pprint(self.vardict)
+        self.vardocs()
 
       return None
    

@@ -6,7 +6,6 @@ from .load_quantities import *
 from .load_noeos_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
-import pprint
 
 class Laresav:
   """
@@ -192,7 +191,7 @@ class Laresav:
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
       if hasattr(self,'vardict'):
-        pprint.pprint(self.vardict)
+        self.vardocs()
 
       return None
    

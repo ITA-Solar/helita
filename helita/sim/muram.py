@@ -6,7 +6,6 @@ from .tools import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .bifrost import Rhoeetab 
-import pprint
 
 class MuramAtmos:
   """
@@ -344,7 +343,7 @@ class MuramAtmos:
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
       if hasattr(self,'vardict'):
-        pprint.pprint(self.vardict)
+        self.vardocs()
 
       return None
    
