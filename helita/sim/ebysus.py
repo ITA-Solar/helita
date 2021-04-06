@@ -46,6 +46,7 @@ class EbysusData(BifrostData):
             self.mf_total_nlevel+=self.att[ispecies].params.nlevel
 
         document_vars.create_vardict(self)
+        document_vars.set_vardocs(self)
 
     def _set_snapvars(self,firstime=False):
 

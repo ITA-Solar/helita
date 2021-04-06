@@ -40,6 +40,9 @@ vardict = {
 }
 """
 
+#import built-ins
+import math #for pretty strings
+
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
 QUANTDOC = '_DOC_QUANT'                 #key for dd.vardict[TYPE_QUANT] containing doc for what TYPE_QUANT means.
@@ -47,6 +50,8 @@ CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are 
 
 # global variable which tells which quantity you are setting now.
 METAQUANT = None
+
+''' ----------------------------- create vardict ----------------------------- '''
 
 def set_meta_quant(obj, name, QUANT_DOC=NONEDOC):
     '''sets the current "meta_quant". You must use this before starting documentation.
@@ -124,5 +129,46 @@ def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
     return getattr(obj, CREATING_VARDICT, default)
 
-# TODO: make something which helps tell new users how to use vardict.
-#   (maybe? I mean, it's just a dictionary, which shouldn't be too complicated.)
+
+''' ----------------------------- prettyprint vardict ----------------------------- '''
+
+def _underline(s, underline='-', minlength=0):
+    '''return underlined s'''
+    if len(underline.strip())==0:
+        return s
+    line = underline * math.ceil(max(len(s), minlength)/len(underline))
+    return s + '\n' + line
+
+TW = 3  #tabwidth
+def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
+                mqd=''*TW, tq=' '*TW, tqd=' '*TW, q=' '*TW*2):
+    '''make obj.vardocs be a function which prints vardict in pretty format.
+    (return string instead if printout is False.)
+    mqd, tq, tqd, q are indents for metaquant_doc, typequant, typequant_doc, varname
+    '''
+    def vardocs(printout=True):
+        '''prettyprint docs. If printout is False, return string instead of printing.'''
+        result = []
+        vardict = getattr(obj, VARDICT)
+        for metaquant in sorted(vardict.keys()):
+            result += ['', '', _underline(metaquant, underline, minlength=min_mq_underline)]
+            metaquant_dict = vardict[metaquant]
+            if QUANTDOC in metaquant_dict.keys():
+                result += [mqd + str(metaquant_dict[QUANTDOC]).lstrip()]
+            for typequant in (key for key in sorted(metaquant_dict.keys()) if key!=QUANTDOC):
+                result += ['', _underline(tq + typequant, underline)]
+                typequant_dict = metaquant_dict[typequant]
+                if QUANTDOC in typequant_dict.keys():
+                    result += [tqd + str(typequant_dict[QUANTDOC]).lstrip()]
+                for varname in (key for key in sorted(typequant_dict.keys()) if key!=QUANTDOC):
+                    result += [q + '{:10s}'.format(varname) + ' : ' + str(typequant_dict[varname])]
+
+        stresult = '\n'.join(result)
+        if printout:
+            print(stresult)
+        else:
+            return stresult
+
+    obj.vardocs=vardocs
+
+
