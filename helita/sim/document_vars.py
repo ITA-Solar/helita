@@ -141,10 +141,11 @@ def _underline(s, underline='-', minlength=0):
 
 TW = 3  #tabwidth
 def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
-                mqd=''*TW, tq=' '*TW, tqd=' '*TW, q=' '*TW*2):
+                mqd=''*TW, tq=' '*TW, tqd=' '*TW, q=' '*TW*2, ud=' '*TW*3):
     '''make obj.vardocs be a function which prints vardict in pretty format.
     (return string instead if printout is False.)
-    mqd, tq, tqd, q are indents for metaquant_doc, typequant, typequant_doc, varname
+    mqd, tq, tqd are indents for metaquant_doc, typequant, typequant_doc,
+    q, ud are indents for varname, undocumented vars
     '''
     def vardocs(printout=True):
         '''prettyprint docs. If printout is False, return string instead of printing.'''
@@ -154,14 +155,21 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
             result += ['', '', _underline(metaquant, underline, minlength=min_mq_underline)]
             metaquant_dict = vardict[metaquant]
             if QUANTDOC in metaquant_dict.keys():
-                result += [mqd + str(metaquant_dict[QUANTDOC]).lstrip()]
+                result += [mqd + str(metaquant_dict[QUANTDOC]).lstrip().replace('\n', mqd+'\n')]
             for typequant in (key for key in sorted(metaquant_dict.keys()) if key!=QUANTDOC):
                 result += ['', _underline(tq + typequant, underline)]
                 typequant_dict = metaquant_dict[typequant]
                 if QUANTDOC in typequant_dict.keys():
-                    result += [tqd + str(typequant_dict[QUANTDOC]).lstrip()]
+                    result += [tqd + str(typequant_dict[QUANTDOC]).lstrip().replace('\n', tqd+'\n')]
+                undocumented = []
                 for varname in (key for key in sorted(typequant_dict.keys()) if key!=QUANTDOC):
-                    result += [q + '{:10s}'.format(varname) + ' : ' + str(typequant_dict[varname])]
+                    vardoc = typequant_dict[varname]
+                    if vardoc is NONEDOC:
+                        undocumented += [varname]
+                    else:
+                        result += [q + '{:10s}'.format(varname) + ' : ' + str(typequant_dict[varname])]
+                if undocumented!=[]:
+                    result += ['\n' + q + 'existing but undocumented vars:\n' + ud + ', '.join(undocumented)]
 
         stresult = '\n'.join(result)
         if printout:
