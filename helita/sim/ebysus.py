@@ -262,6 +262,9 @@ class EbysusData(BifrostData):
         """
         Reads a given variable from the relevant files.
 
+        >>> Use self.get_var('') for help.
+        >>> Use self.vardocs() to prettyprint the available variables and what they mean.
+
         returns the data for the variable (as a 3D array with axes 0,1,2 <-> x,y,z).
 
         Parameters
