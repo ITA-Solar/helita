@@ -15,6 +15,7 @@ from scipy.ndimage import map_coordinates
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
+from . import document_vars
 
 whsp = '  '
 
@@ -129,6 +130,9 @@ class BifrostData(object):
             if os.access(tabfile, os.R_OK):
                 self.rhoee = Rhoeetab(tabfile=tabfile,fdir=fdir,radtab=True)
 
+        document_vars.create_vardict(self)
+        document_vars.set_vardocs(self)
+    
     def _set_snapvars(self,firstime=False):
         """
             Sets list of avaible variables
@@ -650,7 +654,9 @@ class BifrostData(object):
             if np.shape(val) == ():
                 val = load_arithmetic_quantities(self, var, **kwargs) 
 
-        if var == '':
+        if document_vars.creating_vardict(self):
+            return None
+        elif var == '':
             print(help(self.get_var))
             print('Variables from snap or aux files:')
             print(self.simple_vars)

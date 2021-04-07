@@ -10,6 +10,7 @@ from math import ceil, floor
 from scipy.sparse import coo_matrix
 import torch
 import imp
+from . import document_vars
 
 try:
     imp.find_module('pycuda')
@@ -69,7 +70,11 @@ class radyn(object):
     self.hion = False # This will not allow to use HION from Bifrost in load
 
     self.genvar()
-
+        
+    document_vars.create_vardict(self)
+    document_vars.set_vardocs(self)
+    
+    
   def get_var(self, var, iix=None, iiy=None, iiz=None, layout=None): 
     '''
     Reads the variables from a snapshot (it).
@@ -125,8 +130,9 @@ class radyn(object):
           print('Loading arithmetic variable',end="\r",flush=True)
         self.data = load_arithmetic_quantities(self,var)    
 
-    if var == '': 
-
+    if document_vars.creating_vardict(self):
+        return None
+    elif var == '': 
       print(help(self.get_var))
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 
