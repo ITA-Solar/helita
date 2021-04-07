@@ -6,6 +6,8 @@ from .load_noeos_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
 from scipy.io import FortranFile
+from . import document_vars
+
 
 class Mah:
   """
@@ -75,7 +77,10 @@ class Mah:
     self.hion = False # This will not allow to use HION from Bifrost in load
 
     self.genvar()
-
+    document_vars.create_vardict(self)
+    document_vars.set_vardocs(self)
+    
+    
   def read_ini(self):
     f = open('%s.ini'%self.rootname,'rb')
     varnamenew=['unk1','opt',
@@ -537,6 +542,8 @@ class Mah:
                 print('Loading arithmetic variable',end="\r",flush=True)
               self.data = load_arithmetic_quantities(self,var, **kargs) 
         '''
+    elif document_vars.creating_vardict(self):
+            return None
     elif var == '': 
 
       print(help(self.get_var))

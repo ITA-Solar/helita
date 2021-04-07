@@ -6,6 +6,8 @@ from .tools import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .bifrost import Rhoeetab 
+from . import document_vars
+
 
 class MuramAtmos:
   """
@@ -61,8 +63,11 @@ class MuramAtmos:
         self.rhoee = Rhoeetab(tabfile=tabfile,fdir=fdir,radtab=False)
 
     self.genvar(order=self.order)
-
-      
+    
+    document_vars.create_vardict(self)
+    document_vars.set_vardocs(self)
+    
+    
   def read_header(self, headerfile):
     tmp = np.loadtxt(headerfile)
     #self.dims_orig = tmp[:3].astype("i")
@@ -75,6 +80,8 @@ class MuramAtmos:
 
     layout = np.loadtxt('layout.order')
     self.order = layout[0:3].astype(int)
+    #if len(self.order) == 0: 
+    #    self.order = np.array([0,2,1]).astype(int)
     #self.order = tmp[-3:].astype(int)
     # dims = [1,2,0] 0=z, 
     #dims = np.array((self.dims_orig[self.order[2]],self.dims_orig[self.order[0]],self.dims_orig[self.order[1]]))
@@ -336,8 +343,9 @@ class MuramAtmos:
           print('Loading arithmetic variable',end="\r",flush=True)
         self.data = load_arithmetic_quantities(self,var, **kargs) 
  
-    if var == '': 
-
+    if document_vars.creating_vardict(self):
+        return None
+    elif var == '': 
       print(help(self.get_var))
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 

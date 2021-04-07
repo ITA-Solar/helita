@@ -13,6 +13,7 @@ from .tools import *
 from .load_noeos_quantities import *
 import scipy.constants as const
 from scipy.ndimage import rotate
+from . import document_vars
 
 #from matplotlib.pyplot import *
 #from matplotlib.mlab import *
@@ -820,6 +821,9 @@ class PlutoData(object):
     #self.time =  params['time'] # No uniforme (array)
     self.genvar()
 
+    document_vars.create_vardict(self)
+    document_vars.set_vardocs(self)
+        
   def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kwargs): 
     '''
     Reads the variables from a snapshot (snap).
@@ -892,8 +896,9 @@ class PlutoData(object):
             if self.verbose: 
               print('Loading arithmetic variable',end="\r",flush=True)
             self.data = load_arithmetic_quantities(self, var, **kwargs) 
-    if var == '': 
-
+    if document_vars.creating_vardict(self):
+        return None
+    elif var == '': 
       print(help(self.get_var))
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 

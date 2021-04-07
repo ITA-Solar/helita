@@ -7,7 +7,7 @@ from .load_arithmetic_quantities import *
 from .tools import *
 from .load_noeos_quantities import *
 from scipy.ndimage import rotate
-import pprint
+from . import document_vars
 
 class Cipmocct:
     """
@@ -91,7 +91,11 @@ class Cipmocct:
         self.cstagop = False # This will not allow to use cstagger from Bifrost in load
         self.hion = False # This will not allow to use HION from Bifrost in load  
         self.genvar()
-
+        
+        document_vars.create_vardict(self)
+        document_vars.set_vardocs(self)
+        
+        
     def get_var(self,var, *args, snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
         '''
         Reads the variables from a snapshot (it).
@@ -178,14 +182,15 @@ class Cipmocct:
                 print('Loading arithmetic variable',end="\r",flush=True)
               self.data = load_arithmetic_quantities(self, var, **kargs) 
 
-        if var == '': 
-
+        if document_vars.creating_vardict(self):
+            return None
+        elif  var == '': 
           print(help(self.get_var))
           print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
           for ii in self.varn: 
               print('use ', ii,' for ',self.varn[ii])
           if hasattr(self,'vardict'):
-            pprint.pprint(self.vardict)
+            self.vardocs()
 
           return None
 
