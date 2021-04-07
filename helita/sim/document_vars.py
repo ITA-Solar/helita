@@ -139,6 +139,13 @@ def _underline(s, underline='-', minlength=0):
     line = underline * math.ceil(max(len(s), minlength)/len(underline))
     return s + '\n' + line
 
+def _intro_line(text, length=80):
+    '''return fancy formatting of text as "intro line".'''
+    left, right = '(<< ', ' >>)'
+    length  = max(0, (length - len(left) - len(right)))
+    fmtline = '{:^' + str(length) + '}'   # {:^N} makes for line which is N long, and centered.
+    return (left + fmtline + right).format(text)
+
 TW = 3  #tabwidth
 def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
                 mqd=''*TW, tq=' '*TW, tqd=' '*TW, q=' '*TW*2, ud=' '*TW*3):
@@ -149,7 +156,11 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
     '''
     def vardocs(printout=True):
         '''prettyprint docs. If printout is False, return string instead of printing.'''
-        result = []
+        result = [
+            'Following is documentation for vars compatible with self.get_var(var).',
+            _intro_line('Documentation contents available in dictionary form via self.{}'.format(VARDICT)),
+            _intro_line('Documentation string available via self.vardocs(printout=False)'),
+            ]
         vardict = getattr(obj, VARDICT)
         for metaquant in sorted(vardict.keys()):
             result += ['', '', _underline(metaquant, underline, minlength=min_mq_underline)]
