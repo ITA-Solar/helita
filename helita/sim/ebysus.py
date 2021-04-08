@@ -669,7 +669,7 @@ class EbysusData(BifrostData):
                     mode=mode,
                     shape=(self.nx, self.ny, self.nzb, self.mf_arr_size))
 
-    def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None,
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                     ifluid=None, jfluid=None,
                     *args, **kwargs):
@@ -681,8 +681,9 @@ class EbysusData(BifrostData):
         ----------
         var - string
             Name of the variable to read.
-        snap - list of snapshots
+        snap - list of snapshots, or None (default)
             Snapshot numbers to read.
+            if None, use self.snap.
         mf_ispecies - integer, or None (default)
             Species ID
             if None, set using other fluid kwargs (see ifluid, iSL, iS).
@@ -705,6 +706,7 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
+        if snap is None: snap = self.snap
         snap = np.array(snap, copy=False)
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
@@ -767,12 +769,18 @@ class EbysusData(BifrostData):
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-        for it in range(0, snapLen):
-            self.snapInd = 0
-            value[..., it] = self.get_var(var, snap=snap[it],
-                iix=self.iix, iiy=self.iiy, iiz=self.iiz,
-                mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
-                mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
+        remembersnaps = self.snap
+        try:
+            for it in range(0, snapLen):
+                self.snapInd = 0
+                value[..., it] = self.get_var(var, snap=snap[it],
+                    iix=self.iix, iiy=self.iiy, iiz=self.iiz,
+                    mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
+                    mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
+        except Exception:    # restore self.snaps
+            self.snap=remembersnaps
+            raise
+
 
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
