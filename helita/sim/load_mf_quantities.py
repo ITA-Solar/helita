@@ -1,29 +1,42 @@
-import numpy as np
+# import builtins
+import warnings
+
+# import internal modules
 from . import document_vars
+
+# import external public modules
+import numpy as np
+
+# import external private modules
+from at_tools import fluids as fl
+
 
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
                       NDENS_QUANT=None, CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
                       SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
+                      ELECTRON_QUANT=None,
                       **kwargs):
 
   quant = quant.lower()
 
-  document_vars.set_meta_quant(obj, 'mf_quantities', 'These are the multi-fluid quantities')
+  document_vars.set_meta_quant(obj, 'mf_quantities', 'These are the multi-fluid quantities; only used by ebysus.')
 
   val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
-  if np.shape(val) is ():
+  if val is None:
+    val = get_electron_var(obj, quant, ELECTRON_QUANT=ELECTRON_QUANT)
+  if val is None:
     val = get_mf_ndens(obj, quant, NDENS_QUANT=NDENS_QUANT)
-  if np.shape(val) is ():
+  if val is None:
     val = get_mf_colf(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
-  if np.shape(val) is ():
+  if val is None:
     val = get_mf_logcul(obj, quant, LOGCUL_QUANT=LOGCUL_QUANT)
-  if np.shape(val) is ():
+  if val is None:
     val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
-  if np.shape(val) is ():
+  if val is None:
     val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
-  if np.shape(val) is ():
+  if val is None:
     val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT)  
-  if np.shape(val) is (): 
+  if val is None: 
     val = get_mf_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
   return val
 
@@ -46,16 +59,17 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   '''Variables which are calculated by looping through species or levels.'''
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'grph', 'tot_part', 'mu', 'nel', 'pe', 'rc','rneu']
+      GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke', 'grph', 'tot_part', 'mu', 'pe', ]
 
   docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__)
-  docvar('nel',  'electron number density [cm^-3]')
-  docvar('grph',  'grams per hydrogen atom')
-  docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
-  docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
   docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
   docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
   docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
+  docvar('tot_e',  'sum of internal energy densities of all fluids [simu. energy density units]')
+  docvar('tot_ke', 'sum of kinetic  energy densities of all fluids [simu. energy density units]')
+  docvar('grph',  'grams per hydrogen atom')
+  docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
+  docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
 
   if (var == '') or var not in GLOBAL_QUANT:
       return None
@@ -81,16 +95,16 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
         if (obj.att[ispecies].params.levels['stage'][ilevel-1] == 1): 
           output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
 
-  elif var == 'nel':
-    for ispecies in obj.att:
-      nlevels = obj.att[ispecies].params.nlevel
-      weight = obj.att[ispecies].params.atomic_weight * \
-               obj.uni.amu / obj.uni.u_r
-      for ilevel in range(1,nlevels+1):
-        obj.att[ispecies].params.nlevel
-        output += obj.get_var('r', mf_ispecies=ispecies,
-            mf_ilevel=ilevel) / weight * (obj.att[ispecies].params.levels['stage'][ilevel-1]-1)
-        
+  elif var == 'tot_e':
+    output = obj.get_var('ee')  # internal energy density of electrons
+    for fluid in fl.Fluids(dd=obj):
+      output += obj.get_var('e', ifluid=fluid.SL) # internal energy density of fluid
+
+  elif var == 'tot_ke':
+    output = 0.5 * obj.get_var('re') * obj.get_var('ue2')   # kinetic energy density of electrons
+    for fluid in fl.Fluids(dd=obj):
+      output += 0.5 * obj.get_var('r', ifluid=fluid.SL) * obj.get_var('u2')  # kinetic energy density of fluid
+  
   elif var == 'pe':
     output = (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
@@ -134,6 +148,62 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 
   return output
 
+def get_electron_var(obj, var, ELECTRON_QUANT=None):
+  '''variables related to electrons (requires looping over ions to calculate).'''
+
+  if ELECTRON_QUANT is None:
+    ELECTRON_QUANT = ['nel', 're', 'ue2', 'uex', 'uey', 'uez', 'eke']
+
+  docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__)
+  docvar('nel',  'electron number density [cm^-3]')
+  docvar('re',   'mass density of electrons [simu. mass density units]')
+  untested_warning = \
+    ' Tested uex agrees between helita (uex) & ebysus (eux), for one set of units, for current=0. - SE Apr 4 2021.'
+  docvar('ue2',   'electron speed (magnitude of velocity) SQUARED [simu. velocity units SQUARED]' + untested_warning)
+  for v in 'uex', 'uey', 'uez':
+    docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
+  docvar('eke',  'electron kinetic energy density [simu. energy density units]')
+
+  if (var == '') or (var not in ELECTRON_QUANT):
+    return None
+
+  output = np.zeros_like(obj.r)
+
+  if var == 'nel': # number density of electrons [cm^-3]
+    for fluid in fl.Fluids(dd=obj).ions():
+      output += obj.get_var('nr', ifluid=fluid.SL) * fluid.ionization    #[cm^-3]
+
+  elif var == 're': # mass density of electrons [simu. mass density units]
+    for fluid in fl.Fluids(dd=obj).ions():
+      nr = obj.get_var('r', ifluid=fluid.SL) / fluid.atomic_weight  #[simu mass density units / amu]
+      output += nr * fluid.ionization       #[(simu mass density units / amu) * elementary charge]
+    output = output * (obj.uni.msi_e / obj.uni.amusi)
+
+  elif var == 'ue2': # electron speed [simu. velocity units]
+    output = obj.get_var('uex')**2 + obj.get_var('uey')**2 + obj.get_var('uez')**2
+  elif var.startswith('ue'): # electron velocity [simu. velocity units]
+    # using the formula:
+    ## ne qe ue = sum_j(nj uj qj) - i,   where i = current area density (charge per unit area per unit time)
+    axis   = var[-1]
+    i_uni  = obj.uni.u_r / (obj.uni.u_b * obj.uni.u_t * obj.uni.q_electron)     # (see unit conversion table on wiki.)
+    nel    = obj.get_var('nel')                          # [cm^-3]
+    output = -1 * obj.get_var('i'+axis) * i_uni / nel    # [simu velocity units]
+    if not np.all(output == 0): 
+      # remove this warning once this code has been tested.
+      warnings.warn("Nonzero current has not been tested to confirm it matches between helita & ebysus. "+\
+                    "You can test it by saving 'eux' via aux, and comparing get_var('eux') to get_var('uex').")
+    for fluid in fl.Fluids(dd=obj).ions():
+      # TODO: make more efficient, by getting momentum (simple var) and dividing by weight, instead.
+      nr   = obj.get_var('nr', ifluid=fluid.SL)          # [cm^-3]
+      u    = obj.get_var('u'+axis, ifluid=fluid.SL)      # [simu velocity units]
+      output += nr * u * fluid.ionization / nel          # [simu velocity units]
+
+  elif var == 'eke': #electron kinetic energy density [simu. energy density units]
+    return 0.5 * obj.get_var('re') * obj.get_var('ue2')
+
+
+  return output
+
 
 def get_mf_ndens(obj, var, NDENS_QUANT=None):
   '''number density'''
@@ -147,7 +217,7 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
     return None
 
   if var == 'nr':
-    return obj.get_var('r') * obj.params['u_r'][0] / (obj.uni.amu * obj.att[obj.mf_ispecies].params.atomic_weight)
+    return obj.get_var('r') * obj.uni.u_r / (obj.uni.amu * obj.att[obj.mf_ispecies].params.atomic_weight)
 
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   '''spitzer conductivies'''
