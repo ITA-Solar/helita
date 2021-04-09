@@ -102,8 +102,9 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
         if key == 'unitsnorm':
             unitsnorm = value
   
-  docvar = document_vars.vars_documenter(obj, 'EM_QUANT', EM_QUANT, get_em.__doc__)
-  docvar('emiss',  'emission messure [cgs]')
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'EM_QUANT', EM_QUANT, get_em.__doc__)
+    docvar('emiss',  'emission messure [cgs]')
 
   if (quant == '') or not quant in EM_QUANT:
     return None
@@ -129,7 +130,8 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = CROSTAB_LIST
 
-  docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_crossections.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_crossections.__doc__)
  
   quant_elem = ''.join([i for i in quant if not i.isdigit()])
 
@@ -206,15 +208,16 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs):
   if (EOSTAB_QUANT == None):
       EOSTAB_QUANT = ['ne', 'tg', 'pg', 'kr', 'eps', 'opa', 'temt', 'ent']
 
-  docvar = document_vars.vars_documenter(obj, 'EOSTAB_QUANT', EOSTAB_QUANT, get_eosparam.__doc__)
-  docvar('ne',  'electron density [m^-3]')
-  docvar('tg',  'Temperature [K]')
-  docvar('pg',  'gas pressure [dyn/cm^2]')
-  docvar('kr',  'Rosseland opacity [cm^2/g]')
-  docvar('eps',  'scattering probability')
-  docvar('opa',  'opacity')
-  docvar('temt',  'thermal emission')
-  docvar('ent',  'entropy')
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'EOSTAB_QUANT', EOSTAB_QUANT, get_eosparam.__doc__)
+    docvar('ne',  'electron density [m^-3]')
+    docvar('tg',  'Temperature [K]')
+    docvar('pg',  'gas pressure [dyn/cm^2]')
+    docvar('kr',  'Rosseland opacity [cm^2/g]')
+    docvar('eps',  'scattering probability')
+    docvar('opa',  'opacity')
+    docvar('temt',  'thermal emission')
+    docvar('ent',  'entropy')
 
 
   if (quant == '') or not quant in EOSTAB_QUANT:
@@ -257,8 +260,9 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
     COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_LIST]
     COLFRE_QUANT += ['nu%s_mag' % clist for clist in CROSTAB_LIST]
     COLFRE_QUANT += ['nue_' + clist for clist in elemlist]
-  
-  docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_collision.__doc__)
+
+  if quant=='':  
+    docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_collision.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
     return None
@@ -303,7 +307,8 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
     COLFREMX_QUANT = ['numx' + clist for clist in CROSTAB_LIST]
     COLFREMX_QUANT += ['numx%s_mag' % clist for clist in CROSTAB_LIST]
   
-  docvar = document_vars.vars_documenter(obj, 'COLFREMX_QUANT', COLFREMX_QUANT, get_collision_maxw.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'COLFREMX_QUANT', COLFREMX_QUANT, get_collision_maxw.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFREMX_QUANT:
     return None
@@ -409,7 +414,8 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
     COLCOU_QUANT = ['nucou' + clist for clist in CROSTAB_LIST]
     COLCOU_QUANT += ['nucoue_' + clist for clist in elemlist]
 
-  docvar = document_vars.vars_documenter(obj, 'COLCOU_QUANT', COLCOU_QUANT, get_collcoul.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'COLCOU_QUANT', COLCOU_QUANT, get_collcoul.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLCOU_QUANT:
     return None
@@ -444,7 +450,8 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
     COLCOUMS_QUANT = ['nucou_ei', 'nucou_ii']
     COLCOUMS_QUANT += ['nucou' + clist + '_i' for clist in elemlist]
 
-  docvar = document_vars.vars_documenter(obj, 'COLCOUMS_QUANT', COLCOUMS_QUANT, get_collcoul_ms.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'COLCOUMS_QUANT', COLCOUMS_QUANT, get_collcoul_ms.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLCOUMS_QUANT:
     return None
@@ -491,7 +498,8 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
     COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
     COLFRI_QUANT += ['numx' + clist + '_n_mag' for clist in elemlist]
 
-  docvar = document_vars.vars_documenter(obj, 'COLFRI_QUANT', COLFRI_QUANT, get_collision_ms.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'COLFRI_QUANT', COLFRI_QUANT, get_collision_ms.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT:
     return None
@@ -598,7 +606,8 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
   if COULOMB_COL_QUANT is None:
     COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
   
-  docvar = document_vars.vars_documenter(obj, 'COULOMB_COL_QUANT', COULOMB_COL_QUANT, get_coulomb.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'COULOMB_COL_QUANT', COULOMB_COL_QUANT, get_coulomb.__doc__)
 
   if (quant == '') or not quant in COULOMB_COL_QUANT:
     return None
@@ -628,13 +637,14 @@ def get_current(obj, quant, CURRENT_QUANT=None, **kwargs):
   if CURRENT_QUANT is None:
     CURRENT_QUANT = ['ix', 'iy', 'iz', 'wx', 'wy', 'wz']
 
-  docvar = document_vars.vars_documenter(obj, 'CURRENT_QUANT', CURRENT_QUANT, get_current.__doc__)
-  docvar('ix',  'component x of the current')
-  docvar('iy',  'component y of the current')
-  docvar('iz',  'component z of the current')
-  docvar('wx',  'component x of the rotational of the velocity')
-  docvar('wy',  'component y of the rotational of the velocity')
-  docvar('wz',  'component z of the rotational of the velocity')
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'CURRENT_QUANT', CURRENT_QUANT, get_current.__doc__)
+    docvar('ix',  'component x of the current')
+    docvar('iy',  'component y of the current')
+    docvar('iz',  'component z of the current')
+    docvar('wx',  'component x of the rotational of the velocity')
+    docvar('wy',  'component y of the rotational of the velocity')
+    docvar('wz',  'component z of the rotational of the velocity')
 
   if (quant == '') or not quant in CURRENT_QUANT:
     return None
@@ -674,16 +684,18 @@ def get_flux(obj, quant, FLUX_QUANT=None, **kwargs):
   if FLUX_QUANT is None:
     FLUX_QUANT = ['pfx', 'pfy', 'pfz', 'pfex', 'pfey', 'pfez', 'pfwx',
                 'pfwy', 'pfwz']
-  docvar = document_vars.vars_documenter(obj, 'FLUX_QUANT', FLUX_QUANT, get_flux.__doc__)
-  docvar('pfx',  'component x of the Poynting flux')
-  docvar('pfy',  'component y of the Poynting flux')
-  docvar('pfz',  'component z of the Poynting flux')
-  docvar('pfex',  'component x of the Flux emergence')
-  docvar('pfey',  'component y of the Flux emergence')
-  docvar('pfez',  'component z of the Flux emergence')
-  docvar('pfwx',  'component x of the Poynting flux from "horizontal" motions')
-  docvar('pfwy',  'component y of the Poynting flux from "horizontal" motions')
-  docvar('pfwz',  'component z of the Poynting flux from "horizontal" motions')
+
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'FLUX_QUANT', FLUX_QUANT, get_flux.__doc__)
+    docvar('pfx',  'component x of the Poynting flux')
+    docvar('pfy',  'component y of the Poynting flux')
+    docvar('pfz',  'component z of the Poynting flux')
+    docvar('pfex',  'component x of the Flux emergence')
+    docvar('pfey',  'component y of the Flux emergence')
+    docvar('pfez',  'component z of the Flux emergence')
+    docvar('pfwx',  'component x of the Poynting flux from "horizontal" motions')
+    docvar('pfwy',  'component y of the Poynting flux from "horizontal" motions')
+    docvar('pfwz',  'component z of the Poynting flux from "horizontal" motions')
 
   if (quant == '') or not quant in FLUX_QUANT:
     return None
@@ -720,20 +732,21 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
                 'kz']
 
-  docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_plasmaparam.__doc__)
-  docvar('beta', "plasma beta")
-  docvar('va', "alfven speed [simu. units]")
-  docvar('cs', "sound speed [simu. units]")
-  docvar('s', "entropy [log of quantities in simu. units]")
-  docvar('ke', "kinetic energy density of ifluid [simu. units]")
-  docvar('mn', "mach number (using sound speed)")
-  docvar('man', "mach number (using alfven speed)")
-  docvar('hp', "Pressure scale height")
-  for var in ['vax', 'vay', 'vaz']:
-    docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
-  for var in ['kx', 'ky', 'kz']:
-    docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
-                "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_plasmaparam.__doc__)
+    docvar('beta', "plasma beta")
+    docvar('va', "alfven speed [simu. units]")
+    docvar('cs', "sound speed [simu. units]")
+    docvar('s', "entropy [log of quantities in simu. units]")
+    docvar('ke', "kinetic energy density of ifluid [simu. units]")
+    docvar('mn', "mach number (using sound speed)")
+    docvar('man', "mach number (using alfven speed)")
+    docvar('hp', "Pressure scale height")
+    for var in ['vax', 'vay', 'vaz']:
+      docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
+    for var in ['kx', 'ky', 'kz']:
+      docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
+                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
 
   if (quant == '') or not quant in PLASMA_QUANT:
     return None
@@ -790,10 +803,11 @@ def get_wavemode(obj, quant, WAVE_QUANT=None, **kwargs):
   if WAVE_QUANT is None:
     WAVE_QUANT = ['alf', 'fast', 'long']
 
-  docvar = document_vars.vars_documenter(obj, 'WAVE_QUANT', WAVE_QUANT, get_wavemode.__doc__)
-  docvar('alf', "Alfven wave component [simu units]")
-  docvar('fast', "fast wave component [simu units]")
-  docvar('long', "longitudinal wave component [simu units]")
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'WAVE_QUANT', WAVE_QUANT, get_wavemode.__doc__)
+    docvar('alf', "Alfven wave component [simu units]")
+    docvar('fast', "fast wave component [simu units]")
+    docvar('long', "longitudinal wave component [simu units]")
 
   if (quant == '') or not quant in WAVE_QUANT:
     return None
@@ -844,7 +858,8 @@ def get_cyclo_res(obj, quant, CYCL_RES=None, **kwargs):
   if (CYCL_RES is None):
     CYCL_RES = ['n6nhe2', 'n6nhe3', 'nhe2nhe3']
 
-  docvar = document_vars.vars_documenter(obj, 'CYCL_RES', CYCL_RES, get_cyclo_res.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'CYCL_RES', CYCL_RES, get_cyclo_res.__doc__)
 
   if (quant == '') or not quant in CYCL_RES:
     return None
@@ -877,7 +892,8 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
   if (GYROF_QUANT is None):
     GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
   
-  docvar = document_vars.vars_documenter(obj, 'GYROF_QUANT', GYROF_QUANT, get_gyrof.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'GYROF_QUANT', GYROF_QUANT, get_gyrof.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
     return None
@@ -902,7 +918,8 @@ def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
     KAPPA_QUANT = ['kappanorm_', 'kappae'] + \
         ['kappa' + clist for clist in elemlist]
 
-  docvar = document_vars.vars_documenter(obj, 'KAPPA_QUANT', KAPPA_QUANT, get_kappa.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'KAPPA_QUANT', KAPPA_QUANT, get_kappa.__doc__)
 
   if (quant == ''):
     return None
@@ -931,8 +948,9 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
   if (DEBYE_LN_QUANT is None):
     DEBYE_LN_QUANT = ['debye_ln']
 
-  docvar = document_vars.vars_documenter(obj, 'DEBYE_LN_QUANT', DEBYE_LN_QUANT, get_debye_ln.__doc__)
-  docvar('debye_ln', "Debye length [Unknown]")
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'DEBYE_LN_QUANT', DEBYE_LN_QUANT, get_debye_ln.__doc__)
+    docvar('debye_ln', "Debye length [Unknown]")
 
   if (quant == '') or not quant in DEBYE_LN_QUANT:
     return None
@@ -961,7 +979,8 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
     IONP_QUANT += ['rneu', 'rion', 'nion', 'nneu', 'nelc']
     IONP_QUANT += ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']
 
-  docvar = document_vars.vars_documenter(obj, 'IONP_QUANT', IONP_QUANT, get_ionpopulations.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'IONP_QUANT', IONP_QUANT, get_ionpopulations.__doc__)
 
   if (quant == ''):
       return None
@@ -1058,30 +1077,31 @@ def get_ambparam(obj, quant, AMB_QUANT=None, **kwargs):
               'nchi', 'npsi', 'nchi_red', 'npsi_red',
               'rchi', 'rpsi', 'rchi_red', 'rpsi_red','alphai','betai']
 
-  docvar = document_vars.vars_documenter(obj, 'AMB_QUANT', AMB_QUANT, get_ambparam.__doc__)
-  docvar('uambx', "component x of the ambipolar velocity")
-  docvar('uamby', "component y of the ambipolar velocity")
-  docvar('uambz', "component z of the ambipolar velocity")
-  docvar('ambx', "component x of the ambipolar term")
-  docvar('amby', "component y of the ambipolar term")
-  docvar('ambz', "component z of the ambipolar term")
-  docvar('eta_amb1', "ambipolar diffusion using nu_ni")
-  docvar('eta_amb2', "ambipolar diffusion using nu_in")
-  docvar('eta_amb3', "ambipolar diffusion using nu_ni_max and rion_nomag")
-  docvar('eta_amb4', "ambipolar diffusion using Yakov for low ionization regime, Eq (20) (ref{Faraday_corr})")
-  docvar('eta_amb4a', "ambipolar diffusion using Yakov for low ionization regime, Eq (20) (ref{Faraday_corr}), only the numerator")
-  docvar('eta_amb4b', "ambipolar diffusion using Yakov for low ionization regime, Eq (20) (ref{Faraday_corr}), only the denumerator")
-  docvar('eta_amb5', "ambipolar diffusion using Yakov for any ionization regime, 7c")
-  docvar('nchi', "from Yakov notes to derive the ambipolar diff")
-  docvar('npsi', "from Yakov notes to derive the ambipolar diff")
-  docvar('nchi_red', "from Yakov notes to derive the ambipolar diff")
-  docvar('npsi_red', "from Yakov notes to derive the ambipolar diff")
-  docvar('rchi', "from Yakov notes to derive the ambipolar diff")
-  docvar('rpsi', "from Yakov notes to derive the ambipolar diff")
-  docvar('rchi_red', "from Yakov notes to derive the ambipolar diff")
-  docvar('rpsi_red', "from Yakov notes to derive the ambipolar diff")
-  docvar('alphai', "from Yakov notes to derive the ambipolar diff")
-  docvar('betai', "from Yakov notes to derive the ambipolar diff")  
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'AMB_QUANT', AMB_QUANT, get_ambparam.__doc__)
+    docvar('uambx', "component x of the ambipolar velocity")
+    docvar('uamby', "component y of the ambipolar velocity")
+    docvar('uambz', "component z of the ambipolar velocity")
+    docvar('ambx', "component x of the ambipolar term")
+    docvar('amby', "component y of the ambipolar term")
+    docvar('ambz', "component z of the ambipolar term")
+    docvar('eta_amb1', "ambipolar diffusion using nu_ni")
+    docvar('eta_amb2', "ambipolar diffusion using nu_in")
+    docvar('eta_amb3', "ambipolar diffusion using nu_ni_max and rion_nomag")
+    docvar('eta_amb4', "ambipolar diffusion using Yakov for low ionization regime, Eq (20) (ref{Faraday_corr})")
+    docvar('eta_amb4a', "ambipolar diffusion using Yakov for low ionization regime, Eq (20) (ref{Faraday_corr}), only the numerator")
+    docvar('eta_amb4b', "ambipolar diffusion using Yakov for low ionization regime, Eq (20) (ref{Faraday_corr}), only the denumerator")
+    docvar('eta_amb5', "ambipolar diffusion using Yakov for any ionization regime, 7c")
+    docvar('nchi', "from Yakov notes to derive the ambipolar diff")
+    docvar('npsi', "from Yakov notes to derive the ambipolar diff")
+    docvar('nchi_red', "from Yakov notes to derive the ambipolar diff")
+    docvar('npsi_red', "from Yakov notes to derive the ambipolar diff")
+    docvar('rchi', "from Yakov notes to derive the ambipolar diff")
+    docvar('rpsi', "from Yakov notes to derive the ambipolar diff")
+    docvar('rchi_red', "from Yakov notes to derive the ambipolar diff")
+    docvar('rpsi_red', "from Yakov notes to derive the ambipolar diff")
+    docvar('alphai', "from Yakov notes to derive the ambipolar diff")
+    docvar('betai', "from Yakov notes to derive the ambipolar diff")  
 
   if (quant == '') or not (quant in AMB_QUANT):
     return None
@@ -1243,15 +1263,16 @@ def get_hallparam(obj, quant, HALL_QUANT=None, **kwargs):
     HALL_QUANT = ['uhallx', 'uhally', 'uhallz', 'hallx', 'hally', 'hallz',
                 'eta_hall', 'eta_hallb']
 
-  docvar = document_vars.vars_documenter(obj, 'HALL_QUANT', HALL_QUANT, get_hallparam.__doc__)
-  docvar('uhallx', "component x of the Hall velocity")
-  docvar('uhally', "component y of the Hall velocity")
-  docvar('uhallz', "component z of the Hall velocity")
-  docvar('hallx', "component x of the Hall term")
-  docvar('hally', "component y of the Hall term")
-  docvar('hallz', "component z of the Hall term")
-  docvar('eta_hall', "Hall term ")
-  docvar('eta_hallb', "Hall term / B")
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'HALL_QUANT', HALL_QUANT, get_hallparam.__doc__)
+    docvar('uhallx', "component x of the Hall velocity")
+    docvar('uhally', "component y of the Hall velocity")
+    docvar('uhallz', "component z of the Hall velocity")
+    docvar('hallx', "component x of the Hall term")
+    docvar('hally', "component y of the Hall term")
+    docvar('hallz', "component z of the Hall term")
+    docvar('eta_hall', "Hall term ")
+    docvar('eta_hallb', "Hall term / B")
 
   if (quant == '') or not (quant in HALL_QUANT):
     return None
@@ -1285,7 +1306,8 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None, **kwargs):
     BATTERY_QUANT = ['bb_constqe', 'dxpe', 'dype', 'dzpe', 'bb_batx',
                     'bb_baty', 'bb_batz']
   
-  docvar = document_vars.vars_documenter(obj, 'BATTERY_QUANT', BATTERY_QUANT, get_batteryparam.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'BATTERY_QUANT', BATTERY_QUANT, get_batteryparam.__doc__)
 
   if (quant == '') or not (quant in BATTERY_QUANT):
     return None
@@ -1325,7 +1347,8 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None, **kwargs):
   if (SPITZER_QUANT is None):
     SPITZER_QUANT = ['fcx','fcy','fcz','qspitz']
 
-  docvar = document_vars.vars_documenter(obj, 'SPITZER_QUANT', SPITZER_QUANT, get_spitzerparam.__doc__)
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'SPITZER_QUANT', SPITZER_QUANT, get_spitzerparam.__doc__)
 
   if (quant == '') or not (quant in SPITZER_QUANT):
     return None

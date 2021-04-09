@@ -61,15 +61,16 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
       GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke', 'grph', 'tot_part', 'mu', 'pe', ]
 
-  docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__)
-  docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
-  docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
-  docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
-  docvar('tot_e',  'sum of internal energy densities of all fluids [simu. energy density units]')
-  docvar('tot_ke', 'sum of kinetic  energy densities of all fluids [simu. energy density units]')
-  docvar('grph',  'grams per hydrogen atom')
-  docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
-  docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__)
+    docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
+    docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
+    docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
+    docvar('tot_e',  'sum of internal energy densities of all fluids [simu. energy density units]')
+    docvar('tot_ke', 'sum of kinetic  energy densities of all fluids [simu. energy density units]')
+    docvar('grph',  'grams per hydrogen atom')
+    docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
+    docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
 
   if (var == '') or var not in GLOBAL_QUANT:
       return None
@@ -154,15 +155,16 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   if ELECTRON_QUANT is None:
     ELECTRON_QUANT = ['nel', 're', 'ue2', 'uex', 'uey', 'uez', 'eke']
 
-  docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__)
-  docvar('nel',  'electron number density [cm^-3]')
-  docvar('re',   'mass density of electrons [simu. mass density units]')
-  untested_warning = \
-    ' Tested uex agrees between helita (uex) & ebysus (eux), for one set of units, for current=0. - SE Apr 4 2021.'
-  docvar('ue2',   'electron speed (magnitude of velocity) SQUARED [simu. velocity units SQUARED]' + untested_warning)
-  for v in 'uex', 'uey', 'uez':
-    docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
-  docvar('eke',  'electron kinetic energy density [simu. energy density units]')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__)
+    docvar('nel',  'electron number density [cm^-3]')
+    docvar('re',   'mass density of electrons [simu. mass density units]')
+    untested_warning = \
+      ' Tested uex agrees between helita (uex) & ebysus (eux), for one set of units, for current=0. - SE Apr 4 2021.'
+    docvar('ue2',   'electron speed (magnitude of velocity) SQUARED [simu. velocity units SQUARED]' + untested_warning)
+    for v in 'uex', 'uey', 'uez':
+      docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
+    docvar('eke',  'electron kinetic energy density [simu. energy density units]')
 
   if (var == '') or (var not in ELECTRON_QUANT):
     return None
@@ -211,8 +213,9 @@ def get_mf_ndens(obj, var, NDENS_QUANT=None):
   if NDENS_QUANT is None:
     NDENS_QUANT = ['nr']
 
-  docvar = document_vars.vars_documenter(obj, 'NDENS_QUANT', NDENS_QUANT, get_mf_ndens.__doc__)
-  docvar('nr', 'number density [cm^-3]')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'NDENS_QUANT', NDENS_QUANT, get_mf_ndens.__doc__)
+    docvar('nr', 'number density [cm^-3]')
 
   if (var == '') or var not in NDENS_QUANT:
     return None
@@ -225,9 +228,10 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   if SPITZERTERM_QUANT is None:
     SPITZERTERM_QUANT = ['kappaq','dxTe','dyTe','dzTe','rhs']
 
-  docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT, get_spitzerterm.__doc__)
-  #docvar('rhs', 'Someone who knows what this means should put a description here.')
-  #docvar('kappaq', '???')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT, get_spitzerterm.__doc__)
+    #docvar('rhs', 'Someone who knows what this means should put a description here.')
+    #docvar('kappaq', '???')
 
   if (var == '') or var not in SPITZERTERM_QUANT:
     return None
@@ -283,14 +287,15 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     COLFRE_QUANT = ['c_tot_per_vol', '1dcolslope',
                     'nu_ij','nu_en','nu_ei','nu_ij_mx']  
 
-  docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
-  momtrans_start = 'momentum transfer collision frequenc{:} [s^-1] between '
-  colfreqnote = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
-  docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote)
-  docvar('nu_ei', momtrans_start.format('y') + 'electrons & a single ion ifluid.' + colfreqnote)
-  docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote)
-  docvar('1dcolslope', '-(nu_ij + nu_ji)')
-  docvar('c_tot_per_vol', 'number of collisions per volume; might be off by a factor of mass ratio... -SE Apr 5 21')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
+    momtrans_start = 'momentum transfer collision frequenc{:} [s^-1] between '
+    colfreqnote = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
+    docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote)
+    docvar('nu_ei', momtrans_start.format('y') + 'electrons & a single ion ifluid.' + colfreqnote)
+    docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote)
+    docvar('1dcolslope', '-(nu_ij + nu_ji)')
+    docvar('c_tot_per_vol', 'number of collisions per volume; might be off by a factor of mass ratio... -SE Apr 5 21')
 
   if (var == '') or var not in COLFRE_QUANT:
     return None
@@ -438,8 +443,9 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
   if LOGCUL_QUANT is None:
     LOGCUL_QUANT = ['logcul']  
 
-  docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT, get_mf_logcul.__doc__)
-  docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT, get_mf_logcul.__doc__)
+    docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.')
 
   if (var == '') or var not in LOGCUL_QUANT:
     return None
@@ -459,16 +465,17 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
   if DRIFT_QUANT is None:
     DRIFT_QUANT = ['ud', 'pd', 'ed', 'rd', 'tgd']
 
-  docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__)
-  def doc_start(var):
-    return '"drift" for quantity ("{var}"). I.e. ({va_} for ifluid) - ({va_} for jfluid). '.format(var=var, va_=var[:-1])
-  def doc_axis(var):
-    return ' Must append x, y, or z; e.g. {var}x for (ifluid {va_}x) - (jfluid {va_}x).'.format(var=var, va_=var[:-1])
-  docvar('ud', doc_start(var='ud') + 'u = velocity [simu. units].' + doc_axis(var='ud'))
-  docvar('pd', doc_start(var='pd') + 'p = momentum density [simu. units].' + doc_axis(var='pd'))
-  docvar('ed', doc_start(var='ed') + 'e = energy (density??) [simu. units].')
-  docvar('rd', doc_start(var='rd') + 'r = mass density [simu. units].')
-  docvar('tgd', doc_start(var='tgd') + 'tg = temperature [K].')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__)
+    def doc_start(var):
+      return '"drift" for quantity ("{var}"). I.e. ({va_} for ifluid) - ({va_} for jfluid). '.format(var=var, va_=var[:-1])
+    def doc_axis(var):
+      return ' Must append x, y, or z; e.g. {var}x for (ifluid {va_}x) - (jfluid {va_}x).'.format(var=var, va_=var[:-1])
+    docvar('ud', doc_start(var='ud') + 'u = velocity [simu. units].' + doc_axis(var='ud'))
+    docvar('pd', doc_start(var='pd') + 'p = momentum density [simu. units].' + doc_axis(var='pd'))
+    docvar('ed', doc_start(var='ed') + 'e = energy (density??) [simu. units].')
+    docvar('rd', doc_start(var='rd') + 'r = mass density [simu. units].')
+    docvar('tgd', doc_start(var='tgd') + 'tg = temperature [K].')
 
   if (var == ''):
     return None
@@ -490,8 +497,9 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = ['cross']
 
-  docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__)
-  docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__)
+    docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
 
   if var=='' or var not in CROSTAB_QUANT:
     return None
@@ -566,21 +574,22 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
                 'kz']
-
-  docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
-  docvar('beta', "plasma beta")
-  docvar('va', "alfven speed [simu. units]")
-  docvar('cs', "sound speed [simu. units]")
-  docvar('s', "entropy [log of quantities in simu. units]")
-  docvar('ke', "kinetic energy density of ifluid [simu. units]")
-  docvar('mn', "mach number (using sound speed)")
-  docvar('man', "mach number (using alfven speed)")
-  docvar('hp', "Pressure scale height")
-  for var in ['vax', 'vay', 'vaz']:
-    docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
-  for var in ['kx', 'ky', 'kz']:
-    docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
-                "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
+    docvar('beta', "plasma beta")
+    docvar('va', "alfven speed [simu. units]")
+    docvar('cs', "sound speed [simu. units]")
+    docvar('s', "entropy [log of quantities in simu. units]")
+    docvar('ke', "kinetic energy density of ifluid [simu. units]")
+    docvar('mn', "mach number (using sound speed)")
+    docvar('man', "mach number (using alfven speed)")
+    docvar('hp', "Pressure scale height")
+    for var in ['vax', 'vay', 'vaz']:
+      docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
+    for var in ['kx', 'ky', 'kz']:
+      docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
+                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
+    return None
 
   if quant=='' or quant not in PLASMA_QUANT:
     return None
