@@ -7,7 +7,7 @@ import os
 
 # import local modules
 from .bifrost import BifrostData, Rhoeetab, Bifrost_units, Cross_sect
-from .bifrost import read_idl_ascii, subs2grph
+from .bifrost import read_idl_ascii, subs2grph, remember_and_recall
 from . import cstagger
 from .load_mf_quantities import *
 from .load_quantities import *
@@ -130,7 +130,7 @@ class EbysusData(BifrostData):
 
     def _read_params(self,firstime=False):
         ''' Reads parameter file specific for Multi Fluid Bifrost '''
-        super(EbysusData, self)._read_params()
+        super(EbysusData, self)._read_params(firstime=firstime)
 
         self.nspecies_max = 28
         self.nlevels_max = 28
@@ -152,9 +152,9 @@ class EbysusData(BifrostData):
         except KeyError:
             print('warning, this idl file does not include mf_total_nlevel')
         try:
-            filename = os.path.join(
+            file = os.path.join(
                 self.fdir, self.params['mf_param_file'][self.snapInd].strip())
-            self.mf_tabparam = read_mftab_ascii(filename)
+            self.mf_tabparam = read_mftab_ascii(file, obj=self)
         except KeyError:
             print('warning, this idl file does not include mf_param_file')
 
@@ -1063,9 +1063,10 @@ def printi(fdir='./',rootname='',it=1):
     print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
 
 
+@remember_and_recall('_memory_read_mftab_ascii')
 def read_mftab_ascii(filename):
     '''
-    Reads mf_tabparam.in-formatted (command style) ascii file into dictionary
+    Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
     '''
     li = 0
     params = {}
@@ -1083,6 +1084,9 @@ def read_mftab_ascii(filename):
             line, sep, tail = line.partition('#')
             line = line.strip()
             line = line.split(';')[0].split('\t')
+                    #SE should this change to .split() so that any whitespace is ok...?
+                    #SE quicktested Apr 9 2021, for some reason .split() causes issue.
+                    #Probably somewhere this function assumes specifically that we used .split('\t') or something like that.
             # if (len(line) > 2):
             #  print(('(WWW) read_params: line %i is invalid, skipping' % li))
             #    li += 1

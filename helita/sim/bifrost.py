@@ -2,16 +2,21 @@
 Set of programs to read and interact with output from Bifrost
 """
 
+# import builtin modules
 import os
-import warnings
+import functools
 from glob import glob
+
+# import external public modules
 import numpy as np
+from scipy import interpolate
+from scipy.ndimage import map_coordinates
+
+# import internal modules
 try:
     from . import cstagger
 except ImportError:
     print("(WWW) cstagger routines not imported, certain functions will be inaccesible")
-from scipy import interpolate
-from scipy.ndimage import map_coordinates
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
@@ -240,7 +245,7 @@ class BifrostData(object):
                 filename.append(self.file_root + snap_str[i] + '.idl')
 
         for file in filename:
-            self.paramList.append(read_idl_ascii(file,firstime=firstime))
+            self.paramList.append(read_idl_ascii(file,firstime=firstime, obj=self))
 
         # assign some parameters as attributes
         for params in self.paramList:
@@ -963,7 +968,7 @@ class BifrostData(object):
             tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
             tabparams = []
             if os.access(tabfile, os.R_OK):
-                tabparams = read_idl_ascii(tabfile)
+                tabparams = read_idl_ascii(tabfile, obj=self)
             if 'abund' in tabparams and 'aweight' in tabparams:
                 abund = np.array(tabparams['abund']).astype('f')
                 aweight = np.array(tabparams['aweight']).astype('f')
@@ -1270,7 +1275,7 @@ class Bifrost_units(object):
 
         if filename != None:
             if os.path.isfile(os.path.join(fdir,filename)):
-                self.params = read_idl_ascii(os.path.join(fdir,filename),firstime=True)
+                self.params = read_idl_ascii(os.path.join(fdir,filename),firstime=True, obj=self)
                 try:
                     self.u_l = self.params['u_l']
                 except:
@@ -1403,7 +1408,7 @@ class Rhoeetab:
 
     def read_tab_file(self, tabfile):
         ''' Reads tabparam.in file, populates parameters. '''
-        self.params = read_idl_ascii(tabfile)
+        self.params = read_idl_ascii(tabfile, obj=self)
         if self.verbose:
             print(('*** Read parameters from ' + tabfile), whsp*4 ,end="\r",
                     flush=True)
@@ -1776,7 +1781,7 @@ class Cross_sect:
         self.cross_tab = {}
 
         for itab in range(len(self.cross_tab_list)):
-            self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab],firstime=firstime)
+            self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab],firstime=firstime, obj=self)
             self.cross_tab[itab]['tg'] *= uni.ev_to_k
 
     def tab_interp(self, tg, itab=0, out='el', order=1):
@@ -1894,8 +1899,39 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
                             snap=snaps[0])
 
 
+def remember_and_recall(MEMORYATTR):
+    '''wrapper which returns function but with optional args obj, MEMORYATTR.
+    default obj=None, MEMORYATTR=MEMORYATTR.
+    if obj is None, behavior is unchanged;
+    else, remembers the values from reading files (by saving to the dict obj.MEMORYATTR),
+          and returns those values instead of rereading files. (This improves efficiency.)
+    '''
+    def decorator(f):
+        @functools.wraps(f)
+        def f_but_remember_and_recall(filename, *args, obj=None, MEMORYATTR=MEMORYATTR, **kwargs):
+            '''if obj is None, simply does f(filename, *args, **kwargs).
+            Else, recall or remember result, as appropriate.
+                memory location is obj.MEMORYATTR[filename.lower()].
+            '''
+            if obj is not None:
+                if not hasattr(obj, MEMORYATTR):
+                    setattr(obj, MEMORYATTR, dict())
+                memory = getattr(obj, MEMORYATTR)
+                filekey = filename.lower() 
+                if filekey in memory.keys():
+                    pass
+                else:
+                    memory[filekey] = f(filename, *args, **kwargs)  # here is where we call f, if obj is not None.
+                return memory[filekey]
+            else:
+                return f(filename, *args, **kwargs)  # here is where we call f, if obj is None.
+        return f_but_remember_and_recall
+    return decorator
+
+@remember_and_recall('_memory_read_idl_ascii')
 def read_idl_ascii(filename,firstime=False):
-    ''' Reads IDL-formatted (command style) ascii file into dictionary '''
+    ''' Reads IDL-formatted (command style) ascii file into dictionary.
+    if obj is not None,'''
     li = 0
     params = {}
     # go through the file, add stuff to dictionary
@@ -1967,7 +2003,7 @@ def read_idl_ascii(filename,firstime=False):
 
     return params
 
-
+@remember_and_recall('_memory_read_cross_txt')
 def read_cross_txt(filename,firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary '''
     li = 0
