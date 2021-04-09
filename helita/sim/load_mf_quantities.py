@@ -186,17 +186,18 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## ne qe ue = sum_j(nj uj qj) - i,   where i = current area density (charge per unit area per unit time)
     axis   = var[-1]
     i_uni  = obj.uni.u_r / (obj.uni.u_b * obj.uni.u_t * obj.uni.q_electron)     # (see unit conversion table on wiki.)
-    nel    = obj.get_var('nel')                          # [cm^-3]
-    output = -1 * obj.get_var('i'+axis) * i_uni / nel    # [simu velocity units]
+    nel    = np.zeros_like(obj.r)                   # calculate nel as we loop through fluids below, to improve efficiency.
+    output = -1 * obj.get_var('i'+axis) * i_uni     # [simu velocity units * cm^-3]
     if not np.all(output == 0): 
       # remove this warning once this code has been tested.
       warnings.warn("Nonzero current has not been tested to confirm it matches between helita & ebysus. "+\
                     "You can test it by saving 'eux' via aux, and comparing get_var('eux') to get_var('uex').")
     for fluid in fl.Fluids(dd=obj).ions():
-      # TODO: make more efficient, by getting momentum (simple var) and dividing by weight, instead.
-      nr   = obj.get_var('nr', ifluid=fluid.SL)          # [cm^-3]
-      u    = obj.get_var('u'+axis, ifluid=fluid.SL)      # [simu velocity units]
-      output += nr * u * fluid.ionization / nel          # [simu velocity units]
+      nr   = obj.get_var('nr', ifluid=fluid.SL)     # [cm^-3]
+      nel  += nr * fluid.ionization                 # [cm^-3]
+      u    = obj.get_var('u'+axis, ifluid=fluid.SL) # [simu velocity units]
+      output += nr * u * fluid.ionization           # [simu velocity units * cm^-3]
+    output = output / nel                        # [simu velocity units]
 
   elif var == 'eke': #electron kinetic energy density [simu. energy density units]
     return 0.5 * obj.get_var('re') * obj.get_var('ue2')
