@@ -1905,6 +1905,9 @@ def remember_and_recall(MEMORYATTR):
     if obj is None, behavior is unchanged;
     else, remembers the values from reading files (by saving to the dict obj.MEMORYATTR),
           and returns those values instead of rereading files. (This improves efficiency.)
+
+    track modification timestamp for file in memory lookup dict.
+        this ensures if file is modified we will read the new file data.
     '''
     def decorator(f):
         @functools.wraps(f)
@@ -1917,12 +1920,18 @@ def remember_and_recall(MEMORYATTR):
                 if not hasattr(obj, MEMORYATTR):
                     setattr(obj, MEMORYATTR, dict())
                 memory = getattr(obj, MEMORYATTR)
-                filekey = filename.lower() 
+                timestamp = os.stat(filename).st_mtime   # timestamp of when file was last modified
+                filekey   = filename.lower()
+                # determine whether we have this filename with this timestamp stored in memory already.
+                need_to_read = True
                 if filekey in memory.keys():
-                    pass
-                else:
-                    memory[filekey] = f(filename, *args, **kwargs)  # here is where we call f, if obj is not None.
-                return memory[filekey]
+                    if memory[filekey][0]==timestamp:
+                        need_to_read = False
+                # read file if necessary (and store result to memory)
+                if need_to_read:
+                    memory[filekey] = (timestamp, f(filename, *args, **kwargs))  # here is where we call f, if obj is not None.
+                # return value from memory
+                return memory[filekey][1]
             else:
                 return f(filename, *args, **kwargs)  # here is where we call f, if obj is None.
         return f_but_remember_and_recall
