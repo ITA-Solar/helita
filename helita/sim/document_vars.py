@@ -70,7 +70,8 @@ def set_meta_quant(obj, name, QUANT_DOC=NONEDOC):
     global METAQUANT   # allows to edit the value of document_vars.METAQUANT
     METAQUANT = name
 
-    vardict[METAQUANT] = dict()
+    if METAQUANT not in vardict.keys():
+        vardict[METAQUANT] = dict()
     vardict[METAQUANT][QUANTDOC] = QUANT_DOC
 
 def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, rewrite=False):
