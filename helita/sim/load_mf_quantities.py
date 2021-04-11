@@ -97,7 +97,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
           output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
 
   elif var == 'tot_e':
-    output = obj.get_var('ee')  # internal energy density of electrons
+    warnings.warn('summing e for all non-electron fluids; e for electrons not yet added to this term.')
+    # TODO: add electron internal energy density to output; remove warning above.
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('e', ifluid=fluid.SL) # internal energy density of fluid
 
