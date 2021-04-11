@@ -27,7 +27,27 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args,  **kwargs):
+    def __init__(self, *args, remember_memmaps=True, **kwargs):
+        ''' initialize EbysusData object.
+
+        remember_mmaps: bool, default True
+            whether to save numpy memmaps in self._memory_numpy_memmap.
+            True ->
+                !!! get_var is much much faster !!!
+                remember_and_recall memmaps from simple_var reading,
+                i.e. use memmap associated with file in self._memory whenever asked to read file again.
+                WARNING: I have not yet tested whether there are consequences when data files are large.
+                    If I understand memmaps properly, it should be okay to have many at once,
+                    because they do not actually maintain the data itself in local memory, but
+                    just keep "pointers" into the files.
+                    If I misunderstood memmaps and it is problematic,
+                    use remember_memmaps=False to turn off the remember_and_recall behavior.
+                     - SE Apr 11 2021
+            False ->
+                create a new memmap every time a simple_var is read.
+        '''
+
+        self.remember_memmaps=remember_memmaps
 
         super(EbysusData, self).__init__(*args, **kwargs)
 
@@ -198,7 +218,8 @@ class EbysusData(BifrostData):
                 self.variables[var] = self._get_simple_var(
                     var, self.mf_ispecies, self.mf_ilevel, *args, **kwargs)
                 setattr(self, var, self.variables[var])
-            except BaseException:
+            except BaseException as e:
+                warnings.warn('init_vars failed to read variable {} due to {}'.format(var, e))
                 if self.verbose:
                     if not (self.mf_ilevel == 1 and var in self.varsmfc):
                         if (firstime):
@@ -642,32 +663,19 @@ class EbysusData(BifrostData):
 
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize * self.mf_arr_size
+        kw__get_mmap = dict(dtype=self.dtype, order=order, mode=mode,          # kwargs for np.memmap
+                            offset=offset, shape=(self.nx, self.ny, self.nzb), # kwargs for np.memmap
+                            obj=self if self.remember_memmaps else None,       # kwarg for remember_and_recall()
+                            ) 
         if (self.mf_arr_size == 1):
-            return np.memmap(
-                filename,
-                dtype=self.dtype,
-                order=order,
-                offset=offset,
-                mode=mode,
-                shape=(self.nx, self.ny, self.nzb))
+            return get_numpy_memmap(filename, **kw__get_mmap)
         else:
             if var in  self.varsmm:
-                offset += self.nx * self.ny * self.nzb * jdx * dsize
-                return np.memmap(
-                    filename,
-                    dtype=self.dtype,
-                    order=order,
-                    offset=offset,
-                    mode=mode,
-                    shape=(self.nx, self.ny, self.nzb))
+                kw__mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
+                return get_numpy_memmap(filename, **kw__get_mmap)
             else:
-                return np.memmap(
-                    filename,
-                    dtype=self.dtype,
-                    order=order,
-                    offset=offset,
-                    mode=mode,
-                    shape=(self.nx, self.ny, self.nzb, self.mf_arr_size))
+                kw__mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
+                return get_numpy_memmap(filename, **kw__get_mmap)
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
@@ -1061,6 +1069,12 @@ def printi(fdir='./',rootname='',it=1):
     print('bz=%6.2E,%6.2E G'%(np.min(bz),np.max(bz)))
     va=dd.get_var('va',it) * dd.params['u_u'] / 1e5
     print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
+
+
+@remember_and_recall('_memory_numpy_memmap')
+def get_numpy_memmap(filename, **kw__np_memmap):
+    '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
+    return np.memmap(filename, **kw__np_memmap)
 
 
 @remember_and_recall('_memory_read_mftab_ascii')
