@@ -671,10 +671,10 @@ class EbysusData(BifrostData):
             return get_numpy_memmap(filename, **kw__get_mmap)
         else:
             if var in  self.varsmm:
-                kw__mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
+                kw__get_mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
                 return get_numpy_memmap(filename, **kw__get_mmap)
             else:
-                kw__mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
+                kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
                 return get_numpy_memmap(filename, **kw__get_mmap)
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
