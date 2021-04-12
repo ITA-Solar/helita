@@ -1920,7 +1920,10 @@ def remember_and_recall(MEMORYATTR, _memtype=dict):
                 if not hasattr(obj, MEMORYATTR):
                     setattr(obj, MEMORYATTR, _memtype())
                 memory = getattr(obj, MEMORYATTR)
-                timestamp = os.stat(filename).st_mtime   # timestamp of when file was last modified
+                if os.path.exists(filename):
+                    timestamp = os.stat(filename).st_mtime   # timestamp of when file was last modified
+                else:
+                    timestamp = '???'
                 filekey   = filename.lower()
                 # determine whether we have this filename with this timestamp stored in memory already.
                 need_to_read = True
