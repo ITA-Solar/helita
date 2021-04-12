@@ -244,7 +244,7 @@ class Cipmocct:
             if varname[0] in ['u']: 
                 if varname[-1] in ['x']: 
                     varx = self.get_var(varname,snap=snap)
-                    vary = self.get_var(varname,snap=snap)
+                    vary = self.get_var(varname[0]+'y',snap=snap)
                     var = varx * np.cos(angle/90.0*np.pi/2.0) - vary * np.sin(angle/90.0*np.pi/2.0)
                 elif varname[-1] in ['y']: 
                     vary = self.get_var(varname,snap=snap)
@@ -252,7 +252,7 @@ class Cipmocct:
                     var = vary * np.cos(angle/90.0*np.pi/2.0) + varx * np.sin(angle/90.0*np.pi/2.0)
                 else:  # component z
                     var = self.get_var(varname,snap=snap)
-                var = rotate(var, angle=angle, reshape=False, axes=(0,1))
+                var = rotate(var, angle=angle, reshape=False, mode='nearest', axes=(0,1))
             else: 
                 var = self.get_var(varname,snap=snap)
                 var = rotate(var, angle=angle, reshape=False, mode='nearest',axes=(0,1))
