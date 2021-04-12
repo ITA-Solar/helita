@@ -1899,7 +1899,7 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
                             snap=snaps[0])
 
 
-def remember_and_recall(MEMORYATTR):
+def remember_and_recall(MEMORYATTR, _memtype=dict):
     '''wrapper which returns function but with optional args obj, MEMORYATTR.
     default obj=None, MEMORYATTR=MEMORYATTR.
     if obj is None, behavior is unchanged;
@@ -1918,7 +1918,7 @@ def remember_and_recall(MEMORYATTR):
             '''
             if obj is not None:
                 if not hasattr(obj, MEMORYATTR):
-                    setattr(obj, MEMORYATTR, dict())
+                    setattr(obj, MEMORYATTR, _memtype())
                 memory = getattr(obj, MEMORYATTR)
                 timestamp = os.stat(filename).st_mtime   # timestamp of when file was last modified
                 filekey   = filename.lower()
@@ -1929,7 +1929,8 @@ def remember_and_recall(MEMORYATTR):
                         need_to_read = False
                 # read file if necessary (and store result to memory)
                 if need_to_read:
-                    memory[filekey] = (timestamp, f(filename, *args, **kwargs))  # here is where we call f, if obj is not None.
+                    result = f(filename, *args, **kwargs)       # here is where we call f, if obj is not None.
+                    memory[filekey] = (timestamp, result)
                 # return value from memory
                 return memory[filekey][1]
             else:
