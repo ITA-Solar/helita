@@ -92,14 +92,14 @@ class EbysusData(BifrostData):
             # add internal energy to basic snaps
             #self.snapvars.append('e')
             # make distiction between different aux variable
-            self.mf_e_file = self.file_root + '_mf_e'
+            self.mf_e_file = self.root_name + '_mf_e'
         else:  # one energy for all fluid
             self.mhdvars.insert(0, 'e')
             self.snapevars = []
 
         if hasattr(self, 'with_electrons'):
             if self.with_electrons:
-                self.mf_e_file = self.file_root + '_mf_e'
+                self.mf_e_file = self.root_name + '_mf_e'
                 # JMS This must be implemented
                 self.snapelvars=['r', 'px', 'py', 'pz', 'e']
 
