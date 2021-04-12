@@ -27,10 +27,10 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, remember_memmaps=True, **kwargs):
+    def __init__(self, *args, extra_fast=False, **kwargs):
         ''' initialize EbysusData object.
 
-        remember_mmaps: bool, default True
+        extra_fast: bool, default False
             whether to save numpy memmaps in self._memory_numpy_memmap.
             True ->
                 !!! get_var is much much faster !!!
@@ -41,13 +41,13 @@ class EbysusData(BifrostData):
                     because they do not actually maintain the data itself in local memory, but
                     just keep "pointers" into the files.
                     If I misunderstood memmaps and it is problematic,
-                    use remember_memmaps=False to turn off the remember_and_recall behavior.
+                    use extra_fast=False to turn off the remember_and_recall behavior.
                      - SE Apr 11 2021
             False ->
                 create a new memmap every time a simple_var is read.
         '''
 
-        self.remember_memmaps=remember_memmaps
+        self.extra_fast=extra_fast
 
         super(EbysusData, self).__init__(*args, **kwargs)
 
@@ -665,7 +665,7 @@ class EbysusData(BifrostData):
         offset = self.nx * self.ny * self.nzb * idx * dsize * self.mf_arr_size
         kw__get_mmap = dict(dtype=self.dtype, order=order, mode=mode,          # kwargs for np.memmap
                             offset=offset, shape=(self.nx, self.ny, self.nzb), # kwargs for np.memmap
-                            obj=self if self.remember_memmaps else None,       # kwarg for remember_and_recall()
+                            obj=self if self.extra_fast else None,       # kwarg for remember_and_recall()
                             ) 
         if (self.mf_arr_size == 1):
             return get_numpy_memmap(filename, **kw__get_mmap)
