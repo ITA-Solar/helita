@@ -3,6 +3,18 @@ created by Sam Evans on Apr 12 2021
 
 purpose:
 limit number of open memmaps, to avoid crashing due to "too many files open"
+
+TODO:
+    try to do it a bit more intelligently..
+    current implementation will delete the oldest-created memmap first.
+    This leads to non-useful looping behavior esp. if using get_varTime.
+    whereas we could instead do something intelligent. Options include:
+        - dedicate the first N memmaps to the first N that we read.
+        - maintain separate list of just the memmap file names
+            count how many times we read each file;
+            keep in memory the memmaps for the files we are reading more often.
+        - some combination of the above ideas.
+
 """
 
 # import builtins
