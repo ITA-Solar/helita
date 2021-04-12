@@ -4,15 +4,19 @@ Set of programs to read and interact with output from Multifluid/multispecies
 
 # import built-in modules
 import os
+import time
 
 # import local modules
-from .bifrost import BifrostData, Rhoeetab, Bifrost_units, Cross_sect
-from .bifrost import read_idl_ascii, subs2grph, remember_and_recall
+from .bifrost import (
+    BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
+    read_idl_ascii, subs2grph, remember_and_recall,
+)
 from . import cstagger
 from .load_mf_quantities import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import document_vars
+from . import manage_memmaps
 
 # import external public modules
 import numpy as np
@@ -27,27 +31,21 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, extra_fast=False, **kwargs):
+    def __init__(self, *args, N_memmap=20, **kwargs):
         ''' initialize EbysusData object.
 
-        extra_fast: bool, default False
-            whether to save numpy memmaps in self._memory_numpy_memmap.
-            True ->
-                !!! get_var is much much faster !!!
-                remember_and_recall memmaps from simple_var reading,
-                i.e. use memmap associated with file in self._memory whenever asked to read file again.
-                WARNING: I have not yet tested whether there are consequences when data files are large.
-                    If I understand memmaps properly, it should be okay to have many at once,
-                    because they do not actually maintain the data itself in local memory, but
-                    just keep "pointers" into the files.
-                    If I misunderstood memmaps and it is problematic,
-                    use extra_fast=False to turn off the remember_and_recall behavior.
-                     - SE Apr 11 2021
-            False ->
-                create a new memmap every time a simple_var is read.
+        N_memmap: int (default 20)
+            keep the N_memmap most-recently-created memmaps stored in self._memory_numpy_memmap.
+            -1  --> try to never forget any memmaps.
+                    May increase (for this python session) the default maximum number of files
+                    allowed to be open simultaneously. Tries to be conservative about doing so.
+                    See manage_memmaps.py for more details.
+            0   --> never remember any memmaps.
+                    Turns off remembering memmaps. Not recommended; causes major slowdown.
+            >=1 --> remember up to this many memmaps.
         '''
 
-        self.extra_fast=extra_fast
+        setattr(self, manage_memmaps.NMLIM_ATTR, N_memmap)
 
         super(EbysusData, self).__init__(*args, **kwargs)
 
@@ -218,7 +216,9 @@ class EbysusData(BifrostData):
                 self.variables[var] = self._get_simple_var(
                     var, self.mf_ispecies, self.mf_ilevel, *args, **kwargs)
                 setattr(self, var, self.variables[var])
-            except BaseException as e:
+            except Exception as e:
+                if var=='r':
+                    raise     # we need to be able to read r or many methods will fail.
                 warnings.warn('init_vars failed to read variable {} due to {}'.format(var, e))
                 if self.verbose:
                     if not (self.mf_ilevel == 1 and var in self.varsmfc):
@@ -665,17 +665,18 @@ class EbysusData(BifrostData):
         offset = self.nx * self.ny * self.nzb * idx * dsize * self.mf_arr_size
         kw__get_mmap = dict(dtype=self.dtype, order=order, mode=mode,          # kwargs for np.memmap
                             offset=offset, shape=(self.nx, self.ny, self.nzb), # kwargs for np.memmap
-                            obj=self if self.extra_fast else None,       # kwarg for remember_and_recall()
+                            obj=self if (self.N_memmap != 0) else None,        # kwarg for memmap management
                             ) 
         if (self.mf_arr_size == 1):
-            return get_numpy_memmap(filename, **kw__get_mmap)
+            result = get_numpy_memmap(filename, **kw__get_mmap)
         else:
             if var in  self.varsmm:
                 kw__get_mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
-                return get_numpy_memmap(filename, **kw__get_mmap)
+                result = get_numpy_memmap(filename, **kw__get_mmap)
             else:
                 kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
-                return get_numpy_memmap(filename, **kw__get_mmap)
+                result = get_numpy_memmap(filename, **kw__get_mmap)
+        return result
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
@@ -1071,7 +1072,9 @@ def printi(fdir='./',rootname='',it=1):
     print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
 
 
-@remember_and_recall('_memory_numpy_memmap')
+_MEMORY_NP_MEMMAP = '_memory_numpy_memmap'
+@manage_memmaps.manage_memmaps(_MEMORY_NP_MEMMAP)
+@remember_and_recall(_MEMORY_NP_MEMMAP, manage_memmaps.LastUpdatedOrderedDict)
 def get_numpy_memmap(filename, **kw__np_memmap):
     '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
     return np.memmap(filename, **kw__np_memmap)
