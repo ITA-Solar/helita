@@ -10,8 +10,6 @@ import resource
 import warnings
 import functools
 
-import numpy as np
-
 # OrderedDict class which keeps track of order keys were added
 from collections import OrderedDict
 class LastUpdatedOrderedDict(OrderedDict):
