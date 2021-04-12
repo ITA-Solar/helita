@@ -8,7 +8,10 @@ from . import document_vars
 import numpy as np
 
 # import external private modules
-from at_tools import fluids as fl
+try:
+  from at_tools import fluids as fl
+except ImportError:
+  warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.load_mf_quantities may crash')
 
 
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
