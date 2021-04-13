@@ -47,6 +47,8 @@ class EbysusData(BifrostData):
 
         setattr(self, manage_memmaps.NMLIM_ATTR, N_memmap)
 
+        super(EbysusData, self).__init__(*args, **kwargs)
+
         self.att = {}
         if len(np.shape(self.mf_tabparam['SPECIES']))==1:
             self.mf_nspecies = 1
@@ -60,10 +62,7 @@ class EbysusData(BifrostData):
                 self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2],fdir=self.fdir)
             self.mf_total_nlevel+=self.att[ispecies].params.nlevel
 
-        super(EbysusData, self).__init__(*args, **kwargs)
-
-        document_vars.create_vardict(self)
-        document_vars.set_vardocs(self)
+        self._init_vars_get(firstime=True)
 
     def _set_snapvars(self,firstime=False):
 
@@ -176,13 +175,15 @@ class EbysusData(BifrostData):
         except KeyError:
             print('warning, this idl file does not include mf_param_file')
 
-    def _init_vars(self, firstime=False, fast=None, *args, **kwargs):
+    def _init_vars(self, firstime=False, fast=None, *args__get_simple_var, **kw__get_simple_var):
         """
         Initialises variables (common for all fluid)
         
         fast: None, True, or False.
             whether to only read density (and not all the other variables).
             if None, use self.fast instead.
+
+        *args and **kwargs go to _get_simple_var
         """
         fast = fast if fast is not None else self.fast
         if self._fast_skip_flag is True:
@@ -209,22 +210,24 @@ class EbysusData(BifrostData):
         self.set_mfi(None, None)
         self.set_mfj(None, None)
 
-        
-        varlist = ['r'] if fast else self.simple_vars
+        if not firstime:
+            self._init_vars_get(firstime=False, *args__get_simple_var, **kw__get_simple_var)
+            
+
+    def _init_vars_get(self, firstime=False, *args__get_simple_var, **kw__get_simple_var):
+        '''get vars for _init_vars.'''
+        varlist = ['r'] if self.fast else self.simple_vars
         for var in varlist:
             try:
                 self.variables[var] = self._get_simple_var(
-                    var, self.mf_ispecies, self.mf_ilevel, *args, **kwargs)
+                    var, self.mf_ispecies, self.mf_ilevel,
+                    *args__get_simple_var, **kw__get_simple_var)
                 setattr(self, var, self.variables[var])
             except Exception as e:
                 if var=='r':
-                    raise     # we need to be able to read r or many methods will fail.
-                warnings.warn('init_vars failed to read variable {} due to {}'.format(var, e))
-                if self.verbose:
-                    if not (self.mf_ilevel == 1 and var in self.varsmfc):
-                        if (firstime):
-                            print(('(WWW) init_vars: could not read '
-                                'variable %s' % var))
+                    raise     # we need to be able to initialize r or many methods will fail.
+                errmsg = e if (self.verbose or firstime) else type(e).__name__
+                warnings.warn("init_vars failed to read variable '{}' due to: {}".format(var, errmsg))
 
         rdt = self.r.dtype
         if (self.nz>1):
