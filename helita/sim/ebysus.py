@@ -47,8 +47,6 @@ class EbysusData(BifrostData):
 
         setattr(self, manage_memmaps.NMLIM_ATTR, N_memmap)
 
-        super(EbysusData, self).__init__(*args, **kwargs)
-
         self.att = {}
         if len(np.shape(self.mf_tabparam['SPECIES']))==1:
             self.mf_nspecies = 1
@@ -61,6 +59,8 @@ class EbysusData(BifrostData):
             else:
                 self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2],fdir=self.fdir)
             self.mf_total_nlevel+=self.att[ispecies].params.nlevel
+
+        super(EbysusData, self).__init__(*args, **kwargs)
 
         document_vars.create_vardict(self)
         document_vars.set_vardocs(self)
