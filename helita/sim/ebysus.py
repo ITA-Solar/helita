@@ -218,15 +218,39 @@ class EbysusData(BifrostData):
         varlist = ['r'] if self.fast else self.simple_vars
         for var in varlist:
             try:
+                # try to get var via _get_simple_var.
                 self.variables[var] = self._get_simple_var(
                     var, self.mf_ispecies, self.mf_ilevel,
                     *args__get_simple_var, **kw__get_simple_var)
+            except Exception as error:
+                # if an error occurs, then...
+                if var=='r' and firstime:
+                    # RAISE THE ERROR
+                    ## Many methods depend on self.r being set. So if we can't get it, the code needs to crash.
+                    raise
+                elif isinstance(error, ValueError) and (self.mf_ispecies < 0 or self.mf_ilevel < 0):
+                    # SILENTLY HIDE THE ERROR.
+                    ## We assume it came from doing something like get_var('r', mf_ispecies=-1),
+                    ##  which is is _supposed_ to fail. We hope it came from that, at least....
+                    ## To be cautious / help debugging, we will store any such errors in self._hidden_errors.
+                    if not hasattr(self, '_hidden_errors'):
+                        self._hidden_errors = []
+                    if not hasattr(self, '_hidden_errors_max_len'):
+                        self._hidden_errors_max_len = 100  # don't keep track of more than this many errors.
+                    errmsg = "during _init_vars_get, with var='{}', snap={}, ifluid={}, jfluid={}"
+                    errmsg.format(var, self.snap, self.ifluid, self.jfluid)
+                    self._hidden_errors += [(errmsg, error)]
+                    if len(self._hidden_errors) > self._hidden_errors_max_len:
+                        del self._hidden_errors[0]
+                else:
+                    # MAKE A WARNING but don't crash the code.
+                    ## Note: warnings with the same exact contents will only appear once per session, by default.
+                    ## You can change this behavior via, e.g.: import warnings; warnings.simplefilter('always')
+                    errmsg = error if (self.verbose or firstime) else type(error).__name__
+                    warnings.warn("init_vars failed to read variable '{}' due to: {}".format(var, errmsg))
+            else:
+                # if there was no error, then set self.var to the result.
                 setattr(self, var, self.variables[var])
-            except Exception as e:
-                if var=='r':
-                    raise     # we need to be able to initialize r or many methods will fail.
-                errmsg = e if (self.verbose or firstime) else type(e).__name__
-                warnings.warn("init_vars failed to read variable '{}' due to: {}".format(var, errmsg))
 
         rdt = self.r.dtype
         if (self.nz>1):
@@ -377,15 +401,16 @@ class EbysusData(BifrostData):
                 'WARNING: cstagger use has been turned off,',
                 'turn it back on with "dd.cstagop = True"')
 
-        if ((snap is not None) and np.any(snap != self.snap)):
-            self.set_snap(snap)
-            self.variables={}
-
+        # set fluid before set_snap.
+        ## setting fluid MUST happen before setting snap,
+        ## because set_snap may call _init_vars, which calls _get_simple_var,
+        ## and we want to make sure we are getting vars for the correct fluids!
         self.set_mfi(mf_ispecies, mf_ilevel)
         self.set_mfj(mf_jspecies, mf_jlevel)
 
-        # This should not be here because mf_ispecies < 0 is for electrons.
-        #assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
+        if ((snap is not None) and np.any(snap != self.snap)):
+            self.set_snap(snap)
+            self.variables={}
 
         # get value of variable
         if var in self.variables:
@@ -1072,7 +1097,7 @@ def printi(fdir='./',rootname='',it=1):
     print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
 
 
-_MEMORY_NP_MEMMAP = '_memory_numpy_memmap'
+_MEMORY_NP_MEMMAP = '_memory_memmap'
 @manage_memmaps.manage_memmaps(_MEMORY_NP_MEMMAP)
 @remember_and_recall(_MEMORY_NP_MEMMAP, manage_memmaps.LastUpdatedOrderedDict)
 def get_numpy_memmap(filename, **kw__np_memmap):
@@ -1080,7 +1105,7 @@ def get_numpy_memmap(filename, **kw__np_memmap):
     return np.memmap(filename, **kw__np_memmap)
 
 
-@remember_and_recall('_memory_read_mftab_ascii')
+@remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
