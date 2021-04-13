@@ -213,7 +213,6 @@ class EbysusData(BifrostData):
         if not firstime:
             self._init_vars_get(firstime=False, *args__get_simple_var, **kw__get_simple_var)
             
-
     def _init_vars_get(self, firstime=False, *args__get_simple_var, **kw__get_simple_var):
         '''get vars for _init_vars.'''
         varlist = ['r'] if self.fast else self.simple_vars
@@ -235,49 +234,51 @@ class EbysusData(BifrostData):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
+    def set_mf_fluid(self, species=None, level=None, i='i'):
+        '''sets self.mf_{i}species and self.mf_{i}level. Also sets self.{i}fluid
+        species, level: None or int
+            None -> if self.mf_{i}attr already exists, don't change it.
+                    else, set it to 1.
+            ints -> set mf_{i}species=species, mf_{i}level=level.
+        '''
+        DEFAULT_S, DEFAULT_L = (1, 1)
+        mf_species_attr = 'mf_'+i+'species'
+        mf_level_attr = 'mf_'+i+'level'
+        fluid_attr = i+'fluid'
+        # set species
+        if species is None:
+            if not hasattr(self, mf_species_attr):
+                species = DEFAULT_S
+            else:
+                species = getattr(self, mf_species_attr)
+        setattr(self, mf_species_attr, species)
+        # set level
+        if level is None:
+            if not hasattr(self, mf_level_attr):
+                level   = DEFAULT_L
+            else:
+                level   = getattr(self, mf_level_attr)
+        setattr(self, mf_level_attr, level)
+        # set fluid
+        setattr(self, fluid_attr, (species, level) )
+
     def set_mfi(self, mf_ispecies=None, mf_ilevel=None):
-        """
-        adds mf_ispecies and mf_ilevel attributes if they don't exist and
-        changes mf_ispecies and mf_ilevel if needed. It will set defaults to 1
-        """
-
-        if (mf_ispecies is not None):
-            if (mf_ispecies != self.mf_ispecies):
-                self.mf_ispecies = mf_ispecies
-            elif not hasattr(self, 'mf_ispecies'):
-                self.mf_ispecies = 1
-        elif not hasattr(self, 'mf_ispecies'):
-            self.mf_ispecies = 1
-
-        if (mf_ilevel is not None):
-            if (mf_ilevel != self.mf_ilevel):
-                self.mf_ilevel = mf_ilevel
-            elif not hasattr(self, 'mf_ilevel'):
-                self.mf_ilevel = 1
-        elif not hasattr(self, 'mf_ilevel'):
-            self.mf_ilevel = 1
+        '''set self.mf_ispecies, self.mf_ilevel, and self.ifluid.
+        mf_ispecies, mf_ilevel: None or int
+            None -> if attr already exists, don't change it.
+                    else, set it to 1.
+            int  -> set attr to this value.
+        '''
+        return self.set_mf_fluid(mf_ispecies, mf_ilevel, 'i')
 
     def set_mfj(self, mf_jspecies=None, mf_jlevel=None):
-        """
-        adds mf_ispecies and mf_ilevel attributes if they don't exist and
-        changes mf_ispecies and mf_ilevel if needed. It will set defaults to 1
-        """
-
-        if (mf_jspecies is not None):
-            if (mf_jspecies != self.mf_jspecies):
-                self.mf_jspecies = mf_jspecies
-            elif not hasattr(self, 'mf_jspecies'):
-                self.mf_ispecies = 1
-        elif not hasattr(self, 'mf_jspecies'):
-            self.mf_jspecies = 1
-
-        if (mf_jlevel is not None):
-            if (mf_jlevel != self.mf_jlevel):
-                self.mf_jlevel = mf_jlevel
-            elif not hasattr(self, 'mf_jlevel'):
-                self.mf_jlevel = 1
-        elif not hasattr(self, 'mf_jlevel'):
-            self.mf_jlevel = 1
+        '''set self.mf_jspecies, self.mf_jlevel, and self.jfluid.
+        mf_jspecies, mf_jlevel: None or int
+            None -> if attr already exists, don't change it.
+                    else, set it to 1.
+            int  -> set attr to this value.
+        '''
+        return self.set_mf_fluid(mf_jspecies, mf_jlevel, 'j')
 
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
@@ -380,26 +381,16 @@ class EbysusData(BifrostData):
             self.set_snap(snap)
             self.variables={}
 
-        if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)):
-            self.set_mfi(mf_ispecies, mf_ilevel)
-            self.variables={}
-        elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
-            self.set_mfi(mf_ispecies, mf_ilevel)
-            self.variables={}
-        if ((mf_jspecies is not None) and (mf_jspecies != self.mf_jspecies)):
-            self.set_mfj(mf_jspecies, mf_jlevel)
-            self.variables={}
-        elif (( mf_ilevel is not None) and (mf_jlevel != self.mf_jlevel)):
-            self.set_mfj(mf_jspecies, mf_jlevel)
-            self.variables={}
+        self.set_mfi(mf_ispecies, mf_ilevel)
+        self.set_mfj(mf_jspecies, mf_jlevel)
 
         # This should not be here because mf_ispecies < 0 is for electrons.
         #assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
 
-        # # check if already in memmory
+        # get value of variable
         if var in self.variables:
             return self.variables[var]
-        elif var in self.simple_vars:  # is variable already loaded?
+        elif var in self.simple_vars:
             val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel,
                                 self.mf_jspecies, self.mf_jlevel,panic=panic)
         elif var in self.auxxyvars:
@@ -413,10 +404,9 @@ class EbysusData(BifrostData):
                         IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
                         DEBYE_LN_QUANT='', CROSTAB_QUANT='',
                         COULOMB_COL_QUANT='', AMB_QUANT='')
-            # Loading arithmetic quantities
-            if np.shape(val) is ():
+            if val is None:
                 val = load_arithmetic_quantities(self,var)
-            if np.shape(val) is ():
+            if val is None:
                 val = load_mf_quantities(self,var)
 
         if document_vars.creating_vardict(self):
@@ -430,7 +420,7 @@ class EbysusData(BifrostData):
                 self.vardocs()
             return None
 
-        if np.shape(val) is ():
+        if val is None:
             raise ValueError(('get_var: do not know (yet) how to '
                           'calculate quantity %s. Note that simple_var '
                           'available variables are: %s.\nIn addition, '
@@ -593,6 +583,10 @@ class EbysusData(BifrostData):
                 dirvars = '%s.io/mf_%02i_%02i/mfc/' % (self.file_root,
                         self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
+            else:
+                errmsg = "Failed to find '{}' in simple vars for ".format(var) + \
+                         "ifluid={}, jfluid={}. (at point 1 in ebysus.py)".format(self.ifluid, self.jfluid)
+                raise ValueError(errmsg)
         else:
             dirvars = ''
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
@@ -633,7 +627,6 @@ class EbysusData(BifrostData):
                             jdx += 1
                         elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
                             jdx += 1
-
             elif var in self.varsmfr:
                 idx = self.varsmfr.index(var)
                 fsuffix_a = '.aux'
@@ -650,6 +643,10 @@ class EbysusData(BifrostData):
                 idx = self.varsmfc.index(var)
                 fsuffix_a = '.aux'
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
+            else:
+                errmsg = "failed to find '{}' in simple vars for ".format(var) + \
+                         "ifluid={}, jfluid={} (at point 2 in ebysus.py)".format(self.ifluid, self.jfluid)
+                raise ValueError(errmsg)
 
         if panic: 
             if fsuffix_a == '.aux': 
