@@ -1908,6 +1908,13 @@ def remember_and_recall(MEMORYATTR, _memtype=dict):
 
     track modification timestamp for file in memory lookup dict.
         this ensures if file is modified we will read the new file data.
+
+    TODO:
+        somehow include args & kwargs data in filekey.
+            Not really relevant for bifrost, but matters for ebysus where we might
+            store memmaps corresponding to different parts of the same file,
+            e.g. file1 with offset=0, and file1 with offset=2.
+            NOTE: this TODO item will not affect outputs; it is for efficiency improvement, only.
     '''
     def decorator(f):
         @functools.wraps(f)
@@ -1925,17 +1932,18 @@ def remember_and_recall(MEMORYATTR, _memtype=dict):
                 else:
                     timestamp = '???'
                 filekey   = filename.lower()
-                # determine whether we have this filename with this timestamp stored in memory already.
+                # determine whether we have this (filename, timestamp, args, kwargs) in memory already.
                 need_to_read = True
                 if filekey in memory.keys():
-                    if memory[filekey][0]==timestamp:
+                    mem = memory[filekey]
+                    if mem['file_timestamp']==timestamp and mem['args']==args and mem['kwargs']==kwargs:
                         need_to_read = False
                 # read file if necessary (and store result to memory)
                 if need_to_read:
                     result = f(filename, *args, **kwargs)       # here is where we call f, if obj is not None.
-                    memory[filekey] = (timestamp, result)
+                    memory[filekey] = dict(value=result, file_timestamp=timestamp, args=args, kwargs=kwargs)
                 # return value from memory
-                return memory[filekey][1]
+                return memory[filekey]['value']
             else:
                 return f(filename, *args, **kwargs)  # here is where we call f, if obj is None.
         return f_but_remember_and_recall
