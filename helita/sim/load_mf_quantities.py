@@ -62,7 +62,10 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   '''Variables which are calculated by looping through species or levels.'''
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke', 'grph', 'tot_part', 'mu', 'pe', ]
+      GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke',
+                      'tot_px', 'tot_py', 'tot_pz',
+                      'grph', 'tot_part', 'mu', 'pe',
+                      ]
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__)
@@ -71,6 +74,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
     docvar('tot_e',  'sum of internal energy densities of all fluids [simu. energy density units]')
     docvar('tot_ke', 'sum of kinetic  energy densities of all fluids [simu. energy density units]')
+    for axis in ['x', 'y', 'z']:
+      docvar('tot_p'+axis, 'sum of '+axis+'-momentum densities of all fluids [simu. mom. dens. units]')
     docvar('grph',  'grams per hydrogen atom')
     docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
     docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
@@ -109,6 +114,11 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     for fluid in fl.Fluids(dd=obj):
       output += 0.5 * obj.get_var('r', ifluid=fluid.SL) * obj.get_var('u2')  # kinetic energy density of fluid
   
+  elif var.startswith('tot_p'):
+    axis = var[-1]
+    for fluid in fl.Fluids(dd=obj):
+      output += obj.get_var('p'+axis, ifluid=fluid.SL)   # momentum density of fluid
+
   elif var == 'pe':
     output = (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
