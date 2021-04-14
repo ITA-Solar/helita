@@ -21,6 +21,7 @@ from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
 from . import document_vars
+from . import file_memory
 
 whsp = '  '
 
@@ -1898,58 +1899,7 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
                             append=False, Bx=Bx, By=By, Bz=Bz, desc=desc,
                             snap=snaps[0])
 
-
-def remember_and_recall(MEMORYATTR, _memtype=dict):
-    '''wrapper which returns function but with optional args obj, MEMORYATTR.
-    default obj=None, MEMORYATTR=MEMORYATTR.
-    if obj is None, behavior is unchanged;
-    else, remembers the values from reading files (by saving to the dict obj.MEMORYATTR),
-          and returns those values instead of rereading files. (This improves efficiency.)
-
-    track modification timestamp for file in memory lookup dict.
-        this ensures if file is modified we will read the new file data.
-
-    TODO:
-        somehow include args & kwargs data in filekey.
-            Not really relevant for bifrost, but matters for ebysus where we might
-            store memmaps corresponding to different parts of the same file,
-            e.g. file1 with offset=0, and file1 with offset=2.
-            NOTE: this TODO item will not affect outputs; it is for efficiency improvement, only.
-    '''
-    def decorator(f):
-        @functools.wraps(f)
-        def f_but_remember_and_recall(filename, *args, obj=None, MEMORYATTR=MEMORYATTR, **kwargs):
-            '''if obj is None, simply does f(filename, *args, **kwargs).
-            Else, recall or remember result, as appropriate.
-                memory location is obj.MEMORYATTR[filename.lower()].
-            '''
-            if obj is not None:
-                if not hasattr(obj, MEMORYATTR):
-                    setattr(obj, MEMORYATTR, _memtype())
-                memory = getattr(obj, MEMORYATTR)
-                if os.path.exists(filename):
-                    timestamp = os.stat(filename).st_mtime   # timestamp of when file was last modified
-                else:
-                    timestamp = '???'
-                filekey   = filename.lower()
-                # determine whether we have this (filename, timestamp, args, kwargs) in memory already.
-                need_to_read = True
-                if filekey in memory.keys():
-                    mem = memory[filekey]
-                    if mem['file_timestamp']==timestamp and mem['args']==args and mem['kwargs']==kwargs:
-                        need_to_read = False
-                # read file if necessary (and store result to memory)
-                if need_to_read:
-                    result = f(filename, *args, **kwargs)       # here is where we call f, if obj is not None.
-                    memory[filekey] = dict(value=result, file_timestamp=timestamp, args=args, kwargs=kwargs)
-                # return value from memory
-                return memory[filekey]['value']
-            else:
-                return f(filename, *args, **kwargs)  # here is where we call f, if obj is None.
-        return f_but_remember_and_recall
-    return decorator
-
-@remember_and_recall('_memory_read_idl_ascii')
+@file_memory.remember_and_recall('_memory_read_idl_ascii')
 def read_idl_ascii(filename,firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary.
     if obj is not None,'''
@@ -2024,7 +1974,7 @@ def read_idl_ascii(filename,firstime=False):
 
     return params
 
-@remember_and_recall('_memory_read_cross_txt')
+@file_memory.remember_and_recall('_memory_read_cross_txt')
 def read_cross_txt(filename,firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary '''
     li = 0
