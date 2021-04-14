@@ -2,9 +2,15 @@
 Set of programs to read and interact with output from Multifluid/multispecies
 """
 
+DEBUG = False   # if True, change some things, to make debugging easier. (remove this in the long-term.)
+if DEBUG:
+    print('we have loaded ebysus.py in debug mode.')
+
 # import built-in modules
 import os
 import time
+if DEBUG:
+    import sys
 
 # import local modules
 from .bifrost import (
@@ -489,6 +495,9 @@ class EbysusData(BifrostData):
                           'see e.g. help(self.get_var) or get_var('')) for guidance'
                           '.' % (var, repr(self.simple_vars))))
 
+        if DEBUG:
+            self._check_mm_refs(val, 0)
+
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
             if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
@@ -737,7 +746,25 @@ class EbysusData(BifrostData):
             else:
                 kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
                 result = get_numpy_memmap(filename, **kw__get_mmap)
+        if DEBUG:
+            self._check_mm_refs(result, 0)
         return result
+
+    if DEBUG:
+        def _check_mm_refs(self, x, N_external, in_memory=None):
+            '''checks whether there are the correct number of refs to memmap x.
+            N_external is guess of how many references there are besides the x which is passed here.
+            in_memory: bool or None. None -> (getattr(self, file_memory.NMLIM_ATTR, 0)==0)
+            '''
+            # total number of refs should be 3 + N_external + (1 if x is in _memory_memmap else 0)
+            ## the 3 are: original x, local x in this function, local x in sys.getrefcount.
+            errstr = 'Too many references. Expected {} from memory plus {} from external, but got {} total. ' + self.quick_look()
+            if in_memory is None: in_memory = getattr(self, file_memory.NMLIM_ATTR, 0)==0
+            Nref = sys.getrefcount(x)
+            memref = (1 if in_memory else 0)
+            expected = 3 + N_external + memref
+            assert Nref == expected, errstr.format(memref, N_external, Nref-3)
+            return True
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
