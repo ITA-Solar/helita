@@ -31,7 +31,7 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=0, **kwargs):
+    def __init__(self, *args, N_memmap=0, fast=True, **kwargs):
         ''' initialize EbysusData object.
 
         N_memmap: int (default 0)
@@ -44,11 +44,22 @@ class EbysusData(BifrostData):
                     Turns off remembering memmaps.
                     Not recommended; causes major slowdown.
             >=1 --> remember up to this many memmaps.
+
+        fast: True (default) or False
+            whether to be fast.
+            True -> don't create memmaps for all simple variables when snapshot changes.
+            False -> do create memmaps for all simple variables when snapshot changes.
+                     Not recommended; causes major slowdown.
+                     This option is included in case legacy code assumes values
+                     via self.var, or self.variables[var], instead of self.get_var(var).
+                     As long as you use get_var to get var values, you can safely use fast=True.
+
+        *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
 
-        super(EbysusData, self).__init__(*args, **kwargs)
+        super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
         self.att = {}
         if len(np.shape(self.mf_tabparam['SPECIES']))==1:
