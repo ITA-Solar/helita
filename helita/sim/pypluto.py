@@ -1011,7 +1011,7 @@ class PlutoData(object):
     if self.typemodel == 'Kostas': 
         var=var[...,::-1]
         
-    return var[]
+    return var
 
 
   def trans2commaxes(self): 
