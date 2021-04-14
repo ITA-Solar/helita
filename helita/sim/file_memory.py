@@ -22,6 +22,7 @@ TODO:
 import resource
 import warnings
 import functools
+import os
 
 # set defaults
 ## apparently there is good efficiency improvement even if we only remember the last few memmaps.
