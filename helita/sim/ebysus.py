@@ -237,7 +237,7 @@ class EbysusData(BifrostData):
                         self._hidden_errors = []
                     if not hasattr(self, '_hidden_errors_max_len'):
                         self._hidden_errors_max_len = 100  # don't keep track of more than this many errors.
-                    errmsg = "during _init_vars_get, with var='{}', snap={}, ifluid={}, jfluid={}"
+                    errmsg = "during _init_vars_get, with var='{}', {}".format(var, self.quick_look())
                     errmsg.format(var, self.snap, self.ifluid, self.jfluid)
                     self._hidden_errors += [(errmsg, error)]
                     if len(self._hidden_errors) > self._hidden_errors_max_len:
@@ -250,7 +250,11 @@ class EbysusData(BifrostData):
                     warnings.warn("init_vars failed to read variable '{}' due to: {}".format(var, errmsg))
             else:
                 # if there was no error, then set self.var to the result.
+                ## also set self.variables['metadata'] to self._metadata.
+                ## this ensures we only pull data from self.variables when
+                ## it is the correct snapshot, ifluid, and jfluid.
                 setattr(self, var, self.variables[var])
+                self.variables['metadata'] = self._metadata()
 
         rdt = self.r.dtype
         if (self.nz>1):
@@ -303,6 +307,24 @@ class EbysusData(BifrostData):
             int  -> set attr to this value.
         '''
         return self.set_mf_fluid(mf_jspecies, mf_jlevel, 'j')
+
+    def _metadata(self, none=None):
+        '''returns dict of snap, ifluid, jfluid for self.'''
+        return {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
+
+    def quick_look(self):
+        '''returns string with snap, ifluid, and jfluid.'''
+        x = self._metadata(none='(not set)')
+        return 'snap={}, ifluid={}, jfluid={}'.format(x['snap'], x['ifluid'], x['jfluid'])
+
+    def _metadata_equals(self, alt_metadata, none=None):
+        '''return whether self._metadata(none) equals to self.alt_metadata.'''
+        x = self._metadata(none=none)
+        if set(x.keys()) != set(alt_metadata.keys()): return False
+        if x['ifluid'] != alt_metadata['ifluid']: return False
+        if x['jfluid'] != alt_metadata['jfluid']: return False
+        if np.any(x['snap'] != alt_metadata['snap']): return False
+        return True
 
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
@@ -410,10 +432,9 @@ class EbysusData(BifrostData):
 
         if ((snap is not None) and np.any(snap != self.snap)):
             self.set_snap(snap)
-            self.variables={}
 
         # get value of variable
-        if var in self.variables:
+        if self._metadata_equals(self.variables) and var in self.variables:
             return self.variables[var]
         elif var in self.simple_vars:
             val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel,
@@ -609,8 +630,8 @@ class EbysusData(BifrostData):
                         self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
             else:
-                errmsg = "Failed to find '{}' in simple vars for ".format(var) + \
-                         "ifluid={}, jfluid={}. (at point 1 in ebysus.py)".format(self.ifluid, self.jfluid)
+                errmsg = "Failed to find '{}' in simple vars for {}. (at point 1 in ebysus.py)"
+                errmsg = errmsg.format(var, self.quick_look())
                 raise ValueError(errmsg)
         else:
             dirvars = ''
@@ -669,8 +690,8 @@ class EbysusData(BifrostData):
                 fsuffix_a = '.aux'
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
             else:
-                errmsg = "failed to find '{}' in simple vars for ".format(var) + \
-                         "ifluid={}, jfluid={} (at point 2 in ebysus.py)".format(self.ifluid, self.jfluid)
+                errmsg = "Failed to find '{}' in simple vars for {}. (at point 2 in ebysus.py)"
+                errmsg = errmsg.format(var, self.quick_look())
                 raise ValueError(errmsg)
 
         if panic: 
