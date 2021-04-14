@@ -7,11 +7,37 @@ from . import document_vars
 elemlist = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's',
         'k', 'ca', 'cr', 'fe', 'ni']
 
+# put quant default lists that are based on elemlist here
+## (instead of calculating inside each function,)
+## because it takes non-negligible time to calculate these repeatedly
 CROSTAB_LIST = ['e_' + clist for clist in elemlist]
 CROSTAB_LIST += [clist+'_e' for clist in elemlist]
 for iel in elemlist:
   CROSTAB_LIST = CROSTAB_LIST + [
     iel + '_' + clist for clist in elemlist]
+_COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_LIST]
+_COLFRE_QUANT += ['nu%s_mag' % clist for clist in CROSTAB_LIST]
+_COLFRE_QUANT += ['nue_' + clist for clist in elemlist]
+_COLFREMX_QUANT = ['numx' + clist for clist in CROSTAB_LIST]
+_COLFREMX_QUANT += ['numx%s_mag' % clist for clist in CROSTAB_LIST]
+_COLCOU_QUANT = ['nucou' + clist for clist in CROSTAB_LIST]
+_COLCOU_QUANT += ['nucoue_' + clist for clist in elemlist]
+_COLCOUMS_QUANT = ['nucou_ei', 'nucou_ii']
+_COLCOUMS_QUANT += ['nucou' + clist + '_i' for clist in elemlist]
+_COLFRI_QUANT = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
+_COLFRI_QUANT += ['nu' + clist + '_i' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_i' for clist in elemlist]
+_COLFRI_QUANT += ['nu' + clist + '_i_mag' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_i_mag' for clist in elemlist]
+_COLFRI_QUANT += ['nu' + clist + '_n' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_n' for clist in elemlist]
+_COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_n_mag' for clist in elemlist]
+_COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
+_GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
+_KAPPA_QUANT = ['kappa' + clist for clist in elemlist]
+_IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
+_IONP_QUANT += ['r' + clist + '-' for clist in elemlist]
 
 whsp = '  '
 
@@ -257,9 +283,7 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
   tables does not exist. 
   '''
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_LIST]
-    COLFRE_QUANT += ['nu%s_mag' % clist for clist in CROSTAB_LIST]
-    COLFRE_QUANT += ['nue_' + clist for clist in elemlist]
+    COLFRE_QUANT = _COLFRE_QUANT
 
   if quant=='':  
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_collision.__doc__)
@@ -304,8 +328,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
   Maxwell molecular collision frequency 
   '''
   if COLFREMX_QUANT is None:
-    COLFREMX_QUANT = ['numx' + clist for clist in CROSTAB_LIST]
-    COLFREMX_QUANT += ['numx%s_mag' % clist for clist in CROSTAB_LIST]
+    COLFREMX_QUANT = _COLFREMX_QUANT
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLFREMX_QUANT', COLFREMX_QUANT, get_collision_maxw.__doc__)
@@ -411,8 +434,7 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
   (Hansteen et al. 1997)
   '''
   if COLCOU_QUANT is None:
-    COLCOU_QUANT = ['nucou' + clist for clist in CROSTAB_LIST]
-    COLCOU_QUANT += ['nucoue_' + clist for clist in elemlist]
+    COLCOU_QUANT = _COLCOU_QUANT
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLCOU_QUANT', COLCOU_QUANT, get_collcoul.__doc__)
@@ -447,8 +469,7 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
   all ionized elements (cgs)
   '''
   if (COLCOUMS_QUANT == None):
-    COLCOUMS_QUANT = ['nucou_ei', 'nucou_ii']
-    COLCOUMS_QUANT += ['nucou' + clist + '_i' for clist in elemlist]
+    COLCOUMS_QUANT = _COLCOUMS_QUANT
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLCOUMS_QUANT', COLCOUMS_QUANT, get_collcoul_ms.__doc__)
@@ -488,15 +509,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   '''
 
   if (COLFRI_QUANT == None):
-    COLFRI_QUANT = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
-    COLFRI_QUANT += ['nu' + clist + '_i' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_i' for clist in elemlist]
-    COLFRI_QUANT += ['nu' + clist + '_i_mag' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_i_mag' for clist in elemlist]
-    COLFRI_QUANT += ['nu' + clist + '_n' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_n' for clist in elemlist]
-    COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_n_mag' for clist in elemlist]
+    COLFRI_QUANT = _COLFRI_QUANT
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRI_QUANT', COLFRI_QUANT, get_collision_ms.__doc__)
@@ -604,7 +617,7 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
   Coulomb collision frequency in Hz
   '''
   if COULOMB_COL_QUANT is None:
-    COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
+    COULOMB_COL_QUANT = _COULOMB_COL_QUANT
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COULOMB_COL_QUANT', COULOMB_COL_QUANT, get_coulomb.__doc__)
@@ -890,7 +903,7 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
   gf+ ionization state
   '''
   if (GYROF_QUANT is None):
-    GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
+    GYROF_QUANT = _GYROF_QUANT
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'GYROF_QUANT', GYROF_QUANT, get_gyrof.__doc__)
@@ -915,8 +928,8 @@ def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
   at the end it must have the ionization
   '''
   if (KAPPA_QUANT is None):
-    KAPPA_QUANT = ['kappanorm_', 'kappae'] + \
-        ['kappa' + clist for clist in elemlist]
+    KAPPA_QUANT = ['kappanorm_', 'kappae'] + _KAPPA_QUANT
+        
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'KAPPA_QUANT', KAPPA_QUANT, get_kappa.__doc__)
@@ -974,8 +987,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   densities for specific ionized species
   '''
   if (IONP_QUANT is None):
-    IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
-    IONP_QUANT += ['r' + clist + '-' for clist in elemlist]
+    IONP_QUANT = _IONP_QUANT
     IONP_QUANT += ['rneu', 'rion', 'nion', 'nneu', 'nelc']
     IONP_QUANT += ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']
 
