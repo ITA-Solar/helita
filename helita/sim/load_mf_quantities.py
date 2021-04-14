@@ -362,7 +362,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
     cross = obj.get_var('cross')  # units are in cm^2.
     #calculate & return nu_ij:
-    return 8./3. * n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
+    return 4./3. * n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
   
   elif var == "nu_ij_mx":
     #### ASSUMES one fluid is charged & other is neutral. ####
