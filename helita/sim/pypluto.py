@@ -954,7 +954,7 @@ class PlutoData(object):
 
 
 
-  def trans2comm(self, varname, snap=None, angle=45): 
+  def trans2comm(self, varname, snap=None, angle=None): 
     '''
     Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
     is: 
@@ -984,25 +984,33 @@ class PlutoData(object):
 
     self.trans2commaxes 
 
-    if angle != 0: 
+    if angle == None and not hasattr(self,'trans2comm_angle'): 
+        self.trans2comm_angle = 45
+    if angle != None: 
+        self.trans2comm_angle = angle
+
+    if self.trans2comm_angle != 0: 
         if varname[0] in ['u']: 
             if varname[-1] in ['x']: 
                 varx = self.get_var(varname,snap=snap)
                 vary = self.get_var(varname[0]+'y',snap=snap)
-                var = varx * np.cos(angle/90.0*np.pi/2.0) - vary * np.sin(angle/90.0*np.pi/2.0)
+                var = varx * np.cos(self.trans2comm_angle/90.0*np.pi/2.0) - vary * np.sin(self.trans2comm_angle/90.0*np.pi/2.0)
             elif varname[-1] in ['y']: 
                 vary = self.get_var(varname,snap=snap)
                 varx = self.get_var(varname[0]+'x',snap=snap)
-                var = vary * np.cos(angle/90.0*np.pi/2.0) + varx * np.sin(angle/90.0*np.pi/2.0)
+                var = vary * np.cos(self.trans2comm_angle/90.0*np.pi/2.0) + varx * np.sin(self.trans2comm_angle/90.0*np.pi/2.0)
             else:  # component z
                 var = self.get_var(varname,snap=snap)
-            var = rotate(var, angle=angle, reshape=False, mode='nearest', axes=(0,1))
+            var = rotate(var, angle=self.trans2comm_angle, reshape=False, mode='nearest', axes=(0,1))
         else: 
             var = self.get_var(varname,snap=snap)
-            var = rotate(var, angle=angle, reshape=False, mode='nearest',axes=(0,1))
+            var = rotate(var, angle=self.trans2comm_angle, reshape=False, mode='nearest',axes=(0,1))
     else: 
         var = self.get_var(varname,snap=snap)
-            
+
+    if self.typemodel == 'Kostas': 
+        var=var[...,::-1].copy()
+        
     return var
 
 
