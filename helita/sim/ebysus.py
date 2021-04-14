@@ -31,17 +31,18 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=20, **kwargs):
+    def __init__(self, *args, N_memmap=0, **kwargs):
         ''' initialize EbysusData object.
 
-        N_memmap: int (default 20)
+        N_memmap: int (default 0)
             keep the N_memmap most-recently-created memmaps stored in self._memory_numpy_memmap.
             -1  --> try to never forget any memmaps.
                     May increase (for this python session) the default maximum number of files
                     allowed to be open simultaneously. Tries to be conservative about doing so.
                     See file_memory.py for more details.
             0   --> never remember any memmaps.
-                    Turns off remembering memmaps. Not recommended; causes major slowdown.
+                    Turns off remembering memmaps.
+                    Not recommended; causes major slowdown.
             >=1 --> remember up to this many memmaps.
         '''
 
