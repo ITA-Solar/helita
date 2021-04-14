@@ -9,14 +9,14 @@ import time
 # import local modules
 from .bifrost import (
     BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
-    read_idl_ascii, subs2grph, remember_and_recall,
+    read_idl_ascii, subs2grph,
 )
 from . import cstagger
 from .load_mf_quantities import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import document_vars
-from . import manage_memmaps
+from . import file_memory
 
 # import external public modules
 import numpy as np
@@ -39,13 +39,13 @@ class EbysusData(BifrostData):
             -1  --> try to never forget any memmaps.
                     May increase (for this python session) the default maximum number of files
                     allowed to be open simultaneously. Tries to be conservative about doing so.
-                    See manage_memmaps.py for more details.
+                    See file_memory.py for more details.
             0   --> never remember any memmaps.
                     Turns off remembering memmaps. Not recommended; causes major slowdown.
             >=1 --> remember up to this many memmaps.
         '''
 
-        setattr(self, manage_memmaps.NMLIM_ATTR, N_memmap)
+        setattr(self, file_memory.NMLIM_ATTR, N_memmap)
 
         super(EbysusData, self).__init__(*args, **kwargs)
 
@@ -310,7 +310,10 @@ class EbysusData(BifrostData):
 
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
-        return {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
+        result = {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
+        if result['snap'] is not none:
+            if np.size(result['snap'])>1: result['snap'] = self.snap[self.snapInd]
+        return result
 
     def quick_look(self):
         '''returns string with snap, ifluid, and jfluid.'''
@@ -1119,14 +1122,14 @@ def printi(fdir='./',rootname='',it=1):
 
 
 _MEMORY_NP_MEMMAP = '_memory_memmap'
-@manage_memmaps.manage_memmaps(_MEMORY_NP_MEMMAP)
-@remember_and_recall(_MEMORY_NP_MEMMAP, manage_memmaps.LastUpdatedOrderedDict)
+@file_memory.manage_memmaps(_MEMORY_NP_MEMMAP)
+@file_memory.remember_and_recall(_MEMORY_NP_MEMMAP, ORDERED=True)
 def get_numpy_memmap(filename, **kw__np_memmap):
     '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
     return np.memmap(filename, **kw__np_memmap)
 
 
-@remember_and_recall('_memory_mftab')
+@file_memory.remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
