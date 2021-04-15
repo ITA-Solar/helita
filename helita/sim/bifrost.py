@@ -86,11 +86,11 @@ class BifrostData(object):
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.', fast=False,
                  verbose=True, dtype='f4', big_endian=False, cstagop=True,
                  ghost_analyse=False, lowbus=False, numThreads=1, 
-                 params_only=False, sel_units=None):
+                 params_only=False, sel_units=None, use_relpath=False):
         """
         Loads metadata and initialises variables.
         """
-        self.fdir = os.path.abspath(fdir)
+        self.fdir = fdir if use_relpath else os.path.abspath(fdir)
         self.verbose = verbose
         self.cstagop = cstagop
         self.lowbus = lowbus
