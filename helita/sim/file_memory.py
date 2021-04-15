@@ -23,11 +23,16 @@ import resource
 import warnings
 import functools
 import os
+from collections import OrderedDict
+import sys  # for debugging 'too many files' crash; will be removed in the future
+
 
 # set defaults
 ## apparently there is good efficiency improvement even if we only remember the last few memmaps.
 ## NMLIM_ATTR is the name of the attr which will tell us max number of memmaps to remember.
-NMLIM_ATTR     = 'N_memmap'   
+NMLIM_ATTR     = 'N_memmap'  
+MEMORY_MEMMAP  = '_memory_memmap'
+MM_PERSNAP     = 'mm_persnap'
 ## hard limit on number of open files = limit set by system; cannot be changed.
 _, HARD = resource.getrlimit(resource.RLIMIT_NOFILE)
 ## soft limit on number of open files = limit observed by programs; can be changed, must always be less than HARD.
@@ -59,15 +64,21 @@ def remember_and_recall(MEMORYATTR, ORDERED=False):
                 for key in kw_mem, associate key kwargs[key] with uniqueness of result.
             '''
             if obj is not None:
+                if not hasattr(obj, '_recalled'):
+                    obj._recalled = dict()
+                if MEMORYATTR not in obj._recalled:
+                    obj._recalled[MEMORYATTR] = 0
                 if not hasattr(obj, MEMORYATTR):
                     setattr(obj, MEMORYATTR, dict())
                     memory = getattr(obj, MEMORYATTR)
+                    memory['data'] = dict()
                     memory['len'] = 0
                     memory['recalled'] = 0
                     if ORDERED:
-                        memory['order'] = []
+                        memory['order'] = OrderedDict()
                 else:
                     memory = getattr(obj, MEMORYATTR)
+                memdata = memory['data']
                 if os.path.exists(filename):
                     timestamp = os.stat(filename).st_mtime   # timestamp of when file was last modified
                 else:
@@ -75,9 +86,9 @@ def remember_and_recall(MEMORYATTR, ORDERED=False):
                 filekey   = filename.lower()
                 # determine whether we have this (filename, timestamp, kwargs) in memory already.
                 need_to_read = True
-                if filekey in memory.keys():
-                    mem = memory[filekey]
-                    for mid, memdict in mem['memdicts'].items():
+                if filekey in memdata.keys():
+                    memfile = memdata[filekey]
+                    for mid, memdict in memfile['memdicts'].items():
                         # determine if the values of kwargs (which appear in kw_mem) match those in memdict.
                         kws_match = True
                         for key in kw_mem:
@@ -93,22 +104,36 @@ def remember_and_recall(MEMORYATTR, ORDERED=False):
                         if kws_match and memdict['file_timestamp']==timestamp:
                             need_to_read = False
                             break
+                    # if we found a memdict matching (filename, timestamp, kwargs),
+                    ## we need to read if and only if memdict['value'] has been smashed.
+                    if not need_to_read:
+                        if 'value' not in memdict.keys():
+                            need_to_read = True
                 else:
-                    memory[filekey] = dict(memdicts=dict(), read_n=0) #read_n is number of times this file has been read.
-                    mem = memory[filekey]
+                    memdata[filekey] = dict(memdicts=dict(), read_n=0) #read_n is number of times this file has been read.
+                    memfile = memdata[filekey]
                 # read file if necessary (and store result to memory)
                 if need_to_read:
                     result  = f(filename, *args, **kwargs)    # here is where we call f, if obj is not None.
-                    read_n  = mem['read_n'] + 1
-                    mem['read_n'] = read_n
-                    memdict = dict(value=result, file_timestamp=timestamp, read_n=read_n)
+                    mid = memfile['read_n']  # mid is the unique index for this (timestamp, kwargs) for this filekey.
+                    memfile['read_n'] = mid + 1
+                    memdict = dict(value=result, file_timestamp=timestamp, mid=mid, recalled=0)
                     memdict.update(kwargs)
-                    mem['memdicts'][read_n] = memdict
+                    memfile['memdicts'][mid] = memdict
                     memory['len']   += 1    # total number of 'value's in memory
                     if ORDERED:
-                        memory['order'] += [(filekey, read_n)]
+                        memory['order'][(filekey, mid)] = None
+                        # this is faster than a list due to the re-ordering of memory['order']
+                        ## which occurs if we ever access the elements again.
+                        ## really a dict is unnecessary, we just need a "hashed" list,
+                        ## but we can abuse OrderedDict to get that.
                 else:
                     memory['recalled'] += 1
+                    memdict['recalled'] += 1
+                    obj._recalled[MEMORYATTR] += 1
+                    if ORDERED:
+                        # move this memdict to end of order list; order is order of access.
+                        memory['order'].move_to_end((filekey, memdict['mid']))
                 # return value from memory
                 return memdict['value']
             else:
@@ -176,13 +201,27 @@ def manage_memmaps(MEMORYATTR, kw_mem=['dtype', 'order', 'offset', 'shape']):
                     if forget_one:
                         # forget oldest memmap.
                         ## ... TODO: possibly add a warning? It may be okay to be silent though.
-                        filekey, mid = memory['order'][0]
-                        del memory[filekey]['memdicts'][mid]['value']  # this is the memmap
-                        del memory[filekey]['memdicts'][mid]           # this is the dict that had the memmap
-                        del memory['order'][0]
+                        filekey, mid = next(iter(memory['order'].keys()))
+                        # commented lines for debugging 'too many files' crash; will be removed in the future:
+                        #x = memory[filekey]['memdicts'][mid]['value']  # this is the memmap
+                        #print('there are {} references to the map.'.format(sys.getrefcount(x)))
+                        memdata = memory['data']
+                        memdict = memdata[filekey]['memdicts'][mid]
+                        del memdict['value']         # this is the memmap
+                        #print('there are {} references to the map (after deleting dict)'.format(sys.getrefcount(x)))
+                        #print('referrers are: ', referrers(x))
+                        del memory['order'][(filekey, mid)]
                         memory['len'] -= 1
             # return f(*args, **kwargs)
             return f(*args, kw_mem=kw_mem, **kwargs)
 
         return f_but_forget_memmaps_if_needed
     return decorator
+
+# for debugging 'too many files' crash; will be removed in the future:
+def namestr(obj, namespace):
+    return [name for name in namespace if namespace[name] is obj]
+
+# for debugging 'too many files' crash; will be removed in the future:
+def referrers(obj):
+    return [namestr(refe, globals()) for refe in gc.get_referrers(obj)]
