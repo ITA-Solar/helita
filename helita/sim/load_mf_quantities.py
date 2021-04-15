@@ -114,7 +114,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     for fluid in fl.Fluids(dd=obj):
       output += 0.5 * obj.get_var('r', ifluid=fluid.SL) * obj.get_var('u2')  # kinetic energy density of fluid
   
-  elif var.startswith('tot_p'):
+  elif var.startswith('tot_p'):  # note: must be tot_px, tot_py, or tot_pz.
     axis = var[-1]
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('p'+axis, ifluid=fluid.SL)   # momentum density of fluid
