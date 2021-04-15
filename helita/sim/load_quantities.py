@@ -58,47 +58,47 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
     val = get_em(obj, quant, EM_QUANT=EM_QUANT, **kwargs)  
   else: 
     val = None
-  if np.shape(val) == () and COULOMB_COL_QUANT != '':
+  if val is None and COULOMB_COL_QUANT != '':
     val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT, **kwargs)
-  if np.shape(val) == () and COLFRE_QUANT != '':
+  if val is None and COLFRE_QUANT != '':
     val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT,**kwargs)
-  if np.shape(val) == () and CROSTAB_QUANT != '':
+  if val is None and CROSTAB_QUANT != '':
     val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT,**kwargs)
-  if np.shape(val) == () and COLFRI_QUANT != '':
+  if val is None and COLFRI_QUANT != '':
     val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT, **kwargs)
-  if np.shape(val) == () and CURRENT_QUANT != '':
+  if val is None and CURRENT_QUANT != '':
     val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT, **kwargs)
-  if np.shape(val) == () and FLUX_QUANT != '':
+  if val is None and FLUX_QUANT != '':
     val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT, **kwargs)
-  if np.shape(val) == () and PLASMA_QUANT != '':
+  if val is None and PLASMA_QUANT != '':
     val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT, **kwargs)
-  if np.shape(val) == () and WAVE_QUANT != '':
+  if val is None and WAVE_QUANT != '':
     val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT, **kwargs)
-  if np.shape(val) == () and CYCL_RES != '':
+  if val is None and CYCL_RES != '':
     val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES, **kwargs)
-  if np.shape(val) == () and GYROF_QUANT != '':
+  if val is None and GYROF_QUANT != '':
     val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT, **kwargs)
-  if np.shape(val) == () and KAPPA_QUANT != '':
+  if val is None and KAPPA_QUANT != '':
     val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT, **kwargs)
-  if np.shape(val) == () and DEBYE_LN_QUANT != '':
+  if val is None and DEBYE_LN_QUANT != '':
     val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT, **kwargs)
-  if np.shape(val) == () and IONP_QUANT != '':
+  if val is None and IONP_QUANT != '':
     val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT, **kwargs)
-  if np.shape(val) == () and AMB_QUANT != '':
+  if val is None and AMB_QUANT != '':
     val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT, **kwargs)
-  if np.shape(val) == () and HALL_QUANT != '':
+  if val is None and HALL_QUANT != '':
     val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT, **kwargs)
-  if np.shape(val) == () and BATTERY_QUANT != '':
+  if val is None and BATTERY_QUANT != '':
     val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT, **kwargs)  
-  if np.shape(val) == () and SPITZER_QUANT != '':
+  if val is None and SPITZER_QUANT != '':
     val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT, **kwargs) 
-  if np.shape(val) == () and EOSTAB_QUANT != '': 
+  if val is None and EOSTAB_QUANT != '': 
     val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT, **kwargs)
-  if np.shape(val) == () and COLCOU_QUANT != '': 
+  if val is None and COLCOU_QUANT != '': 
     val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT, **kwargs)
-  if np.shape(val) == () and COLCOUMS_QUANT != '': 
+  if val is None and COLCOUMS_QUANT != '': 
     val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT, **kwargs)
-  if np.shape(val) == () and COLFREMX_QUANT != '': 
+  if val is None and COLFREMX_QUANT != '': 
     val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT, **kwargs)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
