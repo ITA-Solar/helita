@@ -2,7 +2,8 @@
 Set of programs to read and interact with output from Multifluid/multispecies
 """
 
-DEBUG = False   # if True, change some things, to make debugging easier. (remove this in the long-term.)
+DEBUG = False  # if True, change some things, to make debugging easier. (remove this in the long-term.)
+               # presently, debug mode is not working properly. - SE Apr 16 2021
 if DEBUG:
     print('we have loaded ebysus.py in debug mode.')
 
@@ -247,8 +248,7 @@ class EbysusData(BifrostData):
         for var in varlist:
             try:
                 # try to get var via _get_simple_var.
-                self.variables[var] = self._get_simple_var(
-                    var, self.mf_ispecies, self.mf_ilevel,
+                self.variables[var] = self._get_simple_var(var,
                     *args__get_simple_var, **kw__get_simple_var)
             except Exception as error:
                 # if an error occurs, then...
@@ -468,8 +468,7 @@ class EbysusData(BifrostData):
         if self._metadata_equals(self.variables) and var in self.variables:
             return self.variables[var]
         elif var in self.simple_vars:
-            val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel,
-                                self.mf_jspecies, self.mf_jlevel,panic=panic)
+            val = self._get_simple_var(var, panic=panic)
         elif var in self.auxxyvars:
             val =  super(EbysusData, self)._get_simple_var_xy(var)
         elif var in self.compvars:
@@ -563,6 +562,9 @@ class EbysusData(BifrostData):
         """
         if var == '':
             print(help(self._get_simple_var))
+
+        self.set_mfi(mf_ispecies, mf_ilevel)
+        self.set_mfj(mf_jspecies, mf_jlevel)
 
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
