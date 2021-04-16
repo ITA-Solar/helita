@@ -963,7 +963,7 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'DEBYE_LN_QUANT', DEBYE_LN_QUANT, get_debye_ln.__doc__)
-    docvar('debye_ln', "Debye length [Unknown]")
+    docvar('debye_ln', "Debye length [u.u_l]")
 
   if (quant == '') or not quant in DEBYE_LN_QUANT:
     return None
@@ -1320,6 +1320,13 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None, **kwargs):
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'BATTERY_QUANT', BATTERY_QUANT, get_batteryparam.__doc__)
+    docvar('bb_constqe', "constant coefficient involved in the battery term")
+    docvar('dxpe', "Gradient of electron pressure in the x direction [simu.u_p/simu.u_l]")
+    docvar('dype', "Gradient of electron pressure in the y direction [simu.u_p/simu.u_l]")
+    docvar('dzpe', "Gradient of electron pressure in the z direction [simu.u_p/simu.u_l]")
+    docvar('bb_batx', "Component of the battery term  in the x direction, (1/ne qe)*dx(pe)")
+    docvar('bb_baty', "Component of the battery term  in the y direction, (1/ne qe)*dy(pe)")
+    docvar('bb_batz', "Component of the battery term  in the z direction, (1/ne qe)*dz(pe)")
 
   if (quant == '') or not (quant in BATTERY_QUANT):
     return None
@@ -1361,6 +1368,10 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None, **kwargs):
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'SPITZER_QUANT', SPITZER_QUANT, get_spitzerparam.__doc__)
+    docvar('fcx', "X component of the anisotropic electron heat flux, i.e., (kappae(B)*grad(Te))_x")
+    docvar('fcy', "Y component of the anisotropic electron heat flux, i.e., (kappae(B)*grad(Te))_y")
+    docvar('fcz', "Z component of the anisotropic electron heat flux, i.e., (kappae(B)*grad(Te))_z")
+    docvar('qspitz', "Electron heat flux, i.e., Qspitz [simu.u_e/simu.u_t] erg.s-1")
 
   if (quant == '') or not (quant in SPITZER_QUANT):
     return None
