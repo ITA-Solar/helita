@@ -1009,7 +1009,7 @@ class PlutoData(object):
         var = self.get_var(varname,snap=snap)
 
     if self.typemodel == 'Kostas': 
-        var=var[...,::-1]
+        var=var[...,::-1].copy()
         
     return var
 

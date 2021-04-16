@@ -2,21 +2,27 @@
 Set of programs to read and interact with output from Multifluid/multispecies
 """
 
+DEBUG = False   # if True, change some things, to make debugging easier. (remove this in the long-term.)
+if DEBUG:
+    print('we have loaded ebysus.py in debug mode.')
+
 # import built-in modules
 import os
 import time
+if DEBUG:
+    import sys
 
 # import local modules
 from .bifrost import (
     BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
-    read_idl_ascii, subs2grph, remember_and_recall,
+    read_idl_ascii, subs2grph,
 )
 from . import cstagger
 from .load_mf_quantities import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import document_vars
-from . import manage_memmaps
+from . import file_memory
 
 # import external public modules
 import numpy as np
@@ -31,23 +37,39 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=20, **kwargs):
+    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, **kwargs):
         ''' initialize EbysusData object.
 
-        N_memmap: int (default 20)
+        N_memmap: int (default 0)
             keep the N_memmap most-recently-created memmaps stored in self._memory_numpy_memmap.
             -1  --> try to never forget any memmaps.
                     May increase (for this python session) the default maximum number of files
                     allowed to be open simultaneously. Tries to be conservative about doing so.
-                    See manage_memmaps.py for more details.
+                    See file_memory.py for more details.
             0   --> never remember any memmaps.
-                    Turns off remembering memmaps. Not recommended; causes major slowdown.
+                    Turns off remembering memmaps.
+                    Not recommended; causes major slowdown.
             >=1 --> remember up to this many memmaps.
+
+        mm_persnap: True (default) or False
+            whether to delete all memmaps in self._memory_memmap when we set_snap to a new snap.
+
+        fast: True (default) or False
+            whether to be fast.
+            True -> don't create memmaps for all simple variables when snapshot changes.
+            False -> do create memmaps for all simple variables when snapshot changes.
+                     Not recommended; causes major slowdown.
+                     This option is included in case legacy code assumes values
+                     via self.var, or self.variables[var], instead of self.get_var(var).
+                     As long as you use get_var to get var values, you can safely use fast=True.
+
+        *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
 
-        setattr(self, manage_memmaps.NMLIM_ATTR, N_memmap)
+        setattr(self, file_memory.NMLIM_ATTR, N_memmap)
+        setattr(self, file_memory.MM_PERSNAP, mm_persnap)
 
-        super(EbysusData, self).__init__(*args, **kwargs)
+        super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
         self.att = {}
         if len(np.shape(self.mf_tabparam['SPECIES']))==1:
@@ -142,8 +164,14 @@ class EbysusData(BifrostData):
         if (self.do_mhd):
             self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
 
-    # def set_snap(self,snap):
-    #     super(EbysusData, self).set_snap(snap)
+    def set_snap(self,snap,*args__set_snap,**kwargs__set_snap):
+        '''call set_snap from BifrostData,
+        but also if mm_persnap, then delete all the memmaps in memory..
+        '''
+        if getattr(self, file_memory.MM_PERSNAP, False) and np.size(self.snap)==1:
+            if hasattr(self, file_memory.MEMORY_MEMMAP):
+                delattr(self, file_memory.MEMORY_MEMMAP)
+        super(EbysusData, self).set_snap(snap, *args__set_snap, **kwargs__set_snap)
 
     def _read_params(self,firstime=False):
         ''' Reads parameter file specific for Multi Fluid Bifrost '''
@@ -310,7 +338,10 @@ class EbysusData(BifrostData):
 
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
-        return {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
+        result = {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
+        if result['snap'] is not none:
+            if np.size(result['snap'])>1: result['snap'] = self.snap[self.snapInd]
+        return result
 
     def quick_look(self):
         '''returns string with snap, ifluid, and jfluid.'''
@@ -473,6 +504,9 @@ class EbysusData(BifrostData):
                           'get_quantity can read others computed variables '
                           'see e.g. help(self.get_var) or get_var('')) for guidance'
                           '.' % (var, repr(self.simple_vars))))
+
+        if DEBUG:
+            self._check_mm_refs(val, 0)
 
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
@@ -722,7 +756,25 @@ class EbysusData(BifrostData):
             else:
                 kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
                 result = get_numpy_memmap(filename, **kw__get_mmap)
+        if DEBUG:
+            self._check_mm_refs(result, 0)
         return result
+
+    if DEBUG:
+        def _check_mm_refs(self, x, N_external, in_memory=None):
+            '''checks whether there are the correct number of refs to memmap x.
+            N_external is guess of how many references there are besides the x which is passed here.
+            in_memory: bool or None. None -> (getattr(self, file_memory.NMLIM_ATTR, 0)==0)
+            '''
+            # total number of refs should be 3 + N_external + (1 if x is in _memory_memmap else 0)
+            ## the 3 are: original x, local x in this function, local x in sys.getrefcount.
+            errstr = 'Too many references. Expected {} from memory plus {} from external, but got {} total. ' + self.quick_look()
+            if in_memory is None: in_memory = getattr(self, file_memory.NMLIM_ATTR, 0)==0
+            Nref = sys.getrefcount(x)
+            memref = (1 if in_memory else 0)
+            expected = 3 + N_external + memref
+            assert Nref == expected, errstr.format(memref, N_external, Nref-3)
+            return True
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
@@ -750,6 +802,7 @@ class EbysusData(BifrostData):
         ifluid - tuple of integers, or None (default)
             if not None: (mf_ispecies, mf_ilevel) = ifluid
         **kwargs may contain the following:
+            snaps  - alias for snap
             iSL    - alias for ifluid
             jSL    - alias for jfluid
             iS, iL - alias for ifluid[0], ifluid[1]
@@ -761,7 +814,11 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
 
-        if snap is None: snap = self.snap
+        if snap is None:
+            if 'snaps' in kwargs:
+                snap = kwargs['snaps']
+            if snap is None:
+                snap = self.snap
         snap = np.array(snap, copy=False)
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
@@ -897,10 +954,10 @@ def _interpret_kw_fluid(mf_species=None, mf_level=None, fluid=None, SL=None, S=N
     '''
     s  , l   = None, None
     kws, kwl = '', ''
+    errmsg = 'Two incompatible fluid kwargs entered! {oldkw:} and {newkw:} must be equal ' + \
+                 '(unless one is None), but got {oldkw:}={oldval:} and {newkw:}={newval:}'
     def set_sl(news, newl, newkws, newkwl, olds, oldl, oldkws, oldkwl, i):
         newkws, newkwl = newkws.format(i), newkwl.format(i)
-        errmsg = 'Two incompatible fluid kwargs entered! {oldkw:} and {newkw:} must be equal ' + \
-                 '(unless one is None), but got {oldkw:}={oldval:} and {newkw:}={newval:}'
         if (olds is not None):
             if (news is not None):
                 if (news != olds):
@@ -1118,15 +1175,14 @@ def printi(fdir='./',rootname='',it=1):
     print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
 
 
-_MEMORY_NP_MEMMAP = '_memory_memmap'
-@manage_memmaps.manage_memmaps(_MEMORY_NP_MEMMAP)
-@remember_and_recall(_MEMORY_NP_MEMMAP, manage_memmaps.LastUpdatedOrderedDict)
+@file_memory.manage_memmaps(file_memory.MEMORY_MEMMAP)
+@file_memory.remember_and_recall(file_memory.MEMORY_MEMMAP, ORDERED=True)
 def get_numpy_memmap(filename, **kw__np_memmap):
     '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
     return np.memmap(filename, **kw__np_memmap)
 
 
-@remember_and_recall('_memory_mftab')
+@file_memory.remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
@@ -1163,7 +1219,7 @@ def read_mftab_ascii(filename):
                 text = line[1].strip().lower()
                 try:
                     value = int(value)
-                except BaseException:
+                except Exception:
                     print('(WWW) read_mftab_ascii: could not find datatype in'
                           'line %i, skipping' % li)
                     li += 1
@@ -1179,7 +1235,7 @@ def read_mftab_ascii(filename):
                 if key != 'species':
                     try:
                         value = int(value)
-                    except BaseException:
+                    except Exception:
                         print(
                             '(WWW) read_mftab_ascii: could not find datatype'
                             'in line %i, skipping' % li)
@@ -1187,7 +1243,7 @@ def read_mftab_ascii(filename):
                     try:
                         value = int(value)
                         value2 = int(value2)
-                    except BaseException:
+                    except Exception:
                         print(
                             '(WWW) read_mftab_ascii: could not find datatype'
                             'in line %i, skipping' % li)
@@ -1202,7 +1258,7 @@ def read_mftab_ascii(filename):
                 # int type
                 try:
                     arr = [int(numeric_string) for numeric_string in line]
-                except BaseException:
+                except Exception:
                     print('(WWW) read_mftab_ascii: could not find datatype in'
                           'line %i, skipping' % li)
                     li += 1
