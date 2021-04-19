@@ -172,6 +172,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   '''variables related to information about a single fluid.
   Use mf_ispecies= -1 to refer to electrons.
+  Intended to contain only "simple" physical quantities.
+  For more complicated "plasma" quantities such as gryofrequncy, see PLASMA_QUANT.
   '''
   if ONEFLUID_QUANT is None:
     ONEFLUID_QUANT = ['nr', 'nr_si', 'p', 'pressure', 'tg', 'temperature', 'ke']
@@ -616,7 +618,8 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   '''plasma parameters, e.g. plasma beta, sound speed, pressure scale height'''
   if PLASMA_QUANT is None:
     PLASMA_QUANT = ['beta', 'va', 'cs', 'ci', 's', 'ke', 'mn', 'man', 'hp',
-                'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
+                'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
+                'sgyrof', 'gyrof']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
     docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
@@ -627,11 +630,13 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     docvar('mn', "mach number (using sound speed)", nfluid=1)
     docvar('man', "mach number (using alfven speed)", nfluid=1)
     docvar('hp', "Pressure scale height", nfluid='???')
-    for var in ['vax', 'vay', 'vaz']:
-      docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]), nfluid=0)
-    for var in ['kx', 'ky', 'kz']:
-      docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
-                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]), nfluid=1)
+    for vax in ['vax', 'vay', 'vaz']:
+      docvar(vax, "{axis} component of alfven velocity [simu. units]".format(axis=vax[-1]), nfluid=0)
+    for kx in ['kx', 'ky', 'kz']:
+      docvar(kx, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
+                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=kx[-1]), nfluid=1)
+    docvar('sgyrof', "signed gryofrequency for ifluid. I.e. qi * |B| / mi. [1 / (simu. time units)]")
+    docvar('gyrof', "gryofrequency for ifluid. I.e. abs(qi * |B| / mi). [1 / (simu. time units)]")
     return None
 
   if quant=='' or quant not in PLASMA_QUANT:
@@ -697,4 +702,15 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     ci_sim = ci_cgs / obj.uni.u_u                          # ci [simu. velocity units]
     return ci_sim
 
+  if quant == 'sgyrof':
+    b_si = obj.get_var('modb') * obj.uni.usi_b   # magnitude of B [Tesla]
+    if obj.mf_ispecies == -1:
+      f_si = -1 * obj.uni.qsi_electron * b_si / obj.uni.msi_e  # [s^-1]
+    else:   
+      fluid = fl.Fluids(dd=obj)[obj.ifluid]
+      f_si = (obj.uni.qsi_electron * fluid.ionization) * b_si / (obj.uni.amusi * fluid.atomic_weight) # [s^-1]
+    return f_si * obj.uni.u_t  # [simu. time units]  # [1/f_si] = [s];  x [s] / usi_t = x [simu. time]   # usi_t = u_t
 
+  elif quant == 'gyrof':
+    return np.abs(obj.get_var('sgyrof'))
+  
