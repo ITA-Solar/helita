@@ -22,7 +22,13 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 
   quant = quant.lower()
 
-  document_vars.set_meta_quant(obj, 'mf_quantities', 'These are the multi-fluid quantities; only used by ebysus.')
+  document_vars.set_meta_quant(obj, 'mf_quantities',
+      ("These are the multi-fluid quantities; only used by ebysus.\n"
+       "nfluid means 'number of fluids used to read the quantity'.\n"
+       "  2  -> uses obj.ifluid and obj.jfluid. (e.g. 'nu_ij')\n"
+       "  1  -> uses obj.ifluid (but not jfluid). (e.g. 'ux', 'tg')\n"
+       "  0  -> does not use ifluid nor jfluid. (e.g. 'bx', 'nel', 'tot_e'))\n")
+                              )
 
   val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
   if val is None:
@@ -68,7 +74,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
                       ]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__, nfluid=0)
     docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
     docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
     docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
@@ -171,7 +177,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     ONEFLUID_QUANT = ['nr', 'nr_si', 'p', 'pressure', 'tg', 'temperature', 'ke']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
     docvar('nr', 'number density of ifluid [cm^-3]')
     docvar('nr_si', 'number density of ifluid [m^-3]')
     for tg in ['tg', 'temperature']:
@@ -217,7 +223,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ELECTRON_QUANT = ['nel', 're', 'uex', 'uey', 'uez', 'eke']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
     docvar('nel',  'electron number density [cm^-3]')
     docvar('re',   'mass density of electrons [simu. mass density units]')
     untested_warning = \
@@ -272,7 +278,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
     SPITZERTERM_QUANT = ['kappaq','dxTe','dyTe','dzTe','rhs']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT, get_spitzerterm.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT, get_spitzerterm.__doc__, nfluid='???')
     docvar('kappaq', 'Electron thermal diffusivity coefficient [Ebysus units], in SI: W.m-1.K-1')
     docvar('dxTe',   'Gradient of electron temperature in the x direction [simu.u_te/simu.u_l] in SI: K.m-1')
     docvar('dyTe',   'Gradient of electron temperature in the y direction [simu.u_te/simu.u_l] in SI: K.m-1')
@@ -326,7 +332,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 
 
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
-  '''quantities related to collision frequency'''
+  '''quantities related to collision frequency. TODO: when can't get etg or mfe_tg, get tg instead of crashing.'''
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['c_tot_per_vol', '1dcolslope',
                     'nu_ij','nu_en','nu_ei','nu_ij_mx']  
@@ -335,11 +341,11 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
     momtrans_start = 'momentum transfer collision frequenc{:} [s^-1] between '
     colfreqnote = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
-    docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote)
-    docvar('nu_ei', momtrans_start.format('y') + 'electrons & a single ion ifluid.' + colfreqnote)
-    docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote)
-    docvar('1dcolslope', '-(nu_ij + nu_ji)')
-    docvar('c_tot_per_vol', 'number of collisions per volume; might be off by a factor of mass ratio... -SE Apr 5 21')
+    docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote, nfluid=2)
+    docvar('nu_ei', momtrans_start.format('y') + 'electrons & a single ion ifluid.' + colfreqnote, nfluid=1)
+    docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote, nfluid=1)
+    docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
+    docvar('c_tot_per_vol', 'number of collisions per volume; might be off by a factor of mass ratio... -SE Apr 5 21', nfluid=2)
 
   if (var == '') or var not in COLFRE_QUANT:
     return None
@@ -487,7 +493,7 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT, get_mf_logcul.__doc__)
-    docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.')
+    docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.', nfluid=0)
 
   if (var == '') or var not in LOGCUL_QUANT:
     return None
@@ -505,7 +511,7 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
     DRIFT_QUANT = ['ud', 'pd', 'ed', 'rd', 'tgd']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__, nfluid=2)
     def doc_start(var):
       return '"drift" for quantity ("{var}"). I.e. ({va_} for ifluid) - ({va_} for jfluid). '.format(var=var, va_=var[:-1])
     def doc_axis(var):
@@ -532,12 +538,12 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
 
 
 def get_mf_cross(obj, var, CROSTAB_QUANT=None):
-  '''cross section between species'''
+  '''cross section between species. TODO: when can't get etg or mfe_tg, get tg instead of crashing.'''
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = ['cross']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
     docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
 
   if var=='' or var not in CROSTAB_QUANT:
@@ -613,26 +619,26 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
-    docvar('beta', "plasma beta")
-    docvar('va', "alfven speed [simu. units]")
-    docvar('cs', "sound speed [simu. units]")
-    docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]")
-    docvar('s', "entropy [log of quantities in simu. units]")
-    docvar('mn', "mach number (using sound speed)")
-    docvar('man', "mach number (using alfven speed)")
-    docvar('hp', "Pressure scale height")
+    docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
+    docvar('va', "alfven speed [simu. units]", nfluid=1)
+    docvar('cs', "sound speed [simu. units]", nfluid='???')
+    docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]", nfluid=1)
+    docvar('s', "entropy [log of quantities in simu. units]", nfluid='???')
+    docvar('mn', "mach number (using sound speed)", nfluid=1)
+    docvar('man', "mach number (using alfven speed)", nfluid=1)
+    docvar('hp', "Pressure scale height", nfluid='???')
     for var in ['vax', 'vay', 'vaz']:
-      docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
+      docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]), nfluid=0)
     for var in ['kx', 'ky', 'kz']:
       docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
-                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
+                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]), nfluid=1)
     return None
 
   if quant=='' or quant not in PLASMA_QUANT:
     return None
 
   if quant in ['hp', 's', 'cs', 'beta']:
-    var = obj.get_var('mfe_p')
+    var = obj.get_var('mfe_p')  # is mfe_p pressure for ifluid, or sum of all fluid pressures? - SE Apr 19 2021
     if quant == 'hp':
       if getattr(obj, 'nx') < 5:
         return np.zeros_like(var)
@@ -666,6 +672,11 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     axis = quant[-1]
     var = obj.get_var('p' + axis + 'c')
     if quant[0] == 'h':
+      # anyone can delete this warning once you have confirmed that get_var('hx') does what you think it should:
+      warnmsg = ('get_var(hx) (or hy or hz) uses get_var(p), and used it since before get_var(p) was implemented. '
+                 'Maybe should be using get_var(mfe_p) instead? '
+                 'You should not trust results until you check this.  - SE Apr 19 2021.')
+      warnings.warn(warnmsg)
       return ((obj.get_var('e') + obj.get_var('p')) /
               obj.get_var('r') * var)
     else:
