@@ -543,16 +543,15 @@ class Mah:
               self.data = load_arithmetic_quantities(self,var, **kargs) 
         '''
     elif document_vars.creating_vardict(self):
-            return None
+        return None
     elif var == '': 
 
       print(help(self.get_var))
       print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
       for ii in self.varn: 
           print('use ', ii,' for ',self.varn[ii])
-    if hasattr(self,'vardict'):
+      if hasattr(self,'vardict'):
         self.vardocs()
-
       return None
    
     return self.data
