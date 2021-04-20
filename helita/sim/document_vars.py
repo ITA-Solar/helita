@@ -46,6 +46,7 @@ import math #for pretty strings
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
 QUANTDOC = '_DOC_QUANT'                 #key for dd.vardict[TYPE_QUANT] containing doc for what TYPE_QUANT means.
+NFLUID  = 'nfluid'    #key which stores number of fluids. (e.g. 0 for none; 1 for "uses ifluid but not jfluid". 
 CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are running get_var('') to create vardict.
 
 # global variable which tells which quantity you are setting now.
@@ -74,9 +75,20 @@ def set_meta_quant(obj, name, QUANT_DOC=NONEDOC):
         vardict[METAQUANT] = dict()
     vardict[METAQUANT][QUANTDOC] = QUANT_DOC
 
-def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, rewrite=False):
-    '''function factory; returns function(varname, vardoc) which writes documentation of var.
-    The documentation goes to obj.vardict[METAQUANT][TYPE_QUANT].
+def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=None, rewrite=False):
+    '''function factory; returns function(varname, vardoc, nfluid=None) which writes documentation of var.
+    The documentation goes to vd['doc'] where vd = obj.vardict[METAQUANT][TYPE_QUANT][varname].
+
+    Also store vd['nfluid'] = nfluid.
+        vars_documenter(...,nfluid) -> store as default
+        f = vars_documenter(); f(var, doc, nfluid) -> store for this var, only.
+        nfluid =
+            None -> does not even understand what a "fluid" is. (Use this value outside of load_mf_quantities.py)
+                    Or, if in mf_quantities, None indicates nfluid has not been documented for this var.
+            2    -> uses obj.ifluid and obj.jfluid to calculate results. (e.g. 'nu_ij')
+            1    -> uses obj.ifluid (and not jfluid) to calculate results. (e.g. 'ux', 'tg')
+            0    -> does not use ifluid nor jfluid to calculate results. (e.g. 'bx', 'nel', 'tot_e')
+
     METAQUANT (i.e. document_vars.METAQUANT) must be set before using vars_documenter;
         use document_vars.set_meta_quant() to accomplish this.
         Raises ValueError if METAQUANT has not been set.
@@ -101,19 +113,29 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, rewrite
         write = True
     if write:
         # define function (which will be returned)
-        def document_var(varname, vardoc):
+        def document_var(varname, vardoc, nfluid=nfluid):
             '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].'''
             if (QUANT_VARS is not None) and (varname not in QUANT_VARS):
                 return
-            vardict[TYPE_QUANT][varname] = vardoc
+            tqd = vardict[TYPE_QUANT]
+            try:
+                vd = tqd[varname]   # vd = vardict[TYPE_QUANT][varname], if possible.
+            except KeyError:
+                tqd[varname] = {'doc': vardoc, 'nfluid': nfluid} # else, initialize tqd[varname]
+            else:                   # if vd assignment was successful, set doc and nfluid.
+                vd['doc'] = vardoc
+                vd['nfluid'] = nfluid
+
         # initialize documentation to NONEDOC for var in QUANT_VARS
         if QUANT_VARS is not None:
             for varname in QUANT_VARS:
-                document_var(varname, vardoc=NONEDOC)
+                document_var(varname, vardoc=NONEDOC, nfluid=nfluid)
+
+        # return document_var function which we defined.
         return document_var
     else:
         # do nothing and return a function which does nothing.
-        def dont_document_var(varname, vardoc):
+        def dont_document_var(varname, vardoc, nfluid=None):
             '''does nothing.
             (because obj.vardict[TYPE_QUANT] already existed when vars_documenter was called).
             '''
@@ -175,11 +197,17 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
                     result += [tqd + str(typequant_dict[QUANTDOC]).lstrip().replace('\n', tqd+'\n')]
                 undocumented = []
                 for varname in (key for key in sorted(typequant_dict.keys()) if key!=QUANTDOC):
-                    vardoc = typequant_dict[varname]
+                    vd = typequant_dict[varname]
+                    vardoc = vd['doc']
                     if vardoc is NONEDOC:
                         undocumented += [varname]
                     else:
-                        result += [q + '{:10s}'.format(varname) + ' : ' + str(typequant_dict[varname])]
+                        nfluid = vd['nfluid']
+                        rstr = q + '{:10s}'.format(varname) + ' : '
+                        if nfluid is not None:
+                            rstr += '(nfluid = {}) '.format(nfluid)
+                        rstr += str(vardoc)
+                        result += [rstr]
                 if undocumented!=[]:
                     result += ['\n' + q + 'existing but undocumented vars:\n' + ud + ', '.join(undocumented)]
 

@@ -24,12 +24,16 @@ from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import document_vars
 from . import file_memory
+from . import fluid_tools
 
 # import external public modules
 import numpy as np
 
 # import external private modules
-from at_tools import atom_tools as at
+try:
+    from at_tools import atom_tools as at
+except ImportError:
+    warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
 
 class EbysusData(BifrostData):
 
@@ -290,51 +294,13 @@ class EbysusData(BifrostData):
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
 
-    def set_mf_fluid(self, species=None, level=None, i='i'):
-        '''sets self.mf_{i}species and self.mf_{i}level. Also sets self.{i}fluid
-        species, level: None or int
-            None -> if self.mf_{i}attr already exists, don't change it.
-                    else, set it to 1.
-            ints -> set mf_{i}species=species, mf_{i}level=level.
-        '''
-        DEFAULT_S, DEFAULT_L = (1, 1)
-        mf_species_attr = 'mf_'+i+'species'
-        mf_level_attr = 'mf_'+i+'level'
-        fluid_attr = i+'fluid'
-        # set species
-        if species is None:
-            if not hasattr(self, mf_species_attr):
-                species = DEFAULT_S
-            else:
-                species = getattr(self, mf_species_attr)
-        setattr(self, mf_species_attr, species)
-        # set level
-        if level is None:
-            if not hasattr(self, mf_level_attr):
-                level   = DEFAULT_L
-            else:
-                level   = getattr(self, mf_level_attr)
-        setattr(self, mf_level_attr, level)
-        # set fluid
-        setattr(self, fluid_attr, (species, level) )
-
-    def set_mfi(self, mf_ispecies=None, mf_ilevel=None):
-        '''set self.mf_ispecies, self.mf_ilevel, and self.ifluid.
-        mf_ispecies, mf_ilevel: None or int
-            None -> if attr already exists, don't change it.
-                    else, set it to 1.
-            int  -> set attr to this value.
-        '''
-        return self.set_mf_fluid(mf_ispecies, mf_ilevel, 'i')
-
-    def set_mfj(self, mf_jspecies=None, mf_jlevel=None):
-        '''set self.mf_jspecies, self.mf_jlevel, and self.jfluid.
-        mf_jspecies, mf_jlevel: None or int
-            None -> if attr already exists, don't change it.
-                    else, set it to 1.
-            int  -> set attr to this value.
-        '''
-        return self.set_mf_fluid(mf_jspecies, mf_jlevel, 'j')
+    # fluid-setting functions
+    set_mf_fluid = fluid_tools.set_mf_fluid
+    set_mfi      = fluid_tools.set_mfi
+    set_mfj      = fluid_tools.set_mfj
+    # docstrings for fluid-setting functions
+    for func in [set_mf_fluid, set_mfi, set_mfj]:
+        func.__doc__ = func.__doc__.replace('obj', 'self')
 
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
@@ -402,7 +368,8 @@ class EbysusData(BifrostData):
             return getattr(self, var)
 
         mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
+            fluid_tools._interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel,
+                                             ifluid, jfluid, **kwargs)
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
@@ -464,26 +431,27 @@ class EbysusData(BifrostData):
         if ((snap is not None) and np.any(snap != self.snap)):
             self.set_snap(snap)
 
-        # get value of variable
-        if self._metadata_equals(self.variables) and var in self.variables:
-            return self.variables[var]
-        elif var in self.simple_vars:
-            val = self._get_simple_var(var, panic=panic)
-        elif var in self.auxxyvars:
-            val =  super(EbysusData, self)._get_simple_var_xy(var)
-        elif var in self.compvars:
-            val =  super(EbysusData, self)._get_composite_var(var)
-        else:
-            # Loading quantities
-            val = load_quantities(self,var,PLASMA_QUANT='',
-                        CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                        IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                        DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                        COULOMB_COL_QUANT='', AMB_QUANT='')
-            if val is None:
-                val = load_arithmetic_quantities(self,var)
-            if val is None:
-                val = load_mf_quantities(self,var)
+        # get value of variable; restore ifluid & jfluid afterwards.
+        with self.MaintainFluids():
+            if self._metadata_equals(self.variables) and var in self.variables:
+                return self.variables[var]
+            elif var in self.simple_vars:
+                val = self._get_simple_var(var, panic=panic)
+            elif var in self.auxxyvars:
+                val =  super(EbysusData, self)._get_simple_var_xy(var)
+            elif var in self.compvars:
+                val =  super(EbysusData, self)._get_composite_var(var)
+            else:
+                # Loading quantities
+                val = load_quantities(self,var,PLASMA_QUANT='',
+                            CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                            IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                            DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                            COULOMB_COL_QUANT='', AMB_QUANT='')
+                if val is None:
+                    val = load_arithmetic_quantities(self,var)
+                if val is None:
+                    val = load_mf_quantities(self,var)
 
         if document_vars.creating_vardict(self):
             return None
@@ -827,7 +795,8 @@ class EbysusData(BifrostData):
             self.variables={}
 
         mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
+            fluid_tools._interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel,
+                                             ifluid, jfluid, **kwargs)
 
         if var in self.varsmfc:
             if mf_ilevel is None and self.mf_ilevel == 1:
@@ -904,87 +873,18 @@ class EbysusData(BifrostData):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
-##################
-#  FLUID KWARGS  #
-##################
+    def MaintainingFluids(self):
+        return fluid_tools._MaintainingFluids(self)
+    MaintainingFluids.__doc__ = fluid_tools._MaintainingFluids.__doc__.replace(
+                                '_MaintainingFluids(dd', 'dd.MaintainingFluids(')  # set docstring
+    MaintainFluids = MaintainingFluids  # alias
 
-def _interpret_kw_fluids(mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                         ifluid=None, jfluid=None, iSL=None, jSL=None,
-                         iS=None, iL=None, jS=None, jL=None,
-                         **kw__None):
-    '''interpret kwargs entered for fluids. Returns (mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel).
-    kwargs are meant to be shorthand notation. If conflicting kwargs are entered, raise ValueError.
-    **kw__None are ignored; it is part of the function def'n so that it will not break if extra kwargs are entered.
-    Meanings for non-None kwargs (similar for j, only writing for i here):
-        mf_ispecies, mf_ilevel = ifluid
-        mf_ispecies, mf_ilevel = iSL
-        mf_ispecies, mf_ilevel = iS, iL
-    Examples:
-        These all return (1,2,3,4) (they are equivalent):
-            _interpret_kw_fluids(mf_ispecies=1, mf_ilevel=2, mf_jspecies=3, mf_jlevel=4)
-            _interpret_kw_fluids(ifluid=(1,2), jfluid=(3,4))
-            _interpret_kw_fluids(iSL=(1,2), jSL=(3,4))
-            _interpret_kw_fluids(iS=1, iL=2, jS=3, jL=4)
-        Un-entered fluids will be returned as None:
-            _interpret_kw_fluids(ifluid=(1,2))
-            >> (1,2,None,None)
-        Conflicting non-None kwargs will cause ValueError:
-            _interpret_kw_fluids(mf_ispecies=3, ifluid=(1,2))
-            >> ValueError('mf_ispecies (==3) was incompatible with ifluid[0] (==1)')
-            _interpret_kw_fluids(mf_ispecies=1, ifluid=(1,2))
-            >> (1,2,None,None)
-    '''
-    si, li = _interpret_kw_fluid(mf_ispecies, mf_ilevel, ifluid, iSL, iS, iL, i='i')
-    sj, lj = _interpret_kw_fluid(mf_jspecies, mf_jlevel, jfluid, jSL, jS, jL, i='j')
-    return (si, li, sj, lj)
+    def UsingFluids(self, **kw__fluids):
+        return fluid_tools._UsingFluids(self, **kw__fluids)
+    UsingFluids.__doc__ = fluid_tools._UsingFluids.__doc__.replace(
+                                '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
+    UseFluids = UsingFluids  # alias
 
-def _interpret_kw_ifluid(mf_ispecies=None, mf_ilevel=None, ifluid=None, iSL=None, iS=None, iL=None, None_ok=True):
-    '''interpret kwargs entered for ifluid. See _interpret_kw_fluids for more documentation.'''
-    return _interpret_kw_fluid(mf_ispecies, mf_ilevel, ifluid, iSL, iS, iL, None_ok=None_ok, i='i')
-
-def _interpret_kw_jfluid(mf_jspecies=None, mf_jlevel=None, jfluid=None, jSL=None, jS=None, jL=None, None_ok=True):
-    '''interpret kwargs entered for jfluid. See _interpret_kw_fluids for more documentation.'''
-    return _interpret_kw_fluid(mf_jspecies, mf_jlevel, jfluid, jSL, jS, jL, None_ok=None_ok, i='j')
-
-def _interpret_kw_fluid(mf_species=None, mf_level=None, fluid=None, SL=None, S=None, L=None, i='', None_ok=True):
-    '''interpret kwargs entered for fluid. Returns (mf_ispecies, mf_ilevel).
-    See _interpret_kw_fluids for more documentation.
-    i      : 'i', or 'j'; Used to make clearer error messages, if entered.
-    None_ok: True (default) or False;
-        whether to allow answer of None or species and/or level.
-        if False and species and/or level is None, raise TypeError.
-    '''
-    s  , l   = None, None
-    kws, kwl = '', ''
-    errmsg = 'Two incompatible fluid kwargs entered! {oldkw:} and {newkw:} must be equal ' + \
-                 '(unless one is None), but got {oldkw:}={oldval:} and {newkw:}={newval:}'
-    def set_sl(news, newl, newkws, newkwl, olds, oldl, oldkws, oldkwl, i):
-        newkws, newkwl = newkws.format(i), newkwl.format(i)
-        if (olds is not None):
-            if (news is not None):
-                if (news != olds):
-                    raise ValueError(errmsg.format(newkw=newkws, newval=news, oldkw=oldkws, oldval=olds))
-            else:
-                news = olds
-        if (oldl is not None):
-            if (newl is not None):
-                if (newl != oldl):
-                    raise ValueError(errmsg.format(newkw=newkwl, newval=newl, oldkw=oldkwl, oldval=oldl))
-            else:
-                newl = oldl
-        return news, newl, newkws, newkwl
-
-    if fluid is None: fluid = (None, None)
-    if SL    is None: SL    = (None, None)
-    s, l, kws, kwl = set_sl(mf_species, mf_level, 'mf_{:}species', 'mf_{:}level', s, l, kws, kwl, i)
-    s, l, kws, kwl = set_sl(fluid[0]  , fluid[1], '{:}fluid[0]'  , '{:}fluid[1]', s, l, kws, kwl, i)
-    s, l, kws, kwl = set_sl(SL[0]     , SL[1]   , '{:}SL[0]'     , '{:}SL[1]'   , s, l, kws, kwl, i)
-    s, l, kws, kwl = set_sl(S         , L       , '{:}S'         , '{:}L'       , s, l, kws, kwl, i)
-    if not None_ok:
-        if s is None or l is None:
-            raise TypeError('{0:}species and {0:}level cannot be None, but got: '.format(i) +
-                            'mf_{0:}species={1:}; mf_{0:}level={2:}.'.format(i, s, l))
-    return s, l
 
 ###########
 #  TOOLS  #
@@ -999,7 +899,7 @@ def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
         - (mf_ispecies and mf_ilevel)
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
+    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -1022,7 +922,7 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilev
         - (mf_ispecies and mf_ilevel)
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
+    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -1072,7 +972,7 @@ def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
         - mf_ispecies and mf_ilevel
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
+    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:

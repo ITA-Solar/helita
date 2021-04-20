@@ -3,6 +3,7 @@ import warnings
 
 # import internal modules
 from . import document_vars
+from . import fluid_tools
 
 # import external public modules
 import numpy as np
@@ -22,7 +23,13 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 
   quant = quant.lower()
 
-  document_vars.set_meta_quant(obj, 'mf_quantities', 'These are the multi-fluid quantities; only used by ebysus.')
+  document_vars.set_meta_quant(obj, 'mf_quantities',
+      ("These are the multi-fluid quantities; only used by ebysus.\n"
+       "nfluid means 'number of fluids used to read the quantity'.\n"
+       "  2  -> uses obj.ifluid and obj.jfluid. (e.g. 'nu_ij')\n"
+       "  1  -> uses obj.ifluid (but not jfluid). (e.g. 'ux', 'tg')\n"
+       "  0  -> does not use ifluid nor jfluid. (e.g. 'bx', 'nel', 'tot_e'))\n")
+                              )
 
   val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
   if val is None:
@@ -68,7 +75,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
                       ]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__, nfluid=0)
     docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
     docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
     docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
@@ -166,12 +173,14 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   '''variables related to information about a single fluid.
   Use mf_ispecies= -1 to refer to electrons.
+  Intended to contain only "simple" physical quantities.
+  For more complicated "plasma" quantities such as gryofrequncy, see PLASMA_QUANT.
   '''
   if ONEFLUID_QUANT is None:
     ONEFLUID_QUANT = ['nr', 'nr_si', 'p', 'pressure', 'tg', 'temperature', 'ke']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
     docvar('nr', 'number density of ifluid [cm^-3]')
     docvar('nr_si', 'number density of ifluid [m^-3]')
     for tg in ['tg', 'temperature']:
@@ -217,7 +226,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ELECTRON_QUANT = ['nel', 're', 'uex', 'uey', 'uez', 'eke']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
     docvar('nel',  'electron number density [cm^-3]')
     docvar('re',   'mass density of electrons [simu. mass density units]')
     untested_warning = \
@@ -272,7 +281,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
     SPITZERTERM_QUANT = ['kappaq','dxTe','dyTe','dzTe','rhs']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT, get_spitzerterm.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT, get_spitzerterm.__doc__, nfluid='???')
     docvar('kappaq', 'Electron thermal diffusivity coefficient [Ebysus units], in SI: W.m-1.K-1')
     docvar('dxTe',   'Gradient of electron temperature in the x direction [simu.u_te/simu.u_l] in SI: K.m-1')
     docvar('dyTe',   'Gradient of electron temperature in the y direction [simu.u_te/simu.u_l] in SI: K.m-1')
@@ -285,7 +294,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
     spitzer_amp = 1.0
     kappa_e = 1.1E-25
     kappaq0 = kappa_e * spitzer_amp
-    te  = obj.get_var('etg')
+    te  = obj.get_var('tg', mf_ispecies=-1) #obj.get_var('etg')
     result = kappaq0*(te)**(5.0/2.0)
 
   if (var == 'dxTe'):     
@@ -326,7 +335,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 
 
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
-  '''quantities related to collision frequency'''
+  '''quantities related to collision frequency.'''
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['c_tot_per_vol', '1dcolslope',
                     'nu_ij','nu_en','nu_ei','nu_ij_mx']  
@@ -335,148 +344,82 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
     momtrans_start = 'momentum transfer collision frequenc{:} [s^-1] between '
     colfreqnote = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
-    docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote)
-    docvar('nu_ei', momtrans_start.format('y') + 'electrons & a single ion ifluid.' + colfreqnote)
-    docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote)
-    docvar('1dcolslope', '-(nu_ij + nu_ji)')
-    docvar('c_tot_per_vol', 'number of collisions per volume; might be off by a factor of mass ratio... -SE Apr 5 21')
+    docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote, nfluid=2)
+    docvar('nu_ei', 'sum of ' + momtrans_start.format('ies') + 'electrons & ion fluids.' + colfreqnote, nfluid=1)
+    docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote, nfluid=1)
+    docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
+    docvar('c_tot_per_vol', 'number density of collisions [cm^-3] between ifluid and jfluid.', nfluid=2)
 
   if (var == '') or var not in COLFRE_QUANT:
     return None
 
   if var == "c_tot_per_vol":
-    (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
-    (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
-    m_i = obj.att[obj.mf_ispecies].params.atomic_weight
-    m_j = obj.att[obj.mf_jspecies].params.atomic_weight
-    value = obj.get_var("nu_ij") * \
-        obj.get_var("nr", mf_ispecies=s_j, mf_ilevel=l_j) 
-        # SE added /mu_ji -> C_tot_per_vol == collisions/volume
-    obj.set_mfi(s_i, l_i)
-    obj.set_mfj(s_j, l_j) #SE: mfj should be unchanged anyway. included for readability.
-    return value
+    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)   # [amu]
+    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)   # [amu]
+    return obj.get_var("nr", ifluid=obj.jfluid) * obj.get_var("nu_ij") / (m_j / (m_i + m_j))
 
   elif var == "nu_ij":
-    ispecies = obj.mf_ispecies
-    jspecies = obj.mf_jspecies
-    ilevel = obj.mf_ilevel
-    jlevel = obj.mf_jlevel
-    #get n_j:
-    n_j   = obj.get_var("nr", mf_ispecies=jspecies, mf_ilevel=jlevel)
-    #restore original i & j species & levels
-    obj.set_mfi(ispecies, ilevel)
-    obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
-    if (ispecies < 0):
-      m_i   = obj.uni.m_electron/obj.uni.amu
-      tgi   = obj.get_var('etg',    mf_ispecies=ispecies, mf_ilevel=ilevel)
-    else: 
-      m_i   = obj.att[ispecies].params.atomic_weight
-      tgi   = obj.get_var('mfe_tg', mf_ispecies=ispecies, mf_ilevel=ilevel)
-    #get m_j, tgj:
-    if (jspecies < 0):
-      m_j   = obj.uni.m_electron/obj.uni.amu
-      tgj   = obj.get_var('etg',    mf_ispecies=jspecies, mf_ilevel=jlevel)
-    else:
-      m_j   = obj.att[jspecies].params.atomic_weight
-      tgj   = obj.get_var('mfe_tg', mf_ispecies=jspecies, mf_ilevel=jlevel)
-    #more variables
-    mu    = obj.uni.amu * m_i * m_j / (m_i + m_j)
+    iSL = obj.ifluid
+    jSL = obj.jfluid
+    # get ifluid info
+    tgi  = obj.get_var('tg', ifluid=iSL)      # [K]
+    m_i  = fluid_tools.get_mass(obj, iSL[0])  # [amu]
+    # get jfluid info, then restore original iSL & jSL
+    with obj.MaintainFluids():
+      n_j   = obj.get_var('nr', ifluid=jSL)      # [cm^-3]
+      tgj   = obj.get_var('tg', ifluid=jSL)      # [K]
+      m_j   = fluid_tools.get_mass(obj, jSL[0])  # [amu]
 
-    #get tgj:
-    obj.set_mfi(jspecies, jlevel)
-    tgj = obj.get_var('etg') if jspecies < 0 else obj.get_var('mfe_tg')
-    #restore original i & j species & levels
-    obj.set_mfi(ispecies, ilevel)
-    obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.      
-    #calculate tgij; the mass-weighted temperature used in nu_ij calculation.
-    tgij = (m_i * tgj + m_j * tgi) / (m_i + m_j)
-    if not(ispecies < 0) and not(jspecies < 0): 
-      if ((obj.att[ispecies].params.levels[ilevel-1]['stage'] > 1) and (
-           obj.att[jspecies].params.levels[jlevel-1]['stage'] > 1)):
-        m_h = obj.uni.m_h
-        logcul = obj.get_var('logcul')
-        return 1.7 * logcul/20.0 * (m_h/(m_i * obj.uni.amu)) * (mu/m_h)**0.5 * \
-             n_j / tgij**1.5 * (obj.att[jspecies].params.levels[jlevel-1]['stage'] - 1.0)
+    # compute some values:
+    m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
+    m_ij    = m_i * m_jfrac                          # [amu]
+    tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
+    
+    # if both fluids have nonzero charge, use coulomb collisions formula.
+    icharge = fluid_tools.get_charge(obj, iSL)   # [elementary charge == 1]
+    jcharge = fluid_tools.get_charge(obj, jSL)   # [elementary charge == 1]
+    if icharge != 0 and jcharge != 0:
+      m_h = obj.uni.m_h / obj.uni.amu            # [amu]
+      logcul = obj.get_var('logcul')
+      return 1.7 * logcul/20.0 * (m_h/m_i) * (m_ij/m_h)**0.5 * n_j / tgij**1.5 * icharge**2 * jcharge**2
       
-    #restore original i & j species & levels
-    obj.set_mfi(ispecies, ilevel)
-    obj.set_mfj(jspecies, jlevel) #SE: mfj should be unchanged anyway. included for readability.
-    cross = obj.get_var('cross')  # units are in cm^2.
+    # else, use charge-neutral collisions formula.
+    cross    = obj.get_var('cross')    # [cm^2]
+    tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
     #calculate & return nu_ij:
-    return 4./3. * n_j * m_j / (m_i + m_j) * cross * np.sqrt(8 * obj.uni.kboltzmann * tgij / (np.pi * mu))
+    return 4./3. * n_j * m_jfrac * cross * tg_speed   # [s^-1]
   
   elif var == "nu_ij_mx":
     #### ASSUMES one fluid is charged & other is neutral. ####
     #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
     CONST_MULT    = 1.96     #factor in front.
-    CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen #unsure of units.
-    e_charge= 1.602176e-19   #[C]      #elementary charge
-    eps0    = 8.854187e-12   #[F m^-1] #epsilon0, standard definition
+    CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen
+    e_charge= obj.uni.qsi_electron  #[C]      #elementary charge
+    eps0    = 8.854187e-12   #[kg^-1 m^-3 s^4 (C^2 s^-2)] #epsilon0, standard definition
+    CONST_RATIO   = (e_charge / obj.uni.amusi) * (e_charge / eps0) * CONST_ALPHA_N   #[C^2 kg^-1 [eps0]^-1 m^3]
+    # units of CONST_RATIO: [C^2 kg^-1 (kg^1 m^3 s^-2 C^-2) m^-3] = [s^-2]
     #get variables.
-    (ispec, ilvl) = (obj.mf_ispecies, obj.mf_ilevel)
-    (jspec, jlvl) = (obj.mf_jspecies, obj.mf_jlevel)
-    n_j = obj.get_var("nr", mf_ispecies=jspec, mf_ilevel=jlvl) /(obj.uni.cm_to_m**3)      #number density [m^-3]
-    m_i = obj.uni.msi_e/obj.uni.amusi if ispec<0 else obj.att[ispec].params.atomic_weight #mass [amu]
-    m_j = obj.uni.msi_e/obj.uni.amusi if jspec<0 else obj.att[jspec].params.atomic_weight #mass [amu]
-    #restore original i & j species & levels
-    obj.set_mfi(ispec, ilvl)
-    obj.set_mfj(jspec, jlvl) #SE: mfj should be unchanged anyway. included for readability
+    with obj.MaintainFluids():
+      n_j = obj.get_var("nr", ifluid=obj.jfluid) /(obj.uni.cm_to_m**3)      #number density [m^-3]
+    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)  #mass [amu]
+    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)  #mass [amu]
     #calculate & return nu_ij_test:
-    return CONST_MULT * n_j * np.sqrt(CONST_ALPHA_N * e_charge**2 * m_j / (eps0 * obj.uni.amusi * m_i *(m_i + m_j)))
+    return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j)))
 
   elif var == "1dcolslope":
-    (s_i, l_i) = (obj.mf_ispecies, obj.mf_ilevel)
-    (s_j, l_j) = (obj.mf_jspecies, obj.mf_jlevel)
-    value = -(obj.get_var("nu_ij",
-                          mf_ispecies=s_i, mf_ilevel=l_i,
-                          mf_jspecies=s_j, mf_jlevel=l_j) +
-              obj.get_var("nu_ij",
-                          mf_ispecies=s_j, mf_ilevel=l_j,
-                          mf_jspecies=s_i, mf_jlevel=l_i))
-    obj.set_mfi(s_i, l_i)
-    obj.set_mfj(s_j, l_j)
-    return value #* m_j / (m_i + m_j)
+    warnings.warn(DeprecationWarning('1dcolslope will be removed at some point in the future.'))
+    return -(obj.get_var("nu_ij")+ obj.get_var("nu_ij", iSL=obj.jfluid, jSL=obj.ifluid))
 
   elif var == 'nu_ei':
     result = np.zeros(np.shape(obj.r))
-    ispecies = obj.mf_ispecies
-    ilevel = obj.mf_ilevel      
-    nel = obj.get_var('nel')
-    nr = obj.get_var('nr',mf_ispecies=ispecies,mf_ilevel=ilevel)
-    obj.set_mfi(ispecies,ilevel)
-    #for ispecies in obj.att:
-    #nlevels = obj.att[ispecies].params.nlevel
-    #for ilevel in range(1,nlevels+1):
-    
-    if (obj.att[ispecies].params.levels['stage'][ilevel-1] > 1):
-      mst = obj.att[ispecies].params.atomic_weight*obj.uni.amu * obj.uni.m_electron / (
-            obj.att[ispecies].params.atomic_weight*obj.uni.amu + (obj.uni.m_electron))
-
-      #mst = obj.uni.m_electron
-
-      etg = obj.get_var('etg')
-      tg1 = obj.get_var('mfe_tg',mf_ispecies=ispecies,mf_ilevel=ilevel)
-
-      tg =  ((obj.uni.m_electron/obj.uni.amu) * tg1 + 
-            obj.att[ispecies].params.atomic_weight * etg)/((
-            obj.uni.m_electron/obj.uni.amu)+obj.att[ispecies].params.atomic_weight) 
-
-      culblog = 23. + 1.5 * np.log(etg / 1.e6) - \
-          0.5 * np.log(nel / 1e6)
-      result = 1.7 * culblog/20. * (obj.uni.m_h/obj.uni.m_electron) * nr * \
-          (mst/obj.uni.m_h)**0.5 / tg**1.5 * (obj.att[ispecies].params.levels['stage'][ilevel-1]-1)
-    obj.set_mfi(ispecies,ilevel)
+    for fluid in fl.Fluids(dd=obj).ions():
+      result += obj.get_var('nu_ij', mf_ispecies=-1, jfluid=fluid.SL)
     return result 
 
   elif var == 'nu_en':
     result = np.zeros(np.shape(obj.r))
-    lvl = 1
-    for ispecies in obj.att:
-      nlevels = obj.att[ispecies].params.nlevel
-      for ilevel in range(1,nlevels+1):
-        if (obj.att[ispecies].params.levels['stage'][ilevel-1] == 1):
-          result += obj.get_var('nu_ij', mf_ispecies=-1,mf_jspeces=ispecies,mf_jlevel=ilevel)
-    
+    for fluid in fl.Fluids(dd=obj).neutrals():
+      result += obj.get_var('nu_ij', mf_ispecies=-1, jfluid=fluid.SL)
     return result 
 
 
@@ -487,13 +430,13 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT, get_mf_logcul.__doc__)
-    docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.')
+    docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.', nfluid=0)
 
   if (var == '') or var not in LOGCUL_QUANT:
     return None
   
   if var == "logcul":
-    etg = obj.get_var('etg')
+    etg = obj.get_var('tg', mf_ispecies=-1)
     nel = obj.get_var('nel')
     return 23. + 1.5 * np.log(etg / 1.e6) - \
           0.5 * np.log(nel / 1e6)
@@ -505,7 +448,7 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
     DRIFT_QUANT = ['ud', 'pd', 'ed', 'rd', 'tgd']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__, nfluid=2)
     def doc_start(var):
       return '"drift" for quantity ("{var}"). I.e. ({va_} for ifluid) - ({va_} for jfluid). '.format(var=var, va_=var[:-1])
     def doc_axis(var):
@@ -532,42 +475,28 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
 
 
 def get_mf_cross(obj, var, CROSTAB_QUANT=None):
-  '''cross section between species'''
+  '''cross section between species.'''
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = ['cross']
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__)
+    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
     docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
 
   if var=='' or var not in CROSTAB_QUANT:
     return None
 
-  ispecies = obj.mf_ispecies
-  jspecies = obj.mf_jspecies
-  ilevel = obj.mf_ilevel
-  jlevel = obj.mf_jlevel
-  if (obj.mf_ispecies < 0):
-    spic1 = 'e'
-    tg1 = obj.get_var('etg') 
-    wgt1 = obj.uni.m_electron/obj.uni.amu
-  else:
-    spic1 = obj.att[ispecies].params.element
-    tg1 = obj.get_var('mfe_tg',mf_ispecies=ispecies,mf_ilevel=ilevel)
-    wgt1 = obj.att[ispecies].params.atomic_weight
+  # get spics & wgts & temperatures, then restore original obj.ifluid and obj.jfluid values.
+  with obj.MaintainFluids():
+    spic1, spic2 = (fluid_tools.get_name(obj, s) for s in (obj.mf_ispecies, obj.mf_jspecies))
+    wgt1,  wgt2  = (fluid_tools.get_mass(obj, s)  for s in (obj.mf_ispecies, obj.mf_jspecies))
+    tg1 = obj.get_var('tg', ifluid = obj.ifluid)
+    tg2 = obj.get_var('tg', ifluid = obj.jfluid)
 
-  if (obj.mf_jspecies < 0):
-    spic2 = 'e'
-    tg2 = obj.get_var('etg')  
-    wgt2 = obj.uni.m_electron/obj.uni.amu
-  else:
-    spic2 = obj.att[jspecies].params.element
-    tg2 = obj.get_var('mfe_tg',mf_ispecies=jspecies,mf_ilevel=jlevel)
-    wgt2 = obj.att[jspecies].params.atomic_weight
-  obj.set_mfi(ispecies,ilevel)
-  obj.set_mfj(jspecies,jlevel)
+  # temperature, weighted by mass of species
+  tg  = (tg1*wgt2 + tg2*wgt1)/(wgt1+wgt2)
 
-  tg = (tg1*wgt2 + tg2*wgt1)/(wgt1+wgt2)
+  # look up cross table and get cross section
   cross_tab = ''
   crossunits = 2.8e-17
   if ([spic1, spic2] == ['h', 'h']):
@@ -610,29 +539,32 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   '''plasma parameters, e.g. plasma beta, sound speed, pressure scale height'''
   if PLASMA_QUANT is None:
     PLASMA_QUANT = ['beta', 'va', 'cs', 'ci', 's', 'ke', 'mn', 'man', 'hp',
-                'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz']
+                'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
+                'sgyrof', 'gyrof']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
-    docvar('beta', "plasma beta")
-    docvar('va', "alfven speed [simu. units]")
-    docvar('cs', "sound speed [simu. units]")
-    docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]")
-    docvar('s', "entropy [log of quantities in simu. units]")
-    docvar('mn', "mach number (using sound speed)")
-    docvar('man', "mach number (using alfven speed)")
-    docvar('hp', "Pressure scale height")
-    for var in ['vax', 'vay', 'vaz']:
-      docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
-    for var in ['kx', 'ky', 'kz']:
-      docvar(var, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
-                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=var[-1]))
+    docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
+    docvar('va', "alfven speed [simu. units]", nfluid=1)
+    docvar('cs', "sound speed [simu. units]", nfluid='???')
+    docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]", nfluid=1)
+    docvar('s', "entropy [log of quantities in simu. units]", nfluid='???')
+    docvar('mn', "mach number (using sound speed)", nfluid=1)
+    docvar('man', "mach number (using alfven speed)", nfluid=1)
+    docvar('hp', "Pressure scale height", nfluid='???')
+    for vax in ['vax', 'vay', 'vaz']:
+      docvar(vax, "{axis} component of alfven velocity [simu. units]".format(axis=vax[-1]), nfluid=0)
+    for kx in ['kx', 'ky', 'kz']:
+      docvar(kx, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
+                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=kx[-1]), nfluid=1)
+    docvar('sgyrof', "signed gryofrequency for ifluid. I.e. qi * |B| / mi. [1 / (simu. time units)]")
+    docvar('gyrof', "gryofrequency for ifluid. I.e. abs(qi * |B| / mi). [1 / (simu. time units)]")
     return None
 
   if quant=='' or quant not in PLASMA_QUANT:
     return None
 
   if quant in ['hp', 's', 'cs', 'beta']:
-    var = obj.get_var('mfe_p')
+    var = obj.get_var('mfe_p')  # is mfe_p pressure for ifluid, or sum of all fluid pressures? - SE Apr 19 2021
     if quant == 'hp':
       if getattr(obj, 'nx') < 5:
         return np.zeros_like(var)
@@ -666,6 +598,11 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     axis = quant[-1]
     var = obj.get_var('p' + axis + 'c')
     if quant[0] == 'h':
+      # anyone can delete this warning once you have confirmed that get_var('hx') does what you think it should:
+      warnmsg = ('get_var(hx) (or hy or hz) uses get_var(p), and used it since before get_var(p) was implemented. '
+                 'Maybe should be using get_var(mfe_p) instead? '
+                 'You should not trust results until you check this.  - SE Apr 19 2021.')
+      warnings.warn(warnmsg)
       return ((obj.get_var('e') + obj.get_var('p')) /
               obj.get_var('r') * var)
     else:
@@ -677,8 +614,8 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     ion = fluids[obj.ifluid]
     assert ion.ionization >= 1, "ifluid {} is not ionized; cannot get ci (==ion acoustic speed).".format(obj.ifluid)
     # (we only want to get ion acoustic speed for ions; it doesn't make sense to get it for neutrals.)
-    itg = obj.get_var('mfe_tg')   # temperature of fluid
-    etg = obj.get_var('etg')      # temperature of electrons
+    itg = obj.get_var('tg')                  # [K] temperature of fluid
+    etg = obj.get_var('tg', mf_ispecies=-1)  # [K] temperature of electrons
     igamma = obj.uni.gamma        # gamma (ratio of specific heats) of fluid
     egamma = obj.uni.gamma        # gamma (ratio of specific heats) of electrons
     ci2_p = ((ion.ionization * igamma * itg + egamma * etg) / ion.atomic_weight) # ci**2 if kB=amu=1
@@ -686,4 +623,15 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     ci_sim = ci_cgs / obj.uni.u_u                          # ci [simu. velocity units]
     return ci_sim
 
+  if quant == 'sgyrof':
+    b_si = obj.get_var('modb') * obj.uni.usi_b   # magnitude of B [Tesla]
+    if obj.mf_ispecies == -1:
+      f_si = -1 * obj.uni.qsi_electron * b_si / obj.uni.msi_e  # [s^-1]
+    else:   
+      fluid = fl.Fluids(dd=obj)[obj.ifluid]
+      f_si = (obj.uni.qsi_electron * fluid.ionization) * b_si / (obj.uni.amusi * fluid.atomic_weight) # [s^-1]
+    return f_si * obj.uni.u_t  # [simu. time units]  # [1/f_si] = [s];  x [s] / usi_t = x [simu. time]   # usi_t = u_t
+
+  elif quant == 'gyrof':
+    return np.abs(obj.get_var('sgyrof'))
 
