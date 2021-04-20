@@ -337,28 +337,29 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
   '''quantities related to collision frequency.'''
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['c_tot_per_vol', '1dcolslope',
-                    'nu_ij','nu_en','nu_ei','nu_ij_mx']  
+    COLFRE_QUANT = ['nu_ij','nu_sj','nu_si','nu_sn','nu_ei','nu_en','nu_ij_mx'
+                    'nu_ij_to_ji', 'nu_sj_to_js', 'c_tot_per_vol', '1dcolslope']
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
-    momtrans_start = 'momentum transfer collision frequenc{:} [s^-1] between '
-    colfreqnote = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
-    docvar('nu_ij', momtrans_start.format('y') + 'ifluid & jfluid. Use species<0 for electrons.' + colfreqnote, nfluid=2)
-    docvar('nu_ei', 'sum of ' + momtrans_start.format('ies') + 'electrons & ion fluids.' + colfreqnote, nfluid=1)
-    docvar('nu_en', 'sum of ' + momtrans_start.format('ies') + 'electrons & neutral fluids.' + colfreqnote, nfluid=1)
+    cfid = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
+    for nu_ij in ['nu_ij', 'nu_sj']:
+      dstr = 'momentum transfer collision frequency [s^-1] between ifluid & jfluid. '
+      docvar(nu_ij, dstr + 'Use species<0 for electrons.' + cfid, nfluid=2)
+    sstr = 'sum of momentum transfer collision frequencies [s^-1] between {} & {}.' + cfid
+    docvar('nu_si', sstr.format('ifluid', 'ion fluids'), nfluid=1)
+    docvar('nu_sn', sstr.format('ifluid', 'neutral fluids'), nfluid=1)
+    docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
+    docvar('nu_en', sstr.format('electrons', 'neutral fluids'), nfluid=0)
+    docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j', nfluid=2)
+    docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j', nfluid=2)
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
     docvar('c_tot_per_vol', 'number density of collisions [cm^-3] between ifluid and jfluid.', nfluid=2)
 
   if (var == '') or var not in COLFRE_QUANT:
     return None
 
-  if var == "c_tot_per_vol":
-    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)   # [amu]
-    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)   # [amu]
-    return obj.get_var("nr", ifluid=obj.jfluid) * obj.get_var("nu_ij") / (m_j / (m_i + m_j))
-
-  elif var == "nu_ij":
+  if var in ['nu_ij', 'nu_sj']:
     iSL = obj.ifluid
     jSL = obj.jfluid
     # get ifluid info
@@ -388,6 +389,24 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
     #calculate & return nu_ij:
     return 4./3. * n_j * m_jfrac * cross * tg_speed   # [s^-1]
+
+  elif var == 'nu_si':
+    result = np.zeros(np.shape(obj.r))
+    for fluid in fl.Fluids(dd=obj).ions():
+      result += obj.get_var('nu_ij', jfluid=fluid.SL)
+    return result
+
+  elif var == 'nu_sn':
+    result = np.zeros(np.shape(obj.r))
+    for fluid in fl.Fluids(dd=obj).neutrals():
+      result += obj.get_var('nu_ij', jfluid=fluid.SL)
+    return result 
+
+  elif var == 'nu_ei':
+    return obj.get_var('nu_si', mf_ispecies=-1)
+
+  elif var == 'nu_en':
+    return obj.get_var('nu_sn', mf_ispecies=-1)
   
   elif var == "nu_ij_mx":
     #### ASSUMES one fluid is charged & other is neutral. ####
@@ -406,21 +425,19 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     #calculate & return nu_ij_test:
     return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j)))
 
+  elif var in ['nu_ij_to_ji', 'nu_sj_to_js']:
+    mi_ni = obj.get_var('r', ifluid=obj.ifluid)  # mi * ni = ri
+    mj_nj = obj.get_var('r', ifluid=obj.jfluid)  # mj * nj = rj
+    return mi_ni / mj_nj
+
+  elif var == "c_tot_per_vol":
+    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)   # [amu]
+    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)   # [amu]
+    return obj.get_var("nr", ifluid=obj.jfluid) * obj.get_var("nu_ij") / (m_j / (m_i + m_j))
+
   elif var == "1dcolslope":
     warnings.warn(DeprecationWarning('1dcolslope will be removed at some point in the future.'))
-    return -(obj.get_var("nu_ij")+ obj.get_var("nu_ij", iSL=obj.jfluid, jSL=obj.ifluid))
-
-  elif var == 'nu_ei':
-    result = np.zeros(np.shape(obj.r))
-    for fluid in fl.Fluids(dd=obj).ions():
-      result += obj.get_var('nu_ij', mf_ispecies=-1, jfluid=fluid.SL)
-    return result 
-
-  elif var == 'nu_en':
-    result = np.zeros(np.shape(obj.r))
-    for fluid in fl.Fluids(dd=obj).neutrals():
-      result += obj.get_var('nu_ij', mf_ispecies=-1, jfluid=fluid.SL)
-    return result 
+    return -1 * obj.get_var("nu_ij") * (1 + obj.get_var('nu_ij_to_ji'))
 
 
 def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
