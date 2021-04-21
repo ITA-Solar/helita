@@ -241,7 +241,8 @@ def get_mass(obj, specie, units='amu'):
 
     '''
     units = units.lower()
-    assert units in ['amu', 'g', 'kg', 'cgs', 'si'], "Units invalid; got units={}".format(units)
+    VALID_UNITS = ['amu', 'g', 'kg', 'cgs', 'si']
+    assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
     if specie < 0:
         # electron
         if units == 'amu':
@@ -260,17 +261,30 @@ def get_mass(obj, specie, units='amu'):
         else: # units in ['kg', 'si']
             return m_amu * obj.uni.amusi
 
-def get_charge(obj, SL):
-    '''return charge for fluid SL. Units: elementary charge==1.
-    E.g. charge(He++)==2;   charge(electrons)==-1;   charge(neutral)==0.
+def get_charge(obj, SL, units='e'):
+    '''return the charge fluid SL in [units]. default is elementary charge units.
+    units: one of ['e', 'elementary', 'esu', 'c', 'cgs', 'si']. Default 'elementary'.
+        'e' or 'elementary' -> charge in elementary charge units. For these units, qH+ ~= 1.
+        'c' or 'si'         -> charge in SI units (Coulombs).     For these units, qH+ ~= 1.6E-19
+        'esu' or 'cgs'      -> charge in cgs units (esu).         For these units, qH+ ~= 4.8E-10
     '''
+    units = units.lower()
+    VALID_UNITS = ['e', 'elementary', 'esu', 'c', 'cgs', 'si']
+    assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
+    # get charge, in 'elementary charge' units:
     if SL[0] < 0:
         # electron
-        return -1.
+        charge = -1.
     else:
         # not electron
-        fluids = fl.Fluids(dd=obj)
-        return fluids[SL].ionization
+        charge = fl.Fluids(dd=obj)[SL].ionization
+    # convert to proper units and return:
+    if units in ['e', 'elementary']:
+        return charge
+    elif units in ['esu', 'cgs']:
+        return charge * obj.uni.q_electron
+    else: #units in ['c', 'si']
+        return charge * obj.uni.qsi_electron
 
 def get_cross_tab(obj, iSL, jSL):
     '''return cross section table for ifluid=iSL, jfluid=jSL.
