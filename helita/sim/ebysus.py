@@ -202,11 +202,31 @@ class EbysusData(BifrostData):
         except KeyError:
             print('warning, this idl file does not include mf_total_nlevel')
         try:
-            file = os.path.join(
-                self.fdir, self.params['mf_param_file'][self.snapInd].strip())
-            self.mf_tabparam = read_mftab_ascii(file, obj=self)
+            param_file = self.params['mf_param_file'][self.snapInd]
         except KeyError:
-            print('warning, this idl file does not include mf_param_file')
+            warnings.warn('mf_param_file not found in this idl file; trying to use mf_params.in')
+            param_file = 'mf_params.in'  # default
+        file = os.path.join(self.fdir, param_file.strip())
+        self.mf_tabparam = read_mftab_ascii(file, obj=self)
+        # electron params
+        try:
+            do_ohm_ecol = self.params['do_ohm_ecol'][self.snapInd]
+        except KeyError:
+            do_ohm_ecol = 0
+        try:
+            eparam_file = self.params['mf_eparam_file'][self.snapInd]
+        except KeyError:
+            # if do_ohm_ecol, warn user; otherwise quietly attempt to use default.
+            if do_ohm_ecol:
+                warnings.warn('mf_eparam_file not found in this idl file; trying to use mf_eparams.in')
+            eparam_file = 'mf_eparams.in' # default
+        file = os.path.join(self.fdir, eparam_file.strip())
+        try:
+            self.mf_etabparam = read_mftab_ascii(file, obj=self)
+        except FileNotFoundError:
+            # if do_ohm_ecol, crash; otherwise quietly ignore error.
+            if do_ohm_ecol:
+                raise
 
     def _init_vars(self, firstime=False, fast=None, *args__get_simple_var, **kw__get_simple_var):
         """
@@ -1089,87 +1109,34 @@ def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
     '''
-    li = 0
+    convert_to_ints = False   # True starting when we hit key=='COLLISIONS_MAP'
+    colstartkeys = ['COLLISIONS_MAP', 'COLISIONS_MAP'] # or another key in colstartkeys.
     params = {}
     # go through the file, add stuff to dictionary
     with open(filename) as fp:
         for line in fp:
-            # ignore empty lines and comments
-            line = line.strip()
-            if len(line) < 1:
-                li += 1
+            # remove comments
+            line, _, _ = line.partition('#')
+            line, _, _ = line.partition(';')
+            tokens = line.split()
+            if len(tokens) == 0:
                 continue
-            if line[0] == '#':
-                li += 1
-                continue
-            line, sep, tail = line.partition('#')
-            line = line.strip()
-            line = line.split(';')[0].split('\t')
-                    #SE should this change to .split() so that any whitespace is ok...?
-                    #SE quicktested Apr 9 2021, for some reason .split() causes issue.
-                    #Probably somewhere this function assumes specifically that we used .split('\t') or something like that.
-            # if (len(line) > 2):
-            #  print(('(WWW) read_params: line %i is invalid, skipping' % li))
-            #    li += 1
-            #    continue
-            if (np.size(line) == 1):
-                key = line
-                ii = 0
-            # force lowercase because IDL is case-insensitive
-            if (np.size(line) == 2):
-                value = line[0].strip()
-                text = line[1].strip().lower()
-                try:
-                    value = int(value)
-                except Exception:
-                    print('(WWW) read_mftab_ascii: could not find datatype in'
-                          'line %i, skipping' % li)
-                    li += 1
-                    continue
-                if not (key[0] in params):
-                    params[key[0]] = [value, text]
+            elif len(tokens) == 1:
+                key = tokens[0]
+                for colstart in colstartkeys:
+                    if key.startswith(colstart):
+                        convert_to_ints = True
+            else:
+                if convert_to_ints:
+                    tokens = [int(token) for token in tokens]
+                if key not in params.keys():
+                    params[key] = [tokens]
                 else:
-                    params[key[0]] = np.vstack((params[key[0]], [value, text]))
-            if (np.size(line) == 3):
-                value = line[0].strip()
-                value2 = line[1].strip()
-                text = line[2].strip()
-                if key != 'species':
-                    try:
-                        value = int(value)
-                    except Exception:
-                        print(
-                            '(WWW) read_mftab_ascii: could not find datatype'
-                            'in line %i, skipping' % li)
-                else:
-                    try:
-                        value = int(value)
-                        value2 = int(value2)
-                    except Exception:
-                        print(
-                            '(WWW) read_mftab_ascii: could not find datatype'
-                            'in line %i, skipping' % li)
-                    li += 1
-                    continue
-                if not (key[0] in params):
-                    params[key[0]] = [value, value2, text]
-                else:
-                    params[key[0]] = np.vstack(
-                        (params[key[0]], [value, value2, text]))
-            if (np.size(line) > 3):
-                # int type
-                try:
-                    arr = [int(numeric_string) for numeric_string in line]
-                except Exception:
-                    print('(WWW) read_mftab_ascii: could not find datatype in'
-                          'line %i, skipping' % li)
-                    li += 1
-                    continue
-                if not (key[0] in params):
-                    params[key[0]] = [arr]
-                else:
-                    params[key[0]] = np.vstack((params[key[0]], [arr]))
-            li += 1
+                    params[key] += [tokens]
+
+    for key in params.keys():
+        params[key] = np.array(params[key])
+
     return params
 
 def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
