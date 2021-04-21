@@ -7,6 +7,7 @@ purpose:
 
 # import built-ins
 import functools
+import warnings
 
 # import external private modules
 try:
@@ -271,3 +272,40 @@ def get_charge(obj, SL):
         fluids = fl.Fluids(dd=obj)
         return fluids[SL].ionization
 
+def get_cross_tab(obj, iSL, jSL):
+    '''return cross section table for ifluid=iSL, jfluid=jSL.
+    use S=-1 for electrons. (e.g. iSL=(-1,1) represents electrons.)
+    either iSL or jSL must be neutral.
+    '''
+    if iSL==jSL:
+        warnings.warn('Tried to get cross_tab when ifluid==jfluid. (Both equal {})'.format(iSL))
+    icharge, jcharge = (get_charge(obj, SL) for SL in (iSL, jSL))
+    assert icharge==0 or jcharge==0, "cannot get cross_tab for charge-charge interaction."
+    # force ispecies to be neutral (swap i & j if necessary; cross tab is symmetric).
+    if icharge != 0:
+        return get_cross_tab(obj, jSL, iSL)
+    # now, ispecies is the neutral one.
+    # now we will actually get the filename.
+    CTK = 'CROSS_SECTIONS_TABLES'
+    if jSL[0] < 0: 
+        # electrons
+        cross_tab_table = obj.mf_etabparam[CTK]
+        for row in cross_tab_table:
+            # example row looks like: ['01', 'e-h-bruno-fits.txt']
+            ## contents are: [mf_species, filename]
+            if int(row[0])==iSL[0]:
+                return row[1]
+    else:
+        # not electrons
+        cross_tab_table = obj.mf_tabparam[CTK]
+        for row in cross_tab_table:
+            # example row looks like: ['01', '02', '01', 'he-h-bruno-fits.txt']
+            ## contents are: [mf_ispecies, mf_jspecies, mf_jlevel, filename]
+            if int(row[0])==iSL[0]:
+                if int(row[1])==jSL[0]:
+                    if int(row[2])==jSL[1]:
+                        return row[3]
+    # if we reach this line, we couldn't find cross section file, so make the code crash.
+    errmsg = "Couldn't find cross section file for ifluid={}, jfluid={}. ".format(iSL, jSL) + \
+             "(We looked in obj.mf_{}tabparam['{}'].)".format(('e' if jSL[0] < 0 else ''), CTK)
+    raise ValueError(errmsg)
