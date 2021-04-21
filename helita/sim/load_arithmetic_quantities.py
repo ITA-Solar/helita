@@ -1,7 +1,26 @@
+"""
+These quantities relate to doing manipulations.
+Frequently, they are "added" to regular variable names.
+Examples:
+  - get_var('u2') is roughly equal to get_var('ux')**2 + get_var('uy')**2 + get_var('uz')**2
+  - get_var('drdxdn') takes derivative of 'r' and pushes down in x.
+  - get_var('rxup') pushes 'r' up in x, by interpolating.
+In general, these are not hard coded for every variable, but rather you will add to names.
+For example, you can do get_var('d'+var+'dxdn') for any var which get_var knows how to get.
+"""
+
+
+# import built-ins
 from multiprocessing.dummy import Pool as ThreadPool
-import numpy as np
+import warnings
+
+# import internal modules
 from . import cstagger
 from . import document_vars
+
+# import external public modules
+import numpy as np
+
 
 def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   quant = quant.lower()
@@ -13,8 +32,7 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
     if obj.cstagop != False: # this is only for cstagger routines 
       val = get_deriv(obj,quant)
   if val is None:
-    if obj.cstagop != False: # this is only for cstagger routines 
-      val = get_interp(obj,quant)
+    val = get_interp(obj,quant)
   if val is None:
     val = get_module(obj,quant)
   if val is None:
@@ -35,6 +53,9 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   if val is None:
     val = get_vector_product(obj,quant)
   return val
+
+def _can_interp(obj, axis):
+  return ( obj.cstagop ) and ( getattr(obj, 'n'+axis) >=5 )
 
 def get_deriv(obj,quant):
   '''
@@ -121,54 +142,29 @@ def get_center(obj,quant, *args, **kwargs):
   transf = AXIS_TRANSFORM[axis]
 
   var = obj.get_var(q, **kwargs)
-  # 2D
-  if getattr(obj, 'n' + axis) < 5 or obj.cstagop == False:
-    return var
-  else:
-    if len(transf) == 2:
-      if obj.lowbus:
-        output = np.zeros_like(var)
-        if transf[0][0] != 'z':
+  # do interpolation
+  if obj.lowbus:
+    # do "lowbus" version of interpolation  # not sure what is this? -SE Apr21 2021
+    output = np.zeros_like(var)
+    for interp in transf:
+      axis = interp[0]
+      if _can_interp(obj, axis):
+        if axis != 'z':
           for iiz in range(obj.nz):
-            output[:, :, iiz] = np.reshape(cstagger.do(
-                (var[:, :, iiz].reshape((obj.nx, obj.ny, 1))).astype('float32'),
-                transf[0]), (obj.nx, obj.ny))
+            slicer = np.s_[:, :, iiz:iiz+1]
+            staggered = cstagger.do(var[slicer], interp)
+            output[slicer] = staggered
         else:
-            for iiy in range(obj.ny):
-              output[:, iiy, :] = np.reshape(cstagger.do(
-                  (var[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
-                  transf[0]), (obj.nx, obj.nz))
-
-        if transf[1][0] != 'z':
-            for iiz in range(obj.nz):
-              output[:, :, iiz] = np.reshape(cstagger.do(
-                  output[:, :, iiz].reshape((obj.nx, obj.ny, 1)),
-                  transf[1]), (obj.nx, obj.ny))
-        else:
-            for iiy in range(obj.ny):
-              output[:, iiy, :] = np.reshape(cstagger.do(
-                  (output[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
-                  transf[1]), (obj.nx, obj.nz))
-        return output
-      else:
-          tmp = cstagger.do(var.astype('float32'), transf[0])
-          return cstagger.do(tmp.astype('float32'), transf[1])
-    else:
-        if obj.lowbus:
-          output = np.zeros_like(var)
-          if axis != 'z':
-            for iiz in range(obj.nz):
-                output[:, :, iiz] = np.reshape(cstagger.do(
-                    (var[:, :, iiz].reshape((obj.nx, obj.ny, 1))).astype('float32'),
-                    transf[0]), (obj.nx, obj.ny))
-          else:
-            for iiy in range(obj.ny):
-                output[:, iiy, :] = np.reshape(cstagger.do(
-                    (var[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
-                    transf[0]), (obj.nx, obj.nz))
-          return output
-        else:
-          return cstagger.do(var.astype('float32'), transf[0])
+          for iiy in range(obj.ny):
+            slicer = np.s_[:, iiy:iiy+1, :]
+            staggered = cstagger.do(var[slicer], interp)
+            output[slicer] = staggered
+  else:
+    # do "regular" version of interpolation
+    for interp in transf:
+      if _can_interp(obj, interp[0]):
+        var = cstagger.do(var, interp)
+  return var
 
 def get_interp(obj, quant):
   '''simple interpolation. var must end in interpolation instructions.
@@ -187,8 +183,13 @@ def get_interp(obj, quant):
     return None
   else:
     val = obj.get_var(varname)      # un-interpolated value
-    ival = cstagger.do(val, interp) # interpolated value
-    return ival
+    if _can_interp(obj, interp[0]):
+      val = cstagger.do(val, interp) # interpolated value
+    else:
+      # return un-interpolated value; warn that we are not actually interpolating.
+      warnings.warn('requested interpolation in {x:} but obj.n{x:} < 5 '.format(x=interp[0]) +\
+                    'or obj.cstagop==False! Skipping this interpolation.')
+    return val
 
 
 def get_module(obj,quant):
