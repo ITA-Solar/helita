@@ -77,17 +77,14 @@ class EbysusData(BifrostData):
         super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
         self.att = {}
-        if len(np.shape(self.mf_tabparam['SPECIES']))==1:
-            self.mf_nspecies = 1
-        else:
-            self.mf_nspecies = len(self.mf_tabparam['SPECIES'])
+        tab_species = self.mf_tabparam['SPECIES']
+        self.mf_nspecies = len(tab_species)
         self.mf_total_nlevel=0
-        for ispecies in range(1,int(self.mf_nspecies)+1):
-            if (self.mf_nspecies == 1):
-                self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][2],fdir=self.fdir)
-            else:
-                self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2],fdir=self.fdir)
-            self.mf_total_nlevel+=self.att[ispecies].params.nlevel
+        for row in tab_species:
+            # example row looks like: ['01', 'H', 'H_2.atom']
+            mf_ispecies = int(row[0])
+            self.att[mf_ispecies] = at.Atom_tools(atom_file=row[2], fdir=self.fdir)
+            self.mf_total_nlevel += self.att[mf_ispecies].params.nlevel
 
         self._init_vars_get(firstime=True)
 
