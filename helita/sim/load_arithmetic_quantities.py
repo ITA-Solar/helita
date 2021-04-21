@@ -7,6 +7,22 @@ Examples:
   - get_var('rxup') pushes 'r' up in x, by interpolating.
 In general, these are not hard coded for every variable, but rather you will add to names.
 For example, you can do get_var('d'+var+'dxdn') for any var which get_var knows how to get.
+
+Interpolation guide:
+  'up' moves up by 0.5 (i.e. half a grid cell)
+  'dn' moves down by 0.5 (i.e. half a grid cell)
+  scalars are in center of cell, at (0,0,0).
+    e.g.: density, energy
+  B, p are on the faces of the cell. Example:
+    Bx at ( -0.5,  0  ,  0   )
+    By at (  0  , -0.5,  0   )
+    Bz at (  0  ,  0  , -0.5 )
+    B = magnetic field; p = momentum density.
+  E, i are on the edges of the cell. Example:
+    Ex at (  0  , -0.5, -0.5 )
+    Ey at ( -0.5,  0  , -0.5 )
+    Ez at ( -0.5, -0.5,  0   )
+    E = electric field; i = current per unit area.
 """
 
 
