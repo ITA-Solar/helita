@@ -18,7 +18,7 @@ except ImportError:
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
                       CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
                       SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
-                      ONEFLUID_QUANT=None, ELECTRON_QUANT=None,
+                      ONEFLUID_QUANT=None, ELECTRON_QUANT=None, FB_INSTAB_QUANT=None,
                       **kwargs):
 
   quant = quant.lower()
@@ -48,6 +48,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
     val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT)  
   if val is None: 
     val = get_mf_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
+  if val is None:
+    val = get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=FB_INSTAB_QUANT)
   return val
 
   '''
@@ -86,8 +88,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('grph',  'grams per hydrogen atom')
     docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
     docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
+    return None
 
-  if (var == '') or var not in GLOBAL_QUANT:
+  if var not in GLOBAL_QUANT:
       return None
 
   output = np.zeros(np.shape(obj.r))    
@@ -234,8 +237,9 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     for v in 'uex', 'uey', 'uez':
       docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
     docvar('eke',  'electron kinetic energy density [simu. energy density units]')
+    return None
 
-  if (var == '') or (var not in ELECTRON_QUANT):
+  if (var not in ELECTRON_QUANT):
     return None
 
   output = np.zeros_like(obj.r)
@@ -287,7 +291,9 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
     docvar('dyTe',   'Gradient of electron temperature in the y direction [simu.u_te/simu.u_l] in SI: K.m-1')
     docvar('dzTe',   'Gradient of electron temperature in the z direction [simu.u_te/simu.u_l] in SI: K.m-1')
     docvar('rhs',    'Anisotropic gradient of electron temperature following magnetic field, i.e., bb.grad(Te), [simu.u_te/simu.u_l] in SI: K.m-1')
-  if (var == '') or var not in SPITZERTERM_QUANT:
+    return None
+
+  if var not in SPITZERTERM_QUANT:
     return None
 
   if (var == 'kappaq'):
@@ -355,8 +361,9 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j', nfluid=2)
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
     docvar('c_tot_per_vol', 'number density of collisions [cm^-3] between ifluid and jfluid.', nfluid=2)
+    return None
 
-  if (var == '') or var not in COLFRE_QUANT:
+  if var not in COLFRE_QUANT:
     return None
 
   if var in ['nu_ij', 'nu_sj']:
@@ -452,8 +459,9 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT, get_mf_logcul.__doc__)
     docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.', nfluid=0)
+    return None
 
-  if (var == '') or var not in LOGCUL_QUANT:
+  if var not in LOGCUL_QUANT:
     return None
   
   if var == "logcul":
@@ -479,8 +487,6 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
     docvar('ed', doc_start(var='ed') + 'e = energy (density??) [simu. units].')
     docvar('rd', doc_start(var='rd') + 'r = mass density [simu. units].')
     docvar('tgd', doc_start(var='tgd') + 'tg = temperature [K].')
-
-  if (var == ''):
     return None
 
   if var[:-1] in DRIFT_QUANT:
@@ -503,8 +509,9 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
     docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
+    return None
 
-  if var=='' or var not in CROSTAB_QUANT:
+  if var not in CROSTAB_QUANT:
     return None
 
   # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
@@ -533,7 +540,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   if PLASMA_QUANT is None:
     PLASMA_QUANT = ['beta', 'va', 'cs', 'ci', 's', 'ke', 'mn', 'man', 'hp',
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
-                'sgyrof', 'gyrof']
+                'sgyrof', 'gyrof', 'skappa', 'kappa']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
     docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
@@ -549,11 +556,14 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     for kx in ['kx', 'ky', 'kz']:
       docvar(kx, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
                   "(0.5 * rho * (get_var(u{axis})**2)").format(axis=kx[-1]), nfluid=1)
-    docvar('sgyrof', "signed gryofrequency for ifluid. I.e. qi * |B| / mi. [1 / (simu. time units)]")
-    docvar('gyrof', "gryofrequency for ifluid. I.e. abs(qi * |B| / mi). [1 / (simu. time units)]")
+    docvar('sgyrof', "signed gryofrequency for ifluid. I.e. qi * |B| / mi. [1 / (simu. time units)]", nfluid=1)
+    docvar('gyrof', "gryofrequency for ifluid. I.e. abs(qi * |B| / mi). [1 / (simu. time units)]", nfluid=1)
+    kappanote = ' "Highly magnetized" when kappa^2 >> 1.'
+    docvar('skappa', "signed magnetization for ifluid. I.e. sgryof/nu_sn." + kappanote, nfluid=1)
+    docvar('kappa', "magnetization for ifluid. I.e. gyrof/nu_sn." + kappanote, nfluid=1)
     return None
 
-  if quant=='' or quant not in PLASMA_QUANT:
+  if quant not in PLASMA_QUANT:
     return None
 
   if quant in ['hp', 's', 'cs', 'beta']:
@@ -617,14 +627,58 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     return ci_sim
 
   if quant == 'sgyrof':
-    b_si = obj.get_var('modb') * obj.uni.usi_b   # magnitude of B [Tesla]
-    if obj.mf_ispecies == -1:
-      f_si = -1 * obj.uni.qsi_electron * b_si / obj.uni.msi_e  # [s^-1]
-    else:   
-      fluid = fl.Fluids(dd=obj)[obj.ifluid]
-      f_si = (obj.uni.qsi_electron * fluid.ionization) * b_si / (obj.uni.amusi * fluid.atomic_weight) # [s^-1]
-    return f_si * obj.uni.u_t  # [simu. time units]  # [1/f_si] = [s];  x [s] / usi_t = x [simu. time]   # usi_t = u_t
+    B = obj.get_var('modb') * obj.uni.usi_b   # magnitude of B [Tesla]  [SI units]
+    q = fluid_tools.get_charge(obj, obj.ifluid, units='si') # [C]       [SI units]
+    m = fluid_tools.get_mass(  obj, obj.mf_ispecies, units='si') # [kg]      [SI units]
+    gyrof_si = q * B / m           # [s^-1]  [SI units]
+    return gyrof_si * obj.uni.u_t  # [simu. time units]  # [1/f_si] = [s];  x [s] / usi_t = x [simu. time]   # usi_t = u_t
 
-  elif quant == 'gyrof':
+  if quant == 'gyrof':
     return np.abs(obj.get_var('sgyrof'))
 
+  if quant == 'skappa':
+    gyrof = obj.get_var('sgyrof') * (1/obj.uni.u_t)  # [s^-1]
+    nu_sn = obj.get_var('nu_sn')                     # [s^-1]
+    return gyrof / nu_sn 
+
+  if quant == 'kappa':
+    return np.abs(obj.get_var('skappa'))
+
+
+def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
+  '''very specific quantities which are related to the Farley-Buneman instability.'''
+  if FB_INSTAB_QUANT is None:
+    FB_INSTAB_QUANT = ['psi0', 'psii', 'vde', 'fb_ssi_vdtrigger', 'fb_ssi_possible']
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'FB_INSTAB_QUANT', FB_INSTAB_QUANT, get_fb_instab_quant.__doc__)
+    for psi in ['psi0', 'psii']:
+      docvar(psi, 'psi_i when k_parallel==0. equals to: (kappa_e * kappa_i)^-1.', nfluid=1)
+    docvar('vde', 'electron drift velocity. equals to: |E|/|B|. [simu. velocity units]', nfluid=0)
+    docvar('fb_ssi_vdtrigger', 'minimum vde [in simu. velocity units] above which the FB instability can grow, ' +\
+             'in the case of SSI (single-species-ion). We assume ifluid is the single ion species.', nfluid=1)
+    docvar('fb_ssi_possible', 'whether SSI Farley Buneman instability can occur (vde > fb_ssi_vdtrigger). ' +\
+             'returns an array of booleans, with "True" meaning "can occur at this point".', nfluid=1)
+    return None
+
+  if quant not in FB_INSTAB_QUANT:
+    return None
+
+  elif quant in ['psi0', 'psii']:
+    kappa_i = obj.get_var('kappa')
+    kappa_e = obj.get_var('kappa', mf_ispecies=-1)
+    return 1./(kappa_i * kappa_e)
+
+  elif quant == 'vde':
+    modE = obj.get_var('mode') # [simu. E-field units]
+    modB = obj.get_var('modb') # [simu. B-field units]
+    return modE / modB         # [simu. velocity units]
+
+  elif quant == 'fb_ssi_vdtrigger':
+    icharge = fluid_tools.get_charge(obj, obj.ifluid)
+    assert icharge > 0, "expected ifluid to be an ion but got ifluid charge == {}".format(icharge)
+    ci   = obj.get_var('ci')   # [simu. velocity units]
+    psi0 = obj.get_var('psi0')
+    return ci * (1 + psi0)     # [simu. velocity units]
+
+  elif quant == 'fb_ssi_possible':
+    return obj.get_var('vde') > obj.get_var('fb_ssi_vdtrigger')
