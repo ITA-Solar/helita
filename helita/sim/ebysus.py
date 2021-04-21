@@ -486,7 +486,7 @@ class EbysusData(BifrostData):
                           'calculate quantity %s. Note that simple_var '
                           'available variables are: %s.\nIn addition, '
                           'get_quantity can read others computed variables '
-                          'see e.g. help(self.get_var) or get_var('')) for guidance'
+                          "see e.g. help(self.get_var) or get_var('')) for guidance"
                           '.' % (var, repr(self.simple_vars))))
 
         if DEBUG:
