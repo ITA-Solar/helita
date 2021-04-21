@@ -337,7 +337,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
   '''quantities related to collision frequency.'''
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['nu_ij','nu_sj','nu_si','nu_sn','nu_ei','nu_en','nu_ij_mx'
+    COLFRE_QUANT = ['nu_ij','nu_sj','nu_si','nu_sn','nu_ei','nu_en','nu_ij_mx',
                     'nu_ij_to_ji', 'nu_sj_to_js', 'c_tot_per_vol', '1dcolslope']
 
   if var=='':
@@ -347,8 +347,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       dstr = 'momentum transfer collision frequency [s^-1] between ifluid & jfluid. '
       docvar(nu_ij, dstr + 'Use species<0 for electrons.' + cfid, nfluid=2)
     sstr = 'sum of momentum transfer collision frequencies [s^-1] between {} & {}.' + cfid
-    docvar('nu_si', sstr.format('ifluid', 'ion fluids'), nfluid=1)
-    docvar('nu_sn', sstr.format('ifluid', 'neutral fluids'), nfluid=1)
+    docvar('nu_si', sstr.format('ifluid', 'ion fluids (excluding ifluid)'), nfluid=1)
+    docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
     docvar('nu_en', sstr.format('electrons', 'neutral fluids'), nfluid=0)
     docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j', nfluid=2)
@@ -391,15 +391,19 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     return 4./3. * n_j * m_jfrac * cross * tg_speed   # [s^-1]
 
   elif var == 'nu_si':
+    ifluid = obj.ifluid
     result = np.zeros(np.shape(obj.r))
     for fluid in fl.Fluids(dd=obj).ions():
-      result += obj.get_var('nu_ij', jfluid=fluid.SL)
+      if fluid.SL != ifluid:
+        result += obj.get_var('nu_ij', jfluid=fluid.SL)
     return result
 
   elif var == 'nu_sn':
+    ifluid = obj.ifluid
     result = np.zeros(np.shape(obj.r))
     for fluid in fl.Fluids(dd=obj).neutrals():
-      result += obj.get_var('nu_ij', jfluid=fluid.SL)
+      if fluid.SL != ifluid:
+        result += obj.get_var('nu_ij', jfluid=fluid.SL)
     return result 
 
   elif var == 'nu_ei':
@@ -503,53 +507,25 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   if var=='' or var not in CROSTAB_QUANT:
     return None
 
-  # get spics & wgts & temperatures, then restore original obj.ifluid and obj.jfluid values.
+  # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
   with obj.MaintainFluids():
-    spic1, spic2 = (fluid_tools.get_name(obj, s) for s in (obj.mf_ispecies, obj.mf_jspecies))
-    wgt1,  wgt2  = (fluid_tools.get_mass(obj, s)  for s in (obj.mf_ispecies, obj.mf_jspecies))
-    tg1 = obj.get_var('tg', ifluid = obj.ifluid)
-    tg2 = obj.get_var('tg', ifluid = obj.jfluid)
+    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)
+    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)
+    tgi = obj.get_var('tg', ifluid = obj.ifluid)
+    tgj = obj.get_var('tg', ifluid = obj.jfluid)
 
   # temperature, weighted by mass of species
-  tg  = (tg1*wgt2 + tg2*wgt1)/(wgt1+wgt2)
+  tg = (tgi*m_j + tgj*m_i)/(m_i + m_j)
 
   # look up cross table and get cross section
-  cross_tab = ''
-  crossunits = 2.8e-17
-  if ([spic1, spic2] == ['h', 'h']):
-    cross_tab = 'h-p-bruno-fits.txt'
-  elif (([spic1, spic2] == ['h', 'he']) or
-        ([spic2, spic1] == ['h', 'he'])):
-    cross_tab = 'he-p-bruno-fits.txt'
-  elif ([spic1, spic2] == ['he', 'he']):
-    cross_tab = 'he-he.txt'
-  elif (([spic1, spic2] == ['e', 'he']) or
-        ([spic2, spic1] == ['e', 'he'])):
-    cross_tab = 'e-he.txt'
-  elif (([spic1, spic2] == ['e', 'h']) or ([spic2, spic1] == ['e', 'h'])):
-    cross_tab = 'e-h.txt'
-  elif (spic1 == 'h'):
-    cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['h'] * \
-          obj.uni.cross_p * np.ones(np.shape(tg))
-  elif (spic2 == 'h'):
-    cross = obj.uni.weightdic[spic1] / obj.uni.weightdic['h'] * \
-          obj.uni.cross_p * np.ones(np.shape(tg))
-  elif (spic1 == 'he'):
-    cross = obj.uni.weightdic[spic2] / obj.uni.weightdic['he'] * \
-          obj.uni.cross_he * np.ones(np.shape(tg))
-  elif (spic2 == 'he'):
-    cross = obj.uni.weightdic[spic1] / obj.uni.weightdic['he'] * \
-          obj.uni.cross_he * np.ones(np.shape(tg))
+  #crossunits = 2.8e-17  
+  cross_tab = fluid_tools.get_cross_tab(obj, obj.ifluid, obj.jfluid)
 
-  if cross_tab != '':
-    crossobj = obj.cross_sect(cross_tab=[cross_tab])
-    crossunits = crossobj.cross_tab[0]['crossunits']
-    cross = crossunits * crossobj.tab_interp(tg)
+  crossobj = obj.cross_sect(cross_tab=[cross_tab])
+  crossunits = crossobj.cross_tab[0]['crossunits']
+  cross = crossunits * crossobj.tab_interp(tg)
 
-  try:
-      return cross
-  except Exception:
-      print('(WWW) cross-section: wrong combination of species')
+  return cross
 
 
 def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
