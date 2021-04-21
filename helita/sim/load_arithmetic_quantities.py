@@ -9,33 +9,37 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   document_vars.set_meta_quant(obj, 'arquantities', 'Computes arithmetic quantities')
 
   val = get_center(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     if obj.cstagop != False: # this is only for cstagger routines 
       val = get_deriv(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
+    if obj.cstagop != False: # this is only for cstagger routines 
+      val = get_interp(obj,quant)
+  if val is None:
     val = get_module(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_horizontal_average(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_gradients_vect(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     if obj.cstagop != False:  # this is only for cstagger routines 
       val = get_gradients_scalar(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_square(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_lg(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_ratios(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_projections(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_vector_product(obj,quant)
   return val
 
 def get_deriv(obj,quant):
   '''
-  Computes derivative of quantity
+  Computes derivative of quantity.
+  Example: 'drdxup' does dxup for var 'r'.
   '''
   quant = quant.lower()
 
@@ -165,6 +169,26 @@ def get_center(obj,quant, *args, **kwargs):
           return output
         else:
           return cstagger.do(var.astype('float32'), transf[0])
+
+def get_interp(obj, quant):
+  '''simple interpolation. var must end in interpolation instructions.
+  e.g. rxup --> cstagger.do(get_var('r'), 'xup')
+  '''
+  INTERP_QUANT = ['xup', 'yup', 'zup',
+                  'xdn', 'ydn', 'zdn']
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, 'INTERP_QUANT', INTERP_QUANT, get_interp.__doc__)
+    for xup in INTERP_QUANT:
+      docvar(xup, 'move half grid {up:} in the {x:} axis'.format(up=xup[1:], x=xup[0]))
+    return None
+
+  varname, interp = quant[:-3], quant[-3:]
+  if not interp in INTERP_QUANT:
+    return None
+  else:
+    val = obj.get_var(varname)      # un-interpolated value
+    ival = cstagger.do(val, interp) # interpolated value
+    return ival
 
 
 def get_module(obj,quant):
