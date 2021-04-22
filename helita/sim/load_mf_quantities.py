@@ -299,7 +299,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     return 0.5 * obj.get_var('ri') * obj.get_var('ui2')
 
   else:
-    for var in ['ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']:
+    if var in ['ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']:
       if obj.mf_ispecies < 0:  # electrons
         e_var = var.replace('i', 'e')
         return obj.get_var(e_var)
