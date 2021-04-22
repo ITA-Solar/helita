@@ -86,8 +86,22 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
     val = get_vector_product(obj,quant)
   return val
 
-def _can_interp(obj, axis):
-  return ( obj.cstagop ) and ( getattr(obj, 'n'+axis) >=5 )
+def _can_interp(obj, axis, warn=True):
+  '''return whether we can interpolate. Make warning if we can't.'''
+  if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
+    return False       # intentionally turned off interpolation. So we don't make warning.
+  if not getattr(obj, 'cstagger_exists', False):
+    warnmsg = 'requested interpolation but cstagger not initialized for obj={}! '.format(obj) +\
+              'We will skip this interpolation, and instead return the original value.'
+    warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
+    return False
+  if not getattr(obj, 'n'+axis, 0) >=5:
+    warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\
+              'We will skip this interpolation, and instead return the original value.'
+    warnings.warn(warnmsg) # warn user we will not be interpolating! (dimension is too small)
+    return False
+  return True
+  
 
 def get_deriv(obj,quant):
   '''
@@ -112,6 +126,17 @@ def get_deriv(obj,quant):
   axis = quant[-3]
   q = quant[1:-4]  # base variable 
   var = obj.get_var(q)
+
+  if not _can_interp(obj, axis):
+    warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
+    xidx = dict(x=0, y=1, z=2)[axis]  # axis; 0, 1, or 2.
+    if var.shape[xidx] <= 1:
+      return np.zeros_like(var)
+    dvar = np.gradient(var, axis=xidx)  # 3D
+    dx   = getattr(obj, 'd'+axis+'1d')  # 1D; needs dims to be added. add dims below.
+    dx   = np.expand_dims(dx, axis=tuple(set((0,1,2)) - set([xidx])))
+    dvardx = dvar / dx
+    return dvardx
 
   def deriv_loop(var, quant):
     return do_cstagger(var, 'd' + quant[0])
@@ -541,6 +566,9 @@ def get_vector_product(obj,quant):
 
   if (quant == '') or not quant[1:6] in VECO_QUANT:
     return None
+
+  warnings.warn('interpolation not implemented properly for cross product.')
+  # vectors are on faces or edges of grid cell, so we need to align them before multiplying.
 
   # projects v1 onto v2
   v1 = quant[0]
