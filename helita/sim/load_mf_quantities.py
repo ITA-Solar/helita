@@ -410,9 +410,11 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
   '''quantities related to collision frequency.'''
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['nu_ij','nu_sj','rijx','rijy','rijz',
-                    'nu_si','nu_sn','nu_ei','nu_en','nu_ij_mx',
-                    'nu_ij_to_ji', 'nu_sj_to_js', 'c_tot_per_vol', '1dcolslope']
+    COLFRE_QUANT = ['nu_ij','nu_sj','rijx','rijy','rijz',      # basics: frequencies & mom exchange
+                    'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
+                    'nu_ij_mx','nu_ij_res','nu_se_spitzcoul',  # alternative formulae
+                    'nu_ij_to_ji', 'nu_sj_to_js',              # conversion factor nu_ij --> nu_ji
+                    'c_tot_per_vol', '1dcolslope']             # misc.
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
@@ -429,7 +431,12 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
     docvar('nu_en', sstr.format('electrons', 'neutral fluids'), nfluid=0)
-    docvar('nu_ij_mx', mtra + 'Assumes maxwell molecules; formula does not depend on temperatures.', nfluid=2)
+    docvar('nu_ij_mx', mtra + 'Assumes maxwell molecules; formula does not depend on temperatures. '+\
+                        'presently, only properly implemented when ifluid=H or jfluid=H.', nfluid=2)
+    docvar('nu_ij_res', 'resonant collisions between ifluid & jfluid. '+\
+                        'presently, only properly implemented for ifluid=H+, jfluid=H.', nfluid=2)
+    docvar('nu_se_spitzcoul', 'coulomb collisions between s & e-, including spitzer correction. ' +\
+                              'Formula in Oppenheim et al 2020 appendix A eq 4.', nfluid=1)
     docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j', nfluid=2)
     docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j', nfluid=2)
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
@@ -511,10 +518,9 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     return obj.get_var('nu_sn', mf_ispecies=-1)
   
   elif var == "nu_ij_mx":
-    #### ASSUMES one fluid is charged & other is neutral. ####
     #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
     CONST_MULT    = 1.96     #factor in front.
-    CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen
+    CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen   #(should be different for different species)
     e_charge= obj.uni.qsi_electron  #[C]      #elementary charge
     eps0    = 8.854187e-12   #[kg^-1 m^-3 s^4 (C^2 s^-2)] #epsilon0, standard definition
     CONST_RATIO   = (e_charge / obj.uni.amusi) * (e_charge / eps0) * CONST_ALPHA_N   #[C^2 kg^-1 [eps0]^-1 m^3]
@@ -526,6 +532,41 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)  #mass [amu]
     #calculate & return nu_ij_test:
     return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j)))
+
+  elif var == 'nu_ij_res':
+    ## uses formula which is only valid when ifluid=H+, jfluid=H
+    nH = obj.get_var('nr_si')  # [m^-3]
+    tg = 0.5 * (obj.get_var('tg') + obj.get_var('tg', ifluid=obj.jfluid)) # [K]
+    return 2.65e-16 * nH * np.sqrt(tg) * (1 - 0.083 * np.log10(tg))**2
+
+  elif var == 'nu_se_spitzcoul':
+    icharge = fluid_tools.get_charge(obj, obj.ifluid)
+    assert icharge > 0, "ifluid must be ion, but got charge={} (ifluid={})".format(icharge, obj.ifluid)
+    #nuje = me pi ne e^4 ln(12 pi ne ldebye^3) / ( ms (4 pi eps0)^2 sqrt(ms (2 kb T)^3) )
+    ldebye = obj.get_var('ldebye') * obj.uni.usi_l
+    me   = obj.uni.msi_e
+    tg   = obj.get_var('tg')
+    ms   = fluid_tools.get_mass(obj, obj.mf_ispecies, units='si')
+    eps0 = obj.uni.permsi
+    kb   = obj.uni.ksi_b
+    qe   = obj.uni.qsi_electron
+    ne   = obj.get_var('nr_si', mf_ispecies=-1)
+    # combine numbers in a way that will prevent extremely large or small values:
+    const = (1 / (16 * np.pi)) * (qe / eps0)**2 * (qe / kb) * (qe / np.sqrt(kb))
+    mass_ = me / ms  *  1/ np.sqrt(ms)
+    ln_   = np.log(12 * np.pi * ne) + 3 * np.log(ldebye)
+    nuje0 = (const * ne) * mass_ * ln_ / (2 * tg)**(3/2)
+
+    # try again but with logs. Run this code to confirm that the above code is correct.
+    run_confirmation_code = False   # change to True to run this code.
+    if run_confirmation_code:
+      ln = np.log
+      tmp1 = ln(me) + ln(np.pi) + ln(ne) + 4*ln(qe) + ln(ln(12) + ln(np.pi) + ln(ne) + 3*ln(ldebye))  # numerator
+      tmp2 = ln(ms) + 2*(ln(4) + ln(np.pi) + ln(eps0)) + 0.5*(ln(ms) + 3*(ln(2) + ln(kb) + ln(tg)))  # denominator
+      tmp = tmp1 - tmp2
+      nuje1 = np.exp(tmp)
+      print('we expect these to be approximately equal:', nuje0.mean(), nuje1.mean())
+    return nuje0
 
   elif var in ['nu_ij_to_ji', 'nu_sj_to_js']:
     mi_ni = obj.get_var('r', ifluid=obj.ifluid)  # mi * ni = ri
@@ -631,7 +672,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   if PLASMA_QUANT is None:
     PLASMA_QUANT = ['beta', 'va', 'cs', 'ci', 's', 'ke', 'mn', 'man', 'hp',
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
-                'sgyrof', 'gyrof', 'skappa', 'kappa']
+                'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
     docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
@@ -652,6 +693,10 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     kappanote = ' "Highly magnetized" when kappa^2 >> 1.'
     docvar('skappa', "signed magnetization for ifluid. I.e. sgryof/nu_sn." + kappanote, nfluid=1)
     docvar('kappa', "magnetization for ifluid. I.e. gyrof/nu_sn." + kappanote, nfluid=1)
+    docvar('ldebyei', "debye length of ifluid [simu. length units]. sqrt(kB eps0 q^-2 Ti / ni)", nfluid=1)
+    docvar('ldebye', "debye length of plasma [simu. length units]. " +\
+                     "sqrt(kB eps0 e^-2 / (ne/Te + sum_j(Zj^2 * nj / Tj)) ); Zj = qj/e"+\
+                     "1/sum_j( (1/ldebye_j) for j in fluids and electrons)", nfluid=0)
     return None
 
   if quant not in PLASMA_QUANT:
@@ -734,6 +779,23 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
 
   if quant == 'kappa':
     return np.abs(obj.get_var('skappa'))
+
+  elif quant == 'ldebyei':
+    Zi2 = fluid_tools.get_charge(obj, obj.ifluid)**2
+    if Zi2 == 0:
+      return np.zeros(obj.r.shape)
+    const = obj.uni.permsi * obj.uni.ksi_b / obj.uni.qsi_electron**2
+    tg = obj.get_var('tg')     # [K]
+    nr = obj.get_var('nr_si')  # [m^-3]
+    ldebsi = np.sqrt(const * tg / (nr * Zi2))  # [m]
+    return ldebsi / obj.uni.usi_l  # [simu. length units]
+
+  elif quant == 'ldebye':
+    # ldebye = 1/sum_j( (1/ldebye_j) for j in fluids and electrons)
+    ldeb_inv_sum = 1/obj.get_var('ldebyei', mf_ispecies=-1)
+    for fluid in fl.Fluids(dd=obj).ions():
+      ldeb_inv_sum += 1/obj.get_var('ldebyei', ifluid=fluid.SL)
+    return 1/ldeb_inv_sum
 
 
 def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
