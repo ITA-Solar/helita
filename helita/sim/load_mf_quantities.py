@@ -206,12 +206,12 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     # ----- calculate ionization & recombination effects ----- #
     warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
     # ----- calculate collisional effects (only if do_ohm_ecol) ----- #
+    sum_rejx = 0.
     if obj.params['do_ohm_ecol'][obj.snapInd]:
       # efx is at (0, -1/2, -1/2)
       ## rijx is at (-1/2, 0, 0)    (same as ux)
       ## --> to align with efx, we shift rijx by xup ydn zdn
       interp = x+'up'+y+'dn'+z+'dn'
-      sum_rejx = 0.
       for fluid in fl.Fluids(dd=obj):
         sum_rejx += obj.get_var('rij'+x + interp, mf_ispecies=-1, jfluid=fluid.SL)
       ## sum_rejx has units [simu. momentum density units / simu. time units]
