@@ -37,6 +37,22 @@ from . import document_vars
 # import external public modules
 import numpy as np
 
+# we need to convert to float32 before doing cstagger.do.
+## not sure why this conversion isnt done in the cstagger method, but it is a bit 
+## painful to change the method itself (required re-installing helita for me) so we will
+## instead just change our calls to the method here. -SE Apr 22 2021
+CSTAGGER_TYPES = ['float32']  # these are the allowed types
+def do_cstagger(arr, operation='xup', default_type=CSTAGGER_TYPES[0]):
+  '''does cstagger, after ensuring arr is the correct type, converting if necessary.
+  if type conversion is necessary, convert to default_type.
+  '''
+  arr = np.array(arr, copy=False)     # make numpy array, if necessary.
+  if arr.dtype not in CSTAGGER_TYPES: # if necessary,
+    arr = arr.astype(default_type)      # convert type
+  return cstagger.do(arr, operation)  # call the original cstagger function
+
+
+''' --------------------- functions to load quantities --------------------- '''
 
 def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   quant = quant.lower()
@@ -98,7 +114,7 @@ def get_deriv(obj,quant):
   var = obj.get_var(q)
 
   def deriv_loop(var, quant):
-    return cstagger.do(var.astype('float32'), 'd' + quant[0])
+    return do_cstagger(var, 'd' + quant[0])
 
   if getattr(obj, 'n' + axis) < 5:  # 2D or close
     print('(WWW) get_quantity: DERIV_QUANT: '
@@ -118,18 +134,18 @@ def get_deriv(obj,quant):
         output = np.zeros_like(var)
         if axis != 'z':
           for iiz in range(obj.nz):
-            output[:, :, iiz] = np.reshape(
-               cstagger.do((var[:, :, iiz].reshape((
-               obj.nx, obj.ny, 1)).astype('float32')), 'd' + quant[-4:]),(obj.nx, obj.ny))
+            slicer = np.s_[:, :, iiz:iiz+1]
+            staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+            output[slicer] = staggered
         else:
           for iiy in range(obj.ny):
-            output[:, iiy, :] = np.reshape(
-               cstagger.do((var[:, iiy, :].reshape((
-               obj.nx, 1, obj.nz)).astype('float32')), 'd' + quant[-4:]),(obj.nx, obj.nz))
+            slicer = np.s_[:, iiy:iiy+1, :]
+            staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+            output[slicer] = staggered
 
         return output
       else:
-        return cstagger.do(var.astype('float32'), 'd' + quant[-4:])
+        return do_cstagger(var, 'd' + quant[-4:])
 
 
 def get_center(obj,quant, *args, **kwargs):
@@ -168,23 +184,23 @@ def get_center(obj,quant, *args, **kwargs):
         if axis != 'z':
           for iiz in range(obj.nz):
             slicer = np.s_[:, :, iiz:iiz+1]
-            staggered = cstagger.do(var[slicer], interp)
+            staggered = do_cstagger(var[slicer], interp)
             output[slicer] = staggered
         else:
           for iiy in range(obj.ny):
             slicer = np.s_[:, iiy:iiy+1, :]
-            staggered = cstagger.do(var[slicer], interp)
+            staggered = do_cstagger(var[slicer], interp)
             output[slicer] = staggered
   else:
     # do "regular" version of interpolation
     for interp in transf:
       if _can_interp(obj, interp[0]):
-        var = cstagger.do(var, interp)
+        var = do_cstagger(var, interp)
   return var
 
 def get_interp(obj, quant):
   '''simple interpolation. var must end in interpolation instructions.
-  e.g. rxup --> cstagger.do(get_var('r'), 'xup')
+  e.g. rxup --> do_cstagger(get_var('r'), 'xup')
   '''
   INTERP_QUANT = ['xup', 'yup', 'zup',
                   'xdn', 'ydn', 'zdn']
@@ -200,7 +216,7 @@ def get_interp(obj, quant):
   else:
     val = obj.get_var(varname)      # un-interpolated value
     if _can_interp(obj, interp[0]):
-      val = cstagger.do(val, interp) # interpolated value
+      val = do_cstagger(val, interp) # interpolated value
     else:
       # return un-interpolated value; warn that we are not actually interpolating.
       warnings.warn('requested interpolation in {x:} but obj.n{x:} < 5 '.format(x=interp[0]) +\
