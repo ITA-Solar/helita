@@ -37,7 +37,7 @@ class Rh15dout:
         GROUPS = [g for g in f.keys() if type(f[g]) == h5py._hl.group.Group]
         f.close()
         for g in GROUPS:
-            setattr(self, g, xr.open_dataset(infile, group=g, autoclose=True))
+            setattr(self, g, xr.open_dataset(infile, group=g))
             self.files.append(getattr(self, g))
         if self.verbose:
             print(('--- Read %s file.' % infile))
@@ -50,7 +50,7 @@ class Rh15dout:
                 infile = os.path.splitext(infile)[0] + '.ncdf'
         if not os.path.isfile(infile):
             return
-        self.ray = xr.open_dataset(infile, autoclose=True)
+        self.ray = xr.open_dataset(infile)
         self.files.append(self.ray)
         if self.verbose:
             print(('--- Read %s file.' % infile))
