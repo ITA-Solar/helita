@@ -466,9 +466,9 @@ class EbysusData(BifrostData):
                             DEBYE_LN_QUANT='', CROSTAB_QUANT='',
                             COULOMB_COL_QUANT='', AMB_QUANT='')
                 if val is None:
-                    val = load_arithmetic_quantities(self,var)
-                if val is None:
                     val = load_mf_quantities(self,var)
+                if val is None:
+                    val = load_arithmetic_quantities(self,var)
 
         if document_vars.creating_vardict(self):
             return None
