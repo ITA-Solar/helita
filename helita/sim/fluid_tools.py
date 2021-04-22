@@ -240,6 +240,13 @@ def get_mass(obj, specie, units='amu'):
         'kg' or 'si' -> mass in kg.     For these units, mH ~= 1.66E-27
 
     '''
+    # if specie is actually (spec, level) return get_mass(obj, spec) instead.
+    try:
+        specie = specie[0]
+    except TypeError:
+        pass
+    else:
+        return get_mass(obj, specie, units=units)
     units = units.lower()
     VALID_UNITS = ['amu', 'g', 'kg', 'cgs', 'si']
     assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
