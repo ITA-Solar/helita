@@ -445,6 +445,9 @@ class BifrostData(object):
             cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
+            self.cstagger_exists = True   # we can use cstagger methods!
+        else:
+            self.cstagger_exists = False  # we must avoid using cstagger methods.
 
     def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None, 
                     *args, **kwargs):
@@ -638,7 +641,7 @@ class BifrostData(object):
         else: 
             cgsunits = 1.0
                 
-        # # check if already in memmory
+        # get value of variable.
         if var in self.variables:
             val = self.variables[var] * cgsunits
         elif var in self.simple_vars:  # is variable already loaded?
@@ -887,24 +890,31 @@ class BifrostData(object):
                          offset=offset, shape=(self.nx, self.ny))
 
     def _get_composite_var(self, var, *args, EOSTAB_QUANT=None, **kwargs):
-        """
-        Gets composite variables such as ux, uy, uz, ee, s tau (at 500),
-        and other eos variables are in cgs except ne which is in SI.
-        The electron density [m^-3] (ne), temperature [K] (tg),
-        pressure [dyn/cm^2] (pg), Rosseland opacity [cm^2/g] (kr),
-        scattering probability (eps), opacity (opa), thermal emission (temt)
-        and entropy (ent). They will will load into memory.
-        """
+        """ gets velocities, internal energy ('e' / 'r'), entropy."""
 
+        COMPOSITE_QUANT = ['ux', 'uy', 'uz', 'ee', 's']
         if var == '':
-            print(help(self._get_composite_var))
+            docvar = document_vars.vars_documenter(obj, 'COMPOSITE_QUANT',
+                                                   COMPOSITE_QUANT, _get_composite_var.__doc__)
+            for ux in ['ux', 'uy', 'uz']:
+                docvar(ux, '{x:}-component of velocity [simu. velocity units]'.format(x=ux[-1]))
+            docvar('ee', "internal energy. get_var('e')/get_var('r').")
+            docvar('s', 'entropy (??)')
+            return None
+
+        if var not in COMPOSITE_QUANT:
+            return None
 
         if var in ['ux', 'uy', 'uz']:  # velocities
-            p = self.get_var('p' + var[1], order='F')
-            if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
-                return p / self.get_var('r')  # do not recentre for 2D cases
-            else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / cstagger.do(self.get_var('r'), var[1] + 'dn')
+            # u = p / r.
+            ## r is on center of grid cell, but p is on face, so we need to interpolate.
+            ## r is at (0,0,0), ux and px are at (-0.5, 0, 0)
+            ## --> to align r with px, shift by xdn
+            x = var[-1]  # axis; 'x', 'y', or 'z'
+            interp = x+'dn'
+            p = self.get_var('p' + x)
+            r = self.get_var('r' + interp)
+            return p / r
 
         elif var == 'ee':   # internal energy
             return self.get_var('e') / self.get_var('r')
