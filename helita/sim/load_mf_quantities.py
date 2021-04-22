@@ -244,9 +244,16 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   Use mf_ispecies= -1 to refer to electrons.
   Intended to contain only "simple" physical quantities.
   For more complicated "plasma" quantities such as gryofrequncy, see PLASMA_QUANT.
+
+  Quantities with 'i' are "generic" version of that quantity,
+  meaning it works with electrons or another fluid for ifluid.
+  For example, obj.get_var('uix') is equivalent to:
+    obj.get_var('uex') when obj.mf_ispecies < 0
+    obj.get_var('ux') otherwise.
   '''
   if ONEFLUID_QUANT is None:
-    ONEFLUID_QUANT = ['nr', 'nr_si', 'p', 'pressure', 'tg', 'temperature', 'ke']
+    ONEFLUID_QUANT = ['nr', 'nr_si', 'p', 'pressure', 'tg', 'temperature', 'ke',
+                      'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
@@ -257,15 +264,22 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     for p in ['p', 'pressure']:
       docvar(p, 'pressure of ifluid [simu. energy density units]')
     docvar('ke', 'kinetic energy density of ifluid [simu. units]')
+    _equivstr = " Equivalent to obj.get_var('{ve:}') when obj.mf_ispecies < 0; obj.get_var('{vf:}'), otherwise."
+    equivstr = lambda v: _equivstr.format(ve=v.replace('i', 'e'), vf=v.replace('i', ''))
+    docvar('ri', 'mass density of ifluid [simu. density units]. '+equivstr('ri'))
+    for uix in ['uix', 'uiy', 'uiz']:
+      docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix))
+    for pix in ['pix', 'piy', 'piz']:
+      docvar(pix, 'momentum density of ifluid [simu. momentum density units]. '+equivstr(pix))
     return None
 
   if var not in ONEFLUID_QUANT:
     return None
 
   if var == 'nr':
-    if obj.mf_ispecies == -1: # electrons
+    if obj.mf_ispecies < 0: # electrons
       return obj.get_var('nel')
-    else:                     # ifluid
+    else:                   # not electrons
       mass = obj.att[obj.mf_ispecies].params.atomic_weight          # [amu]
       return obj.get_var('r') * obj.uni.u_r / (obj.uni.amu * mass)  # [cm^-3]
 
@@ -282,17 +296,24 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     return p / (nr * obj.uni.k_b)        # [K]         # p = n k T
 
   elif var == 'ke':
-    if obj.mf_ispecies == -1: # electrons
-      return obj.get_var('eke')
-    else:                     # ifluid
-      return 0.5 * obj.get_var('r') * obj.get_var('u2')
+    return 0.5 * obj.get_var('ri') * obj.get_var('ui2')
+
+  else:
+    for var in ['ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']:
+      if obj.mf_ispecies < 0:  # electrons
+        e_var = var.replace('i', 'e')
+        return obj.get_var(e_var)
+      else:                    # not electrons
+        f_var = var.replace('i', '')
+        return obj.get_var(f_var)
+
 
 
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
   if ELECTRON_QUANT is None:
-    ELECTRON_QUANT = ['nel', 're', 'uex', 'uey', 'uez', 'eke']
+    ELECTRON_QUANT = ['nel', 're', 'uex', 'uey', 'uez', 'pex', 'pey', 'pez', 'eke']
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
@@ -302,6 +323,8 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
       ' Tested uex agrees between helita (uex) & ebysus (eux), for one set of units, for current=0. - SE Apr 4 2021.'
     for v in 'uex', 'uey', 'uez':
       docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
+    for v in 'pex', 'pey', 'pez':
+      docvar(v, '{}-component of electron momentum density [simu. momentum density units]'.format(v[-1]))
     docvar('eke',  'electron kinetic energy density [simu. energy density units]')
     return None
 
@@ -313,37 +336,58 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   if var == 'nel': # number density of electrons [cm^-3]
     for fluid in fl.Fluids(dd=obj).ions():
       output += obj.get_var('nr', ifluid=fluid.SL) * fluid.ionization    #[cm^-3]
+    return output
 
   elif var == 're': # mass density of electrons [simu. mass density units]
+    # it is more efficient to loop through the fluids here than to get_var('nel').
     for fluid in fl.Fluids(dd=obj).ions():
-      nr = obj.get_var('r', ifluid=fluid.SL) / fluid.atomic_weight  #[simu mass density units / amu]
-      output += nr * fluid.ionization       #[(simu mass density units / amu) * elementary charge]
-    output = output * (obj.uni.msi_e / obj.uni.amusi)
+      nr = obj.get_var('r', ifluid=fluid.SL) / fluid.atomic_weight  #[simu. mass density units / amu]
+      output += nr * fluid.ionization         #[(simu. mass density units / amu) * elementary charge]
+    return output * (obj.uni.msi_e / obj.uni.amusi)  # [simu. mass density units]
 
-  elif var.startswith('ue'): # electron velocity [simu. velocity units]
-    # using the formula:
-    ## ne qe ue = sum_j(nj uj qj) - i,   where i = current area density (charge per unit area per unit time)
-    axis   = var[-1]
-    i_uni  = obj.uni.u_r / (obj.uni.u_b * obj.uni.u_t * obj.uni.q_electron)     # (see unit conversion table on wiki.)
-    nel    = np.zeros(obj.r.shape)                  # calculate nel as we loop through fluids below, to improve efficiency.
-    output = -1 * obj.get_var('i'+axis) * i_uni     # [simu velocity units * cm^-3]
+  elif var in ['uex', 'uey', 'uez']: # electron velocity [simu. velocity units]
+    # ne qe ue = sum_j(nj uj qj) - i,   where i = current area density (charge per unit area per unit time)
+    x = var[-1] # axis; 'x', 'y', or 'z'.
+    # get component due to current:
+    ## i is on edges of cells, while u is on faces, so we need to interpolate.
+    ## ix is at (0, -0.5, -0.5); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift ix by xdn yup zup
+    y, z   = tuple(set(('x', 'y', 'z')) - set((x)))
+    interp = x+'dn' + y+'up' + z+'up'
+    ix = obj.get_var('i'+x + interp)   # [units?? we convert to SI below.]
+    i_uni = obj.uni.u_r / (obj.uni.u_b * obj.uni.u_t * obj.uni.q_electron)  # (see unit conversion table on wiki.)
+    output = -1 * ix * i_uni     # [simu velocity units * cm^-3]
     if not np.all(output == 0): 
       # remove this warning once this code has been tested.
       warnings.warn("Nonzero current has not been tested to confirm it matches between helita & ebysus. "+\
                     "You can test it by saving 'eux' via aux, and comparing get_var('eux') to get_var('uex').")
-      # note: i and u are at different points on the mesh so we will need to interpolate.
+    # get component due to velocities:
+    ## r is in center of cells, while u is on faces, so we need to interpolate.
+    ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift r by xdn
+    interp = x+'dn'
+    nel    = np.zeros(obj.r.shape)  # calculate nel as we loop through fluids below, to improve efficiency.
     for fluid in fl.Fluids(dd=obj).ions():
-      nr   = obj.get_var('nr', ifluid=fluid.SL)     # [cm^-3]
-      nel  += nr * fluid.ionization                 # [cm^-3]
-      u    = obj.get_var('u'+axis, ifluid=fluid.SL) # [simu velocity units]
-      output += nr * u * fluid.ionization           # [simu velocity units * cm^-3]
-    output = output / nel                        # [simu velocity units]
+      nr   = obj.get_var('nr' + interp, ifluid=fluid.SL)  # [cm^-3]
+      ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu velocity units]
+      qnr  = nr * fluid.ionization                        # [cm^-3]
+      output += qnr * ux                                  # [simu velocity units * cm^-3]
+      nel    += qnr                                       # [cm^-3]
+    return output / nel                                   # [simu velocity units]
+
+  elif var in ['pex', 'pey', 'pez']: # electron momentum density [simu. momentum density units]
+    # p = r * u.
+    ## u is on faces of cells, while r is in center, so we need to interpolate.
+    ## px and ux are at (-0.5, 0, 0); r is at (0, 0, 0)
+    ## ---> to align with ux, we shift r by xdn
+    x = var[-1] # axis; 'x', 'y', or 'z'.
+    interp = x+'dn'
+    re  = obj.get_var('re'+interp)  # [simu. mass density units]
+    uex = obj.get_var('ue'+x)       # [simu. velocity units]
+    return re * uex                 # [simu. momentum density units]
 
   elif var == 'eke': #electron kinetic energy density [simu. energy density units]
-    return 0.5 * obj.get_var('re') * obj.get_var('ue2')
-
-
-  return output
+    return obj.get_var('ke', mf_ispecies=-1)
 
 
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
@@ -483,17 +527,10 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     x = var[-1]  # axis; x= 'x', 'y', or 'z'.
     # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
     nu_ij = obj.get_var('nu_ij')
-    if obj.mf_ispecies > 0: # ifluid is not electrons
-      ri = obj.get_var('r')     # [simu. density units]
-      ui = obj.get_var('u'+x)   # [simu. velocity units]
-    else:                   # ifluid is electrons
-      ri = obj.get_var('nr') * obj.uni.m_e / obj.uni.u_r  # [simu. density units]
-      ui = obj.get_var('ue'+x)                            # [simu. velocity units]
-    if obj.mf_jspecies > 0: # jfluid is not electrons
-      uj = obj.get_var('u'+x, ifluid=obj.jfluid)
-    else:                   # jfluid is electrons
-      uj = obj.get_var('ue'+x)
-    return ri * nu_ij * (uj - ui)
+    ri  = obj.get_var('ri')
+    uix = obj.get_var('ui'+x)
+    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
+    return ri * nu_ij * (ujx - uix)
 
   elif var == 'nu_si':
     ifluid = obj.ifluid
