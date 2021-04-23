@@ -447,7 +447,8 @@ class BifrostData(object):
                               self.dzidzdn.astype(rdt))
             self.cstagger_exists = True   # we can use cstagger methods!
         else:
-            self.cstagger_exists = False  # we must avoid using cstagger methods.
+            cstagger.init_stagger_mz1d(self.nz, self.dx, self.dy)
+            self.cstagger_exists = True  # we must avoid using cstagger methods.
 
     def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None, 
                     *args, **kwargs):

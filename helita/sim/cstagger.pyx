@@ -41,7 +41,10 @@ cpdef xup(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
+    if (mx == 1): 
+        o = f
+    else:
+      for k in range(mz):
         for j in range(my):
             l = j*mx + k*mx*my
             o[l + (m-3)] = (
@@ -102,7 +105,10 @@ cpdef yup(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
+    if (my == 1): 
+        o = f
+    else:
+      for k in range(mz):
         for i in range(mx):
             l = i + k*mx*my
             o[l + (m-3)*mx] = (
@@ -165,7 +171,10 @@ cpdef zup(np.ndarray[FLOAT_t, ndim=3] inarr):
     o = <FLOAT_t *> outarr.data
     tmp = <FLOAT_t *> zz.data
     # Pure C part
-    for k in range(mz):
+    if (mz == 1): 
+        o = f
+    else:
+      for k in range(mz):
         m = k - 2
         if (k < 3):
             m = 0
@@ -208,7 +217,10 @@ cpdef xdn(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
+    if (mx == 1): 
+        o = f
+    else:
+      for k in range(mz):
         for j in range(my):
             l = j*mx + k*mx*my
             o[l + (m-2)] = (
@@ -269,7 +281,10 @@ cpdef ydn(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
+    if (my == 1): 
+        o = f
+    else:
+      for k in range(mz):
         for i in range(mx):
             l = i + k*mx*my
             o[l + (m-2)*mx] = (
@@ -332,7 +347,10 @@ cpdef zdn(np.ndarray[FLOAT_t, ndim=3] inarr):
     o = <FLOAT_t *> outarr.data
     tmp = <FLOAT_t *> zz.data
     # Pure C part
-    for k in range(mz):
+    if (mz == 1): 
+        o = f
+    else:
+      for k in range(mz):
         m = k-3
         if (k < 3):
             m = 0
@@ -375,36 +393,39 @@ cpdef ddxup(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
-      for j in range(my):
-        l = j*mx + k*mx*my
-        o[l + (m-3)] = (
-          a*(f[l + (m-2)]-f[l + (m-3)]) +
-          b*(f[l + (m-1)]-f[l + (m-4)]) +
-          c*(f[l + (0)]-f[l + (m-5)]))
-        o[l + (m-2)] = (
-          a*(f[l + (m-1)]-f[l + (m-2)]) +
-          b*(f[l + (0)]-f[l + (m-3)]) +
-          c*(f[l + (1)]-f[l + (m-4)]))
-        o[l + (m-1)] = (
-          a*(f[l + (0)]-f[l + (m-1)]) +
-          b*(f[l + (1)]-f[l + (m-2)]) +
-          c*(f[l + (2)]-f[l + (m-3)]))
-        o[l + (0)] = (
-          a*(f[l + (1)]-f[l + (0)]) +
-          b*(f[l + (2)]-f[l + (m-1)]) +
-          c*(f[l + (3)]-f[l + (m-2)]));
-        o[l + (1)] = (
-          a*(f[l + (2)]-f[l + (1)]) +
-          b*(f[l + (3)]-f[l + (0)]) +
-          c*(f[l + (4)]-f[l + (m-1)]));
-      for j in range(my):
-        l = j*mx + k*mx*my;
-        for i in range(2,mx-3):
-          o[l + (i)] = (
-            a*(f[l + (i+1)] - f[l + i]) +
-            b*(f[l + (i+2)] - f[l + (i-1)]) +
-            c*(f[l + (i+3)] - f[l + (i-2)]))
+    if (mx == 1): 
+        o = 0.0
+    else:
+        for k in range(mz):
+          for j in range(my):
+            l = j*mx + k*mx*my
+            o[l + (m-3)] = (
+              a*(f[l + (m-2)]-f[l + (m-3)]) +
+              b*(f[l + (m-1)]-f[l + (m-4)]) +
+              c*(f[l + (0)]-f[l + (m-5)]))
+            o[l + (m-2)] = (
+              a*(f[l + (m-1)]-f[l + (m-2)]) +
+              b*(f[l + (0)]-f[l + (m-3)]) +
+              c*(f[l + (1)]-f[l + (m-4)]))
+            o[l + (m-1)] = (
+              a*(f[l + (0)]-f[l + (m-1)]) +
+              b*(f[l + (1)]-f[l + (m-2)]) +
+              c*(f[l + (2)]-f[l + (m-3)]))
+            o[l + (0)] = (
+              a*(f[l + (1)]-f[l + (0)]) +
+              b*(f[l + (2)]-f[l + (m-1)]) +
+              c*(f[l + (3)]-f[l + (m-2)]));
+            o[l + (1)] = (
+              a*(f[l + (2)]-f[l + (1)]) +
+              b*(f[l + (3)]-f[l + (0)]) +
+              c*(f[l + (4)]-f[l + (m-1)]));
+          for j in range(my):
+            l = j*mx + k*mx*my;
+            for i in range(2,mx-3):
+              o[l + (i)] = (
+                a*(f[l + (i+1)] - f[l + i]) +
+                b*(f[l + (i+2)] - f[l + (i-1)]) +
+                c*(f[l + (i+3)] - f[l + (i-2)]))
     return outarr
 
 
@@ -436,36 +457,39 @@ cpdef ddyup(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
-      for i in range(mx):
-        l = i + k*mx*my
-        o[l + (m-3)*mx] = (
-          a*(f[l + (m-2)*mx]-f[l + (m-3)*mx]) +
-          b*(f[l + (m-1)*mx]-f[l + (m-4)*mx]) +
-          c*(f[l + (0)*mx]-f[l + (m-5)*mx]))
-        o[l + (m-2)*mx] = (
-          a*(f[l + (m-1)*mx]-f[l + (m-2)*mx]) +
-          b*(f[l + (0)*mx]-f[l + (m-3)*mx]) +
-          c*(f[l + (1)*mx]-f[l + (m-4)*mx]))
-        o[l + (m-1)*mx] = (
-          a*(f[l + (0)*mx]-f[l + (m-1)*mx]) +
-          b*(f[l + (1)*mx]-f[l + (m-2)*mx]) +
-          c*(f[l + (2)*mx]-f[l + (m-3)*mx]))
-        o[l + (0)*mx] = (
-          a*(f[l + (1)*mx]-f[l + (0)*mx]) +
-          b*(f[l + (2)*mx]-f[l + (m-1)*mx]) +
-          c*(f[l + (3)*mx]-f[l + (m-2)*mx]))
-        o[l + (1)*mx] = (
-          a*(f[l + (2)*mx]-f[l + (1)*mx]) +
-          b*(f[l + (3)*mx]-f[l + (0)*mx]) +
-          c*(f[l + (4)*mx]-f[l + (m-1)*mx]))
-      for j in range(2,my-3):
-        for i in range(mx):
-          l = i + k*mx*my
-          o[l + (j)*mx] = (
-            a*(f[l + (j+1)*mx] - f[l + j*mx]) +
-            b*(f[l + (j+2)*mx] - f[l + (j-1)*mx]) +
-            c*(f[l + (j+3)*mx] - f[l + (j-2)*mx]))
+    if (my == 1): 
+        o = 0.0
+    else: 
+        for k in range(mz):
+          for i in range(mx):
+            l = i + k*mx*my
+            o[l + (m-3)*mx] = (
+              a*(f[l + (m-2)*mx]-f[l + (m-3)*mx]) +
+              b*(f[l + (m-1)*mx]-f[l + (m-4)*mx]) +
+              c*(f[l + (0)*mx]-f[l + (m-5)*mx]))
+            o[l + (m-2)*mx] = (
+              a*(f[l + (m-1)*mx]-f[l + (m-2)*mx]) +
+              b*(f[l + (0)*mx]-f[l + (m-3)*mx]) +
+              c*(f[l + (1)*mx]-f[l + (m-4)*mx]))
+            o[l + (m-1)*mx] = (
+              a*(f[l + (0)*mx]-f[l + (m-1)*mx]) +
+              b*(f[l + (1)*mx]-f[l + (m-2)*mx]) +
+              c*(f[l + (2)*mx]-f[l + (m-3)*mx]))
+            o[l + (0)*mx] = (
+              a*(f[l + (1)*mx]-f[l + (0)*mx]) +
+              b*(f[l + (2)*mx]-f[l + (m-1)*mx]) +
+              c*(f[l + (3)*mx]-f[l + (m-2)*mx]))
+            o[l + (1)*mx] = (
+              a*(f[l + (2)*mx]-f[l + (1)*mx]) +
+              b*(f[l + (3)*mx]-f[l + (0)*mx]) +
+              c*(f[l + (4)*mx]-f[l + (m-1)*mx]))
+          for j in range(2,my-3):
+            for i in range(mx):
+              l = i + k*mx*my
+              o[l + (j)*mx] = (
+                a*(f[l + (j+1)*mx] - f[l + j*mx]) +
+                b*(f[l + (j+2)*mx] - f[l + (j-1)*mx]) +
+                c*(f[l + (j+3)*mx] - f[l + (j-2)*mx]))
     return outarr
 
 
@@ -499,7 +523,10 @@ cpdef ddzup(np.ndarray[FLOAT_t, ndim=3] inarr):
     o = <FLOAT_t *> outarr.data
     tmp = <FLOAT_t *> zz.data
     # Pure C part
-    for k in range(mz):
+    if (mz == 1): 
+        o = 0.0
+    else: 
+      for k in range(mz):
         m = k-2
         if (k < 3):
             m = 0
@@ -542,7 +569,10 @@ cpdef ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
+    if (mx == 1): 
+        o = 0.0
+    else: 
+      for k in range(mz):
         for j in range(my):
             l = j*mx + k*mx*my
             o[l + (m-2)] = (
@@ -565,13 +595,13 @@ cpdef ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr):
                 a*(f[l + (2)]-f[l + (1)]) +
                 b*(f[l + (3)]-f[l + (0)]) +
                 c*(f[l + (4)]-f[l + (m-1)]))
-    for j in range(my):
-        l = j*mx + k*mx*my;
-        for i in range(2,mx-3):
-            o[l + (i+1)] = (
-              a*(f[l + (i+1)] - f[l + i]) +
-              b*(f[l + (i+2)] - f[l + (i-1)]) +
-              c*(f[l + (i+3)] - f[l + (i-2)]))
+        for j in range(my):
+            l = j*mx + k*mx*my;
+            for i in range(2,mx-3):
+                o[l + (i+1)] = (
+                  a*(f[l + (i+1)] - f[l + i]) +
+                  b*(f[l + (i+2)] - f[l + (i-1)]) +
+                  c*(f[l + (i+3)] - f[l + (i-2)]))
     return outarr
 
 
@@ -603,36 +633,39 @@ cpdef ddydn(np.ndarray[FLOAT_t, ndim=3] inarr):
     f = <FLOAT_t *> inarr.data
     o = <FLOAT_t *> outarr.data
     # Pure C part
-    for k in range(mz):
-        for i in range(mx):
-          l = i + k*mx*my
-          o[l + (m-2)*mx] = (
-            a*(f[l + (m-2)*mx]-f[l + (m-3)*mx]) +
-            b*(f[l + (m-1)*mx]-f[l + (m-4)*mx]) +
-            c*(f[l + (0)*mx]-f[l + (m-5)*mx]))
-          o[l + (m-1)*mx] = (
-            a*(f[l + (m-1)*mx]-f[l + (m-2)*mx]) +
-            b*(f[l + (0)*mx]-f[l + (m-3)*mx]) +
-            c*(f[l + (1)*mx]-f[l + (m-4)*mx]))
-          o[l + (0)*mx] = (
-            a*(f[l + (0)*mx]-f[l + (m-1)*mx]) +
-            b*(f[l + (1)*mx]-f[l + (m-2)*mx]) +
-            c*(f[l + (2)*mx]-f[l + (m-3)*mx]))
-          o[l + (1)*mx] = (
-            a*(f[l + (1)*mx]-f[l + (0)*mx]) +
-            b*(f[l + (2)*mx]-f[l + (m-1)*mx]) +
-            c*(f[l + (3)*mx]-f[l + (m-2)*mx]))
-          o[l + (2)*mx] = (
-            a*(f[l + (2)*mx]-f[l + (1)*mx]) +
-            b*(f[l + (3)*mx]-f[l + (0)*mx]) +
-            c*(f[l + (4)*mx]-f[l + (m-1)*mx]))
-    for j in range(2,my-3):
-          for i in range(0,mx):
-            l = i + k*mx*my
-            o[l + (j+1)*mx] = (
-              a*(f[l + (j+1)*mx] - f[l + j*mx]) +
-              b*(f[l + (j+2)*mx] - f[l + (j-1)*mx]) +
-              c*(f[l + (j+3)*mx] - f[l + (j-2)*mx]))
+    if (my == 1): 
+        o = 0
+    else:
+        for k in range(mz):
+            for i in range(mx):
+              l = i + k*mx*my
+              o[l + (m-2)*mx] = (
+                a*(f[l + (m-2)*mx]-f[l + (m-3)*mx]) +
+                b*(f[l + (m-1)*mx]-f[l + (m-4)*mx]) +
+                c*(f[l + (0)*mx]-f[l + (m-5)*mx]))
+              o[l + (m-1)*mx] = (
+                a*(f[l + (m-1)*mx]-f[l + (m-2)*mx]) +
+                b*(f[l + (0)*mx]-f[l + (m-3)*mx]) +
+                c*(f[l + (1)*mx]-f[l + (m-4)*mx]))
+              o[l + (0)*mx] = (
+                a*(f[l + (0)*mx]-f[l + (m-1)*mx]) +
+                b*(f[l + (1)*mx]-f[l + (m-2)*mx]) +
+                c*(f[l + (2)*mx]-f[l + (m-3)*mx]))
+              o[l + (1)*mx] = (
+                a*(f[l + (1)*mx]-f[l + (0)*mx]) +
+                b*(f[l + (2)*mx]-f[l + (m-1)*mx]) +
+                c*(f[l + (3)*mx]-f[l + (m-2)*mx]))
+              o[l + (2)*mx] = (
+                a*(f[l + (2)*mx]-f[l + (1)*mx]) +
+                b*(f[l + (3)*mx]-f[l + (0)*mx]) +
+                c*(f[l + (4)*mx]-f[l + (m-1)*mx]))
+            for j in range(2,my-3):
+              for i in range(0,mx):
+                l = i + k*mx*my
+                o[l + (j+1)*mx] = (
+                  a*(f[l + (j+1)*mx] - f[l + j*mx]) +
+                  b*(f[l + (j+2)*mx] - f[l + (j-1)*mx]) +
+                  c*(f[l + (j+3)*mx] - f[l + (j-2)*mx]))
     return outarr
 
 
@@ -666,18 +699,21 @@ cpdef ddzdn(np.ndarray[FLOAT_t, ndim=3] inarr):
     o = <FLOAT_t *> outarr.data
     tmp = <FLOAT_t *> zz.data
     # Pure C part
-    for k in range(mz):
-        m = k-3
-        if (k < 3):
-            m = 0
-        if (k > mz-4):
-            m = mz - 6
-        for j in range(my):
-          for i in range(mx):
-            d = 0
-            for l in range(6):
-                d += tmp[k*6 + l] * f[((m + l) * my + j) * mx + i]
-            o[(k * my + j) * mx + i] = d
+    if (mz == 1): 
+        o = 0
+    else:
+        for k in range(mz):
+            m = k-3
+            if (k < 3):
+                m = 0
+            if (k > mz-4):
+                m = mz - 6
+            for j in range(my):
+              for i in range(mx):
+                d = 0
+                for l in range(6):
+                    d += tmp[k*6 + l] * f[((m + l) * my + j) * mx + i]
+                o[(k * my + j) * mx + i] = d
     return outarr
 
 
@@ -803,6 +839,45 @@ def init_stagger(int mz, FLOAT_t dx, FLOAT_t dy, np.ndarray[FLOAT_t, ndim=1] z,
             a[j] = 0
         calc_stagger_inv(a, dordu[mz - k + 1], 1, 5 - iordu[mz - k + 1],
                          dzdnc[k - 1])
+    return
+
+def init_stagger_mz1(int mz, FLOAT_t dx, FLOAT_t dy):
+    '''
+    init_stagger_mz1(int mz, dx, dy)
+
+    Initialises zupc and zdnc structures but it makes it unit.
+    From init_stagger.c and init_stagger.pro
+
+    Parameters
+    ----------
+    mz - integer
+       1 Number of z point
+    z - 1-D ndarray, float
+        z scale
+    zdn - 1-D ndarray, float
+        z scale derivative
+    dzdup - 1-D ndarray, float
+        z scale up derivative
+    dzdn - 1-D ndarray, float
+        z scale down derivative
+    Returns
+    -------
+    None. Results saved in cstagger.zupc, cstagger.zdnc, cstagger.dzupc,
+    cstagger.dzdnc.
+    '''
+    cdef int i, j, k
+    global zupc, zdnc, nz, dxc, dyc, dzupc, dzdnc
+    zupc = np.ones((mz, 6), dtype=z.dtype)
+    zdnc = np.ones((mz, 6), dtype=z.dtype)
+    dzupc = np.zeros((mz, 6), dtype=z.dtype)
+    dzdnc = np.zeros((mz, 6), dtype=z.dtype)
+    nz = mz
+    dxc = dx
+    dyc = dy
+
+    cdef np.ndarray[FLOAT_t, ndim=1] zh = np.sort(np.concatenate([z,zdn]))
+    cdef np.ndarray[FLOAT_t, ndim=1] a = np.zeros(6, dtype=z.dtype)
+
     return
 
 
