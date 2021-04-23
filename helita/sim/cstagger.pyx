@@ -16,353 +16,353 @@ dyc = 0  # initialise dyc
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cpdef xup(np.ndarray[FLOAT_t, ndim=3] inarr):
-    """
-    xup(np.ndarray[FLOAT_t, ndim=3] inarr)
+  """
+  xup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-    Brings quantity from cell faces to cell centre, x direction.
+  Brings quantity from cell faces to cell centre, x direction.
 
-    Parameters
-    ----------
-    inarr - 3-D array, floating type
-        Input array. If not F contiguous, will make a copy (slower).
+  Parameters
+  ----------
+  inarr - 3-D array, floating type
+      Input array. If not F contiguous, will make a copy (slower).
 
-    Returns
-    -------
-    result - 3-D array, floating type
-        Interpolated quantity. Same dtype as inarr.
-    """
-    cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef long i, j, k, l, m=mx
-    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
-    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
-    if not inarr.flags["C_CONTIGUOUS"]:
-        inarr = inarr.copy('C')
-    f = <FLOAT_t *> inarr.data
-    o = <FLOAT_t *> outarr.data
-    # Pure C part
-    if (mx == 1): 
-        o = f
-    else:
-      for k in range(mz):
-        for j in range(my):
-            l = j*mx + k*mx*my
-            o[l + (m-3)] = (
-              a*(f[l + (m-2)]+f[l + (m-3)]) +
-              b*(f[l + (m-1)]+f[l + (m-4)]) +
-              c*(f[l + (0)]+f[l + (m-5)]))
-            o[l + (m-2)] = (
-              a*(f[l + (m-1)]+f[l + (m-2)]) +
-              b*(f[l + (0)]+f[l + (m-3)]) +
-              c*(f[l + (1)]+f[l + (m-4)]))
-            o[l + (m-1)] = (
-              a*(f[l + (0)]+f[l + (m-1)]) +
-              b*(f[l + (1)]+f[l + (m-2)]) +
-              c*(f[l + (2)]+f[l + (m-3)]))
-            o[l + (0)] = (
-              a*(f[l + (1)]+f[l + (0)]) +
-              b*(f[l + (2)]+f[l + (m-1)]) +
-              c*(f[l + (3)]+f[l + (m-2)]))
-            o[l + (1)] = (
-              a*(f[l + (2)]+f[l + (1)]) +
-              b*(f[l + (3)]+f[l + (0)]) +
-              c*(f[l + (4)]+f[l + (m-1)]))
-        for j in range(my):
-            l = j*mx + k*mx*my
-            for i in range(2,mx-3):
-                o[l + (i)] = (
-                    a*(f[l + (i+1)] + f[l + i]) +
-                    b*(f[l + (i+2)] + f[l + (i-1)]) +
-                    c*(f[l + (i+3)] + f[l + (i-2)]))
-    return outarr
+  Returns
+  -------
+  result - 3-D array, floating type
+      Interpolated quantity. Same dtype as inarr.
+  """
+  cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
+  cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
+  cdef long i, j, k, l, m=mx
+  cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
+  inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
+  if not inarr.flags["C_CONTIGUOUS"]:
+    inarr = inarr.copy('C')
+  f = <FLOAT_t *> inarr.data
+  o = <FLOAT_t *> outarr.data
+  # Pure C part
+  if (mx == 1): 
+      o = f
+  else:
+    for k in range(mz):
+      for j in range(my):
+        l = j*mx + k*mx*my
+        o[l + (m-3)] = (
+          a*(f[l + (m-2)]+f[l + (m-3)]) +
+          b*(f[l + (m-1)]+f[l + (m-4)]) +
+          c*(f[l + (0)]+f[l + (m-5)]))
+        o[l + (m-2)] = (
+          a*(f[l + (m-1)]+f[l + (m-2)]) +
+          b*(f[l + (0)]+f[l + (m-3)]) +
+          c*(f[l + (1)]+f[l + (m-4)]))
+        o[l + (m-1)] = (
+          a*(f[l + (0)]+f[l + (m-1)]) +
+          b*(f[l + (1)]+f[l + (m-2)]) +
+          c*(f[l + (2)]+f[l + (m-3)]))
+        o[l + (0)] = (
+          a*(f[l + (1)]+f[l + (0)]) +
+          b*(f[l + (2)]+f[l + (m-1)]) +
+          c*(f[l + (3)]+f[l + (m-2)]))
+        o[l + (1)] = (
+          a*(f[l + (2)]+f[l + (1)]) +
+          b*(f[l + (3)]+f[l + (0)]) +
+          c*(f[l + (4)]+f[l + (m-1)]))
+      for j in range(my):
+        l = j*mx + k*mx*my
+        for i in range(2,mx-3):
+          o[l + (i)] = (
+              a*(f[l + (i+1)] + f[l + i]) +
+              b*(f[l + (i+2)] + f[l + (i-1)]) +
+              c*(f[l + (i+3)] + f[l + (i-2)]))
+  return outarr
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cpdef yup(np.ndarray[FLOAT_t, ndim=3] inarr):
-    """
-    yup(np.ndarray[FLOAT_t, ndim=3] inarr)
+  """
+  yup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-    Brings quantity from cell faces to cell centre, y direction.
+  Brings quantity from cell faces to cell centre, y direction.
 
-    Parameters
-    ----------
-    inarr - 3-D array, floating type
-        Input array. If not F contiguous, will make a copy (slower).
+  Parameters
+  ----------
+  inarr - 3-D array, floating type
+      Input array. If not F contiguous, will make a copy (slower).
 
-    Returns
-    -------
-    result - 3-D array, floating type
-        Interpolated quantity. Same dtype as inarr.
-    """
-    cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef long i, j, k, l, m=mx
-    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
-    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
-    if not inarr.flags["C_CONTIGUOUS"]:
-        inarr = inarr.copy('C')
-    f = <FLOAT_t *> inarr.data
-    o = <FLOAT_t *> outarr.data
-    # Pure C part
-    if (my == 1): 
-        o = f
-    else:
-      for k in range(mz):
-        for i in range(mx):
+  Returns
+  -------
+  result - 3-D array, floating type
+      Interpolated quantity. Same dtype as inarr.
+  """
+  cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
+  cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
+  cdef long i, j, k, l, m=mx
+  cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
+  inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
+  if not inarr.flags["C_CONTIGUOUS"]:
+    inarr = inarr.copy('C')
+  f = <FLOAT_t *> inarr.data
+  o = <FLOAT_t *> outarr.data
+  # Pure C part
+  if (my == 1): 
+    o = f
+  else:
+    for k in range(mz):
+      for i in range(mx):
+        l = i + k*mx*my
+        o[l + (m-3)*mx] = (
+            a*(f[l + (m-2)*mx]+f[l + (m-3)*mx]) +
+            b*(f[l + (m-1)*mx]+f[l + (m-4)*mx]) +
+            c*(f[l + (0)*mx]+f[l + (m-5)*mx]))
+        o[l + (m-2)*mx] = (
+            a*(f[l + (m-1)*mx]+f[l + (m-2)*mx]) +
+            b*(f[l + (0)*mx]+f[l + (m-3)*mx]) +
+            c*(f[l + (1)*mx]+f[l + (m-4)*mx]))
+        o[l + (m-1)*mx] = (
+            a*(f[l + (0)*mx]+f[l + (m-1)*mx]) +
+            b*(f[l + (1)*mx]+f[l + (m-2)*mx]) +
+            c*(f[l + (2)*mx]+f[l + (m-3)*mx]))
+        o[l + (0)*mx] = (
+            a*(f[l + (1)*mx]+f[l + (0)*mx]) +
+            b*(f[l + (2)*mx]+f[l + (m-1)*mx]) +
+            c*(f[l + (3)*mx]+f[l + (m-2)*mx]))
+        o[l + (1)*mx] = (
+            a*(f[l + (2)*mx]+f[l + (1)*mx]) +
+            b*(f[l + (3)*mx]+f[l + (0)*mx]) +
+            c*(f[l + (4)*mx]+f[l + (m-1)*mx]))
+      for j in range(2, my - 3):
+          for i in range(mx):
             l = i + k*mx*my
-            o[l + (m-3)*mx] = (
-                a*(f[l + (m-2)*mx]+f[l + (m-3)*mx]) +
-                b*(f[l + (m-1)*mx]+f[l + (m-4)*mx]) +
-                c*(f[l + (0)*mx]+f[l + (m-5)*mx]))
-            o[l + (m-2)*mx] = (
-                a*(f[l + (m-1)*mx]+f[l + (m-2)*mx]) +
-                b*(f[l + (0)*mx]+f[l + (m-3)*mx]) +
-                c*(f[l + (1)*mx]+f[l + (m-4)*mx]))
-            o[l + (m-1)*mx] = (
-                a*(f[l + (0)*mx]+f[l + (m-1)*mx]) +
-                b*(f[l + (1)*mx]+f[l + (m-2)*mx]) +
-                c*(f[l + (2)*mx]+f[l + (m-3)*mx]))
-            o[l + (0)*mx] = (
-                a*(f[l + (1)*mx]+f[l + (0)*mx]) +
-                b*(f[l + (2)*mx]+f[l + (m-1)*mx]) +
-                c*(f[l + (3)*mx]+f[l + (m-2)*mx]))
-            o[l + (1)*mx] = (
-                a*(f[l + (2)*mx]+f[l + (1)*mx]) +
-                b*(f[l + (3)*mx]+f[l + (0)*mx]) +
-                c*(f[l + (4)*mx]+f[l + (m-1)*mx]))
-        for j in range(2, my - 3):
-            for i in range(mx):
-                l = i + k*mx*my
-                o[l + (j)*mx] = (
-                    a*(f[l + (j+1)*mx] + f[l + j*mx]) +
-                    b*(f[l + (j+2)*mx] + f[l + (j-1)*mx]) +
-                    c*(f[l + (j+3)*mx] + f[l + (j-2)*mx]))
-    return outarr
+            o[l + (j)*mx] = (
+                a*(f[l + (j+1)*mx] + f[l + j*mx]) +
+                b*(f[l + (j+2)*mx] + f[l + (j-1)*mx]) +
+                c*(f[l + (j+3)*mx] + f[l + (j-2)*mx]))
+  return outarr
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cpdef zup(np.ndarray[FLOAT_t, ndim=3] inarr):
-    """
-    zup(np.ndarray[FLOAT_t, ndim=3] inarr)
+  """
+  zup(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-    Brings quantity from cell faces to cell centre, z direction.
+  Brings quantity from cell faces to cell centre, z direction.
 
-    Parameters
-    ----------
-    inarr - 3-D array, floating type
-        Input array. If not F contiguous, will make a copy (slower).
+  Parameters
+  ----------
+  inarr - 3-D array, floating type
+      Input array. If not F contiguous, will make a copy (slower).
 
-    Returns
-    -------
-    result - 3-D array, floating type
-        Interpolated quantity. Same dtype as inarr.
-    """
-    cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef long i, j, k, l, m=mx
-    cdef FLOAT_t d
-    cdef np.ndarray[FLOAT_t, ndim=2] zz = zupc
-    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
-    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
-    if not inarr.flags["C_CONTIGUOUS"]:
-        inarr = inarr.copy('C')
-    f = <FLOAT_t *> inarr.data
-    o = <FLOAT_t *> outarr.data
-    tmp = <FLOAT_t *> zz.data
-    # Pure C part
-    if (mz == 1): 
-        o = f
-    else:
-      for k in range(mz):
-        m = k - 2
-        if (k < 3):
-            m = 0
-        if (k > mz - 4):
-            m = mz - 6
-        for j in range(my):
-            for i in range(mx):
-                d = 0
-                for l in range(6):
-                    d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i]
-                o[(k * my + j) * mx + i] = d
-    return outarr
+  Returns
+  -------
+  result - 3-D array, floating type
+      Interpolated quantity. Same dtype as inarr.
+  """
+  cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
+  cdef long i, j, k, l, m=mx
+  cdef FLOAT_t d
+  cdef np.ndarray[FLOAT_t, ndim=2] zz = zupc
+  cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
+  inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
+  if not inarr.flags["C_CONTIGUOUS"]:
+    inarr = inarr.copy('C')
+  f = <FLOAT_t *> inarr.data
+  o = <FLOAT_t *> outarr.data
+  tmp = <FLOAT_t *> zz.data
+  # Pure C part
+  if (mz == 1): 
+    o = f
+  else:
+    for k in range(mz):
+      m = k - 2
+      if (k < 3):
+        m = 0
+      if (k > mz - 4):
+        m = mz - 6
+      for j in range(my):
+        for i in range(mx):
+          d = 0
+          for l in range(6):
+            d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i]
+          o[(k * my + j) * mx + i] = d
+  return outarr
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cpdef xdn(np.ndarray[FLOAT_t, ndim=3] inarr):
-    """
-    xdn(np.ndarray[FLOAT_t, ndim=3] inarr)
+  """
+  xdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-    Brings quantity from cell centre to cell faces, x direction.
+  Brings quantity from cell centre to cell faces, x direction.
 
-    Parameters
-    ----------
-    inarr - 3-D array, floating type
-        Input array. If not F contiguous, will make a copy (slower).
+  Parameters
+  ----------
+  inarr - 3-D array, floating type
+      Input array. If not F contiguous, will make a copy (slower).
 
-    Returns
-    -------
-    result - 3-D array, floating type
-        Interpolated quantity. Same dtype as inarr.
-    """
-    cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef long i, j, k, l, m=mx
-    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
-    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
-    if not inarr.flags["C_CONTIGUOUS"]:
-        inarr = inarr.copy('C')
-    f = <FLOAT_t *> inarr.data
-    o = <FLOAT_t *> outarr.data
-    # Pure C part
-    if (mx == 1): 
-        o = f
-    else:
-      for k in range(mz):
-        for j in range(my):
-            l = j*mx + k*mx*my
-            o[l + (m-2)] = (
-              a*(f[l + (m-2)]+f[l + (m-3)]) +
-              b*(f[l + (m-1)]+f[l + (m-4)]) +
-              c*(f[l + (0)]+f[l + (m-5)]))
-            o[l + (m-1)] = (
-              a*(f[l + (m-1)]+f[l + (m-2)]) +
-              b*(f[l + (0)]+f[l + (m-3)]) +
-              c*(f[l + (1)]+f[l + (m-4)]))
-            o[l + (0)] = (
-              a*(f[l + (0)]+f[l + (m-1)]) +
-              b*(f[l + (1)]+f[l + (m-2)]) +
-              c*(f[l + (2)]+f[l + (m-3)]))
-            o[l + (1)] = (
-              a*(f[l + (1)]+f[l + (0)]) +
-              b*(f[l + (2)]+f[l + (m-1)]) +
-              c*(f[l + (3)]+f[l + (m-2)]))
-            o[l + (2)] = (
-              a*(f[l + (2)]+f[l + (1)]) +
-              b*(f[l + (3)]+f[l + (0)]) +
-              c*(f[l + (4)]+f[l + (m-1)]))
-        for j in range(my):
-            l = j*mx + k*mx*my
-            for i in range(2, mx - 3):
-                o[l + (i+1)] = (
-                  a*(f[l + (i+1)] + f[l + i]) +
-                  b*(f[l + (i+2)] + f[l + (i-1)]) +
-                  c*(f[l + (i+3)] + f[l + (i-2)]))
-    return outarr
+  Returns
+  -------
+  result - 3-D array, floating type
+      Interpolated quantity. Same dtype as inarr.
+  """
+  cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
+  cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
+  cdef long i, j, k, l, m=mx
+  cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
+  inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
+  if not inarr.flags["C_CONTIGUOUS"]:
+    inarr = inarr.copy('C')
+  f = <FLOAT_t *> inarr.data
+  o = <FLOAT_t *> outarr.data
+  # Pure C part
+  if (mx == 1): 
+    o = f
+  else:
+    for k in range(mz):
+      for j in range(my):
+        l = j*mx + k*mx*my
+        o[l + (m-2)] = (
+          a*(f[l + (m-2)]+f[l + (m-3)]) +
+          b*(f[l + (m-1)]+f[l + (m-4)]) +
+          c*(f[l + (0)]+f[l + (m-5)]))
+        o[l + (m-1)] = (
+          a*(f[l + (m-1)]+f[l + (m-2)]) +
+          b*(f[l + (0)]+f[l + (m-3)]) +
+          c*(f[l + (1)]+f[l + (m-4)]))
+        o[l + (0)] = (
+          a*(f[l + (0)]+f[l + (m-1)]) +
+          b*(f[l + (1)]+f[l + (m-2)]) +
+          c*(f[l + (2)]+f[l + (m-3)]))
+        o[l + (1)] = (
+          a*(f[l + (1)]+f[l + (0)]) +
+          b*(f[l + (2)]+f[l + (m-1)]) +
+          c*(f[l + (3)]+f[l + (m-2)]))
+        o[l + (2)] = (
+          a*(f[l + (2)]+f[l + (1)]) +
+          b*(f[l + (3)]+f[l + (0)]) +
+          c*(f[l + (4)]+f[l + (m-1)]))
+      for j in range(my):
+        l = j*mx + k*mx*my
+        for i in range(2, mx - 3):
+          o[l + (i+1)] = (
+            a*(f[l + (i+1)] + f[l + i]) +
+            b*(f[l + (i+2)] + f[l + (i-1)]) +
+            c*(f[l + (i+3)] + f[l + (i-2)]))
+  return outarr
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cpdef ydn(np.ndarray[FLOAT_t, ndim=3] inarr):
-    """
-    ydn(np.ndarray[FLOAT_t, ndim=3] inarr)
+  """
+  ydn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-    Brings quantity from cell centre to cell faces, y direction.
+  Brings quantity from cell centre to cell faces, y direction.
 
-    Parameters
-    ----------
-    inarr - 3-D array, floating type
-        Input array. If not F contiguous, will make a copy (slower).
+  Parameters
+  ----------
+  inarr - 3-D array, floating type
+      Input array. If not F contiguous, will make a copy (slower).
 
-    Returns
-    -------
-    result - 3-D array, floating type
-        Interpolated quantity. Same dtype as inarr.
-    """
-    cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
-    cdef long i, j, k, l, m=mx
-    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
-    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
-    if not inarr.flags["C_CONTIGUOUS"]:
-        inarr = inarr.copy('C')
-    f = <FLOAT_t *> inarr.data
-    o = <FLOAT_t *> outarr.data
-    # Pure C part
-    if (my == 1): 
-        o = f
-    else:
-      for k in range(mz):
+  Returns
+  -------
+  result - 3-D array, floating type
+      Interpolated quantity. Same dtype as inarr.
+  """
+  cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
+  cdef FLOAT_t c = 3./256., b = -25./256., a = 150./256.
+  cdef long i, j, k, l, m=mx
+  cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
+  inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
+  if not inarr.flags["C_CONTIGUOUS"]:
+    inarr = inarr.copy('C')
+  f = <FLOAT_t *> inarr.data
+  o = <FLOAT_t *> outarr.data
+  # Pure C part
+  if (my == 1): 
+    o = f
+  else:
+    for k in range(mz):
+      for i in range(mx):
+        l = i + k*mx*my
+        o[l + (m-2)*mx] = (
+            a*(f[l + (m-2)*mx]+f[l + (m-3)*mx]) +
+            b*(f[l + (m-1)*mx]+f[l + (m-4)*mx]) +
+            c*(f[l + (0)*mx]+f[l + (m-5)*mx]))
+        o[l + (m-1)*mx] = (
+            a*(f[l + (m-1)*mx]+f[l + (m-2)*mx]) +
+            b*(f[l + (0)*mx]+f[l + (m-3)*mx]) +
+            c*(f[l + (1)*mx]+f[l + (m-4)*mx]))
+        o[l + (0)*mx] = (
+            a*(f[l + (0)*mx]+f[l + (m-1)*mx]) +
+            b*(f[l + (1)*mx]+f[l + (m-2)*mx]) +
+            c*(f[l + (2)*mx]+f[l + (m-3)*mx]))
+        o[l + (1)*mx] = (
+            a*(f[l + (1)*mx]+f[l + (0)*mx]) +
+            b*(f[l + (2)*mx]+f[l + (m-1)*mx]) +
+            c*(f[l + (3)*mx]+f[l + (m-2)*mx]))
+        o[l + (2)*mx] = (
+            a*(f[l + (2)*mx]+f[l + (1)*mx]) +
+            b*(f[l + (3)*mx]+f[l + (0)*mx]) +
+            c*(f[l + (4)*mx]+f[l + (m-1)*mx]))
+      for j in range(2, my - 3):
         for i in range(mx):
-            l = i + k*mx*my
-            o[l + (m-2)*mx] = (
-                a*(f[l + (m-2)*mx]+f[l + (m-3)*mx]) +
-                b*(f[l + (m-1)*mx]+f[l + (m-4)*mx]) +
-                c*(f[l + (0)*mx]+f[l + (m-5)*mx]))
-            o[l + (m-1)*mx] = (
-                a*(f[l + (m-1)*mx]+f[l + (m-2)*mx]) +
-                b*(f[l + (0)*mx]+f[l + (m-3)*mx]) +
-                c*(f[l + (1)*mx]+f[l + (m-4)*mx]))
-            o[l + (0)*mx] = (
-                a*(f[l + (0)*mx]+f[l + (m-1)*mx]) +
-                b*(f[l + (1)*mx]+f[l + (m-2)*mx]) +
-                c*(f[l + (2)*mx]+f[l + (m-3)*mx]))
-            o[l + (1)*mx] = (
-                a*(f[l + (1)*mx]+f[l + (0)*mx]) +
-                b*(f[l + (2)*mx]+f[l + (m-1)*mx]) +
-                c*(f[l + (3)*mx]+f[l + (m-2)*mx]))
-            o[l + (2)*mx] = (
-                a*(f[l + (2)*mx]+f[l + (1)*mx]) +
-                b*(f[l + (3)*mx]+f[l + (0)*mx]) +
-                c*(f[l + (4)*mx]+f[l + (m-1)*mx]))
-        for j in range(2, my - 3):
-            for i in range(mx):
-                l = i + k*mx*my
-                o[l + (j+1)*mx] = (
-                  a*(f[l + (j+1)*mx] + f[l + j*mx]) +
-                  b*(f[l + (j+2)*mx] + f[l + (j-1)*mx]) +
-                  c*(f[l + (j+3)*mx] + f[l + (j-2)*mx]))
-    return outarr
+          l = i + k*mx*my
+          o[l + (j+1)*mx] = (
+            a*(f[l + (j+1)*mx] + f[l + j*mx]) +
+            b*(f[l + (j+2)*mx] + f[l + (j-1)*mx]) +
+            c*(f[l + (j+3)*mx] + f[l + (j-2)*mx]))
+  return outarr
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cpdef zdn(np.ndarray[FLOAT_t, ndim=3] inarr):
-    """
-    zdn(np.ndarray[FLOAT_t, ndim=3] inarr)
+  """
+  zdn(np.ndarray[FLOAT_t, ndim=3] inarr)
 
-    Brings quantity from cell centre to cell faces, z direction.
+  Brings quantity from cell centre to cell faces, z direction.
 
-    Parameters
-    ----------
-    inarr - 3-D array, floating type
-        Input array. If not F contiguous, will make a copy (slower).
+  Parameters
+  ----------
+  inarr - 3-D array, floating type
+      Input array. If not F contiguous, will make a copy (slower).
 
-    Returns
-    -------
-    result - 3-D array, floating type
-        Interpolated quantity. Same dtype as inarr.
-    """
-    cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
-    cdef long i, j, k, l, m=mx
-    cdef FLOAT_t d
-    cdef np.ndarray[FLOAT_t, ndim=2] zz = zdnc
-    cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
-    inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
-    if not inarr.flags["C_CONTIGUOUS"]:
-        inarr = inarr.copy('C')
-    f = <FLOAT_t *> inarr.data
-    o = <FLOAT_t *> outarr.data
-    tmp = <FLOAT_t *> zz.data
-    # Pure C part
-    if (mz == 1): 
-        o = f
-    else:
-      for k in range(mz):
-        m = k-3
-        if (k < 3):
-            m = 0
-        if (k > mz-4):
-            m = mz-6
-        for j in range(my):
-            for i in range(mx):
-                d = 0
-                for l in range(6):
-                    d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i];
-                o[(k * my + j) * mx + i] = d
-    return outarr
+  Returns
+  -------
+  result - 3-D array, floating type
+      Interpolated quantity. Same dtype as inarr.
+  """
+  cdef int mx = inarr.shape[0], my = inarr.shape[1], mz = inarr.shape[2]
+  cdef long i, j, k, l, m=mx
+  cdef FLOAT_t d
+  cdef np.ndarray[FLOAT_t, ndim=2] zz = zdnc
+  cdef np.ndarray[FLOAT_t, ndim=3] outarr = np.zeros_like(inarr)
+  inarr = np.reshape(np.transpose(inarr), (mx, my, mz))
+  if not inarr.flags["C_CONTIGUOUS"]:
+    inarr = inarr.copy('C')
+  f = <FLOAT_t *> inarr.data
+  o = <FLOAT_t *> outarr.data
+  tmp = <FLOAT_t *> zz.data
+  # Pure C part
+  if (mz == 1): 
+    o = f
+  else:
+    for k in range(mz):
+      m = k-3
+      if (k < 3):
+        m = 0
+      if (k > mz-4):
+        m = mz-6
+      for j in range(my):
+        for i in range(mx):
+          d = 0
+          for l in range(6):
+            d += tmp[k*6 + l] * f[((m + l)*my + j)*mx + i];
+          o[(k * my + j) * mx + i] = d
+  return outarr
 
 
 @cython.boundscheck(False)
