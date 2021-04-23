@@ -394,7 +394,7 @@ cpdef ddxup(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   # Pure C part
   if (mx == 1): 
-    o = np.zeros((mx, my, mz), dtype=z.dtype)
+    o = np.zeros_like(inarr)
   else:
     for k in range(mz):
       for j in range(my):
@@ -458,7 +458,7 @@ cpdef ddyup(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   # Pure C part
   if (my == 1): 
-    o = np.zeros((mx, my, mz), dtype=z.dtype)
+    o = np.zeros_like(inarr)
   else: 
     for k in range(mz):
       for i in range(mx):
@@ -524,7 +524,7 @@ cpdef ddzup(np.ndarray[FLOAT_t, ndim=3] inarr):
   tmp = <FLOAT_t *> zz.data
   # Pure C part
   if (mz == 1): 
-    o = np.zeros((mx, my, mz), dtype=z.dtype)
+    o = np.zeros_like(inarr)
   else: 
     for k in range(mz):
       m = k-2
@@ -570,7 +570,7 @@ cpdef ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   # Pure C part
   if (mx == 1): 
-    o = np.zeros((mx, my, mz), dtype=z.dtype)
+    o = np.zeros_like(inarr)
   else: 
     for k in range(mz):
       for j in range(my):
@@ -634,7 +634,7 @@ cpdef ddydn(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   # Pure C part
   if (my == 1): 
-    o = np.zeros((mx, my, mz), dtype=z.dtype)
+    o = np.zeros_like(inarr)
   else:
     for k in range(mz):
       for i in range(mx):
@@ -700,7 +700,7 @@ cpdef ddzdn(np.ndarray[FLOAT_t, ndim=3] inarr):
   tmp = <FLOAT_t *> zz.data
   # Pure C part
   if (mz == 1): 
-    o = np.zeros((mx, my, mz), dtype=z.dtype)
+    o = np.zeros_like(inarr)
   else:
     for k in range(mz):
       m = k-3
