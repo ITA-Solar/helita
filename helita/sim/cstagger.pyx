@@ -829,7 +829,7 @@ def init_stagger(int mz, FLOAT_t dx, FLOAT_t dy, np.ndarray[FLOAT_t, ndim=1] z,
                      dzdnc[k - 1])
   return
 
-def init_stagger_mz1(int mz, FLOAT_t dx, FLOAT_t dy):
+def init_stagger_mz1(int mz, FLOAT_t dx, FLOAT_t dy, np.ndarray[FLOAT_t, ndim=1] z):
   '''
   init_stagger_mz1(int mz, dx, dy)
 
