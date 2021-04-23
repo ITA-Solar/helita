@@ -8,6 +8,7 @@ purpose:
 # import built-ins
 import functools
 import warnings
+import itertools
 
 # import external private modules
 try:
@@ -222,6 +223,32 @@ def use_fluids(**kw__fluids):
     return decorator
 
 
+''' --------------------- iterators over fluid pairs --------------------- '''
+
+def fluid_pairs(fluids, ordered=False, allow_same=False):
+    '''returns an iterator over fluids of obj.
+
+    ordered: False (default) or True
+        False -> (A,B) and (B,A) will be yielded separately.
+        True  -> (A,B) will be yielded, but (B,A) will not.
+    allow_same: False (default) or True
+        False -> (A,A) will never be yielded.
+        True  -> (A,A) will be yielded.
+
+    This function just returns a combinatoric iterators from itertools.
+    defaults lead to calling itertools.permutations(fluids)
+
+    Example:
+    for (ifluid, jfluid) in fluid_pairs([(1,2),(3,4),(5,6)], ordered=True, allow_same=False):
+        print(ifluid, jfluid, end=' | ')
+    # >> (1, 2) (3, 4) | (1, 2) (5, 6) | (3, 4) (5, 6) | 
+    '''
+    if       ordered and     allow_same: return itertools.combinations_with_replacement(fluids, 2)
+    elif     ordered and not allow_same: return itertools.combinations(fluids, 2)
+    elif not ordered and not allow_same: return itertools.permutations(fluids, 2)
+    elif not ordered and     allow_same: return itertools.product(fluids, 2)
+    assert False #we should never reach this line...
+
 ''' --------------------- small helper functions --------------------- '''
 # for each of these functions, obj should be an EbysusData object.
 
@@ -242,7 +269,7 @@ def get_mass(obj, specie, units='amu'):
     '''
     # if specie is actually (spec, level) return get_mass(obj, spec) instead.
     try:
-        specie = specie[0]
+        specie = next(iter(specie))
     except TypeError:
         pass
     else:
