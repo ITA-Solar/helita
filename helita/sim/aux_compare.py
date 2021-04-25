@@ -2,6 +2,37 @@
 Created by Sam Evans on Apr 24 2021
 
 purpose: easily compare values between helita and aux vars from a simulation.
+
+Example usage:
+    #<< input:
+    from helita.sim import aux_compare as axc
+    from helita.sim import ebysus as eb
+    dd = eb.EbysusData(...)        # you must fill in the ... as appropriate.
+    axc.compare(dd, 'mfr_nu_es')
+
+    #>> output:
+    auxvar mfr_nu_es  ( 1, 1)           min= 3.393e+04, mean= 3.393e+04,  max= 3.393e+04
+    helvar     nu_ij   -1     ( 1, 1)   min= 1.715e+04, mean= 1.715e+04,  max= 1.715e+04;   mean ratio (aux / helita):  1.978e+00
+                                                                                         >>> WARNING: RATIO DIFFERS FROM 1.000 <<<<
+    ------------------------------------------------------------------------------------------------------------------------------------
+    auxvar mfr_nu_es  ( 1, 2)           min= 1.621e+05, mean= 1.621e+05,  max= 1.621e+05
+    helvar     nu_ij   -1     ( 1, 2)   min= 1.622e+05, mean= 1.622e+05,  max= 1.622e+05;   mean ratio (aux / helita):  9.993e-01
+    ------------------------------------------------------------------------------------------------------------------------------------
+
+    #<< more input:
+    axc.compare(dd, 'mm_cnu')
+
+    #>> more output:
+    auxvar mm_cnu  ( 1, 1) ( 1, 2)   min= 8.280e+05, mean= 8.280e+05,  max= 8.280e+05
+    helvar  nu_ij  ( 1, 1) ( 1, 2)   min= 8.280e+05, mean= 8.280e+05,  max= 8.280e+05;   mean ratio (aux / helita):  1.000e+00
+    ---------------------------------------------------------------------------------------------------------------------------------
+    auxvar mm_cnu  ( 1, 2) ( 1, 1)   min= 8.280e+06, mean= 8.280e+06,  max= 8.280e+06
+    helvar  nu_ij  ( 1, 2) ( 1, 1)   min= 8.280e+06, mean= 8.280e+06,  max= 8.280e+06;   mean ratio (aux / helita):  1.000e+00
+    ---------------------------------------------------------------------------------------------------------------------------------
+
+# output format notes:
+#   vartype varname (ispecie, ilevel) (jspecie, jlevel) min mean max
+# when ispecies < 0 or jspecie < 0 (i.e. for electrons), they may be shown as "specie" instead of "(ispecie, ilevel)".
 """
 
 # import internal modules
@@ -28,6 +59,8 @@ AUXVARS = {
 
 def get_helita_var(auxvar):
     return AUXVARS[auxvar]
+
+''' ----------------------------- get_var for helita & aux ----------------------------- '''
 
 def _callsig(helvar):
     '''returns dict with keys for getvar for helvar'''
@@ -120,10 +153,10 @@ def _SL_fluids(fluids_dict, f = lambda fluid: fluid):
     '''update values in fluids_dict by applying f'''
     return {key: f(val) for key, val in fluids_dict.items()}
 
-def _construct_calls(auxvar, callsig, auxfluids, helfluids, f=lambda fluid: fluid, **kw__get_var):
+def _setup_fluid_kw(auxvar, callsig, auxfluids, helfluids, f=lambda fluid: fluid):
     '''returns ((args, kwargs) to use with auxvar, (args, kwargs) to use with helitavar)
     args with be the list [var]
-    kwargs will be the dict of auxfluids (or helfluids), updated by kw__get_var.
+    kwargs will be the dict of auxfluids (or helfluids). (species, levels) only.
 
     f is applied to all values in auxfluids and helfluids.
         use f = (lambda fluid: fluid.SL) when fluids are at_tools.fluids.Fluids,
@@ -135,10 +168,7 @@ def _construct_calls(auxvar, callsig, auxfluids, helfluids, f=lambda fluid: flui
     # pop var from callsig (we pass var as arg rather than kwarg).
     callsigcopy = callsig.copy()  # copy to ensure callsig is not altered
     helvar = callsigcopy.pop('var')
-    # update dicts with callsig kws and kw__get_var
     helfluids.update(callsigcopy)
-    auxfluids.update(**kw__get_var)
-    helfluids.update(**kw__get_var)
     # make & return output
     callaux = ([auxvar], auxfluids)
     callhel = ([helvar], helfluids)
@@ -172,6 +202,7 @@ def iter_get_var(obj, auxvar, helvar=None, fluids=None, f=lambda fluid: fluid,
         yields dict(vars   = dict(aux=auxvar,          hel=helita var name),
                     vals   = dict(aux=get_var(auxvar), hel=get_var(helvar)),
                     fluids = dict(aux=auxfluids_dict,  hel=helfluids_dict)),
+                    SLs    = dict(aux=auxfluidsSL,     hel=helfluidsSL))   ,
                     )
 
         obj: EbysusData object
@@ -205,38 +236,146 @@ def iter_get_var(obj, auxvar, helvar=None, fluids=None, f=lambda fluid: fluid,
         fluids, f = _get_fluids_and_f(obj, fluids, f)
     iterfluids = _iter_fluids(fluids, loopfluids, ordered=ordered, allow_same=allow_same)
     for auxfluids_dict, helfluids_dict in iterfluids:
-        auxcall, helcall = _construct_calls(auxvar, callsig, auxfluids_dict, helfluids_dict, f=f, **kw__get_var)
-        #print(auxcall, helcall)
+        auxcall, helcall = _setup_fluid_kw(auxvar, callsig, auxfluids_dict, helfluids_dict, f=f, **kw__get_var)
+        auxfluidsSL = auxcall[1].copy()
+        helfluidsSL = helcall[1].copy()
+        auxcall[1].update(**kw__get_var)
+        helcall[1].update(**kw__get_var)
+        # actually get values by reading data and/or doing calculations
         auxval = obj.get_var(*auxcall[0], **auxcall[1])
         helval = obj.get_var(*helcall[0], **helcall[1])
         # format output & yield it
         vardict = dict(aux=auxvar,         hel=callsig['var'])
         valdict = dict(aux=auxval,         hel=helval)
         fludict = dict(aux=auxfluids_dict, hel=helfluids_dict)
-        yield dict(vars=vardict, vals=valdict, fluids=fludict)
+        SLsdict = dict(aux=auxfluidsSL,    hel=helfluidsSL)
+        yield dict(vars=vardict, vals=valdict, fluids=fludict, SLs=SLsdict)
 
-# TODO:
-#   generic prettyprint of results, requiring only obj and auxvar.
-#   also should include some stats such as ratio, and {min, max & mean} for hel & aux.
-# example simple non-generic prettyprint:
-'''
-for d in axc.iter_get_var(dd, 'mm_cnu'):
-    fluids = d['fluids']
-    auxfluids = fluids['aux']['ifluid'].SL, fluids['aux']['jfluid'].SL
-    helfluids = fluids['hel']['ifluid'].SL, fluids['hel']['jfluid'].SL
-    print('{:6s}'.format(d['vars']['aux']), *auxfluids, '{: .3e}'.format(d['vals']['aux'].mean()))
-    print('{:6s}'.format(d['vars']['hel']), *helfluids, '{: .3e}'.format(d['vals']['hel'].mean()))
-    print('-'*40)
 
-# the first few lines of output look like:
+''' ----------------------------- prettyprint comparison ----------------------------- '''
 
-mm_cnu (1, 1) (1, 2)  8.280e+05
-nu_ij  (1, 1) (1, 2)  8.280e+05
-----------------------------------------
-mm_cnu (1, 1) (2, 1)  7.225e+02
-nu_ij  (1, 1) (2, 1)  7.225e+02
-----------------------------------------
-mm_cnu (1, 1) (2, 2)  1.252e+02
-nu_ij  (1, 1) (2, 2)  1.252e+02
-----------------------------------------
-'''
+def _stats(arr):
+    '''return stats for arr. dict with min, mean, max.'''
+    return dict(min=arr.min(), mean=arr.mean(), max=arr.max())
+
+def _strstats(arr_or_stats, fmt='{: 0.3e}', fmtkey='{:>4s}'):
+    '''return pretty string for stats. min=__, mean=__, max=__.'''
+    keys = ['min', 'mean', 'max']
+    if isinstance(arr_or_stats, dict): # arr_or_stats is stats
+        x = arr_or_stats  
+    else:                              # arr_or_stats is arr
+        x = _stats(arr_or_stats) 
+    return ', '.join([fmtkey.format(key) + '='+fmt.format(x[key]) for key in keys])
+
+def _strvals(valdict):
+    '''return dict of pretty str for vals from valdict. keys 'hel', 'aux', 'stats'.
+    'stats' contains dict of stats for hel & aux.
+    '''
+    result = dict(stats=dict())
+    for aux in valdict.keys():  # for aux in ['aux', 'hel']:
+        stats = _stats(valdict[aux])
+        strstats = _strstats(stats)
+        result[aux] = strstats
+        result['stats'][aux] = stats
+    return result
+
+def _strSL(SL, fmtSL='({:2d},{:2d})', fmtS=' {:2d}    ', fmtNone=' '*(1+2+1+2+1)):
+    '''pretty string for (specie, level) SL. (or just specie SL, or None SL)'''
+    if SL is None:
+        return fmtNone
+    try:
+        next(iter(SL))  # error if SL is not a list.
+    except TypeError:
+        return fmtS.format(SL)    # SL is just S
+    else:
+        return fmtSL.format(*SL)  # SL is (S, L)
+
+def _strfluids(fludict):
+    '''return dict of pretty str for fluids from fludict. keys 'hel', 'aux'.'''
+    N = max(len(fludict['aux']), len(fludict['hel']))
+    result = dict()
+    for aux in fludict.keys():  # for aux in ['aux', 'hel']:
+        s = ''
+        if N>0:
+            iSL = fludict[aux].get('ifluid', fludict[aux].get('mf_ispecies', None))
+            s += _strSL(iSL) + ' '
+        if N>1:
+            jSL = fludict[aux].get('jfluid', fludict[aux].get('mf_jspecies', None))
+            s += _strSL(jSL) + ' '
+        result[aux] = s
+    return result
+
+def _strvars(vardict, prefix=True):
+    '''return dict of pretty str for vars from vardict. keys 'hel', 'aux'.
+    prefix==True -> include prefix 'helita' or 'auxvar'.
+    '''
+    L = max(len(vardict['aux']), len(vardict['hel']))
+    fmt = '{:>'+str(L)+'s}'
+    result = dict()
+    for aux in vardict.keys():  # for aux in ['aux', 'hel']:
+        s = ''
+        if prefix:
+            s += dict(aux='auxvar', hel='helvar')[aux] + ' '
+        s += fmt.format(vardict[aux]) + ' '
+        result[aux] = s
+    return result
+
+def prettyprint_comparison(x, printout=True, prefix=True, underline=True,
+                           rattol=0.01, return_warned=False, **kw__None):
+    '''pretty printing of info in x. x is one output of iter_get_var.
+    e.g.: for x in iter_get_var(...): prettyprint_comparison(x)
+
+    printout: if False, return string instead of printing.
+    prefix: whether to include prefix of 'helita' or 'auxvar' at start of each line.
+    underline: whether to include a line of '------'... at the end.
+    rattol: if abs(1 - (mean aux / mean helita)) > rattol, print extra warning line.
+    return_warned: whether to also return whether we made a warning.
+    **kw__None goes to nowhere.
+    '''
+    # get strings / values:
+    svars   = _strvars(  x['vars'])
+    sfluids = _strfluids(x['SLs'] )
+    svals   = _strvals(  x['vals'])
+    ratio   = svals['stats']['aux']['mean']/svals['stats']['hel']['mean']
+    ratstr  = 'mean ratio (aux / helita): {: 0.3e}'.format(ratio)
+    # combine strings
+    key = 'aux'
+    s = ' '.join([svars[key], sfluids[key], svals[key]]) + '\n'
+    lline = len(s)
+    key = 'hel'
+    s += ' '.join([svars[key], sfluids[key], svals[key]]) + ';   '
+    s += ratstr
+    if abs(1 - ratio) > rattol:  # then, add warning!
+        s += '\n' + ' '*(lline) + '>>> WARNING: RATIO DIFFERS FROM 1.000 <<<<'
+        warned = True
+    else:
+        warned = False
+    if underline:
+        s += '\n' + '-' * (lline + len(ratstr) + 10)
+    # print (or return)
+    result = None
+    if printout:
+        print(s)
+    else:
+        result = s
+    if return_warned:
+        result = (result, warned)
+    return result
+
+
+''' ----------------------------- high-level comparison interface ----------------------------- '''
+
+@fluid_tools.maintain_fluids # restore dd.ifluid and dd.jfluid after finishing compare().
+def compare(obj, auxvar, **kwargs):
+    '''compare values of auxvar with appropriate helita var, for obj.
+    **kwargs propagate to iter_get_var, obj.get_var, and prettyprint_comparison.
+
+    return number of times helita and auxvar gave different mean results (by more than rattol).
+    0 is good, it means helita & auxvar agreed on everything! :)
+    '''
+    N_warnings = 0
+    for x in iter_get_var(obj, auxvar, **kwargs):
+        _, warned = prettyprint_comparison(x, return_warned=True, **kwargs)
+        if warned:
+            N_warnings += 1
+    return N_warnings
