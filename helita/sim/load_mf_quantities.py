@@ -221,19 +221,10 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     ## to align with efx, we shift ne by ydn zdn
     interp = y+'dn'+z+'dn'
     ne = obj.get_var('nr_si'+interp, mf_ispecies=-1)  # [m^-3]
-    neqe = obj.uni.qsi_electron * ne    # [C m^-3]
+    neqesi = obj.uni.qsi_electron * ne    # [C m^-3]
+    neqe = neqesi / obj.uni.usi_nq        # [simu. charge density units]
     # ----- calculate efx ----- #
-    ## TODO: instead do the calculation without converting to SI.
-    ## because ne and qe are in SI, we will convert to SI.
-    ### converting to SI:
-    gradPe_x *= obj.uni.usi_e
-    sum_rejx *= obj.uni.usi_p / obj.uni.u_t         # u_t == usi_t
-    ## add up the things which are divided by ne qe; convert to simu. units.
-    tmp = (gradPe_x + sum_rejx) / (neqe)   # [SI units for E-field]
-    u_ef = obj.uni.usi_b * obj.uni.usi_u   # conversion: E [simu.] * u_ef = E [SI]
-    tmp = tmp / u_ef                       # [simu. units for E-field]
-    ## put it all together.
-    efx = B_cross_ue_x + tmp
+    efx = B_cross_ue_x + (gradPe_x + sum_rejx) / neqe # [simu. E-field units] 
     output = efx
 
   return output
@@ -306,7 +297,6 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
       else:                    # not electrons
         f_var = var.replace('i', '')
         return obj.get_var(f_var)
-
 
 
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
