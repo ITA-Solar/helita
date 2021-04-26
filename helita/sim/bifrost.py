@@ -1280,74 +1280,108 @@ class Create_new_br_files:
 
 
 class Bifrost_units(object):
+    '''stores units as attributes.
 
-    def __init__(self,filename='mhd.in',fdir='./',verbose=True):
+    units starting with 'u_' are in cgs. starting with 'usi_' are in SI.
+    Convert to these units by multiplying data by this factor.
+    Example:
+        r    = obj.get_var('r')  # r    = mass density / (simulation units)
+        rcgs = r * obj.uni.u_r   # rcgs = mass density / (cgs units, i.e. (g * cm^-3))
+        rsi  = r * obj.uni.usi_r # rsi  = mass density / (si units, i.e. (kg * m^-3))
+
+    all units are uniquely determined by the following minimal set of units:
+        (length, time, mass density, gamma)
+
+    you can access documentation on the units themselves via:
+        self.help().    (for BifrostData object obj, do obj.uni.help())
+        this documentation is not very detailed, but at least tells you
+        which physical quantity the units are for.
+    '''
+
+    def __init__(self,filename='mhd.in',fdir='./',verbose=True,base_units=None):
+        '''get units from file (by reading values of u_l, u_t, u_r, gamma).
+
+        filename: str; name of file. Default 'mhd.in'
+        fdir: str; directory of file. Default './'
+        verbose: True (default) or False
+            True -> if we use default value for a base unit because
+                    we can't find its value otherwise, print warning.
+        base_units: None (default), dict, or list
+            None -> ignore this keyword.
+            dict -> if contains any of the keys: u_l, u_t, u_r, gamma,
+                    initialize the corresponding unit to the value found.
+                    if base_units contains ALL of those keys, IGNORE file.
+            list -> provides value for u_l, u_t, u_r, gamma; in that order.
+        '''
         import scipy.constants as const
         from astropy import constants as aconst
 
-        if filename != None:
-            if os.path.isfile(os.path.join(fdir,filename)):
-                self.params = read_idl_ascii(os.path.join(fdir,filename),firstime=True, obj=self)
-                try:
-                    self.u_l = self.params['u_l']
-                except:
-                    if (verbose): 
-                        print('(WWW) the filename does not have u_l.'
-                            ' Default Solar Bifrost u_l has been selected')
-                    self.u_l = 1.0e8
+        self.doc_units = dict()
+        self.BASE_UNITS = ['u_l', 'u_t', 'u_r', 'gamma']
+        DEFAULT_UNITS = dict(u_l=1.0e8, u_t=1.0e2, u_r=1.0e-7, gamma=1.667)
+        _n_base_set = 0  # number of base units which have been set.
 
-                try:
-                    self.u_t = self.params['u_t']
-                except:
-                    if (verbose): 
-                        print('(WWW) the filename does not have u_t.'
-                            ' Default Solar Bifrost u_t has been selected')
-                    self.u_t = 1.0e2
-
-                try:
-                    self.u_r = self.params['u_r']
-                except:
-                    if (verbose): 
-                        print('(WWW) the filename does not have u_r.'
-                            ' Default Solar Bifrost u_r has been selected')
-                    self.u_r = 1.0e-7
-
-                try:
-                    self.gamma = self.params['gamma']
-                except:
-                    if (verbose): 
-                        print('(WWW) the filename does not have gamma.'
-                            ' ideal gas has been selected')
-                    self.gamma = 1.667
-
+        # set units from base_units, if applicable
+        if base_units is not None:
+            try:
+                items = base_units.items()
+            except AttributeError: # base_units is a list
+                for i, val in enumerate(base_units):
+                    setattr(self, self.BASE_UNITS[i], val)
             else:
-                if (verbose): 
-                    print('(WWW) selected filename is not available.'
-                          ' Default Solar Bifrost units has been selected')
-                self.u_l = 1.0e8
-                self.u_t = 1.0e2
-                self.u_r = 1.0e-7
-                # --- ideal gas
-                self.gamma = 1.667
-        else:
-            if (verbose): 
-                print('(WWW) selected filename is not available.'
-                      ' Default Solar Bifrost units has been selected')
-            self.u_l = 1.0e8
-            self.u_t = 1.0e2
-            self.u_r = 1.0e-7
-            # --- ideal gas
-            self.gamma = 1.667
+                for key, val in base_units.items():
+                    if key in DEFAULT_UNITS.keys():
+                        setattr(self, key, val)
+                        _n_base_set += 1
+                    elif verbose:
+                        print(('(WWW) the key {} is not a base unit',
+                              ' so it was ignored').format(key))
+        # set units from file (or defaults), if still necessary.
+        if _n_base_set != len(DEFAULT_UNITS):
+            if filename is None:
+                file_exists = False
+            else:
+                file = os.path.join(fdir, filename)
+                file_exists = os.path.isfile(file)
+            if file_exists:
+                # file exists -> set units using file.
+                self.params = read_idl_ascii(file,firstime=True)
+                def set_unit(key):
+                    if getattr(self, key, None) is not None:
+                        return
+                    try:
+                        value = self.params[key]
+                    except:
+                        value = DEFAULT_UNITS[key]
+                        if verbose:
+                            printstr = ("(WWW) the file '{file}' does not contain '{unit}'. "
+                                        "Default Solar Bifrost {unit}={value} has been selected.")
+                            print(printstr.format(file=file, unit=key, value=value))
+                    setattr(self, key, value)
+
+                for unit in DEFAULT_UNITS.keys():
+                    set_unit(unit)
+            else:
+                # file does not exist -> set default units.
+                units_to_set = {unit: DEFAULT_UNITS[unit] for unit in DEFAULT_UNITS.keys()
+                                        if getattr(self, unit, None) is None}
+                if verbose:
+                    print("(WWW) selected file '{file}' is not available.".format(file=file),
+                          "Setting the following Default Solar Bifrost units: ", units_to_set)
+                for unit, value in units_to_set.items():
+                    setattr(self, unit, value)
+
+        # set cgs units
         self.verbose=verbose
-        self.u_u = self.u_l / self.u_t
-        self.u_p = self.u_r * (self.u_l / self.u_t)**2    # Pressure [dyne/cm2]
-        self.u_kr = 1 / (self.u_r * self.u_l)             # Rosseland opacity [cm2/g]
+        self.u_u  = self.u_l / self.u_t
+        self.u_p  = self.u_r * (self.u_u)**2           # Pressure [dyne/cm2]
+        self.u_kr = 1 / (self.u_r * self.u_l)         # Rosseland opacity [cm2/g]
         self.u_ee = self.u_u**2
-        self.u_e = self.u_r * self.u_ee
+        self.u_e  = self.u_p      # energy density units are the same as pressure units.
         self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
-        self.u_n = 3.00e+10                      # Density number n_0 * 1/cm^3
-        self.pi = const.pi
-        self.u_b = self.u_u * np.sqrt(4. * self.pi * self.u_r)
+        self.u_n  = 3.00e+10                      # Density number n_0 * 1/cm^3
+        self.pi   = const.pi
+        self.u_b  = self.u_u * np.sqrt(4. * self.pi * self.u_r)
 
         self.uni={}
 
@@ -1368,13 +1402,15 @@ class Bifrost_units(object):
         self.u_tg = (self.m_h / self.k_b) * self.u_ee
         self.u_tge = (self.m_e / self.k_b) * self.u_ee
 
-        self.usi_l = self.u_l * const.centi  # 1e6
+        # set si units
+        self.usi_t = self.u_t
+        self.usi_l = self.u_l * const.centi                   # 1e-2
         self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
         self.usi_u = self.usi_l / self.u_t
-        self.usi_p = self.usi_r * (self.usi_l / self.u_t)**2  # Pressure [N/m2]
+        self.usi_p = self.usi_r * (self.usi_u)**2             # Pressure [N/m2]
         self.usi_kr = 1 / (self.usi_r * self.usi_l)           # Rosseland opacity [m2/kg]
         self.usi_ee = self.usi_u**2
-        self.usi_e = self.usi_r * self.usi_ee
+        self.usi_e = self.usi_p    # energy density units are the same as pressure units.
         self.usi_te = self.usi_e / self.u_t * self.usi_l      # Box therm. em. [J/(s ster m2)]
         self.ksi_b = aconst.k_B.to_value('J/K')               # Boltzman's cst. [J/K]
         self.msi_h = const.m_n                                # 1.674927471e-27
@@ -1383,6 +1419,85 @@ class Bifrost_units(object):
         self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
         self.msi_e = const.m_e  # 9.1093897e-31
         self.usi_b = self.u_b * 1e-4
+
+        # documentation for units above:
+        self.docu('t', 'time')
+        self.docu('l', 'length')
+        self.docu('r', 'mass density')
+        self.docu('u', 'velocity')
+        self.docu('p', 'pressure')
+        self.docu('kr', 'Rosseland opacity')
+        self.docu('ee', 'energy (total; i.e. not energy density)')
+        self.docu('e', 'energy density')
+        self.docu('te', 'Box therm. em. [J/(s ster m2)]')
+        self.docu('b', 'magnetic field')
+
+        # additional units (added for convenience) - started by SE, Apr 26 2021
+        self.docu('m', 'mass')
+        self.u_m    = self.u_r   * self.u_l**3   # rho = mass / length^3
+        self.usi_m  = self.usi_r * self.usi_l**3 # rho = mass / length^3
+        self.docu('ef', 'electric field')
+        self.u_ef   = self.u_b                   # in cgs: F = q(E + (u/c) x B)
+        self.usi_ef = self.usi_b * self.usi_u    # in SI:  F = q(E + u x B)
+        self.docu('f', 'force')
+        self.u_f    = self.u_p   * self.u_l**2   # pressure = force / area
+        self.usi_f  = self.usi_p * self.usi_l**2 # pressure = force / area
+        self.docu('q', 'charge')
+        self.u_q    = self.u_f   / self.u_ef     # F = q E
+        self.usi_q  = self.usi_f / self.usi_ef   # F = q E
+        self.docu('nr', 'number density')
+        self.u_nr   = self.u_r   / self.u_m      # nr = r / m
+        self.usi_nr = self.usi_r / self.usi_m    # nr = r / m
+        self.docu('nq', 'charge density')
+        self.u_nq   = self.u_q   * self.u_nr
+        self.usi_nq = self.usi_q * self.usi_nr
+        self.docu('pm', 'momentum density')
+        self.u_pm   = self.u_u   * self.u_r      # mom. dens. = mom * nr = u * r
+        self.usi_pm = self.usi_u * self.usi_r
+
+
+    def __repr__(self):
+        '''show self in a pretty way (i.e. including info about base units)'''
+        return "<{} with base_units={}>".format(object.__repr__(self),
+                            self.prettyprint_base_units(printout=False))
+
+    def base_units(self):
+        '''returns dict of u_l, u_t, u_r, gamma, for self.'''
+        return {unit: getattr(self, unit) for unit in self.BASE_UNITS}
+
+    def prettyprint_base_units(self, printout=True):
+        '''print (or return, if not printout) prettystring for base_units for self.'''
+        fmt = '{:.2e}'  # formatting for keys (except gamma)
+        fmtgam = '{}'   # formatting for key gamma
+        s = []
+        for unit in self.BASE_UNITS:
+            val = getattr(self,unit)
+            if unit=='gamma':
+                valstr = fmtgam.format(val)
+            else:
+                valstr = fmt.format(val)
+            s += [unit+'='+valstr]
+        result = 'dict({})'.format(', '.join(s))
+        if printout:
+            print(result)
+        else:
+            return(result)
+
+    def docu(self, u, doc):
+        '''documents u by adding u=doc to dict self.doc_units'''
+        self.doc_units[u]=doc
+
+
+    def help(self, u=None):
+        '''returns documentation for u, or all units if u is None.'''
+        if u is None:
+            return self.doc_units
+        else:
+            for prefix in ['u_', 'usi_']:
+                if u.startswith(prefix):
+                    u = u[ len(prefix) : ]
+            return self.doc_units.get(u, "u='{}' is not yet documented!".format(u))
+
 
 
 
@@ -1789,7 +1904,7 @@ class Cross_sect:
         '''
         Collects the information in the cross table files.
         '''
-        uni = Bifrost_units()
+        uni = Bifrost_units(verbose=False)
         self.cross_tab = {}
 
         for itab in range(len(self.cross_tab_list)):
