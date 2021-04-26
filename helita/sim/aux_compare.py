@@ -81,6 +81,9 @@ except ImportError:
     fl = None
     warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.aux_compare may crash')
 
+# set defaults
+DEFAULT_TOLERANCE = 0.05    # the max for (1-abs(X/Y)) before we think X != Y
+
 
 ''' ----------------------------- lookup helita counterpart to aux var ----------------------------- '''
 
@@ -370,7 +373,7 @@ def _strvars(vardict, prefix=True):
     return result
 
 def prettyprint_comparison(x, printout=True, prefix=True, underline=True,
-                           rattol=0.01, return_warned=False, **kw__None):
+                           rattol=DEFAULT_TOLERANCE, return_warned=False, **kw__None):
     '''pretty printing of info in x. x is one output of iter_get_var.
     e.g.: for x in iter_get_var(...): prettyprint_comparison(x)
 
