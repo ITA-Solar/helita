@@ -261,10 +261,11 @@ def get_name(obj, specie):
 
 def get_mass(obj, specie, units='amu'):
     '''return specie's mass [units]. default units is amu.
-    units: one of: ['amu', 'g', 'kg', 'cgs', 'si']. Default 'amu'
+    units: one of: ['amu', 'g', 'kg', 'cgs', 'si', 'simu']. Default 'amu'
         'amu'        -> mass in amu.    For these units, mH ~= 1
         'g' or 'cgs' -> mass in grams.  For these units, mH ~= 1.66E-24
         'kg' or 'si' -> mass in kg.     For these units, mH ~= 1.66E-27
+        'simu'       -> mass in simulation units.
 
     '''
     # if specie is actually (spec, level) return get_mass(obj, spec) instead.
@@ -275,7 +276,7 @@ def get_mass(obj, specie, units='amu'):
     else:
         return get_mass(obj, specie, units=units)
     units = units.lower()
-    VALID_UNITS = ['amu', 'g', 'kg', 'cgs', 'si']
+    VALID_UNITS = ['amu', 'g', 'kg', 'cgs', 'si', 'simu']
     assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
     if specie < 0:
         # electron
@@ -283,8 +284,10 @@ def get_mass(obj, specie, units='amu'):
             return obj.uni.m_electron / obj.uni.amu
         elif units in ['g', 'cgs']:
             return obj.uni.m_electron
-        else: # units in ['kg', 'si']
+        elif units in ['kg', 'si']:
             return obj.uni.msi_e
+        else: # units == 'simu'
+            return obj.uni.simu_me
     else:
         # not electron
         m_amu = obj.att[specie].params.atomic_weight
@@ -292,18 +295,21 @@ def get_mass(obj, specie, units='amu'):
             return m_amu
         elif units in ['g', 'cgs']:
             return m_amu * obj.uni.amu
-        else: # units in ['kg', 'si']
+        elif units in ['kg', 'si']:
             return m_amu * obj.uni.amusi
+        else: # units == 'simu'
+            return m_amu * obj.uni.simu_amu
 
 def get_charge(obj, SL, units='e'):
     '''return the charge fluid SL in [units]. default is elementary charge units.
-    units: one of ['e', 'elementary', 'esu', 'c', 'cgs', 'si']. Default 'elementary'.
+    units: one of ['e', 'elementary', 'esu', 'c', 'cgs', 'si', 'simu']. Default 'elementary'.
         'e' or 'elementary' -> charge in elementary charge units. For these units, qH+ ~= 1.
         'c' or 'si'         -> charge in SI units (Coulombs).     For these units, qH+ ~= 1.6E-19
         'esu' or 'cgs'      -> charge in cgs units (esu).         For these units, qH+ ~= 4.8E-10
+        'simu'              -> charge in simulation units.
     '''
     units = units.lower()
-    VALID_UNITS = ['e', 'elementary', 'esu', 'c', 'cgs', 'si']
+    VALID_UNITS = ['e', 'elementary', 'esu', 'c', 'cgs', 'si', 'simu']
     assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
     # get charge, in 'elementary charge' units:
     if SL[0] < 0:
@@ -317,8 +323,10 @@ def get_charge(obj, SL, units='e'):
         return charge
     elif units in ['esu', 'cgs']:
         return charge * obj.uni.q_electron
-    else: #units in ['c', 'si']
+    elif units in ['c', 'si']:
         return charge * obj.uni.qsi_electron
+    else: #units=='simu'
+        return charge * obj.uni.simu_qe
 
 def get_cross_tab(obj, iSL, jSL):
     '''return cross section table for ifluid=iSL, jfluid=jSL.
