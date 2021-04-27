@@ -1383,8 +1383,8 @@ class Bifrost_units(object):
         self.pi   = const.pi
         self.u_b  = self.u_u * np.sqrt(4. * self.pi * self.u_r)
 
+        # self.uni tells how to convert from simu. units to cgs units, for simple vars.
         self.uni={}
-
         self.uni['l'] = self.u_l
         self.uni['t'] = self.u_t
         self.uni['rho'] = self.u_r
@@ -1454,6 +1454,22 @@ class Bifrost_units(object):
         self.docu('pm', 'momentum density')
         self.u_pm   = self.u_u   * self.u_r      # mom. dens. = mom * nr = u * r
         self.usi_pm = self.usi_u * self.usi_r
+        self.docu('hz', 'frequency')
+        self.u_hz   = 1./self.u_t
+        self.usi_hz = 1./self.usi_t
+        self.docu('phz', 'momentum density frequency (see e.g. momentum density exchange terms)')
+        self.u_phz  = self.u_pm   * self.u_hz
+        self.usi_phz= self.usi_pm * self.usi_hz
+
+        # additional constants (added for convenience)
+        ## masses
+        self.simu_amu = self.amu / self.u_m         # 1 amu
+        self.simu_m_e = self.m_electron / self.u_m  # 1 electron mass
+        ## charge (1 elementary charge)
+        self.simu_q_e   = self.q_electron   / self.u_q   # [derived from cgs]
+        self.simu_qsi_e = self.qsi_electron / self.usi_q # [derived from si]
+        ### note simu_q_e != simu_qsi_e because charge is defined
+        ### by different equations, for cgs and si. 
 
 
     def __repr__(self):
@@ -1486,7 +1502,6 @@ class Bifrost_units(object):
     def docu(self, u, doc):
         '''documents u by adding u=doc to dict self.doc_units'''
         self.doc_units[u]=doc
-
 
     def help(self, u=None):
         '''returns documentation for u, or all units if u is None.'''
