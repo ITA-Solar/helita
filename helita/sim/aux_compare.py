@@ -478,7 +478,8 @@ def compare(obj, auxvar, helvar=None, fluids=None, **kwargs):
         _, warned = prettyprint_comparison(x, return_warned=True, **kwargs)
         if warned:
             N_warnings += 1
-    return comparison_result(N_warnings, N_total, time.time() - now)
+    runtime = round(time.time() - now, 3) # round because sub-ms times are untrustworthy and ugly.
+    return comparison_result(N_warnings, N_total, runtime)
 
 def _get_aux_vars(obj):
     '''returns list of vars in aux based on obj.'''
@@ -539,16 +540,16 @@ def compare_all(obj, aux=None, verbose=2, **kwargs):
             x['N_error'] += 1
             x['errors']  += [exc]
             if verbose >= 1:
-                print('>>>', repr(exc))
+                print('>>>', repr(exc), '\n')
         else:
             x['N_compare'] += comp[1]
             x['N_differ']  += comp[0]
             x['N_diffvar'] += (comp[0] > 0)
+            if printout: print() # print a single new line
+            if verbose >= 1:
+                print(comp, '\n')
         if printout: print() # print a single new line
-        if verbose >= 1:
-            print(comp, '\n')
-        if printout: print() # print a single new line
-    x['runtime'] = time.time() - now
+    x['runtime'] = round(time.time() - now, 3) # round because sub-ms times are untrustworthy and ugly.
     return x
 
 
