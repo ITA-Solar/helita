@@ -74,7 +74,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke',
                       'tot_px', 'tot_py', 'tot_pz',
                       'grph', 'tot_part', 'mu', 'pe',
-                      'efx', 'efy', 'efz',
+                      'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
                       ]
 
   if var=='':
@@ -89,6 +89,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('grph',  'grams per hydrogen atom')
     docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
     docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
+    for axis in ['x', 'y', 'z']:
+      docvar('j'+axis, 'sum of '+axis+'-component of current per unit area [simu. current per area units]')
     for axis in ['x', 'y', 'z']:
       docvar('ef'+axis, axis+'-component of electric field [simu. E-field units] ' +\
                           '== [simu. B-field units * simu. velocity units]')
@@ -173,6 +175,15 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
         output += obj.get_var('r', mf_ispecies=ispecies,
             mf_ilevel=mf_ilevel) / weight 
     output = output / obj.get_var('tot_part')
+
+  elif var in ['jx', 'jy', 'jz']:
+    # J = curl (B) / mu_0
+    warnings.warn('j does not (yet) add contribution from imposed current if it exists.')
+    ## TODO: do calculation in simu. units; add contribution from ic_ix if it exists.
+    x = var[-1]
+    curlb_x =  obj.get_var('curvec'+'b'+x) * obj.uni.usi_b / obj.uni.usi_l  # (curl b)_x [si units]
+    jx = curlb_x / obj.uni.mu0si   # j [si units]
+    return jx / obj.uni.usi_i      # j [simu. units]
 
   elif var in ['efx', 'efy', 'efz']:
     # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
@@ -337,9 +348,8 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## ---> to align with ux, we shift ix by xdn yup zup
     y, z   = tuple(set(('x', 'y', 'z')) - set((x)))
     interp = x+'dn' + y+'up' + z+'up'
-    ix = obj.get_var('i'+x + interp)   # [units?? we convert to SI below.]
-    i_uni = obj.uni.u_r / (obj.uni.u_b * obj.uni.u_t * obj.uni.q_electron)  # (see unit conversion table on wiki.)
-    output = -1 * ix * i_uni     # [simu velocity units * cm^-3]
+    ix = obj.get_var('j'+x + interp)   # [simu current per area units]
+    output = -1 * ix * obj.uni.u_nr    # [simu velocity units * cm^-3]
     if not np.all(output == 0): 
       # remove this warning once this code has been tested.
       warnings.warn("Nonzero current has not been tested to confirm it matches between helita & ebysus. "+\
@@ -463,7 +473,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_ij_res', 'resonant collisions between ifluid & jfluid. '+\
                         'presently, only properly implemented for ifluid=H+, jfluid=H.', nfluid=2)
     docvar('nu_se_spitzcoul', 'coulomb collisions between s & e-, including spitzer correction. ' +\
-                              'Formula in Oppenheim et al 2020 appendix A eq 4.', nfluid=1)
+                              'Formula in Oppenheim et al 2020 appendix A eq 4. [simu freq]', nfluid=1)
     docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j', nfluid=2)
     docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j', nfluid=2)
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
@@ -553,13 +563,16 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)  #mass [amu]
     m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)  #mass [amu]
     #calculate & return nu_ij_test:
-    return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j)))
+    return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j))) / obj.uni.usi_hz
 
   elif var == 'nu_ij_res':
-    ## uses formula which is only valid when ifluid=H+, jfluid=H
-    nH = obj.get_var('nr') * obj.uni.usi_nr # [m^-3]
+    # formula assumes we are doing nu_{H+, H} collisions.
+    ## it also happens to be valid for nu_{H, H+},
+    ## because nu_ij_to_ji for H, H+ is the ratio nH / nH+.
+    with obj.MaintainFluids():
+      nH = obj.get_var('nr', ifluid=obj.jfluid) * obj.uni.usi_nr # [m^-3]
     tg = 0.5 * (obj.get_var('tg') + obj.get_var('tg', ifluid=obj.jfluid)) # [K]
-    return 2.65e-16 * nH * np.sqrt(tg) * (1 - 0.083 * np.log10(tg))**2
+    return 2.65e-16 * nH * np.sqrt(tg) * (1 - 0.083 * np.log10(tg))**2 / obj.uni.usi_hz
 
   elif var == 'nu_se_spitzcoul':
     icharge = fluid_tools.get_charge(obj, obj.ifluid)
@@ -580,15 +593,15 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     nuje0 = (const * ne) * mass_ * ln_ / (2 * tg)**(3/2)
 
     # try again but with logs. Run this code to confirm that the above code is correct.
-    run_confirmation_code = False   # change to True to run this code.
-    if run_confirmation_code:
+    run_confirmation_routine = False   # change to True to run this code.
+    if run_confirmation_routine:
       ln = np.log
       tmp1 = ln(me) + ln(np.pi) + ln(ne) + 4*ln(qe) + ln(ln(12) + ln(np.pi) + ln(ne) + 3*ln(ldebye))  # numerator
       tmp2 = ln(ms) + 2*(ln(4) + ln(np.pi) + ln(eps0)) + 0.5*(ln(ms) + 3*(ln(2) + ln(kb) + ln(tg)))  # denominator
       tmp = tmp1 - tmp2
       nuje1 = np.exp(tmp)
       print('we expect these to be approximately equal:', nuje0.mean(), nuje1.mean())
-    return nuje0
+    return nuje0 / obj.uni.usi_hz
 
   elif var in ['nu_ij_to_ji', 'nu_sj_to_js']:
     mi_ni = obj.get_var('ri', ifluid=obj.ifluid)  # mi * ni = ri
@@ -843,7 +856,7 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
     return 1./(kappa_i * kappa_e)
 
   elif quant == 'vde':
-    modE = obj.get_var('mode') # [simu. E-field units]
+    modE = obj.get_var('modef') # [simu. E-field units]
     modB = obj.get_var('modb') # [simu. B-field units]
     return modE / modB         # [simu. velocity units]
 
