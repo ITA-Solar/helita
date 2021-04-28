@@ -1471,6 +1471,9 @@ class Bifrost_units(object):
         ### note simu_q_e != simu_qsi_e because charge is defined
         ### by different equations, for cgs and si. 
 
+        # update the dict doc_units with the values of units
+        self._update_doc_units_with_values()
+
 
     def __repr__(self):
         '''show self in a pretty way (i.e. including info about base units)'''
@@ -1499,19 +1502,74 @@ class Bifrost_units(object):
         else:
             return(result)
 
+    def _unit_name(self, u):
+        '''returns name of unit u. e.g. u_r -> 'r'; usi_hz -> 'hz', 'nq' -> 'nq'.'''
+        for prefix in ['u_', 'usi_']:
+            if u.startswith(prefix):
+                u = u[ len(prefix) : ]
+                break
+        return u
+
+    def _unit_values(self, u):
+        '''return values of u, as a dict'''
+        u = self._unit_name(u)
+        result = {}
+        u_u   = 'u_'+u
+        usi_u = 'usi_'+u
+        if hasattr(self, u_u):
+            result[u_u] = getattr(self, u_u)
+        if hasattr(self, usi_u):
+            result[usi_u] = getattr(self, usi_u)
+        return result
+
+    def prettyprint_unit_values(self, x, printout=True, fmtname='{:<3s}', fmtval='{:.2e}', sep=' ;  '):
+        '''pretty string for unit values. print if printout, else return string.'''
+        if isinstance(x, str):
+            x = self._unit_values(x)
+        result = []
+        for key, value in x.items():
+            u_, p, name = key.partition('_')
+            result += [u_ + p + fmtname.format(name) + ' = ' + fmtval.format(value)]
+        result = sep.join(result)
+        if printout:
+            print(result)
+        else:
+            return result
+
+    def _update_doc_units_with_values(self, sep=' |  ', fmtdoc='{:20s}'):
+        '''for u in self.doc_units, update self.doc_units[u] with values of u.'''
+        for u, doc in self.doc_units.items():
+            valstr = self.prettyprint_unit_values(u, printout=False)
+            if len(valstr)>0:
+                doc = sep.join([fmtdoc.format(doc), valstr])
+                self.doc_units[u] = doc
+
     def docu(self, u, doc):
         '''documents u by adding u=doc to dict self.doc_units'''
         self.doc_units[u]=doc
 
-    def help(self, u=None):
-        '''returns documentation for u, or all units if u is None.'''
+    def help(self, u=None, printout=True, fmt='{:3s}: {}'):
+        '''prints documentation for u, or all units if u is None.
+        printout=False --> return dict, instead of printing.
+        '''
         if u is None:
-            return self.doc_units
+            result = self.doc_units
         else:
-            for prefix in ['u_', 'usi_']:
-                if u.startswith(prefix):
-                    u = u[ len(prefix) : ]
-            return self.doc_units.get(u, "u='{}' is not yet documented!".format(u))
+            result = dict()
+            try:
+                next(iter(u))
+            except TypeError:
+                u = [u]
+            for unit in u:
+                unit = self._unit_name(unit)
+                doc  = self.doc_units.get(unit, "u='{}' is not yet documented!".format(unit))
+                result[unit] = doc
+        if not printout:
+            return result
+        else:
+            for key, doc in result.items():
+                print(fmt.format(key, doc))
+
 
 
 
