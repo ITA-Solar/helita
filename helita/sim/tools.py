@@ -173,6 +173,7 @@ def globalvars(obj):
   obj.stefboltz = aconst.sigma_sb.cgs.value
   obj.mion = obj.m_h            # Ion mass [g]
   obj.r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
+  obj.mu0si = aconst.mu0.to_value('N/A2')  # magnetic constant [SI units]
 
   # --- Aliases, for convenience
   obj.msi_electron = obj.msi_e
