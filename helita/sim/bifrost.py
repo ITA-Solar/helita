@@ -1371,6 +1371,29 @@ class Bifrost_units(object):
                 for unit, value in units_to_set.items():
                     setattr(self, unit, value)
 
+        # I think we shouldn't keep "params" in Bifrost_units anymore. - SE Apr 28 2021
+        ## it obfuscates the contents of Bifrost_units, especially when checking self.__dict__.
+        ## Here I am going to set self.params to an object which, if someone tries to access a key of it,
+        ## will raise an exception with a clear message
+        ## of how to fix it.
+        class params_are_empty():
+            def __init__(self):
+                pass
+                self.errmsg = ('We are testing to remove self.params from Bifrost_units object. '
+                      'If you are seeing this Exception, please consider if your code '
+                      'can be written without doing self.params[key] (e.g. obj.uni.params[key]). '
+                      'A good alternative is probably to use obj.params[key][obj.snapInd]. '
+                      'If you decide you really need to access self.uni.params, then you can '
+                      'remove the line of code which deletes self.params, in helita.sim.bifrost.py.'
+                      '(the line looks like: "self.params = params_are_empty()"')
+            def __getitem__(self, i):  raise Exception(self.errmsg)
+            def __contains__(self, i): raise Exception(self.errmsg)
+            def keys(self):            raise Exception(self.errmsg)
+            def values(self):          raise Exception(self.errmsg)
+            def items(self):           raise Exception(self.errmsg)
+
+        self.params = params_are_empty()  # "delete" self.params
+
         # set cgs units
         self.verbose=verbose
         self.u_u  = self.u_l / self.u_t
@@ -1460,6 +1483,9 @@ class Bifrost_units(object):
         self.docu('phz', 'momentum density frequency (see e.g. momentum density exchange terms)')
         self.u_phz  = self.u_pm   * self.u_hz
         self.usi_phz= self.usi_pm * self.usi_hz
+        self.docu('i', 'current per unit area')
+        self.u_i    = self.u_nq   * self.u_u     # ue = ... + J / (ne qe)
+        self.usi_i  = self.usi_nq * self.usi_u
 
         # additional constants (added for convenience)
         ## masses
@@ -1570,8 +1596,38 @@ class Bifrost_units(object):
             for key, doc in result.items():
                 print(fmt.format(key, doc))
 
-
-
+    def closest(self, value, sign_sensitive=True, reltol=1e-8):
+        '''returns [(attr, value)] for attr(s) in self whose value is closest to value.
+        sign_sensitive: True (default) or False
+            whether to care about signs (plus or minus) when comparing values
+        reltol: number (default 1e-8)
+            if multiple attrs are closest, and all match (to within reltol)
+            return a list of (attr, value) pairs for all such attrs.
+        closeness is determined by doing ratios.
+        '''
+        result = []
+        best = np.inf
+        for key, val in self.__dict__.items():
+            if val == 0:
+                if value != 0:
+                    continue
+                else:
+                    result += [(key, val)]
+            try:
+                rat = value / val
+            except TypeError:
+                continue
+            if sign_sensitive: rat = abs(rat)
+            compare_val = abs(rat - 1)
+            if best == 0:  # we handle this separately to prevent division by 0 error.
+                if compare_val < reltol:
+                    result += [(key, val)]
+            elif abs(1 - compare_val / best) < reltol:
+                result += [(key, val)]
+            elif compare_val < best:
+                result = [(key, val)]
+                best = compare_val
+        return result
 
 
 class Rhoeetab:
