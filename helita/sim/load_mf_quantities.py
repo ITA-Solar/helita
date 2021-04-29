@@ -181,9 +181,11 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     warnings.warn('j does not (yet) add contribution from imposed current if it exists.')
     ## TODO: do calculation in simu. units; add contribution from ic_ix if it exists.
     x = var[-1]
+    ic_ix = obj.get_param('ic_i'+x, 0) * (obj.get_param('do_imposed_current', 0) > 0)
     curlb_x =  obj.get_var('curvec'+'b'+x) * obj.uni.usi_b / obj.uni.usi_l  # (curl b)_x [si units]
     jx = curlb_x / obj.uni.mu0si   # j [si units]
-    return jx / obj.uni.usi_i      # j [simu. units]
+    jx = jx / obj.uni.usi_i        # j [simu. units]
+    return ic_ix + jx              # j [simu. units]
 
   elif var in ['efx', 'efy', 'efz']:
     # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
@@ -255,12 +257,13 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     obj.get_var('ux') otherwise.
   '''
   if ONEFLUID_QUANT is None:
-    ONEFLUID_QUANT = ['nr', 'p', 'pressure', 'tg', 'temperature', 'ke',
+    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke',
                       'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
     docvar('nr', 'number density of ifluid [simu. number density units]')
+    docvar('nq', 'charge density of ifluid [simu. charge density units]')
     for tg in ['tg', 'temperature']:
       docvar(tg, 'temperature of ifluid [K]')
     for p in ['p', 'pressure']:
@@ -284,6 +287,13 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     else:                   # not electrons
       mass = fluid_tools.get_mass(obj, obj.mf_ispecies, units='simu') # [simu. mass units]
       return obj.get_var('r') / mass   # [simu number density units]
+
+  elif var == 'nq':
+    charge = fluid_tools.get_charge(obj, obj.ifluid, units='simu') # [simu. charge units]
+    if charge == 0:
+      return np.zeros(obj.r.shape)
+    else:
+      return charge * obj.get_var('nr')
 
   elif var in ['p', 'pressure']:
     gamma = obj.uni.gamma
@@ -337,10 +347,11 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     return output * obj.uni.u_nr    # [cm^-3]
 
   elif var == 're': # mass density of electrons [simu. mass density units]
-    return obj.get_var('nel') * obj.uni.simu_m_e
+    return obj.get_var('nr') * obj.uni.simu_m_e
 
   elif var in ['uex', 'uey', 'uez']: # electron velocity [simu. velocity units]
-    # ne qe ue = sum_j(nj uj qj) - i,   where i = current area density (charge per unit area per unit time)
+    # i = sum_j (nj uj qj) + ne qe ue
+    ## --> ue = (i - sum_j(nj uj qj)) / (ne qe)
     x = var[-1] # axis; 'x', 'y', or 'z'.
     # get component due to current:
     ## i is on edges of cells, while u is on faces, so we need to interpolate.
@@ -348,8 +359,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## ---> to align with ux, we shift ix by xdn yup zup
     y, z   = tuple(set(('x', 'y', 'z')) - set((x)))
     interp = x+'dn' + y+'up' + z+'up'
-    ix = obj.get_var('j'+x + interp)   # [simu current per area units]
-    output = -1 * ix * obj.uni.u_nr    # [simu velocity units * cm^-3]
+    output = obj.get_var('j'+x + interp)   # [simu current per area units]
     if not np.all(output == 0): 
       # remove this warning once this code has been tested.
       warnings.warn("Nonzero current has not been tested to confirm it matches between helita & ebysus. "+\
@@ -359,14 +369,13 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
     ## ---> to align with ux, we shift r by xdn
     interp = x+'dn'
-    nel    = np.zeros(obj.r.shape)  # calculate nel as we loop through fluids below, to improve efficiency.
+    nqe    = np.zeros(obj.r.shape)  # charge density of electrons.
     for fluid in fl.Fluids(dd=obj).ions():
-      nr   = obj.get_var('nr' + interp, ifluid=fluid.SL)  # [cm^-3]
-      ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu velocity units]
-      qnr  = nr * fluid.ionization                        # [cm^-3]
-      output += qnr * ux                                  # [simu velocity units * cm^-3]
-      nel    += qnr                                       # [cm^-3]
-    return output / nel                                   # [simu velocity units * cm^-3 / cm^-3]
+      nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
+      ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
+      output -= nq * ux                                   # [simu. current per area units]
+      nqe    -= nq                                        # [simu. charge density units]
+    return output / nqe  # [simu velocity units]
 
   elif var in ['pex', 'pey', 'pez']: # electron momentum density [simu. momentum density units]
     # p = r * u.
