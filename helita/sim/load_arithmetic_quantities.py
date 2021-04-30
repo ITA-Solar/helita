@@ -584,33 +584,62 @@ def get_projections(obj,quant):
 
 
 def get_vector_product(obj,quant):
-  VECO_QUANT = ['times']
-  
-  docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
-  docvar('times',  'in between with, vectorial products (a.k.a cross product) of two vectors [simu units]')
+  '''cross product between two vectors.
+  call via <v1><times><v2><x>.
+  Example, for the x component of b cross u, you should call get_var('b_facecross_ux').
+  '''
+  VECO_QUANT = ['times', '_facecross_', '_edgecross_']
 
-  if (quant == '') or not quant[1:6] in VECO_QUANT:
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
+    docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
+    docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u.'
+                           'result is edge-centered. E.g. x component --> ( 0  , -0.5, -0.5).'))
+    docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I.'
+                           'result is face-centered. E.g. x component --> (-0.5,  0  ,  0  ).'))
     return None
 
-  warnings.warn('interpolation not implemented properly for cross product.')
-  # vectors are on faces or edges of grid cell, so we need to align them before multiplying.
+  cross = ''
+  for times in VECO_QUANT:
+    A, cross, q = quant.partition(times)
+    if cross==times: # then the partition was successful, i.e. (times in quant).
+      B, x = q[:-1], q[-1]
+      y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+      break
 
-  # projects v1 onto v2
-  v1 = quant[0]
-  v2 = quant[-2]
-  axis = quant[-1]
-  if axis == 'x':
-    varsn = ['y', 'z']
-  elif axis == 'y':
-    varsn = ['z', 'y']
-  elif axis == 'z':
-    varsn = ['x', 'y']
-  #return (obj.get_var(v1 + varsn[0] + 'c') *
-  #    obj.get_var(v2 + varsn[1] + 'c') - obj.get_var(v1 + varsn[1] + 'c') *
-  #    obj.get_var(v2 + varsn[0] + 'c'))
-  return (obj.get_var(v1 + varsn[0]) *
-      obj.get_var(v2 + varsn[1]) - obj.get_var(v1 + varsn[1]) *
-      obj.get_var(v2 + varsn[0]))
+  if cross == '':
+    return None
+
+  elif cross == 'times':
+    return (obj.get_var(A + y) * obj.get_var(B + z) -
+            obj.get_var(A + z) * obj.get_var(B + y))
+
+  elif cross == '_facecross_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (0, -0.5, -0.5)
+    ## Ay, By are at (0, -0.5,  0  ).  we must shift by zdn to align with result.
+    ## Az, Bz are at (0,  0  , -0.5).  we must shift by ydn to align with result.
+    ydn, zdn = y+'dn', z+'dn'
+    Ay = obj.get_var(A+y + zdn)
+    By = obj.get_var(B+y + zdn)
+    Az = obj.get_var(A+z + ydn)
+    Bz = obj.get_var(B+z + ydn)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
+  elif cross == '_edgecross_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (-0.5, 0, 0)
+    ## Ay, By are at (-0.5,  0  , -0.5).  we must shift by zup to align with result.
+    ## Az, Bz are at (-0.5, -0.5,  0  ).  we must shift by yup to align with result.
+    yup, zup = y+'up', z+'up'
+    Ay = obj.get_var(A+y + zup)
+    By = obj.get_var(B+y + zup)
+    Az = obj.get_var(A+z + yup)
+    Bz = obj.get_var(B+z + yup)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
 
 
 def threadQuantity(task, numThreads, *args):
