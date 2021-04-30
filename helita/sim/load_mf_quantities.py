@@ -189,26 +189,22 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 
   elif var in ['efx', 'efy', 'efz']:
     # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
-    x    = var[-1]  # axis; 'x', 'y', or 'z'
-    xidx = dict(x=0, y=1, z=2)[x] # axis; 0, 1, or 2.
     # ----- calculate the necessary component of -ue x B (== B x ue) ----- #
-    if   x=='x':         # (B x A)_x = By Az - Bz Ay
-      xl, xm = 'y', 'z'  # (B x A)_x = Bl Am - Bm Al  << (same)
-    elif x=='y':         # (B x A)_y = Bz Ax - Bx Az
-      xl, xm = 'z', 'x'  # (B x A)_y = Bl Am - Bm Al  << (same)
-    elif x=='z':         # (B x A)_z = Bx Ay - By Ax
-      xl, xm = 'x', 'y'  # (B x A)_z = Bl Am - Bm Al  << (same)
-    ## make sure we get the interpolation correct:
-    ## efx is at (0, -1/2, -1/2).
-    ## By  is at (0, -1/2,  0  ).  we shift by zdn to align with efx.
-    ## uez is at (0,  0  , -1/2).  we shift by ydn to align with efx.
-    y, z = xl, xm
-    ydn, zdn = y+'dn', z+'dn'
-    By  = obj.get_var('b'+y  + zdn)  # [simu. B-field units]
-    Bz  = obj.get_var('b'+z  + ydn)  # [simu. B-field units]
-    uey = obj.get_var('ue'+y + zdn)  # [simu. velocity units]
-    uez = obj.get_var('ue'+z + ydn)  # [simu. velocity units]
-    B_cross_ue_x = By * uez - Bz * uey # [simu. E-field units]
+    # There is a flag, "do_hall", when "false", we don't let the contribution
+    ## from current to ue to enter in to the B x ue for electric field.
+    if obj.get_param('do_hall', default="false")=="false":
+      ue = 'uep'  # include only the momentum contribution in ue, in our ef calculation.
+      warnings.warn('do_hall=="false", so we are dropping the j (current) contribution to ef (E-field)')
+    else:
+      ue = 'ue'   # include the full ue term, in our ef calculation.
+    # we will need to do a cross product, with extra care to interpolate correctly.
+    ## we name the axes variables x,y,z to make it easier to understand the code.
+    x    = var[-1]  # axis; 'x', 'y', or 'z'
+    y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    # make sure we get the interpolation correct:
+    ## B and ue are face-centered vectors.
+    ## Thus we use _facecross_ from load_arithmetic_quantities.
+    B_cross_ue__x = obj.get_var('b_facecross_ue'+x)
     # ----- calculate grad pressure ----- #
     ## efx is at (0, -1/2, -1/2).
     ## P is at (0,0,0).
@@ -217,7 +213,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     interp = 'xdnydnzdn'
     gradPe_x = obj.get_var('dpd'+x+'up'+interp, mf_ispecies=-1) # [simu. energy density units]
     # ----- calculate ionization & recombination effects ----- #
-    warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
+    if obj.get_param('do_recion', default=False):
+      warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
     # ----- calculate collisional effects (only if do_ohm_ecol) ----- #
     sum_rejx = 0.
     if obj.params['do_ohm_ecol'][obj.snapInd]:
@@ -238,7 +235,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     ## we used simu_qsi_e because we are using here the SI equation for E-field.
     ## if we wanted to use simu_q_e we would have to use the cgs equation instead.
     # ----- calculate efx ----- #
-    efx = B_cross_ue_x + (gradPe_x + sum_rejx) / neqe # [simu. E-field units] 
+    efx = B_cross_ue__x + (gradPe_x + sum_rejx) / neqe # [simu. E-field units] 
     output = efx
 
   return output
@@ -321,7 +318,8 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
   if ELECTRON_QUANT is None:
-    ELECTRON_QUANT = ['nel', 're', 'uex', 'uey', 'uez', 'pex', 'pey', 'pez', 'eke']
+    ELECTRON_QUANT = ['nel', 're', 'eke']
+    ELECTRON_QUANT += [ue + x for ue in ['ue', 'pe', 'uej', 'uep'] for x in ['x', 'y', 'z']]
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
@@ -349,6 +347,41 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   elif var == 're': # mass density of electrons [simu. mass density units]
     return obj.get_var('nr') * obj.uni.simu_m_e
 
+  elif var in ['uepx', 'uepy', 'uepz']: # electron velocity (contribution from momenta)
+    # i = sum_j (nj uj qj) + ne qe ue
+    ## --> ue = (i - sum_j(nj uj qj)) / (ne qe)
+    x = var[-1] # axis; 'x', 'y', or 'z'.
+    # get component due to velocities:
+    ## r is in center of cells, while u is on faces, so we need to interpolate.
+    ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift r by xdn
+    interp = x+'dn'
+    nqe    = np.zeros(obj.r.shape)  # charge density of electrons.
+    for fluid in fl.Fluids(dd=obj).ions():
+      nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
+      ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
+      output -= nq * ux                                   # [simu. current per area units]
+      nqe    -= nq                                        # [simu. charge density units]
+    return output / nqe  # [simu velocity units]
+
+  elif var in ['uejx', 'uejy', 'uejz']: # electron velocity (contribution from current)
+    # i = sum_j (nj uj qj) + ne qe ue
+    ## --> ue = (i - sum_j(nj uj qj)) / (ne qe)
+    x = var[-1] # axis; 'x', 'y', or 'z'.
+    # get component due to current:
+    ## i is on edges of cells, while u is on faces, so we need to interpolate.
+    ## ix is at (0, -0.5, -0.5); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift ix by xdn yup zup
+    y, z    = tuple(set(('x', 'y', 'z')) - set((x)))
+    interpj = x+'dn' + y+'up' + z+'up'
+    jx      = obj.get_var('j'+x + interpj)   # [simu current per area units]
+    ## r (nq) is in center of cells, while u is on faces, so we need to interpolate.
+    ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift r by xdn
+    interpn = x+'dn'
+    nqe = obj.get_var('nq' + interpn, iS= -1)     # [simu charge density units]
+    return jx / nqe  # [simu velocity units]
+
   elif var in ['uex', 'uey', 'uez']: # electron velocity [simu. velocity units]
     # i = sum_j (nj uj qj) + ne qe ue
     ## --> ue = (i - sum_j(nj uj qj)) / (ne qe)
@@ -360,10 +393,6 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     y, z   = tuple(set(('x', 'y', 'z')) - set((x)))
     interp = x+'dn' + y+'up' + z+'up'
     output = obj.get_var('j'+x + interp)   # [simu current per area units]
-    if not np.all(output == 0): 
-      # remove this warning once this code has been tested.
-      warnings.warn("Nonzero current has not been tested to confirm it matches between helita & ebysus. "+\
-                    "You can test it by saving 'eux' via aux, and comparing get_var('eux') to get_var('uex').")
     # get component due to velocities:
     ## r is in center of cells, while u is on faces, so we need to interpolate.
     ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
