@@ -8,6 +8,7 @@ from .tools import *
 from .load_noeos_quantities import *
 from scipy.ndimage import rotate
 from . import document_vars
+from scipy import interpolate
 
 class Cipmocct:
     """
@@ -210,7 +211,7 @@ class Cipmocct:
         self.varn['by'] = 'bz_cube'
         self.varn['bz'] = 'by_cube'
 
-    def trans2comm(self,varname, snap=None, angle=45): 
+    def trans2comm(self,varname, snap=None, angle=45, loop = 'quarter'): 
         '''
         Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
         is: 
@@ -238,45 +239,101 @@ class Cipmocct:
 
         self.sel_units = 'cgs'
 
-        self.trans2commaxes 
+        self.trans2commaxes(loop) 
         
-        if angle != 0: 
-            if varname[0] in ['u']: 
-                if varname[-1] in ['x']: 
-                    varx = self.get_var(varname,snap=snap)
-                    vary = self.get_var(varname[0]+'y',snap=snap)
-                    var = varx * np.cos(angle/90.0*np.pi/2.0) - vary * np.sin(angle/90.0*np.pi/2.0)
-                elif varname[-1] in ['y']: 
-                    vary = self.get_var(varname,snap=snap)
-                    varx = self.get_var(varname[0]+'x',snap=snap)
-                    var = vary * np.cos(angle/90.0*np.pi/2.0) + varx * np.sin(angle/90.0*np.pi/2.0)
-                else:  # component z
-                    var = self.get_var(varname,snap=snap)
-                var = rotate(var, angle=angle, reshape=False, mode='nearest', axes=(0,1))
-            else: 
+        if angle != 0:       
+            if varname[-1] in ['x']: 
+                varx = self.get_var(varname,snap=snap)
+                vary = self.get_var(varname[0]+'y',snap=snap)
+                var = varx * np.cos(angle/90.0*np.pi/2.0) - vary * np.sin(angle/90.0*np.pi/2.0)
+            elif varname[-1] in ['y']: 
+                vary = self.get_var(varname,snap=snap)
+                varx = self.get_var(varname[0]+'x',snap=snap)
+                var = vary * np.cos(angle/90.0*np.pi/2.0) + varx * np.sin(angle/90.0*np.pi/2.0)
+            else:  
                 var = self.get_var(varname,snap=snap)
-                var = rotate(var, angle=angle, reshape=False, mode='nearest',axes=(0,1))
+            var = rotate(var, angle=angle, reshape=False, mode='nearest', axes=(0,1))
+           
         else: 
             var = self.get_var(varname,snap=snap)
+        
+        if loop == 'quarter': 
             
+            if varname[-1] in ['x']: 
+                var = self.make_loop(var)
+                varz = self.get_var(varname[0]+'z',snap=snap)
+                varz = self.make_loop(varz)
+                xx, zz = np.meshgrid(self.x,self.z)
+                aa=np.angle(xx+1j*zz)
+                for iiy, iy in enumerate(self.y):
+                    var[:,iiy,:] = varz[:,iiy,:] * np.cos(aa.T) - var[:,iiy,:] * np.sin(aa.T)
+            elif varname[-1] in ['z']: 
+                var = self.make_loop(var)
+                varz = self.get_var(varname[0]+'z',snap=snap)
+                varz = self.make_loop(varz)
+                xx, zz = np.meshgrid(self.x,self.z)
+                aa=np.angle(xx+1j*zz)
+                for iiy, iy in enumerate(self.y):
+                    var[:,iiy,:] = var[:,iiy,:] * np.cos(aa.T) + varz[:,iiy,:] * np.sin(aa.T)
+            else: 
+                var = self.make_loop(var)
+
         return var
 
-    def trans2commaxes(self): 
+    def make_loop(self,var): 
+        R = np.max(self.z*2)/np.pi/2.
+        rad=self.x_orig+np.max(self.x_loop)-np.max(self.x_orig)/2
+        angl=self.z_orig / R 
+        var_new=np.zeros((self.nx,self.ny,self.nz))
+        iiy0=np.argmin(np.abs(self.y_orig))
+
+        for iiy, iy in enumerate(self.y): 
+            temp=var[:,iiy*2+iiy0,:]
+            data = polar2cartesian(rad,angl,temp,self.z,self.x)
+
+            var_new[:,iiy,:] = data
+        return var_new
+    
+    def trans2commaxes(self,loop): 
 
         if self.transunits == False:
-          #self.x =  # including units conversion 
-          #self.y = 
-          #self.z =
-          #self.dx = 
-          #self.dy = 
-          #self.dz =
-          self.transunits = True
+            self.x_orig = self.x
+            self.y_orig = self.y
+            self.z_orig = self.z
+            if loop == 'quarter':
+                R = np.max(self.z*2)/np.pi/2.
+                self.x_loop=np.linspace(R*np.cos([np.pi/4]),R,
+                              int((R-R*np.cos([np.pi/4]))/2/np.min(self.dx1d*2)))
+                self.z_loop=np.linspace(0,R*np.sin([np.pi/4]),
+                              int(R*np.sin([np.pi/4])/2/np.min(self.dx1d*2))) 
+                
+                self.x=self.x_loop.squeeze()
+                self.z=self.z_loop.squeeze()
+                self.y=self.y[np.argmin(np.abs(self.y))+1::2]
+                
+                self.dx1d = np.gradient(self.x)
+                self.dy1d = np.gradient(self.y)
+                self.dz1d = np.gradient(self.z)
+                self.nx=np.size(self.x)
+                self.ny=np.size(self.y)
+                self.nz=np.size(self.z)
+
+            self.transunits = True
 
     def trans2noncommaxes(self): 
 
         if self.transunits == True:
-          # opposite to the previous function 
-          self.transunits = False
+            self.x=self.x_orig
+            self.y=self.y_orig
+            self.z=self.z_orig
+            self.dx1d = np.gradient(self.x)
+            self.dy1d = np.gradient(self.y)
+            self.dz1d = np.gradient(self.z)
+            self.nx=np.size(self.x)
+            self.ny=np.size(self.y)
+            self.nz=np.size(self.z)
+            # opposite to the previous function 
+            self.transunits = False
 
 class Cipmocct_units(object): 
 
@@ -315,3 +372,24 @@ class Cipmocct_units(object):
 
 
 
+def polar2cartesian(r, t, grid, x, y, order=3):
+    '''
+    Converts polar grid to cartesian grid
+    '''
+    from scipy import ndimage
+
+    X, Y = np.meshgrid(x, y)
+
+    new_r = np.sqrt(X * X + Y * Y)
+    new_t = np.arctan2(X, Y)
+
+    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False, fill_value=0.0)
+    it = interpolate.interp1d(t, np.arange(len(t)), bounds_error=False, fill_value=0.0)
+    new_ir = ir(new_r.ravel())
+    new_it = it(new_t.ravel())
+
+    new_ir[new_r.ravel() > r.max()] = len(r) - 1
+    new_ir[new_r.ravel() < r.min()] = 0
+
+    return ndimage.map_coordinates(grid, np.array([new_ir, new_it]),
+                           order=order).reshape(new_r.shape)
