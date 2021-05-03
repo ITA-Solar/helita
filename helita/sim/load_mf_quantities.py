@@ -650,13 +650,17 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
     # compute some values:
     m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
-    m_ij    = m_i * m_jfrac                          # [amu]
+    m_ij    = m_i * m_jfrac                          # [amu]   # e.g. for H, H+, m_ij = 0.5.
     tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
+
+    tg_speed = np.sqrt(8 * (obj.uni.ksi_b/obj.uni.amusi) * tgij / (np.pi * m_ij)) # [m s^-1]
+    E_alpha  = 0.5 * (m_ij * obj.uni.amusi) * tg_speed**2
       
-    euler_constant = 0.577215  
-    b_0      = abs(icharge*jcharge)/(2 * obj.uni.ksi_b*obj.uni.permsi * tgij)  # [m]   # permsi == epsilon_0
+    euler_constant = 0.577215
+    b_0      = abs(icharge*jcharge)/(4 * np.pi * obj.uni.permsi * E_alpha)  # [m]  # permsi == epsilon_0
+    #b_0      = abs(icharge*jcharge)/(2 * obj.uni.ksi_b*obj.uni.permsi * tgij)  # [m]   # permsi == epsilon_0
     cross    = np.pi*2.0*(b_0**2)*(np.log(obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant) # [m2]
-    tg_speed = np.sqrt(8 * (obj.uni.ksi_b/obj.uni.amu) * tgij / (np.pi * m_ij)) # [m s^-1]
+
     #calculate & return nu_ij:
     nu_ij = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
     return nu_ij
