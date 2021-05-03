@@ -441,7 +441,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
                     'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
                     'nu_ij_mx','nu_ij_res','nu_se_spitzcoul',  # alternative formulae
                     'nu_ij_to_ji', 'nu_sj_to_js',              # conversion factor nu_ij --> nu_ji
-                    'c_tot_per_vol', '1dcolslope']             # misc.
+                    'c_tot_per_vol', '1dcolslope','nu_ij_coul']             # misc.
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
@@ -469,6 +469,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
     docvar('c_tot_per_vol', 'number density of collisions per volume per time '
                             '[simu. number density * simu. frequency] between ifluid and jfluid.', nfluid=2)
+    docvar('nu_ij_coul', 'coulomb collisions using Capitelli 2013 formulae', nfluid=1)
     return None
 
   if var not in COLFRE_QUANT:
@@ -505,6 +506,35 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
     #calculate & return nu_ij:
     return 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
+  if var in ['nu_ij_coul']:
+    # if both fluids have nonzero charge, use coulomb collisions formula.
+    icharge = fluid_tools.get_charge(obj, iSL, units='si') #[C]
+    jcharge = fluid_tools.get_charge(obj, jSL, units='si') #[C]
+    assert icharge != 0 and jcharge != 0
+
+    iSL = obj.ifluid
+    jSL = obj.jfluid
+    # get ifluid info
+    tgi  = obj.get_var('tg', ifluid=iSL)      # [K]
+    m_i  = fluid_tools.get_mass(obj, iSL[0])  # [amu]
+    # get jfluid info, then restore original iSL & jSL
+    with obj.MaintainFluids():
+      n_j   = obj.get_var('nr', ifluid=jSL) * obj.uni.usi_nr # [m^-3]
+      tgj   = obj.get_var('tg', ifluid=jSL)                # [K]
+      m_j   = fluid_tools.get_mass(obj, jSL[0])            # [amu]
+
+    # compute some values:
+    m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
+    m_ij    = m_i * m_jfrac                          # [amu]
+    tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
+      
+    euler_constant = 0.577215  
+    b_0 = (icharge*jcharge)/(2*uni.ksi_b*tgij)
+    # else, use charge-neutral collisions formula.
+    cross    = np.pi*2.0*(b_0**2)(np.log(obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant) # [m2]
+    tg_speed = np.sqrt(8 * (obj.uni.ksi_b/obj.uni.amu) * tgij / (np.pi * m_ij)) # [m s^-1]
+    #calculate & return nu_ij:
+    return 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]  
 
   elif var in ['rijx', 'rijy', 'rijz']:
     if obj.ifluid==obj.jfluid:      # when ifluid==jfluid, u_j = u_i, so rij = 0.
