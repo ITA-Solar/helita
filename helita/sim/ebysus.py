@@ -909,6 +909,7 @@ class EbysusData(BifrostData):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
+    # include methods from fluid_tools.
     def MaintainingFluids(self):
         return fluid_tools._MaintainingFluids(self)
     MaintainingFluids.__doc__ = fluid_tools._MaintainingFluids.__doc__.replace(
@@ -920,6 +921,12 @@ class EbysusData(BifrostData):
     UsingFluids.__doc__ = fluid_tools._UsingFluids.__doc__.replace(
                                 '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
     UseFluids = UsingFluids  # alias
+
+# include methods from fluid_tools in EbysusData object.
+for func in ['get_name', 'get_mass', 'get_charge', 'get_cross_tab', 'get_cross_sect']:
+    setattr(EbysusData, func, getattr(fluid_tools, func, None))
+
+del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
 
 
 ###########
