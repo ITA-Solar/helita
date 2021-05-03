@@ -252,7 +252,7 @@ def fluid_pairs(fluids, ordered=False, allow_same=False):
 ''' --------------------- small helper functions --------------------- '''
 # for each of these functions, obj should be an EbysusData object.
 
-def get_name(obj, specie):
+def get_species_name(obj, specie):
     '''return specie's name: 'e' for electrons; element (atomic symbol) for other fluids.'''
     if specie < 0:
         return 'e'
@@ -329,7 +329,7 @@ def get_charge(obj, SL, units='e'):
         return charge * obj.uni.simu_qsi_e
 
 def get_cross_tab(obj, iSL=None, jSL=None, **kw__fluids):
-    '''return cross section table for obj.ifluid, obj.jfluid.
+    '''return (filename of) cross section table for obj.ifluid, obj.jfluid.
     use S=-1 for electrons. (e.g. iSL=(-1,1) represents electrons.)
     either ifluid or jfluid must be neutral. (charged -> Coulomb collisions.)
     iSL, jSL, kw__fluids behavior is the same as in get_var.

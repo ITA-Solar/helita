@@ -358,6 +358,8 @@ class EbysusData(BifrostData):
         >>> Use self.get_var('') for help.
         >>> Use self.vardocs() to prettyprint the available variables and what they mean.
 
+        sets fluid-related attributes (e.g. self.ifluid) based on fluid-related kwargs.
+
         returns the data for the variable (as a 3D array with axes 0,1,2 <-> x,y,z).
 
         Parameters
@@ -923,7 +925,7 @@ class EbysusData(BifrostData):
     UseFluids = UsingFluids  # alias
 
 # include methods from fluid_tools in EbysusData object.
-for func in ['get_name', 'get_mass', 'get_charge', 'get_cross_tab', 'get_cross_sect']:
+for func in ['get_species_name', 'get_mass', 'get_charge', 'get_cross_tab', 'get_cross_sect']:
     setattr(EbysusData, func, getattr(fluid_tools, func, None))
 
 del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
