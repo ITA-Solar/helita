@@ -65,6 +65,14 @@ High-level use-case: compare a single aux var with its helita counterpart!
 # output format notes:
 #   vartype varname (ispecie, ilevel) (jspecie, jlevel) min mean max
 # when ispecies < 0 or jspecie < 0 (i.e. for electrons), they may be shown as "specie" instead of "(ispecie, ilevel)".
+
+
+TODO (maybe):
+    - allow to put kwargs in auxvar lookup.
+        - for example, ebysus defines mm_cross = 0 when ispecies is ion, to save space.
+          meanwhile get_var('cross') in helita will tell same values even if fluids are swapped.
+          e.g. get_var('mm_cross', ifluid=(1,2), jfluid=(1,1)) == 0
+          get_var('cross', ifluid=(1,2), jfluid=(1,1)) == get_var('cross', ifluid=(1,1), jfluid=(1,2))
 """
 
 # import built-in
@@ -95,6 +103,8 @@ AUXVARS = {
     'mfe_tg'    : 'tg',          #  fluid   temperature
     'mfr_nu_es' : ('nu_ij', -1), # electron-fluid collision frequency
     'mm_cnu'    : 'nu_ij',       #  fluid - fluid collision frequency
+    'mm_cross'  : 'cross',       # cross section
+    'mfr_p'     : 'p',           # pressure
     
 }
 # add each of these plus an axis to AUXVARS.
@@ -102,6 +112,7 @@ AUXVARS = {
 AUX_AXIAL_VARS = {
     'e'         : 'ef',
     'eu'        : 'ue',
+    'i'         : 'j',
 }
 AXES = ['x', 'y', 'z']
 # add the axial vars to auxvars.
@@ -388,7 +399,12 @@ def prettyprint_comparison(x, printout=True, prefix=True, underline=True,
     svars   = _strvars(  x['vars'])
     sfluids = _strfluids(x['SLs'] )
     svals   = _strvals(  x['vals'])
-    ratio   = svals['stats']['aux']['mean']/svals['stats']['hel']['mean']
+    meanaux = svals['stats']['aux']['mean']
+    meanhel = svals['stats']['hel']['mean']
+    if meanaux==0.0 and meanhel==0.0:
+        ratio = 1.0
+    else:
+        ratio = meanaux / meanhel
     ratstr  = 'mean ratio (aux / helita): {: 0.3e}'.format(ratio)
     # combine strings
     key = 'aux'

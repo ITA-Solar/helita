@@ -287,7 +287,7 @@ def get_mass(obj, specie, units='amu'):
         elif units in ['kg', 'si']:
             return obj.uni.msi_e
         else: # units == 'simu'
-            return obj.uni.simu_me
+            return obj.uni.simu_m_e
     else:
         # not electron
         m_amu = obj.att[specie].params.atomic_weight
@@ -326,7 +326,7 @@ def get_charge(obj, SL, units='e'):
     elif units in ['c', 'si']:
         return charge * obj.uni.qsi_electron
     else: #units=='simu'
-        return charge * obj.uni.simu_qe
+        return charge * obj.uni.simu_qsi_e
 
 def get_cross_tab(obj, iSL, jSL):
     '''return cross section table for ifluid=iSL, jfluid=jSL.
