@@ -72,7 +72,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
       GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke',
                       'tot_px', 'tot_py', 'tot_pz',
-                      'grph', 'tot_part', 'mu', 'pe',
+                      'grph', 'tot_part', 'mu',
                       'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
                       ]
 
@@ -133,9 +133,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     axis = var[-1]
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('p'+axis, ifluid=fluid.SL)   # momentum density of fluid
-
-  elif var == 'pe':
-    output = (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
   elif var == 'grph':
     for ispecies in obj.att:
@@ -317,20 +314,24 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
   if ELECTRON_QUANT is None:
-    ELECTRON_QUANT = ['nel', 're', 'eke']
+    ELECTRON_QUANT = ['nel', 're', 'eke', 'pe']
     ELECTRON_QUANT += [ue + x for ue in ['ue', 'pe', 'uej', 'uep'] for x in ['x', 'y', 'z']]
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
     docvar('nel',  'electron number density [cm^-3]')
     docvar('re',   'mass density of electrons [simu. mass density units]')
-    untested_warning = \
-      ' Tested uex agrees between helita (uex) & ebysus (eux), for one set of units, for current=0. - SE Apr 4 2021.'
-    for v in 'uex', 'uey', 'uez':
-      docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
-    for v in 'pex', 'pey', 'pez':
-      docvar(v, '{}-component of electron momentum density [simu. momentum density units]'.format(v[-1]))
     docvar('eke',  'electron kinetic energy density [simu. energy density units]')
+    docvar('pe',   'electron pressure [simu. pressure units]')
+    AXES = ['x', 'y', 'z']
+    for x in AXES:
+      docvar('ue'+x, '{}-component of electron velocity [simu. velocity units]'.format(x))
+    for x in AXES:
+      docvar('pe'+x, '{}-component of electron momentum density [simu. momentum density units]'.format(x))
+    for x in AXES:
+      docvar('uej'+x, '{}-component of current contribution to electron velocity [simu. velocity units]'.format(x))
+    for x in AXES:
+      docvar('uep'+x, '{}-component of species velocities contribution to electron velocity [simu. velocity units]'.format(x))
     return None
 
   if (var not in ELECTRON_QUANT):
@@ -345,6 +346,12 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
   elif var == 're': # mass density of electrons [simu. mass density units]
     return obj.get_var('nr') * obj.uni.simu_m_e
+
+  elif var == 'eke': #electron kinetic energy density [simu. energy density units]
+    return obj.get_var('ke', mf_ispecies=-1)
+
+  elif var == 'pe':
+    return (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
   elif var in ['uepx', 'uepy', 'uepz']: # electron velocity (contribution from momenta)
     # i = sum_j (nj uj qj) + ne qe ue
@@ -415,9 +422,6 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     re  = obj.get_var('re'+interp)  # [simu. mass density units]
     uex = obj.get_var('ue'+x)       # [simu. velocity units]
     return re * uex                 # [simu. momentum density units]
-
-  elif var == 'eke': #electron kinetic energy density [simu. energy density units]
-    return obj.get_var('ke', mf_ispecies=-1)
 
 
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):

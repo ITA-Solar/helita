@@ -246,7 +246,7 @@ def fluid_pairs(fluids, ordered=False, allow_same=False):
     if       ordered and     allow_same: return itertools.combinations_with_replacement(fluids, 2)
     elif     ordered and not allow_same: return itertools.combinations(fluids, 2)
     elif not ordered and not allow_same: return itertools.permutations(fluids, 2)
-    elif not ordered and     allow_same: return itertools.product(fluids, 2)
+    elif not ordered and     allow_same: return itertools.product(fluids, repeat=2)
     assert False #we should never reach this line...
 
 ''' --------------------- small helper functions --------------------- '''

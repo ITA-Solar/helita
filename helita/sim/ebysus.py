@@ -317,6 +317,8 @@ class EbysusData(BifrostData):
                               self.dzidzdn.astype(rdt))
             self.cstagger_exists = True   # we can use cstagger methods!
         else:
+            #cstagger.init_stagger_mz1(self.nz, self.dx, self.dy, self.z.astype(rdt))
+            #self.cstagger_exists = True
             self.cstagger_exists = False  # we must avoid using cstagger methods.
 
     # fluid-setting functions
@@ -326,6 +328,8 @@ class EbysusData(BifrostData):
     # docstrings for fluid-setting functions
     for func in [set_mf_fluid, set_mfi, set_mfj]:
         func.__doc__ = func.__doc__.replace('obj', 'self')
+
+    del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
 
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
