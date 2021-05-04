@@ -91,8 +91,8 @@ def _can_interp(obj, axis, warn=True):
   if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
     return False       # intentionally turned off interpolation. So we don't make warning.
   if not getattr(obj, 'cstagger_exists', False):
-    warnmsg = 'requested interpolation but cstagger not initialized for obj={}! '.format(obj) +\
-              'We will skip this interpolation, and instead return the original value.'
+    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(obj) +\
+              'We will skip the interpolation, and instead return the original value.'
     warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
     return False
   if not getattr(obj, 'n'+axis, 0) >=5:
@@ -225,7 +225,7 @@ def get_center(obj,quant, *args, **kwargs):
 
 def get_interp(obj, quant):
   '''simple interpolation. var must end in interpolation instructions.
-  e.g. rxup --> do_cstagger(get_var('r'), 'xup')
+  e.g. get_var('rxup') --> do_cstagger(get_var('r'), 'xup')
   '''
   INTERP_QUANT = ['xup', 'yup', 'zup',
                   'xdn', 'ydn', 'zdn']
@@ -242,10 +242,6 @@ def get_interp(obj, quant):
     val = obj.get_var(varname)      # un-interpolated value
     if _can_interp(obj, interp[0]):
       val = do_cstagger(val, interp) # interpolated value
-    else:
-      # return un-interpolated value; warn that we are not actually interpolating.
-      warnings.warn('requested interpolation in {x:} but obj.n{x:} < 5 '.format(x=interp[0]) +\
-                    'or obj.cstagop==False! Skipping this interpolation.')
     return val
 
 
@@ -318,7 +314,7 @@ def get_gradients_vect(obj,quant):
     docvar('rot',  'starting with, rotational (a.k.a. curl) [simu units]')
     docvar('she',  'starting with, shear [simu units]')
     docvar('curlcc',  'starting with, curl but shifted (via interpolation) back to original location on cell [simu units]')
-    docvar('curvec',  'starting with, curl of face-centered vector [simu units]')
+    docvar('curvec',  'starting with, curl of face-centered vector (e.g. B, p) [simu units]')
     docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
     docvar('chbdiv',  'starting with, ratio of the divergence with the sum of the absolute of each spatial derivative [simu units]')
     docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
@@ -593,10 +589,10 @@ def get_vector_product(obj,quant):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
     docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
-    docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u.'
-                           'result is edge-centered. E.g. x component --> ( 0  , -0.5, -0.5).'))
-    docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I.'
-                           'result is face-centered. E.g. x component --> (-0.5,  0  ,  0  ).'))
+    docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u. '
+                           'result is edge-centered. E.g. result_x --> ( 0  , -0.5, -0.5).'))
+    docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I. '
+                           'result is face-centered. E.g. result_x --> (-0.5,  0  ,  0  ).'))
     return None
 
   cross = ''

@@ -317,6 +317,8 @@ class EbysusData(BifrostData):
                               self.dzidzdn.astype(rdt))
             self.cstagger_exists = True   # we can use cstagger methods!
         else:
+            #cstagger.init_stagger_mz1(self.nz, self.dx, self.dy, self.z.astype(rdt))
+            #self.cstagger_exists = True
             self.cstagger_exists = False  # we must avoid using cstagger methods.
 
     # fluid-setting functions
@@ -326,6 +328,8 @@ class EbysusData(BifrostData):
     # docstrings for fluid-setting functions
     for func in [set_mf_fluid, set_mfi, set_mfj]:
         func.__doc__ = func.__doc__.replace('obj', 'self')
+
+    del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
 
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
@@ -357,6 +361,8 @@ class EbysusData(BifrostData):
 
         >>> Use self.get_var('') for help.
         >>> Use self.vardocs() to prettyprint the available variables and what they mean.
+
+        sets fluid-related attributes (e.g. self.ifluid) based on fluid-related kwargs.
 
         returns the data for the variable (as a 3D array with axes 0,1,2 <-> x,y,z).
 
@@ -909,6 +915,7 @@ class EbysusData(BifrostData):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
+    # include methods from fluid_tools.
     def MaintainingFluids(self):
         return fluid_tools._MaintainingFluids(self)
     MaintainingFluids.__doc__ = fluid_tools._MaintainingFluids.__doc__.replace(
@@ -920,6 +927,12 @@ class EbysusData(BifrostData):
     UsingFluids.__doc__ = fluid_tools._UsingFluids.__doc__.replace(
                                 '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
     UseFluids = UsingFluids  # alias
+
+# include methods from fluid_tools in EbysusData object.
+for func in ['get_species_name', 'get_mass', 'get_charge', 'get_cross_tab', 'get_cross_sect']:
+    setattr(EbysusData, func, getattr(fluid_tools, func, None))
+
+del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
 
 
 ###########

@@ -3,7 +3,6 @@ import warnings
 
 # import internal modules
 from . import document_vars
-from . import fluid_tools
 
 # import external public modules
 import numpy as np
@@ -73,7 +72,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   if GLOBAL_QUANT is None:
       GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke',
                       'tot_px', 'tot_py', 'tot_pz',
-                      'grph', 'tot_part', 'mu', 'pe',
+                      'grph', 'tot_part', 'mu',
                       'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
                       ]
 
@@ -134,9 +133,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     axis = var[-1]
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('p'+axis, ifluid=fluid.SL)   # momentum density of fluid
-
-  elif var == 'pe':
-    output = (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
   elif var == 'grph':
     for ispecies in obj.att:
@@ -282,11 +278,11 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     if obj.mf_ispecies < 0: # electrons
       return obj.get_var('nel') / obj.uni.u_nr
     else:                   # not electrons
-      mass = fluid_tools.get_mass(obj, obj.mf_ispecies, units='simu') # [simu. mass units]
+      mass = obj.get_mass(obj.mf_ispecies, units='simu') # [simu. mass units]
       return obj.get_var('r') / mass   # [simu number density units]
 
   elif var == 'nq':
-    charge = fluid_tools.get_charge(obj, obj.ifluid, units='simu') # [simu. charge units]
+    charge = obj.get_charge(obj.ifluid, units='simu') # [simu. charge units]
     if charge == 0:
       return np.zeros(obj.r.shape)
     else:
@@ -318,20 +314,24 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
   if ELECTRON_QUANT is None:
-    ELECTRON_QUANT = ['nel', 're', 'eke']
+    ELECTRON_QUANT = ['nel', 're', 'eke', 'pe']
     ELECTRON_QUANT += [ue + x for ue in ['ue', 'pe', 'uej', 'uep'] for x in ['x', 'y', 'z']]
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
     docvar('nel',  'electron number density [cm^-3]')
     docvar('re',   'mass density of electrons [simu. mass density units]')
-    untested_warning = \
-      ' Tested uex agrees between helita (uex) & ebysus (eux), for one set of units, for current=0. - SE Apr 4 2021.'
-    for v in 'uex', 'uey', 'uez':
-      docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
-    for v in 'pex', 'pey', 'pez':
-      docvar(v, '{}-component of electron momentum density [simu. momentum density units]'.format(v[-1]))
     docvar('eke',  'electron kinetic energy density [simu. energy density units]')
+    docvar('pe',   'electron pressure [simu. pressure units]')
+    AXES = ['x', 'y', 'z']
+    for x in AXES:
+      docvar('ue'+x, '{}-component of electron velocity [simu. velocity units]'.format(x))
+    for x in AXES:
+      docvar('pe'+x, '{}-component of electron momentum density [simu. momentum density units]'.format(x))
+    for x in AXES:
+      docvar('uej'+x, '{}-component of current contribution to electron velocity [simu. velocity units]'.format(x))
+    for x in AXES:
+      docvar('uep'+x, '{}-component of species velocities contribution to electron velocity [simu. velocity units]'.format(x))
     return None
 
   if (var not in ELECTRON_QUANT):
@@ -346,6 +346,12 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
   elif var == 're': # mass density of electrons [simu. mass density units]
     return obj.get_var('nr') * obj.uni.simu_m_e
+
+  elif var == 'eke': #electron kinetic energy density [simu. energy density units]
+    return obj.get_var('ke', mf_ispecies=-1)
+
+  elif var == 'pe':
+    return (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
   elif var in ['uepx', 'uepy', 'uepz']: # electron velocity (contribution from momenta)
     # i = sum_j (nj uj qj) + ne qe ue
@@ -417,9 +423,6 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     uex = obj.get_var('ue'+x)       # [simu. velocity units]
     return re * uex                 # [simu. momentum density units]
 
-  elif var == 'eke': #electron kinetic energy density [simu. energy density units]
-    return obj.get_var('ke', mf_ispecies=-1)
-
 
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   '''spitzer conductivies'''
@@ -487,9 +490,9 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['nu_ij','nu_sj','rijx','rijy','rijz',      # basics: frequencies & mom exchange
                     'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
-                    'nu_ij_mx','nu_ij_res','nu_se_spitzcoul',  # alternative formulae
+                    'nu_ij_mx','nu_ij_res','nu_se_spitzcoul', 'nu_ij_capcoul', # alternative formulae
                     'nu_ij_to_ji', 'nu_sj_to_js',              # conversion factor nu_ij --> nu_ji
-                    'c_tot_per_vol', '1dcolslope']             # misc.
+                    'c_tot_per_vol', '1dcolslope',]            # misc.
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
@@ -512,6 +515,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
                         'presently, only properly implemented for ifluid=H+, jfluid=H.', nfluid=2)
     docvar('nu_se_spitzcoul', 'coulomb collisions between s & e-, including spitzer correction. ' +\
                               'Formula in Oppenheim et al 2020 appendix A eq 4. [simu freq]', nfluid=1)
+    docvar('nu_ij_capcoul', 'coulomb collisions using Capitelli 2013 formulae. [simu freq]', nfluid=2)
     docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j', nfluid=2)
     docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j', nfluid=2)
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
@@ -527,12 +531,12 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     jSL = obj.jfluid
     # get ifluid info
     tgi  = obj.get_var('tg', ifluid=iSL)      # [K]
-    m_i  = fluid_tools.get_mass(obj, iSL[0])  # [amu]
+    m_i  = obj.get_mass(iSL[0])  # [amu]
     # get jfluid info, then restore original iSL & jSL
     with obj.MaintainFluids():
       n_j   = obj.get_var('nr', ifluid=jSL) * obj.uni.u_nr # [cm^-3]
       tgj   = obj.get_var('tg', ifluid=jSL)                # [K]
-      m_j   = fluid_tools.get_mass(obj, jSL[0])            # [amu]
+      m_j   = obj.get_mass(jSL[0])            # [amu]
 
     # compute some values:
     m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
@@ -540,8 +544,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
     
     # if both fluids have nonzero charge, use coulomb collisions formula.
-    icharge = fluid_tools.get_charge(obj, iSL)   # [elementary charge == 1]
-    jcharge = fluid_tools.get_charge(obj, jSL)   # [elementary charge == 1]
+    icharge = obj.get_charge(iSL)   # [elementary charge == 1]
+    jcharge = obj.get_charge(jSL)   # [elementary charge == 1]
     if icharge != 0 and jcharge != 0:
       m_h = obj.uni.m_h / obj.uni.amu            # [amu]
       logcul = obj.get_var('logcul')
@@ -598,8 +602,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     #get variables.
     with obj.MaintainFluids():
       n_j = obj.get_var('nr', ifluid=obj.jfluid) * obj.uni.usi_nr   #number density [m^-3]
-    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)  #mass [amu]
-    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)  #mass [amu]
+    m_i = obj.get_mass(obj.mf_ispecies)  #mass [amu]
+    m_j = obj.get_mass(obj.mf_jspecies)  #mass [amu]
     #calculate & return nu_ij_test:
     return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j))) / obj.uni.usi_hz
 
@@ -613,13 +617,13 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     return 2.65e-16 * nH * np.sqrt(tg) * (1 - 0.083 * np.log10(tg))**2 / obj.uni.usi_hz
 
   elif var == 'nu_se_spitzcoul':
-    icharge = fluid_tools.get_charge(obj, obj.ifluid)
+    icharge = obj.get_charge(obj.ifluid)
     assert icharge > 0, "ifluid must be ion, but got charge={} (ifluid={})".format(icharge, obj.ifluid)
     #nuje = me pi ne e^4 ln(12 pi ne ldebye^3) / ( ms (4 pi eps0)^2 sqrt(ms (2 kb T)^3) )
     ldebye = obj.get_var('ldebye') * obj.uni.usi_l
     me   = obj.uni.msi_e
     tg   = obj.get_var('tg')
-    ms   = fluid_tools.get_mass(obj, obj.mf_ispecies, units='si')
+    ms   = obj.get_mass(obj.mf_ispecies, units='si')
     eps0 = obj.uni.permsi
     kb   = obj.uni.ksi_b
     qe   = obj.uni.qsi_electron
@@ -629,6 +633,40 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     mass_ = me / ms  *  1/ np.sqrt(ms)
     ln_   = np.log(12 * np.pi * ne) + 3 * np.log(ldebye)
     nuje0 = (const * ne) * mass_ * ln_ / (2 * tg)**(3/2)
+
+  elif var == 'nu_ij_capcoul':
+    iSL = obj.ifluid
+    jSL = obj.jfluid
+    icharge = obj.get_charge(iSL, units='si') #[C]
+    jcharge = obj.get_charge(jSL, units='si') #[C]
+    assert icharge != 0 and jcharge != 0, 'we require i & j both charged' +\
+      ' but got icharge={}, jcharge={}'.format(icharge, jcharge)
+
+    # get ifluid info
+    tgi  = obj.get_var('tg', ifluid=iSL)      # [K]
+    m_i  = obj.get_mass(iSL[0])  # [amu]
+    # get jfluid info, then restore original iSL & jSL
+    with obj.MaintainFluids():
+      n_j   = obj.get_var('nr', ifluid=jSL) * obj.uni.usi_nr # [m^-3]
+      tgj   = obj.get_var('tg', ifluid=jSL)                # [K]
+      m_j   = obj.get_mass(jSL[0])            # [amu]
+
+    # compute some values:
+    m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
+    m_ij    = m_i * m_jfrac                          # [amu]   # e.g. for H, H+, m_ij = 0.5.
+    tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
+
+    tg_speed = np.sqrt(8 * (obj.uni.ksi_b/obj.uni.amusi) * tgij / (np.pi * m_ij)) # [m s^-1]
+    E_alpha  = 0.5 * (m_ij * obj.uni.amusi) * tg_speed**2
+      
+    euler_constant = 0.577215
+    b_0      = abs(icharge*jcharge)/(4 * np.pi * obj.uni.permsi * E_alpha)  # [m]  # permsi == epsilon_0
+    #b_0      = abs(icharge*jcharge)/(2 * obj.uni.ksi_b*obj.uni.permsi * tgij)  # [m]   # permsi == epsilon_0
+    cross    = np.pi*2.0*(b_0**2)*(np.log(obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant) # [m2]
+
+    #calculate & return nu_ij:
+    nu_ij = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
+    return nu_ij
 
     # try again but with logs. Run this code to confirm that the above code is correct.
     run_confirmation_routine = False   # change to True to run this code.
@@ -647,8 +685,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     return mi_ni / mj_nj
 
   elif var == "c_tot_per_vol":
-    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)   # [amu]
-    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)   # [amu]
+    m_i = obj.get_mass(obj.mf_ispecies)   # [amu]
+    m_j = obj.get_mass(obj.mf_jspecies)   # [amu]
     return obj.get_var("nr", ifluid=obj.jfluid) * obj.get_var("nu_ij") / (m_j / (m_i + m_j))
 
   elif var == "1dcolslope":
@@ -721,8 +759,8 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
 
   # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
   with obj.MaintainFluids():
-    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)
-    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)
+    m_i = obj.get_mass(obj.mf_ispecies)
+    m_j = obj.get_mass(obj.mf_jspecies)
     tgi = obj.get_var('tg', ifluid = obj.ifluid)
     tgj = obj.get_var('tg', ifluid = obj.jfluid)
 
@@ -731,9 +769,7 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
 
   # look up cross table and get cross section
   #crossunits = 2.8e-17  
-  cross_tab = fluid_tools.get_cross_tab(obj, obj.ifluid, obj.jfluid)
-
-  crossobj = obj.cross_sect(cross_tab=[cross_tab])
+  crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
   crossunits = crossobj.cross_tab[0]['crossunits']
   cross = crossunits * crossobj.tab_interp(tg)
 
@@ -837,8 +873,8 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
 
   if quant == 'sgyrof':
     B = obj.get_var('modb')                       # magnitude of B [simu. B-field units]
-    q = fluid_tools.get_charge(obj, obj.ifluid, units='simu')     #[simu. charge units]
-    m = fluid_tools.get_mass(obj, obj.mf_ispecies, units='simu')  #[simu. mass units]
+    q = obj.get_charge(obj.ifluid, units='simu')     #[simu. charge units]
+    m = obj.get_mass(obj.mf_ispecies, units='simu')  #[simu. mass units]
     return q * B / m
 
   if quant == 'gyrof':
@@ -853,7 +889,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     return np.abs(obj.get_var('skappa'))
 
   elif quant == 'ldebyei':
-    Zi2 = fluid_tools.get_charge(obj, obj.ifluid)**2
+    Zi2 = obj.get_charge(obj.ifluid)**2
     if Zi2 == 0:
       return np.zeros(obj.r.shape)
     const = obj.uni.permsi * obj.uni.ksi_b / obj.uni.qsi_electron**2
@@ -899,7 +935,7 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
     return modE / modB         # [simu. velocity units]
 
   elif quant == 'fb_ssi_vdtrigger':
-    icharge = fluid_tools.get_charge(obj, obj.ifluid)
+    icharge = obj.get_charge(obj.ifluid)
     assert icharge > 0, "expected ifluid to be an ion but got ifluid charge == {}".format(icharge)
     ci   = obj.get_var('ci')   # [simu. velocity units]
     psi0 = obj.get_var('psi0')

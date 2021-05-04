@@ -246,13 +246,13 @@ def fluid_pairs(fluids, ordered=False, allow_same=False):
     if       ordered and     allow_same: return itertools.combinations_with_replacement(fluids, 2)
     elif     ordered and not allow_same: return itertools.combinations(fluids, 2)
     elif not ordered and not allow_same: return itertools.permutations(fluids, 2)
-    elif not ordered and     allow_same: return itertools.product(fluids, 2)
+    elif not ordered and     allow_same: return itertools.product(fluids, repeat=2)
     assert False #we should never reach this line...
 
 ''' --------------------- small helper functions --------------------- '''
 # for each of these functions, obj should be an EbysusData object.
 
-def get_name(obj, specie):
+def get_species_name(obj, specie):
     '''return specie's name: 'e' for electrons; element (atomic symbol) for other fluids.'''
     if specie < 0:
         return 'e'
@@ -270,7 +270,7 @@ def get_mass(obj, specie, units='amu'):
     '''
     # if specie is actually (spec, level) return get_mass(obj, spec) instead.
     try:
-        specie = next(iter(specie))
+        specie = iter(specie)
     except TypeError:
         pass
     else:
@@ -328,11 +328,17 @@ def get_charge(obj, SL, units='e'):
     else: #units=='simu'
         return charge * obj.uni.simu_qsi_e
 
-def get_cross_tab(obj, iSL, jSL):
-    '''return cross section table for ifluid=iSL, jfluid=jSL.
+def get_cross_tab(obj, iSL=None, jSL=None, **kw__fluids):
+    '''return (filename of) cross section table for obj.ifluid, obj.jfluid.
     use S=-1 for electrons. (e.g. iSL=(-1,1) represents electrons.)
-    either iSL or jSL must be neutral.
+    either ifluid or jfluid must be neutral. (charged -> Coulomb collisions.)
+    iSL, jSL, kw__fluids behavior is the same as in get_var.
     '''
+    iS, iL, jS, jL = _interpret_kw_fluids(iSL=iSL, jSL=jSL, **kw__fluids)
+    obj.set_mfi(iS, iL)
+    obj.set_mfj(jS, jL)
+    iSL = obj.ifluid
+    jSL = obj.jfluid
     if iSL==jSL:
         warnings.warn('Tried to get cross_tab when ifluid==jfluid. (Both equal {})'.format(iSL))
     icharge, jcharge = (get_charge(obj, SL) for SL in (iSL, jSL))
@@ -365,3 +371,12 @@ def get_cross_tab(obj, iSL, jSL):
     errmsg = "Couldn't find cross section file for ifluid={}, jfluid={}. ".format(iSL, jSL) + \
              "(We looked in obj.mf_{}tabparam['{}'].)".format(('e' if jSL[0] < 0 else ''), CTK)
     raise ValueError(errmsg)
+
+def get_cross_sect(obj, **kw__fluids):
+    '''returns Cross_sect object containing cross section data for obj.ifluid & obj.jfluid.
+    equivalent to obj.cross_sect(cross_tab=[get_cross_tab(obj, **kw__fluids)])
+
+    common use-case:
+    obj.get_cross_sect().tab_interp(tg_array)
+    '''
+    return obj.cross_sect([obj.get_cross_tab(**kw__fluids)])

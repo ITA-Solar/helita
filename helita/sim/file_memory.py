@@ -44,7 +44,7 @@ SOFT_PER_OBJ  = 0.1     # limit number of open memmaps in one object to SOFT_PER
 
 ''' --------------------- remember_and_recall() --------------------- '''
 
-def remember_and_recall(MEMORYATTR, ORDERED=False):
+def remember_and_recall(MEMORYATTR, ORDERED=False, kw_mem=[]):
     '''wrapper which returns function but with optional args obj, MEMORYATTR.
     default obj=None, MEMORYATTR=MEMORYATTR.
     if obj is None, behavior is unchanged;
@@ -56,7 +56,7 @@ def remember_and_recall(MEMORYATTR, ORDERED=False):
     '''
     def decorator(f):
         @functools.wraps(f)
-        def f_but_remember_and_recall(filename, *args, obj=None, MEMORYATTR=MEMORYATTR, kw_mem=[], **kwargs):
+        def f_but_remember_and_recall(filename, *args, obj=None, MEMORYATTR=MEMORYATTR, kw_mem=kw_mem, **kwargs):
             '''if obj is None, simply does f(filename, *args, **kwargs).
             Else, recall or remember result, as appropriate.
                 memory location is obj.MEMORYATTR[filename.lower()].

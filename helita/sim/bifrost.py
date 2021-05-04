@@ -130,7 +130,7 @@ class BifrostData(object):
         
         self.genvar()
         self.transunits = False
-        self.cross_sect = Cross_sect
+        self.cross_sect = cross_sect_for_obj(self)
         if 'tabinputfile' in self.params.keys(): 
             tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
             if os.access(tabfile, os.R_OK):
@@ -1581,11 +1581,9 @@ class Bifrost_units(object):
         if u is None:
             result = self.doc_units
         else:
-            result = dict()
-            try:
-                next(iter(u))
-            except TypeError:
+            if isinstance(u, str):
                 u = [u]
+            result = dict()
             for unit in u:
                 unit = self._unit_name(unit)
                 doc  = self.doc_units.get(unit, "u='{}' is not yet documented!".format(unit))
@@ -1994,38 +1992,55 @@ class Cross_sect:
         If True, will print out more diagnostic messages
     dtype - string, optional
         Data type for reading variables. Default is 32 bit float.
+    kelvin - bool (default True)
+        Whether to load data in Kelvin. (uses eV otherwise)
 
     Examples
     --------
     >>> a = cross_sect(['h-h-data2.txt','h-h2-data.txt'], fdir="/data/cb24bih")
 
     """
-    def __init__(self, cross_tab=None, fdir='.', dtype='f4', verbose=True):
+    def __init__(self, cross_tab=None, fdir=os.curdir, dtype='f4', verbose=None, kelvin=True, obj=None):
         '''
         Loads cross section tables and calculates collision frequencies and
         ambipolar diffusion.
-        '''
 
+        parameters:
+        cross_tab: None or list of strings
+            None -> use default cross tab list of strings.
+            else -> treat each string as the name of a cross tab file.
+        fdir: str (default '.')
+            directory of files (prepend to each filename in cross_tab).
+        dtype: default 'f4'
+            sets self.dtype. aside from that, internally does NOTHING.
+        verbose: None (default) or bool.
+            controls verbosity. presently, internally does NOTHING.
+            if None, use obj.verbose if possible, else use False (default)
+        kelvin - bool (default True)
+            Whether to load data in Kelvin. (uses eV otherwise)
+        obj: None (default) or an object
+            None -> does nothing; ignore this parameter.
+            else -> improve time-efficiency by saving data from cross_tab files
+                    into memory of obj (save in obj._memory_read_cross_txt).
+        '''
         self.fdir = fdir
         self.dtype = dtype
+        if verbose is None: verbose = False if obj is None else getattr(obj, 'verbose', False)
         self.verbose = verbose
+        self.obj = obj
+        self.kelvin = kelvin
+        self.units = {True: 'K', False: 'eV'}[self.kelvin]
         # read table file and calculate parameters
-        cross_txt_list = ['h-h-data2.txt', 'h-h2-data.txt', 'he-he.txt',
+        if cross_tab is None:
+            cross_tab = ['h-h-data2.txt', 'h-h2-data.txt', 'he-he.txt',
                           'e-h.txt', 'e-he.txt', 'h2_molecule_bc.txt',
                           'h2_molecule_pj.txt', 'p-h-elast.txt', 'p-he.txt',
                           'proton-h2-data.txt']
+        self._cross_tab_strs = cross_tab
         self.cross_tab_list = {}
-        counter = 0
-        if cross_tab is None:
-            for icross_txt in cross_txt_list:
-                os.path.isfile('%s/%s' % (fdir, icross_txt))
-                self.cross_tab_list[counter] = '%s/%s' % (fdir, icross_txt)
-                counter += 1
-        else:
-            for icross_txt in cross_tab:
-                os.path.isfile('%s/%s' % (fdir, icross_txt))
-                self.cross_tab_list[counter] = '%s/%s' % (fdir, icross_txt)
-                counter += 1
+        for i, cross_txt in enumerate(cross_tab):
+            self.cross_tab_list[i] = os.path.join(fdir, cross_txt)
+
         # load table(s)
         self.load_cross_tables(firstime=True)
 
@@ -2033,12 +2048,11 @@ class Cross_sect:
         '''
         Collects the information in the cross table files.
         '''
-        uni = Bifrost_units(verbose=False)
-        self.cross_tab = {}
-
+        self.cross_tab = dict()
         for itab in range(len(self.cross_tab_list)):
-            self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab],firstime=firstime, obj=self)
-            self.cross_tab[itab]['tg'] *= uni.ev_to_k
+            self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab],firstime=firstime,
+                                                  obj=getattr(self, 'obj', None), kelvin=self.kelvin)
+            
 
     def tab_interp(self, tg, itab=0, out='el', order=1):
         ''' Interpolates the cross section tables in the simulated domain.
@@ -2057,13 +2071,36 @@ class Cross_sect:
 
         finterp = interpolate.interp1d(self.cross_tab[itab]['tg'],
                                           self.cross_tab[itab][out])
-        tgreg = tg * 1.0
+        tgreg = np.array(tg, copy=True)
         max_temp = np.max(self.cross_tab[itab]['tg'])
-        tgreg[np.where(tg > max_temp)] = max_temp
+        tgreg[tg > max_temp] = max_temp
         min_temp = np.min(self.cross_tab[itab]['tg'])
-        tgreg[np.where(tg < min_temp)] = min_temp
+        tgreg[tg < min_temp] = min_temp
 
         return finterp(tgreg)
+
+    def __repr__(self):
+        return '{} == {}'.format(object.__repr__(self), str(self))
+
+    def __str__(self):
+        return "Cross_sect(cross_tab={}, fdir='{}')".format(self._cross_tab_strs, self.fdir)
+
+
+def cross_sect_for_obj(obj=None):
+    '''return function which returns Cross_sect with self.obj=obj.
+    obj: None (default) or an object
+        None -> does nothing; ignore this parameter.
+        else -> improve time-efficiency by saving data from cross_tab files
+                into memory of obj (save in obj._memory_read_cross_txt).
+                Also, use fdir=obj.fdir, unless fdir is entered explicitly.
+    '''
+    @functools.wraps(Cross_sect)
+    def _init_cross_sect(cross_tab=None, fdir=None, *args__Cross_sect, **kw__Cross_sect):
+        if fdir is None: fdir = getattr(obj, 'fdir', '.')
+        return Cross_sect(cross_tab, fdir, *args__Cross_sect, **kw__Cross_sect, obj=obj)
+    return _init_cross_sect
+
+
 
 ###########
 #  TOOLS  #
@@ -2229,9 +2266,11 @@ def read_idl_ascii(filename,firstime=False):
 
     return params
 
-@file_memory.remember_and_recall('_memory_read_cross_txt')
-def read_cross_txt(filename,firstime=False):
-    ''' Reads IDL-formatted (command style) ascii file into dictionary '''
+@file_memory.remember_and_recall('_memory_read_cross_txt', kw_mem=['kelvin'])
+def read_cross_txt(filename,firstime=False, kelvin=True):
+    ''' Reads IDL-formatted (command style) ascii file into dictionary.
+    tg will be converted to Kelvin, unless kelvin==False.
+    '''
     li = 0
     params = {}
     count = 0
@@ -2363,6 +2402,10 @@ def read_cross_txt(filename,firstime=False):
                 else:
                     params['se'] = np.append(params['se'], cross)
             li += 1
+
+    # convert to kelvin
+    if kelvin:
+        params['tg'] *= Bifrost_units(verbose=False).ev_to_k
 
     return params
 
