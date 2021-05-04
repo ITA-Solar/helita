@@ -294,7 +294,7 @@ class Cipmocct:
             var_new[:,iiy,:] = data
         return var_new
     
-    def trans2commaxes(self,loop): 
+    def trans2commaxes(self,loop = 'quarter'): 
 
         if self.transunits == False:
             self.x_orig = self.x
