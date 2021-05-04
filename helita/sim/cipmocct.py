@@ -211,7 +211,7 @@ class Cipmocct:
         self.varn['by'] = 'bz_cube'
         self.varn['bz'] = 'by_cube'
 
-    def trans2comm(self,varname, snap=None, angle=45, loop = 'quarter'): 
+    def trans2comm(self,varname, snap=None, angle=0, loop = 'quarter'): 
         '''
         Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
         is: 
