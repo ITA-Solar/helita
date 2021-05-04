@@ -2,7 +2,7 @@ import numpy as np
 from numba import jit, njit, prange
 
 
-def do(var, operation='xup', pad_mode='wrap'):
+def do(var, operation='xup', pad_mode=None):
     """
     Do a stagger operation on `var`. These are generally divided into
     'up' or 'down' operations that interpolate values from cell faces
@@ -11,11 +11,12 @@ def do(var, operation='xup', pad_mode='wrap'):
     Supported operations are currently:
     * 'xup', 'xdn', 'yup', 'ydn', 'zup', 'zdn'.
     """
-    op_func = {
+    OPERATIONS = {
         'x': _xshift,
         'y': _yshift,
         'z': _zshift,
     }
+    DEFAULT_PAD = {'x': 'wrap', 'y': 'wrap', 'z': 'reflect'}
     if operation[-2:].lower() == 'up':
         up = True
     elif operation[-2:].lower() == 'dn':
@@ -23,9 +24,11 @@ def do(var, operation='xup', pad_mode='wrap'):
     else: 
         raise ValueError(f"Invalid operation {operation}")
     op = operation[:-2]
-    if op not in op_func:
+    if op not in OPERATIONS:
         raise ValueError(f"Invalid operation {operation}")
-    func = op_func[op]
+    func = OPERATIONS[op]
+    if pad_mode is None:
+        pad_mode = DEFAULT_PAD[op]
     dim_index = 'xyz'.find(op[-1])
     extra_dims = [(3, 2), (2, 3)][up]
     padding = [(0, 0)] * 3
