@@ -287,7 +287,7 @@ class Cipmocct:
         iiy0=np.argmin(np.abs(self.y_orig))
 
         for iiy, iy in enumerate(self.y): 
-            temp=var[:,iiy+iiy0,:]
+            temp=var[:,iiy*2+iiy0,:]
             data = polar2cartesian(rad,angl,temp,self.z,self.x)
             var_new[:,iiy,:] = data
         return var_new
