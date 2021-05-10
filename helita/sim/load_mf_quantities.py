@@ -73,7 +73,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   '''Variables which are calculated by looping through species or levels.'''
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke',
+      GLOBAL_QUANT = ['totr', 'rc', 'rneu',
+                      'tot_e', 'tot_ke', 'e_ef', 'e_b', 'total_energy',
                       'tot_px', 'tot_py', 'tot_pz',
                       'grph', 'tot_part', 'mu',
                       'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
@@ -86,6 +87,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
     docvar('tot_e',  'sum of internal energy densities of all fluids [simu. energy density units]')
     docvar('tot_ke', 'sum of kinetic  energy densities of all fluids [simu. energy density units]')
+    docvar('e_ef', 'energy density in electric field [simu. energy density units]')
+    docvar('e_b', 'energy density in magnetic field [simu. energy density units]')
+    docvar('total_energy', 'total energy density. tot_e + tot_ke + e_ef + e_b [simu units].')
     for axis in ['x', 'y', 'z']:
       docvar('tot_p'+axis, 'sum of '+axis+'-momentum densities of all fluids [simu. mom. dens. units]')
     docvar('grph',  'grams per hydrogen atom')
@@ -131,6 +135,24 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     output = obj.get_var('eke')   # kinetic energy density of electrons
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('ke', ifluid=fluid.SL)  # kinetic energy density of fluid
+
+  elif var == 'e_ef':
+    ef2  = obj.get_var('ef2')   # |E|^2  [simu E-field units, squared]
+    eps0 = obj.uni.permsi       # epsilon_0 [SI units]
+    units = obj.uni.usi_ef**2 / obj.uni.usi_e   # convert ef2 * eps0 to [simu energy density units]
+    return (0.5 * eps0 * units) * ef2
+
+  elif var == 'e_b':
+    b2   = obj.get_var('b2')    # |B|^2  [simu B-field units, squared]
+    mu0  = obj.uni.mu0si        # mu_0 [SI units]
+    units = obj.uni.usi_b**2 / obj.uni.usi_e    # convert b2 * mu0 to [simu energy density units]
+    return (0.5 * mu0 * units) * b2
+
+  elif var == 'total_energy':
+    output  = obj.get_var('tot_e')
+    output += obj.get_var('tot_ke')
+    output += obj.get_var('e_ef')
+    output += obj.get_var('e_b')
   
   elif var.startswith('tot_p'):  # note: must be tot_px, tot_py, or tot_pz.
     axis = var[-1]
