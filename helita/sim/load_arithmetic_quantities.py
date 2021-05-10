@@ -225,7 +225,7 @@ def get_center(obj,quant, *args, **kwargs):
 
 def get_interp(obj, quant):
   '''simple interpolation. var must end in interpolation instructions.
-  e.g. rxup --> do_cstagger(get_var('r'), 'xup')
+  e.g. get_var('rxup') --> do_cstagger(get_var('r'), 'xup')
   '''
   INTERP_QUANT = ['xup', 'yup', 'zup',
                   'xdn', 'ydn', 'zdn']
@@ -314,7 +314,7 @@ def get_gradients_vect(obj,quant):
     docvar('rot',  'starting with, rotational (a.k.a. curl) [simu units]')
     docvar('she',  'starting with, shear [simu units]')
     docvar('curlcc',  'starting with, curl but shifted (via interpolation) back to original location on cell [simu units]')
-    docvar('curvec',  'starting with, curl of face-centered vector [simu units]')
+    docvar('curvec',  'starting with, curl of face-centered vector (e.g. B, p) [simu units]')
     docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
     docvar('chbdiv',  'starting with, ratio of the divergence with the sum of the absolute of each spatial derivative [simu units]')
     docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
@@ -589,10 +589,10 @@ def get_vector_product(obj,quant):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
     docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
-    docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u.'
-                           'result is edge-centered. E.g. x component --> ( 0  , -0.5, -0.5).'))
-    docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I.'
-                           'result is face-centered. E.g. x component --> (-0.5,  0  ,  0  ).'))
+    docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u. '
+                           'result is edge-centered. E.g. result_x --> ( 0  , -0.5, -0.5).'))
+    docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I. '
+                           'result is face-centered. E.g. result_x --> (-0.5,  0  ,  0  ).'))
     return None
 
   cross = ''

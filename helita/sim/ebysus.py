@@ -317,6 +317,8 @@ class EbysusData(BifrostData):
                               self.dzidzdn.astype(rdt))
             self.cstagger_exists = True   # we can use cstagger methods!
         else:
+            #cstagger.init_stagger_mz1(self.nz, self.dx, self.dy, self.z.astype(rdt))
+            #self.cstagger_exists = True
             self.cstagger_exists = False  # we must avoid using cstagger methods.
 
     # fluid-setting functions
@@ -326,6 +328,8 @@ class EbysusData(BifrostData):
     # docstrings for fluid-setting functions
     for func in [set_mf_fluid, set_mfi, set_mfj]:
         func.__doc__ = func.__doc__.replace('obj', 'self')
+
+    del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
 
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
@@ -910,6 +914,21 @@ class EbysusData(BifrostData):
 
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
+
+    # include methods related to wavegrowth, for convenience
+    def get_lmin(self):
+        '''return smallest length resolvable for each direction ['x', 'y', 'z'].
+        result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
+        '''
+        return np.array([getattr(self, 'd'+x+'1d').min() for x in ['x', 'y', 'z']])
+
+    def get_kmax(self):
+        '''return largest value of each component of wavevector resolvable by self.
+        I.e. returns [max kx, max ky, max kz].
+        result is in [1/ simu. length units]. Divide by self.uni.usi_l to convert to SI.
+        '''
+        return 2 * np.pi / self.get_lmin()
+
 
     # include methods from fluid_tools.
     def MaintainingFluids(self):

@@ -1581,11 +1581,9 @@ class Bifrost_units(object):
         if u is None:
             result = self.doc_units
         else:
-            result = dict()
-            try:
-                next(iter(u))
-            except TypeError:
+            if isinstance(u, str):
                 u = [u]
+            result = dict()
             for unit in u:
                 unit = self._unit_name(unit)
                 doc  = self.doc_units.get(unit, "u='{}' is not yet documented!".format(unit))
