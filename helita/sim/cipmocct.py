@@ -211,7 +211,7 @@ class Cipmocct:
         self.varn['by'] = 'bz_cube'
         self.varn['bz'] = 'by_cube'
 
-    def trans2comm(self,varname, snap=None, angle=0, loop = 'quarter'): 
+    def trans2comm(self,varname, snap=None, angle=0, loop = 3): 
         '''
         Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
         is: 
@@ -257,30 +257,29 @@ class Cipmocct:
         else: 
             var = self.get_var(varname,snap=snap)
         
-        if loop == 'quarter': 
-            
+        if loop != None: 
             if varname[-1] in ['x']: 
-                var = self.make_loop(var)
+                var = self.make_loop(var,loop)
                 varz = self.get_var(varname[0]+'z',snap=snap)
-                varz = self.make_loop(varz)
+                varz = self.make_loop(varz,loop)
                 xx, zz = np.meshgrid(self.x,self.z)
                 aa=np.angle(xx+1j*zz)
                 for iiy, iy in enumerate(self.y):
-                    var[:,iiy,:] = varz[:,iiy,:] * np.cos(aa.T) - var[:,iiy,:] * np.sin(aa.T)
+                    var[:,iiy,:] = var[:,iiy,:] * np.cos(aa.T) - varz[:,iiy,:] * np.sin(aa.T)
             elif varname[-1] in ['z']: 
-                var = self.make_loop(var)
-                varz = self.get_var(varname[0]+'z',snap=snap)
-                varz = self.make_loop(varz)
+                var = self.make_loop(var,loop)
+                varx = self.get_var(varname[0]+'x',snap=snap)
+                varx = self.make_loop(varx,loop)
                 xx, zz = np.meshgrid(self.x,self.z)
                 aa=np.angle(xx+1j*zz)
                 for iiy, iy in enumerate(self.y):
-                    var[:,iiy,:] = var[:,iiy,:] * np.cos(aa.T) + varz[:,iiy,:] * np.sin(aa.T)
+                    var[:,iiy,:] = var[:,iiy,:] * np.cos(aa.T) + varx[:,iiy,:] * np.sin(aa.T)
             else: 
-                var = self.make_loop(var)
+                var = self.make_loop(var,loop)
 
         return var
 
-    def make_loop(self,var): 
+    def make_loop(self,var,loop): 
         R = np.max(self.z*2)/np.pi/2.
         rad=self.x_orig+np.max(self.x_loop)-np.max(self.x_orig)/2
         angl=self.z_orig / R 
@@ -290,22 +289,21 @@ class Cipmocct:
         for iiy, iy in enumerate(self.y): 
             temp=var[:,iiy*2+iiy0,:]
             data = polar2cartesian(rad,angl,temp,self.z,self.x)
-
             var_new[:,iiy,:] = data
         return var_new
     
-    def trans2commaxes(self,loop = 'quarter'): 
+    def trans2commaxes(self,loop = 3): 
 
         if self.transunits == False:
             self.x_orig = self.x
             self.y_orig = self.y
             self.z_orig = self.z
-            if loop == 'quarter':
+            if loop != None:
                 R = np.max(self.z*2)/np.pi/2.
-                self.x_loop=np.linspace(R*np.cos([np.pi/4]),R,
-                              int((R-R*np.cos([np.pi/4]))/2/np.min(self.dx1d*2)))
-                self.z_loop=np.linspace(0,R*np.sin([np.pi/4]),
-                              int(R*np.sin([np.pi/4])/2/np.min(self.dx1d*2))) 
+                self.x_loop=np.linspace(R*np.cos([np.pi/loop]),R,
+                              int((R-R*np.cos([np.pi/loop]))/2/np.min(self.dx1d)))
+                self.z_loop=np.linspace(0,R*np.sin([np.pi/loop]),
+                              int(R*np.sin([np.pi/loop])/2/np.min(self.dx1d))) 
                 
                 self.x=self.x_loop.squeeze()
                 self.z=self.z_loop.squeeze()
