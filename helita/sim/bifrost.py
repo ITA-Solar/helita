@@ -191,7 +191,7 @@ class BifrostData(object):
                 else:
                     tmp = glob("%s.idl" % self.file_root)
                     snap = 0
-            except:
+            except Exception:
                 try:
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
                     snap = -1
@@ -1351,7 +1351,7 @@ class Bifrost_units(object):
                         return
                     try:
                         value = self.params[key]
-                    except:
+                    except Exception:
                         value = DEFAULT_UNITS[key]
                         if verbose:
                             printstr = ("(WWW) the file '{file}' does not contain '{unit}'. "
@@ -2229,7 +2229,7 @@ def read_idl_ascii(filename,firstime=False):
                                 value2[0].find('.') >= 0)):
                             value = value2.astype(np.float)
 
-                except:
+                except Exception:
                     value = value
             elif (value.find("'") >= 0):
                 value = value.strip("'")
@@ -2239,7 +2239,7 @@ def read_idl_ascii(filename,firstime=False):
                         if ((value2[0].upper().find('E') >= 0) or (
                                 value2[0].find('.') >= 0)):
                             value = value2.astype(np.float)
-                except:
+                except Exception:
                     value = value
             elif (value.lower() in ['.false.', '.true.']):
                 # bool type
