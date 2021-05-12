@@ -1,6 +1,9 @@
 from astropy.io import fits
 import numpy as np
 import os, fnmatch
+from scipy import interpolate
+from scipy import ndimage
+
 
 def writefits(obj, varname, snap=None, instrument = 'MURaM', 
               name='ar098192', origin='HGCR    ', z_tau51m = None): 
@@ -227,30 +230,26 @@ def globalvars(obj):
            'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
 
 
-
 def polar2cartesian(r, t, grid, x, y, order=3):
     '''
     Converts polar grid to cartesian grid
     '''
-
-
+    
     X, Y = np.meshgrid(x, y)
 
     new_r = np.sqrt(X * X + Y * Y)
     new_t = np.arctan2(X, Y)
 
-    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
-    it = interpolate.interp1d(t, np.arange(len(t)))
-
+    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False, fill_value=0.0)
+    it = interpolate.interp1d(t, np.arange(len(t)), bounds_error=False, fill_value=0.0)
     new_ir = ir(new_r.ravel())
     new_it = it(new_t.ravel())
 
     new_ir[new_r.ravel() > r.max()] = len(r) - 1
     new_ir[new_r.ravel() < r.min()] = 0
 
-    return map_coordinates(grid, np.array([new_ir, new_it]),
+    return ndimage.map_coordinates(grid, np.array([new_ir, new_it]),
                            order=order).reshape(new_r.shape)
-
 
 def cartesian2polar(x, y, grid, r, t, order=3):
     '''
@@ -274,7 +273,7 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     new_iy[new_y.ravel() > y.max()] = len(y) - 1
     new_iy[new_y.ravel() < y.min()] = 0
 
-    return map_coordinates(grid, np.array([new_ix, new_iy]),
+    return ndimage.map_coordinates(grid, np.array([new_ix, new_iy]),
                            order=order).reshape(new_x.shape)
 
 
