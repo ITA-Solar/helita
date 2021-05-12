@@ -270,7 +270,7 @@ def get_mass(obj, specie, units='amu'):
     '''
     # if specie is actually (spec, level) return get_mass(obj, spec) instead.
     try:
-        specie = iter(specie)
+        specie = next(iter(specie))
     except TypeError:
         pass
     else:
