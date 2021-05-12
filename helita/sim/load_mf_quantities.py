@@ -18,6 +18,7 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
                       CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
                       SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
                       ONEFLUID_QUANT=None, ELECTRON_QUANT=None, 
+                      CFL_QUANT=None,
                       WAVE_QUANT=None, FB_INSTAB_QUANT=None,
                       **kwargs):
 
@@ -46,6 +47,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
     val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
   if val is None:
     val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT)  
+  if val is None:
+    val = get_cfl_quant(obj, quant, CFL_QUANT=CFL_QUANT)
   if val is None: 
     val = get_mf_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
   if val is None:
@@ -209,7 +212,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     return ic_ix + jx              # j [simu. units]
 
   elif var in ['efx', 'efy', 'efz']:
-    # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
+    # E = - ue x B + (ne |qe|)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
     # ----- calculate the necessary component of -ue x B (== B x ue) ----- #
     # There is a flag, "do_hall", when "false", we don't let the contribution
     ## from current to ue to enter in to the B x ue for electric field.
@@ -806,6 +809,30 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   return cross
 
 
+def get_cfl_quant(obj, quant, CFL_QUANT=None):
+  '''CFL quantities. All are in simu. frequency units.'''
+  if CFL_QUANT is None:
+    CFL_QUANTS = ['ohm']
+    CFL_QUANT = ['cfl_' + q for q in CFL_QUANTS]
+
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'CFL_QUANT', CFL_QUANT, get_cfl_quant.__doc__)
+    docvar('cfl_ohm', 'cfl condition for ohmic module. (me / ms) ((qs / qe) + (ne / ns)) nu_es', nfluid=1)
+    return None
+
+  _, cfl_, quant = quant.partition('cfl_')
+  if quant=='':
+    return None
+
+  elif quant=='ohm':
+    fluid = obj.ifluid
+    nrat  = obj.get_var('nr', iS=-1) / obj.get_var('nr', ifluid=fluid)   # ne / ns
+    mrat  = obj.uni.msi_electron / obj.get_mass(fluid, units='si')       # me / ms
+    qrat  = obj.get_charge(fluid) / -1                                  # qs / qe
+    nu_es = obj.get_var('nu_ij', iS=-1, jfluid=fluid)                   # nu_es
+    return mrat * (qrat + nrat) * nu_es
+
+
 def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   '''plasma parameters, e.g. plasma beta, sound speed, pressure scale height'''
   if PLASMA_QUANT is None:
@@ -918,6 +945,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     for fluid in fl.Fluids(dd=obj).ions():
       ldeb_inv_sum += 1/obj.get_var('ldebyei', ifluid=fluid.SL)
     return 1/ldeb_inv_sum
+
 
 def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
   '''quantities related most directly to waves in plasmas.'''
