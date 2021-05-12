@@ -489,7 +489,7 @@ def get_square(obj,quant):
     result += obj.get_var(quant[:-1] + 'yc') ** 2
     result += obj.get_var(quant[:-1] + 'zc') ** 2
     return result
-  except:
+  except Exception:
     return None
 
 
@@ -505,7 +505,7 @@ def get_lg(obj,quant):
 
   try: 
     return np.log10(obj.get_var(quant[2:]))
-  except:
+  except Exception:
     return None
 
 

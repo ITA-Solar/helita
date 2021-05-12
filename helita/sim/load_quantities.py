@@ -194,7 +194,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   if cross_tab == None: 
     try: 
       cross_tab = cross_dict[spic1,spic2]
-    except:  
+    except Exception:  
       if not(maxwell): 
         if (spic1_ele == 'h'):
           cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['h'] * \
@@ -1292,7 +1292,7 @@ def get_hallparam(obj, quant, HALL_QUANT=None, **kwargs):
   if quant[0] == 'u':
     try:
       result = obj.get_var('i' + quant[-1])
-    except:
+    except Exception:
       result = obj.get_var('rotb' + quant[-1])   
   elif quant == 'eta_hall':
     nel = obj.get_var('nel')
