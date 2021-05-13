@@ -203,9 +203,18 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   elif var in ['jx', 'jy', 'jz']:
     # J = curl (B) / mu_0
     warnings.warn('j does not (yet) add contribution from imposed current if it exists.')
-    ## TODO: do calculation in simu. units; add contribution from ic_ix if it exists.
     x = var[-1]
-    ic_ix = obj.get_param('ic_i'+x, 0) * (obj.get_param('do_imposed_current', 0) > 0)
+    # imposed current (imposed "additional" current, added artificially to system)
+    if obj.get_param('do_imposed_current', 0) > 0:
+      ic_units = obj.get_param('ic_units', 'ebysus')
+      ic_ix    = obj.get_param('ic_i'+x, 0)      # ic_ix [ic_units]
+      if   ic_units.strip().lower() == 'si':
+        ic_ix /= obj.uni.usi_i     # ic_ix [simu. units]
+      elif ic_units.strip().lower() == 'cgs':
+        ic_ix /= obj.uni.u_i       # ic_ix [simu. units]
+    else:
+      ic_ix = 0
+    # calculated current
     curlb_x =  obj.get_var('curvec'+'b'+x) * obj.uni.usi_b / obj.uni.usi_l  # (curl b)_x [si units]
     jx = curlb_x / obj.uni.mu0si   # j [si units]
     jx = jx / obj.uni.usi_i        # j [simu. units]
@@ -836,12 +845,13 @@ def get_cfl_quant(obj, quant, CFL_QUANT=None):
 def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   '''plasma parameters, e.g. plasma beta, sound speed, pressure scale height'''
   if PLASMA_QUANT is None:
-    PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+    PLASMA_QUANT = ['beta', 'beta_ions', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                 'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
     docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
+    docvar('beta_ions', "plasma beta using sum of ion pressures. P / (B^2 / (2 mu0)).", nfluid=0)
     docvar('va', "alfven speed [simu. units]", nfluid=1)
     docvar('cs', "sound speed [simu. units]", nfluid='???')
     docvar('s', "entropy [log of quantities in simu. units]", nfluid='???')
@@ -882,6 +892,13 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
               np.log(obj.get_var('totr')))
     elif quant == 'beta':
       return 2 * var / obj.get_var('b2')
+
+  if quant == 'beta_ions':
+    p = np.zeros(obj.r)
+    for fluid in fl.Fluids(dd=dd).ions():
+      p += obj.get_var('p', ifluid=fluid)
+    bp = obj.get_var('b') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
+    return p / bp
 
   if quant in ['mn', 'man']:
     var = obj.get_var('modu')
