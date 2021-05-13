@@ -526,6 +526,12 @@ class EbysusData(BifrostData):
 
         return val
 
+    def get_varm(self, *args__get_var, **kwargs__get_var):
+        '''get_var but returns np.mean() of result.
+        provided for convenience for quicker debugging.
+        '''
+        return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
+
     def _get_simple_var(
             self,
             var,
