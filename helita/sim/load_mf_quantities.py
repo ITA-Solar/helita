@@ -228,7 +228,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     # make sure we get the interpolation correct:
     ## B and ue are face-centered vectors.
     ## Thus we use _facecross_ from load_arithmetic_quantities.
-    B_cross_ue__x = obj.get_var('b_facecross_ue'+x)
+    B_cross_ue__x = obj.get_var('b_facecross_'+ue+x)
     # ----- calculate grad pressure ----- #
     ## efx is at (0, -1/2, -1/2).
     ## P is at (0,0,0).
