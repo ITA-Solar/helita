@@ -287,7 +287,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     obj.get_var('ux') otherwise.
   '''
   if ONEFLUID_QUANT is None:
-    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke',
+    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 
                       'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
 
   if var=='':
@@ -306,6 +306,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
       docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix))
     for pix in ['pix', 'piy', 'piz']:
       docvar(pix, 'momentum density of ifluid [simu. momentum density units]. '+equivstr(pix))
+    docvar('vitherm', 'thermal speed of ifluid [simu. velocity units].')
     return None
 
   if var not in ONEFLUID_QUANT:
@@ -894,10 +895,10 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       return 2 * var / obj.get_var('b2')
 
   if quant == 'beta_ions':
-    p = np.zeros(obj.r)
-    for fluid in fl.Fluids(dd=dd).ions():
+    p = np.zeros(obj.r.shape)
+    for fluid in fl.Fluids(dd=obj).ions():
       p += obj.get_var('p', ifluid=fluid)
-    bp = obj.get_var('b') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
+    bp = obj.get_var('b2') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
     return p / bp
 
   if quant in ['mn', 'man']:
