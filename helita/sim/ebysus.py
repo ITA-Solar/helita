@@ -175,6 +175,22 @@ class EbysusData(BifrostData):
                 delattr(self, file_memory.MEMORY_MEMMAP)
         super(EbysusData, self).set_snap(snap, *args__set_snap, **kwargs__set_snap)
 
+    def get_param(self, param, default=None, warning=None):
+        ''' get param via self.params[param][self.snapInd].
+        if param not in self.params.keys():
+            return default.
+            if warning not None, also do warnings.warn(warning).
+        '''
+        try:
+            p = self.params[param]
+        except KeyError:
+            p = default
+            if warning is not None:
+                warnings.warn(warning)
+        else:
+            p = p[self.snapInd]
+        return p
+
     def _read_params(self,firstime=False):
         ''' Reads parameter file specific for Multi Fluid Bifrost '''
         super(EbysusData, self)._read_params(firstime=firstime)
@@ -193,30 +209,19 @@ class EbysusData(BifrostData):
             self.with_electrons = self.params['mf_electrons'][self.snapInd]
         except KeyError:
             raise KeyError(
-                'read_params: could not find with_electrons in idl file!')
-        try:
-            self.mf_total_nlevel = self.params['mf_total_nlevel'][self.snapInd]
-        except KeyError:
-            print('warning, this idl file does not include mf_total_nlevel')
-        try:
-            param_file = self.params['mf_param_file'][self.snapInd]
-        except KeyError:
-            warnings.warn('mf_param_file not found in this idl file; trying to use mf_params.in')
-            param_file = 'mf_params.in'  # default
+                'read_params: could not find mf_electrons in idl file!')
+        # mf_total_nlevel
+        self.mf_total_nlevel = self.get_param('mf_total_nlevel',
+                        warning='warning, this idl file does not include mf_total_nlevel')
+        # mf_param_file
+        param_file = self.get_param('mf_param_file', default='mf_params.in',
+                        warning='mf_param_file not found in this idl file; trying to use mf_params.in')
         file = os.path.join(self.fdir, param_file.strip())
         self.mf_tabparam = read_mftab_ascii(file, obj=self)
-        # electron params
-        try:
-            do_ohm_ecol = self.params['do_ohm_ecol'][self.snapInd]
-        except KeyError:
-            do_ohm_ecol = 0
-        try:
-            eparam_file = self.params['mf_eparam_file'][self.snapInd]
-        except KeyError:
-            # if do_ohm_ecol, warn user; otherwise quietly attempt to use default.
-            if do_ohm_ecol:
-                warnings.warn('mf_eparam_file not found in this idl file; trying to use mf_eparams.in')
-            eparam_file = 'mf_eparams.in' # default
+        # mf_eparam_file
+        do_ohm_ecol = self.get_param('do_ohm_ecol', 0)
+        warning = 'mf_eparam_file parameter not found; trying to use mf_eparams.in' if do_ohm_ecol else None
+        eparam_file = self.get_param('mf_eparam_file', default='mf_eparams.in', warning=warning)
         file = os.path.join(self.fdir, eparam_file.strip())
         try:
             self.mf_etabparam = read_mftab_ascii(file, obj=self)
@@ -353,6 +358,8 @@ class EbysusData(BifrostData):
 
         >>> Use self.get_var('') for help.
         >>> Use self.vardocs() to prettyprint the available variables and what they mean.
+
+        sets fluid-related attributes (e.g. self.ifluid) based on fluid-related kwargs.
 
         returns the data for the variable (as a 3D array with axes 0,1,2 <-> x,y,z).
 
@@ -767,6 +774,17 @@ class EbysusData(BifrostData):
             assert Nref == expected, errstr.format(memref, N_external, Nref-3)
             return True
 
+    def get_var_if_in_aux(self, var, *args__get_var, **kw__get_var):
+        """ get_var but only if it appears in aux (i.e. self.params['aux'][self.snapInd])
+        
+        if var not in aux, return None.
+        *args and **kwargs go to get_var.
+        """
+        if var in self.params['aux'][self.snapInd].split():
+            return self.get_var(var, *args__get_var, **kw__get_var)
+        else:
+            return None
+
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                     ifluid=None, jfluid=None,
@@ -894,6 +912,7 @@ class EbysusData(BifrostData):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
+    # include methods from fluid_tools.
     def MaintainingFluids(self):
         return fluid_tools._MaintainingFluids(self)
     MaintainingFluids.__doc__ = fluid_tools._MaintainingFluids.__doc__.replace(
@@ -905,6 +924,12 @@ class EbysusData(BifrostData):
     UsingFluids.__doc__ = fluid_tools._UsingFluids.__doc__.replace(
                                 '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
     UseFluids = UsingFluids  # alias
+
+# include methods from fluid_tools in EbysusData object.
+for func in ['get_species_name', 'get_mass', 'get_charge', 'get_cross_tab', 'get_cross_sect']:
+    setattr(EbysusData, func, getattr(fluid_tools, func, None))
+
+del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
 
 
 ###########

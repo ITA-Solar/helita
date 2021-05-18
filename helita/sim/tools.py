@@ -124,7 +124,7 @@ def convertcsgsi(obj):
       obj.unisi['ee']     = obj.unisi['u']**2
       obj.unisi['e']      = obj.unisi['rho'] * obj.unisi['ee'] 
       obj.unisi['b']      = obj.uni['b'] * 1e-4 # T
-  except:  
+  except Exception:  
     if obj.verbose: 
         print('Some unisi did not run')
 
@@ -136,7 +136,7 @@ def globalvars(obj):
   from astropy import units
   
   '''
-  Conversion from cgs units to SI
+  global units
   '''
 
   obj.mu = 0.8
@@ -173,6 +173,13 @@ def globalvars(obj):
   obj.stefboltz = aconst.sigma_sb.cgs.value
   obj.mion = obj.m_h            # Ion mass [g]
   obj.r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
+  obj.mu0si = aconst.mu0.to_value('N/A2')  # magnetic constant [SI units]
+
+  # --- Aliases, for convenience
+  obj.msi_electron = obj.msi_e
+  obj.m_e = obj.m_electron
+  obj.q_e = obj.q_electron
+  obj.qsi_e = obj.qsi_electron
 
   # --- Unit conversions
   obj.ev_to_erg = units.eV.to('erg')

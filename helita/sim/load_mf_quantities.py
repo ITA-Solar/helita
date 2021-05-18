@@ -3,7 +3,6 @@ import warnings
 
 # import internal modules
 from . import document_vars
-from . import fluid_tools
 
 # import external public modules
 import numpy as np
@@ -74,7 +73,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke',
                       'tot_px', 'tot_py', 'tot_pz',
                       'grph', 'tot_part', 'mu', 'pe',
-                      'efx', 'efy', 'efz',
+                      'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
                       ]
 
   if var=='':
@@ -89,6 +88,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('grph',  'grams per hydrogen atom')
     docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
     docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
+    for axis in ['x', 'y', 'z']:
+      docvar('j'+axis, 'sum of '+axis+'-component of current per unit area [simu. current per area units]')
     for axis in ['x', 'y', 'z']:
       docvar('ef'+axis, axis+'-component of electric field [simu. E-field units] ' +\
                           '== [simu. B-field units * simu. velocity units]')
@@ -174,28 +175,35 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
             mf_ilevel=mf_ilevel) / weight 
     output = output / obj.get_var('tot_part')
 
+  elif var in ['jx', 'jy', 'jz']:
+    # J = curl (B) / mu_0
+    warnings.warn('j does not (yet) add contribution from imposed current if it exists.')
+    ## TODO: do calculation in simu. units; add contribution from ic_ix if it exists.
+    x = var[-1]
+    ic_ix = obj.get_param('ic_i'+x, 0) * (obj.get_param('do_imposed_current', 0) > 0)
+    curlb_x =  obj.get_var('curvec'+'b'+x) * obj.uni.usi_b / obj.uni.usi_l  # (curl b)_x [si units]
+    jx = curlb_x / obj.uni.mu0si   # j [si units]
+    jx = jx / obj.uni.usi_i        # j [simu. units]
+    return ic_ix + jx              # j [simu. units]
+
   elif var in ['efx', 'efy', 'efz']:
     # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
-    x    = var[-1]  # axis; 'x', 'y', or 'z'
-    xidx = dict(x=0, y=1, z=2)[x] # axis; 0, 1, or 2.
     # ----- calculate the necessary component of -ue x B (== B x ue) ----- #
-    if   x=='x':         # (B x A)_x = By Az - Bz Ay
-      xl, xm = 'y', 'z'  # (B x A)_x = Bl Am - Bm Al  << (same)
-    elif x=='y':         # (B x A)_y = Bz Ax - Bx Az
-      xl, xm = 'z', 'x'  # (B x A)_y = Bl Am - Bm Al  << (same)
-    elif x=='z':         # (B x A)_z = Bx Ay - By Ax
-      xl, xm = 'x', 'y'  # (B x A)_z = Bl Am - Bm Al  << (same)
-    ## make sure we get the interpolation correct:
-    ## efx is at (0, -1/2, -1/2).
-    ## By  is at (0, -1/2,  0  ).  we shift by zdn to align with efx.
-    ## uez is at (0,  0  , -1/2).  we shift by ydn to align with efx.
-    y, z = xl, xm
-    ydn, zdn = y+'dn', z+'dn'
-    By  = obj.get_var('b'+y  + zdn)  # [simu. B-field units]
-    Bz  = obj.get_var('b'+z  + ydn)  # [simu. B-field units]
-    uey = obj.get_var('ue'+y + zdn)  # [simu. velocity units]
-    uez = obj.get_var('ue'+z + ydn)  # [simu. velocity units]
-    B_cross_ue_x = By * uez - Bz * uey # [simu. E-field units]
+    # There is a flag, "do_hall", when "false", we don't let the contribution
+    ## from current to ue to enter in to the B x ue for electric field.
+    if obj.get_param('do_hall', default="false")=="false":
+      ue = 'uep'  # include only the momentum contribution in ue, in our ef calculation.
+      warnings.warn('do_hall=="false", so we are dropping the j (current) contribution to ef (E-field)')
+    else:
+      ue = 'ue'   # include the full ue term, in our ef calculation.
+    # we will need to do a cross product, with extra care to interpolate correctly.
+    ## we name the axes variables x,y,z to make it easier to understand the code.
+    x    = var[-1]  # axis; 'x', 'y', or 'z'
+    y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    # make sure we get the interpolation correct:
+    ## B and ue are face-centered vectors.
+    ## Thus we use _facecross_ from load_arithmetic_quantities.
+    B_cross_ue__x = obj.get_var('b_facecross_ue'+x)
     # ----- calculate grad pressure ----- #
     ## efx is at (0, -1/2, -1/2).
     ## P is at (0,0,0).
@@ -204,7 +212,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     interp = 'xdnydnzdn'
     gradPe_x = obj.get_var('dpd'+x+'up'+interp, mf_ispecies=-1) # [simu. energy density units]
     # ----- calculate ionization & recombination effects ----- #
-    warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
+    if obj.get_param('do_recion', default=False):
+      warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
     # ----- calculate collisional effects (only if do_ohm_ecol) ----- #
     sum_rejx = 0.
     if obj.params['do_ohm_ecol'][obj.snapInd]:
@@ -220,20 +229,12 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     ## ne is at (0, 0, 0)
     ## to align with efx, we shift ne by ydn zdn
     interp = y+'dn'+z+'dn'
-    ne = obj.get_var('nr_si'+interp, mf_ispecies=-1)  # [m^-3]
-    neqe = obj.uni.qsi_electron * ne    # [C m^-3]
+    ne = obj.get_var('nr'+interp, mf_ispecies=-1)   # [simu. number density units]
+    neqe = ne * obj.uni.simu_qsi_e                  # [simu. charge density units]
+    ## we used simu_qsi_e because we are using here the SI equation for E-field.
+    ## if we wanted to use simu_q_e we would have to use the cgs equation instead.
     # ----- calculate efx ----- #
-    ## TODO: instead do the calculation without converting to SI.
-    ## because ne and qe are in SI, we will convert to SI.
-    ### converting to SI:
-    gradPe_x *= obj.uni.usi_e
-    sum_rejx *= obj.uni.usi_p / obj.uni.u_t         # u_t == usi_t
-    ## add up the things which are divided by ne qe; convert to simu. units.
-    tmp = (gradPe_x + sum_rejx) / (neqe)   # [SI units for E-field]
-    u_ef = obj.uni.usi_b * obj.uni.usi_u   # conversion: E [simu.] * u_ef = E [SI]
-    tmp = tmp / u_ef                       # [simu. units for E-field]
-    ## put it all together.
-    efx = B_cross_ue_x + tmp
+    efx = B_cross_ue__x + (gradPe_x + sum_rejx) / neqe # [simu. E-field units] 
     output = efx
 
   return output
@@ -252,13 +253,13 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     obj.get_var('ux') otherwise.
   '''
   if ONEFLUID_QUANT is None:
-    ONEFLUID_QUANT = ['nr', 'nr_si', 'p', 'pressure', 'tg', 'temperature', 'ke',
+    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke',
                       'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
-    docvar('nr', 'number density of ifluid [cm^-3]')
-    docvar('nr_si', 'number density of ifluid [m^-3]')
+    docvar('nr', 'number density of ifluid [simu. number density units]')
+    docvar('nq', 'charge density of ifluid [simu. charge density units]')
     for tg in ['tg', 'temperature']:
       docvar(tg, 'temperature of ifluid [K]')
     for p in ['p', 'pressure']:
@@ -266,7 +267,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     docvar('ke', 'kinetic energy density of ifluid [simu. units]')
     _equivstr = " Equivalent to obj.get_var('{ve:}') when obj.mf_ispecies < 0; obj.get_var('{vf:}'), otherwise."
     equivstr = lambda v: _equivstr.format(ve=v.replace('i', 'e'), vf=v.replace('i', ''))
-    docvar('ri', 'mass density of ifluid [simu. density units]. '+equivstr('ri'))
+    docvar('ri', 'mass density of ifluid [simu. mass density units]. '+equivstr('ri'))
     for uix in ['uix', 'uiy', 'uiz']:
       docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix))
     for pix in ['pix', 'piy', 'piz']:
@@ -278,22 +279,26 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
 
   if var == 'nr':
     if obj.mf_ispecies < 0: # electrons
-      return obj.get_var('nel')
+      return obj.get_var('nel') / obj.uni.u_nr
     else:                   # not electrons
-      mass = obj.att[obj.mf_ispecies].params.atomic_weight          # [amu]
-      return obj.get_var('r') * obj.uni.u_r / (obj.uni.amu * mass)  # [cm^-3]
+      mass = obj.get_mass(obj.mf_ispecies, units='simu') # [simu. mass units]
+      return obj.get_var('r') / mass   # [simu number density units]
 
-  elif var == 'nr_si':
-    return obj.get_var('nr') / ( (obj.uni.cm_to_m)**3 )
+  elif var == 'nq':
+    charge = obj.get_charge(obj.ifluid, units='simu') # [simu. charge units]
+    if charge == 0:
+      return np.zeros(obj.r.shape)
+    else:
+      return charge * obj.get_var('nr')
 
   elif var in ['p', 'pressure']:
     gamma = obj.uni.gamma
     return (gamma - 1) * obj.get_var('e')          # p = (gamma - 1) * internal energy
 
   elif var in ['tg', 'temperature']:
-    p  = obj.get_var('p') * obj.uni.u_e  # [cgs units]
-    nr = obj.get_var('nr')               # [cgs units]
-    return p / (nr * obj.uni.k_b)        # [K]         # p = n k T
+    p  = obj.get_var('p') * obj.uni.u_e    # [cgs units]
+    nr = obj.get_var('nr') * obj.uni.u_nr  # [cgs units]
+    return p / (nr * obj.uni.k_b)          # [K]         # p = n k T
 
   elif var == 'ke':
     return 0.5 * obj.get_var('ri') * obj.get_var('ui2')
@@ -308,12 +313,12 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
         return obj.get_var(f_var)
 
 
-
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
   if ELECTRON_QUANT is None:
-    ELECTRON_QUANT = ['nel', 're', 'uex', 'uey', 'uez', 'pex', 'pey', 'pez', 'eke']
+    ELECTRON_QUANT = ['nel', 're', 'eke']
+    ELECTRON_QUANT += [ue + x for ue in ['ue', 'pe', 'uej', 'uep'] for x in ['x', 'y', 'z']]
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
@@ -335,18 +340,50 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
   if var == 'nel': # number density of electrons [cm^-3]
     for fluid in fl.Fluids(dd=obj).ions():
-      output += obj.get_var('nr', ifluid=fluid.SL) * fluid.ionization    #[cm^-3]
-    return output
+      output += obj.get_var('nr', ifluid=fluid.SL) * fluid.ionization   #[simu. number density units]
+    return output * obj.uni.u_nr    # [cm^-3]
 
   elif var == 're': # mass density of electrons [simu. mass density units]
-    # it is more efficient to loop through the fluids here than to get_var('nel').
+    return obj.get_var('nr') * obj.uni.simu_m_e
+
+  elif var in ['uepx', 'uepy', 'uepz']: # electron velocity (contribution from momenta)
+    # i = sum_j (nj uj qj) + ne qe ue
+    ## --> ue = (i - sum_j(nj uj qj)) / (ne qe)
+    x = var[-1] # axis; 'x', 'y', or 'z'.
+    # get component due to velocities:
+    ## r is in center of cells, while u is on faces, so we need to interpolate.
+    ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift r by xdn
+    interp = x+'dn'
+    nqe    = np.zeros(obj.r.shape)  # charge density of electrons.
     for fluid in fl.Fluids(dd=obj).ions():
-      nr = obj.get_var('r', ifluid=fluid.SL) / fluid.atomic_weight  #[simu. mass density units / amu]
-      output += nr * fluid.ionization         #[(simu. mass density units / amu) * elementary charge]
-    return output * (obj.uni.msi_e / obj.uni.amusi)  # [simu. mass density units]
+      nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
+      ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
+      output -= nq * ux                                   # [simu. current per area units]
+      nqe    -= nq                                        # [simu. charge density units]
+    return output / nqe  # [simu velocity units]
+
+  elif var in ['uejx', 'uejy', 'uejz']: # electron velocity (contribution from current)
+    # i = sum_j (nj uj qj) + ne qe ue
+    ## --> ue = (i - sum_j(nj uj qj)) / (ne qe)
+    x = var[-1] # axis; 'x', 'y', or 'z'.
+    # get component due to current:
+    ## i is on edges of cells, while u is on faces, so we need to interpolate.
+    ## ix is at (0, -0.5, -0.5); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift ix by xdn yup zup
+    y, z    = tuple(set(('x', 'y', 'z')) - set((x)))
+    interpj = x+'dn' + y+'up' + z+'up'
+    jx      = obj.get_var('j'+x + interpj)   # [simu current per area units]
+    ## r (nq) is in center of cells, while u is on faces, so we need to interpolate.
+    ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
+    ## ---> to align with ux, we shift r by xdn
+    interpn = x+'dn'
+    nqe = obj.get_var('nq' + interpn, iS= -1)     # [simu charge density units]
+    return jx / nqe  # [simu velocity units]
 
   elif var in ['uex', 'uey', 'uez']: # electron velocity [simu. velocity units]
-    # ne qe ue = sum_j(nj uj qj) - i,   where i = current area density (charge per unit area per unit time)
+    # i = sum_j (nj uj qj) + ne qe ue
+    ## --> ue = (i - sum_j(nj uj qj)) / (ne qe)
     x = var[-1] # axis; 'x', 'y', or 'z'.
     # get component due to current:
     ## i is on edges of cells, while u is on faces, so we need to interpolate.
@@ -354,26 +391,19 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## ---> to align with ux, we shift ix by xdn yup zup
     y, z   = tuple(set(('x', 'y', 'z')) - set((x)))
     interp = x+'dn' + y+'up' + z+'up'
-    ix = obj.get_var('i'+x + interp)   # [units?? we convert to SI below.]
-    i_uni = obj.uni.u_r / (obj.uni.u_b * obj.uni.u_t * obj.uni.q_electron)  # (see unit conversion table on wiki.)
-    output = -1 * ix * i_uni     # [simu velocity units * cm^-3]
-    if not np.all(output == 0): 
-      # remove this warning once this code has been tested.
-      warnings.warn("Nonzero current has not been tested to confirm it matches between helita & ebysus. "+\
-                    "You can test it by saving 'eux' via aux, and comparing get_var('eux') to get_var('uex').")
+    output = obj.get_var('j'+x + interp)   # [simu current per area units]
     # get component due to velocities:
     ## r is in center of cells, while u is on faces, so we need to interpolate.
     ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
     ## ---> to align with ux, we shift r by xdn
     interp = x+'dn'
-    nel    = np.zeros(obj.r.shape)  # calculate nel as we loop through fluids below, to improve efficiency.
+    nqe    = np.zeros(obj.r.shape)  # charge density of electrons.
     for fluid in fl.Fluids(dd=obj).ions():
-      nr   = obj.get_var('nr' + interp, ifluid=fluid.SL)  # [cm^-3]
-      ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu velocity units]
-      qnr  = nr * fluid.ionization                        # [cm^-3]
-      output += qnr * ux                                  # [simu velocity units * cm^-3]
-      nel    += qnr                                       # [cm^-3]
-    return output / nel                                   # [simu velocity units]
+      nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
+      ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
+      output -= nq * ux                                   # [simu. current per area units]
+      nqe    -= nq                                        # [simu. charge density units]
+    return output / nqe  # [simu velocity units]
 
   elif var in ['pex', 'pey', 'pez']: # electron momentum density [simu. momentum density units]
     # p = r * u.
@@ -456,21 +486,21 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['nu_ij','nu_sj','rijx','rijy','rijz',      # basics: frequencies & mom exchange
                     'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
-                    'nu_ij_mx','nu_ij_res','nu_se_spitzcoul',  # alternative formulae
+                    'nu_ij_mx','nu_ij_res','nu_se_spitzcoul', 'nu_ij_capcoul', # alternative formulae
                     'nu_ij_to_ji', 'nu_sj_to_js',              # conversion factor nu_ij --> nu_ji
-                    'c_tot_per_vol', '1dcolslope']             # misc.
+                    'c_tot_per_vol', '1dcolslope',]            # misc.
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
     cfid = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
-    mtra = 'momentum transfer collision frequency [s^-1] between ifluid & jfluid. '
+    mtra = 'momentum transfer collision frequency [simu. frequency units] between ifluid & jfluid. '
     for nu_ij in ['nu_ij', 'nu_sj']:
       docvar(nu_ij, mtra + 'Use species<0 for electrons.' + cfid, nfluid=2)
     for x in ['x', 'y', 'z']:
       docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
                        '[simu. momentum density units / simu. time units]. ' +\
                        'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2)
-    sstr = 'sum of momentum transfer collision frequencies [s^-1] between {} & {}.' + cfid
+    sstr = 'sum of momentum transfer collision frequencies [simu. frequency units] between {} & {}.' + cfid
     docvar('nu_si', sstr.format('ifluid', 'ion fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
@@ -480,11 +510,13 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_ij_res', 'resonant collisions between ifluid & jfluid. '+\
                         'presently, only properly implemented for ifluid=H+, jfluid=H.', nfluid=2)
     docvar('nu_se_spitzcoul', 'coulomb collisions between s & e-, including spitzer correction. ' +\
-                              'Formula in Oppenheim et al 2020 appendix A eq 4.', nfluid=1)
+                              'Formula in Oppenheim et al 2020 appendix A eq 4. [simu freq]', nfluid=1)
+    docvar('nu_ij_capcoul', 'coulomb collisions using Capitelli 2013 formulae. [simu freq]', nfluid=2)
     docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j', nfluid=2)
     docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j', nfluid=2)
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
-    docvar('c_tot_per_vol', 'number density of collisions [cm^-3] between ifluid and jfluid.', nfluid=2)
+    docvar('c_tot_per_vol', 'number density of collisions per volume per time '
+                            '[simu. number density * simu. frequency] between ifluid and jfluid.', nfluid=2)
     return None
 
   if var not in COLFRE_QUANT:
@@ -495,12 +527,12 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     jSL = obj.jfluid
     # get ifluid info
     tgi  = obj.get_var('tg', ifluid=iSL)      # [K]
-    m_i  = fluid_tools.get_mass(obj, iSL[0])  # [amu]
+    m_i  = obj.get_mass(iSL[0])  # [amu]
     # get jfluid info, then restore original iSL & jSL
     with obj.MaintainFluids():
-      n_j   = obj.get_var('nr', ifluid=jSL)      # [cm^-3]
-      tgj   = obj.get_var('tg', ifluid=jSL)      # [K]
-      m_j   = fluid_tools.get_mass(obj, jSL[0])  # [amu]
+      n_j   = obj.get_var('nr', ifluid=jSL) * obj.uni.u_nr # [cm^-3]
+      tgj   = obj.get_var('tg', ifluid=jSL)                # [K]
+      m_j   = obj.get_mass(jSL[0])            # [amu]
 
     # compute some values:
     m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
@@ -508,18 +540,19 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
     
     # if both fluids have nonzero charge, use coulomb collisions formula.
-    icharge = fluid_tools.get_charge(obj, iSL)   # [elementary charge == 1]
-    jcharge = fluid_tools.get_charge(obj, jSL)   # [elementary charge == 1]
+    icharge = obj.get_charge(iSL)   # [elementary charge == 1]
+    jcharge = obj.get_charge(jSL)   # [elementary charge == 1]
     if icharge != 0 and jcharge != 0:
       m_h = obj.uni.m_h / obj.uni.amu            # [amu]
       logcul = obj.get_var('logcul')
-      return 1.7 * logcul/20.0 * (m_h/m_i) * (m_ij/m_h)**0.5 * n_j / tgij**1.5 * icharge**2 * jcharge**2
+      scalars = 1.7 * 1/20.0 * (m_h/m_i) * (m_ij/m_h)**0.5 * icharge**2 * jcharge**2 / obj.uni.u_hz
+      return scalars * logcul * n_j / tgij**1.5
       
     # else, use charge-neutral collisions formula.
     cross    = obj.get_var('cross')    # [cm^2]
     tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
     #calculate & return nu_ij:
-    return 4./3. * n_j * m_jfrac * cross * tg_speed   # [s^-1]
+    return 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
 
   elif var in ['rijx', 'rijy', 'rijz']:
     if obj.ifluid==obj.jfluid:      # when ifluid==jfluid, u_j = u_i, so rij = 0.
@@ -554,7 +587,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   elif var == 'nu_en':
     return obj.get_var('nu_sn', mf_ispecies=-1)
   
-  elif var == "nu_ij_mx":
+  elif var == 'nu_ij_mx':
     #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
     CONST_MULT    = 1.96     #factor in front.
     CONST_ALPHA_N = 6.67e-31 #[m^3]    #polarizability for Hydrogen   #(should be different for different species)
@@ -564,55 +597,92 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     # units of CONST_RATIO: [C^2 kg^-1 (kg^1 m^3 s^-2 C^-2) m^-3] = [s^-2]
     #get variables.
     with obj.MaintainFluids():
-      n_j = obj.get_var("nr", ifluid=obj.jfluid) /(obj.uni.cm_to_m**3)      #number density [m^-3]
-    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)  #mass [amu]
-    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)  #mass [amu]
+      n_j = obj.get_var('nr', ifluid=obj.jfluid) * obj.uni.usi_nr   #number density [m^-3]
+    m_i = obj.get_mass(obj.mf_ispecies)  #mass [amu]
+    m_j = obj.get_mass(obj.mf_jspecies)  #mass [amu]
     #calculate & return nu_ij_test:
-    return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j)))
+    return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j))) / obj.uni.usi_hz
 
   elif var == 'nu_ij_res':
-    ## uses formula which is only valid when ifluid=H+, jfluid=H
-    nH = obj.get_var('nr_si')  # [m^-3]
+    # formula assumes we are doing nu_{H+, H} collisions.
+    ## it also happens to be valid for nu_{H, H+},
+    ## because nu_ij_to_ji for H, H+ is the ratio nH / nH+.
+    with obj.MaintainFluids():
+      nH = obj.get_var('nr', ifluid=obj.jfluid) * obj.uni.usi_nr # [m^-3]
     tg = 0.5 * (obj.get_var('tg') + obj.get_var('tg', ifluid=obj.jfluid)) # [K]
-    return 2.65e-16 * nH * np.sqrt(tg) * (1 - 0.083 * np.log10(tg))**2
+    return 2.65e-16 * nH * np.sqrt(tg) * (1 - 0.083 * np.log10(tg))**2 / obj.uni.usi_hz
 
   elif var == 'nu_se_spitzcoul':
-    icharge = fluid_tools.get_charge(obj, obj.ifluid)
+    icharge = obj.get_charge(obj.ifluid)
     assert icharge > 0, "ifluid must be ion, but got charge={} (ifluid={})".format(icharge, obj.ifluid)
     #nuje = me pi ne e^4 ln(12 pi ne ldebye^3) / ( ms (4 pi eps0)^2 sqrt(ms (2 kb T)^3) )
     ldebye = obj.get_var('ldebye') * obj.uni.usi_l
     me   = obj.uni.msi_e
     tg   = obj.get_var('tg')
-    ms   = fluid_tools.get_mass(obj, obj.mf_ispecies, units='si')
+    ms   = obj.get_mass(obj.mf_ispecies, units='si')
     eps0 = obj.uni.permsi
     kb   = obj.uni.ksi_b
     qe   = obj.uni.qsi_electron
-    ne   = obj.get_var('nr_si', mf_ispecies=-1)
+    ne   = obj.get_var('nr', mf_ispecies=-1) * obj.uni.usi_nr  # [m^-3]
     # combine numbers in a way that will prevent extremely large or small values:
     const = (1 / (16 * np.pi)) * (qe / eps0)**2 * (qe / kb) * (qe / np.sqrt(kb))
     mass_ = me / ms  *  1/ np.sqrt(ms)
     ln_   = np.log(12 * np.pi * ne) + 3 * np.log(ldebye)
     nuje0 = (const * ne) * mass_ * ln_ / (2 * tg)**(3/2)
 
+  elif var == 'nu_ij_capcoul':
+    iSL = obj.ifluid
+    jSL = obj.jfluid
+    icharge = obj.get_charge(iSL, units='si') #[C]
+    jcharge = obj.get_charge(jSL, units='si') #[C]
+    assert icharge != 0 and jcharge != 0, 'we require i & j both charged' +\
+      ' but got icharge={}, jcharge={}'.format(icharge, jcharge)
+
+    # get ifluid info
+    tgi  = obj.get_var('tg', ifluid=iSL)      # [K]
+    m_i  = obj.get_mass(iSL[0])  # [amu]
+    # get jfluid info, then restore original iSL & jSL
+    with obj.MaintainFluids():
+      n_j   = obj.get_var('nr', ifluid=jSL) * obj.uni.usi_nr # [m^-3]
+      tgj   = obj.get_var('tg', ifluid=jSL)                # [K]
+      m_j   = obj.get_mass(jSL[0])            # [amu]
+
+    # compute some values:
+    m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
+    m_ij    = m_i * m_jfrac                          # [amu]   # e.g. for H, H+, m_ij = 0.5.
+    tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
+
+    tg_speed = np.sqrt(8 * (obj.uni.ksi_b/obj.uni.amusi) * tgij / (np.pi * m_ij)) # [m s^-1]
+    E_alpha  = 0.5 * (m_ij * obj.uni.amusi) * tg_speed**2
+      
+    euler_constant = 0.577215
+    b_0      = abs(icharge*jcharge)/(4 * np.pi * obj.uni.permsi * E_alpha)  # [m]  # permsi == epsilon_0
+    #b_0      = abs(icharge*jcharge)/(2 * obj.uni.ksi_b*obj.uni.permsi * tgij)  # [m]   # permsi == epsilon_0
+    cross    = np.pi*2.0*(b_0**2)*(np.log(obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant) # [m2]
+
+    #calculate & return nu_ij:
+    nu_ij = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
+    return nu_ij
+
     # try again but with logs. Run this code to confirm that the above code is correct.
-    run_confirmation_code = False   # change to True to run this code.
-    if run_confirmation_code:
+    run_confirmation_routine = False   # change to True to run this code.
+    if run_confirmation_routine:
       ln = np.log
       tmp1 = ln(me) + ln(np.pi) + ln(ne) + 4*ln(qe) + ln(ln(12) + ln(np.pi) + ln(ne) + 3*ln(ldebye))  # numerator
       tmp2 = ln(ms) + 2*(ln(4) + ln(np.pi) + ln(eps0)) + 0.5*(ln(ms) + 3*(ln(2) + ln(kb) + ln(tg)))  # denominator
       tmp = tmp1 - tmp2
       nuje1 = np.exp(tmp)
       print('we expect these to be approximately equal:', nuje0.mean(), nuje1.mean())
-    return nuje0
+    return nuje0 / obj.uni.usi_hz
 
   elif var in ['nu_ij_to_ji', 'nu_sj_to_js']:
-    mi_ni = obj.get_var('r', ifluid=obj.ifluid)  # mi * ni = ri
-    mj_nj = obj.get_var('r', ifluid=obj.jfluid)  # mj * nj = rj
+    mi_ni = obj.get_var('ri', ifluid=obj.ifluid)  # mi * ni = ri
+    mj_nj = obj.get_var('ri', ifluid=obj.jfluid)  # mj * nj = rj
     return mi_ni / mj_nj
 
   elif var == "c_tot_per_vol":
-    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)   # [amu]
-    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)   # [amu]
+    m_i = obj.get_mass(obj.mf_ispecies)   # [amu]
+    m_j = obj.get_mass(obj.mf_jspecies)   # [amu]
     return obj.get_var("nr", ifluid=obj.jfluid) * obj.get_var("nu_ij") / (m_j / (m_i + m_j))
 
   elif var == "1dcolslope":
@@ -685,8 +755,8 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
 
   # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
   with obj.MaintainFluids():
-    m_i = fluid_tools.get_mass(obj, obj.mf_ispecies)
-    m_j = fluid_tools.get_mass(obj, obj.mf_jspecies)
+    m_i = obj.get_mass(obj.mf_ispecies)
+    m_j = obj.get_mass(obj.mf_jspecies)
     tgi = obj.get_var('tg', ifluid = obj.ifluid)
     tgj = obj.get_var('tg', ifluid = obj.jfluid)
 
@@ -695,9 +765,7 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
 
   # look up cross table and get cross section
   #crossunits = 2.8e-17  
-  cross_tab = fluid_tools.get_cross_tab(obj, obj.ifluid, obj.jfluid)
-
-  crossobj = obj.cross_sect(cross_tab=[cross_tab])
+  crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
   crossunits = crossobj.cross_tab[0]['crossunits']
   cross = crossunits * crossobj.tab_interp(tg)
 
@@ -800,30 +868,29 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     return ci_sim
 
   if quant == 'sgyrof':
-    B = obj.get_var('modb') * obj.uni.usi_b   # magnitude of B [Tesla]  [SI units]
-    q = fluid_tools.get_charge(obj, obj.ifluid, units='si') # [C]       [SI units]
-    m = fluid_tools.get_mass(  obj, obj.mf_ispecies, units='si') # [kg]      [SI units]
-    gyrof_si = q * B / m           # [s^-1]  [SI units]
-    return gyrof_si * obj.uni.u_t  # [simu. time units]  # [1/f_si] = [s];  x [s] / usi_t = x [simu. time]   # usi_t = u_t
+    B = obj.get_var('modb')                       # magnitude of B [simu. B-field units]
+    q = obj.get_charge(obj.ifluid, units='simu')     #[simu. charge units]
+    m = obj.get_mass(obj.mf_ispecies, units='simu')  #[simu. mass units]
+    return q * B / m
 
   if quant == 'gyrof':
     return np.abs(obj.get_var('sgyrof'))
 
   if quant == 'skappa':
-    gyrof = obj.get_var('sgyrof') * (1/obj.uni.u_t)  # [s^-1]
-    nu_sn = obj.get_var('nu_sn')                     # [s^-1]
+    gyrof = obj.get_var('sgyrof') #[simu. freq.]
+    nu_sn = obj.get_var('nu_sn')  #[simu. freq.]
     return gyrof / nu_sn 
 
   if quant == 'kappa':
     return np.abs(obj.get_var('skappa'))
 
   elif quant == 'ldebyei':
-    Zi2 = fluid_tools.get_charge(obj, obj.ifluid)**2
+    Zi2 = obj.get_charge(obj.ifluid)**2
     if Zi2 == 0:
       return np.zeros(obj.r.shape)
     const = obj.uni.permsi * obj.uni.ksi_b / obj.uni.qsi_electron**2
-    tg = obj.get_var('tg')     # [K]
-    nr = obj.get_var('nr_si')  # [m^-3]
+    tg = obj.get_var('tg')                     # [K]
+    nr = obj.get_var('nr') * obj.uni.usi_nr    # [m^-3]
     ldebsi = np.sqrt(const * tg / (nr * Zi2))  # [m]
     return ldebsi / obj.uni.usi_l  # [simu. length units]
 
@@ -859,12 +926,12 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
     return 1./(kappa_i * kappa_e)
 
   elif quant == 'vde':
-    modE = obj.get_var('mode') # [simu. E-field units]
+    modE = obj.get_var('modef') # [simu. E-field units]
     modB = obj.get_var('modb') # [simu. B-field units]
     return modE / modB         # [simu. velocity units]
 
   elif quant == 'fb_ssi_vdtrigger':
-    icharge = fluid_tools.get_charge(obj, obj.ifluid)
+    icharge = obj.get_charge(obj.ifluid)
     assert icharge > 0, "expected ifluid to be an ion but got ifluid charge == {}".format(icharge)
     ci   = obj.get_var('ci')   # [simu. velocity units]
     psi0 = obj.get_var('psi0')

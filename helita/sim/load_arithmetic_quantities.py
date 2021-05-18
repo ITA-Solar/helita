@@ -91,8 +91,8 @@ def _can_interp(obj, axis, warn=True):
   if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
     return False       # intentionally turned off interpolation. So we don't make warning.
   if not getattr(obj, 'cstagger_exists', False):
-    warnmsg = 'requested interpolation but cstagger not initialized for obj={}! '.format(obj) +\
-              'We will skip this interpolation, and instead return the original value.'
+    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(obj) +\
+              'We will skip the interpolation, and instead return the original value.'
     warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
     return False
   if not getattr(obj, 'n'+axis, 0) >=5:
@@ -242,10 +242,6 @@ def get_interp(obj, quant):
     val = obj.get_var(varname)      # un-interpolated value
     if _can_interp(obj, interp[0]):
       val = do_cstagger(val, interp) # interpolated value
-    else:
-      # return un-interpolated value; warn that we are not actually interpolating.
-      warnings.warn('requested interpolation in {x:} but obj.n{x:} < 5 '.format(x=interp[0]) +\
-                    'or obj.cstagop==False! Skipping this interpolation.')
     return val
 
 
@@ -306,19 +302,25 @@ def get_horizontal_average(obj,quant):
 def get_gradients_vect(obj,quant):
   '''
   Vectorial derivative opeartions
+
+  for rot, she, curlcc, curvec, ensure that quant ends with axis.
+  e.g. curvecbx gets the x component of curl of b.
   '''
-  GRADVECT_QUANT = ['div', 'rot', 'she', 'chkdiv', 'chbdiv', 'chhdiv']
+  GRADVECT_QUANT = ['div', 'rot', 'she', 'curlcc', 'curvec', 'chkdiv', 'chbdiv', 'chhdiv']
 
-  docvar = document_vars.vars_documenter(obj, 'GRADVECT_QUANT', GRADVECT_QUANT, get_gradients_vect.__doc__)
-  docvar('div',  'starting with, divergence [simu units]')
-  docvar('rot',  'starting with, rotational [simu units]')
-  docvar('she',  'starting with, shear [simu units]')
-  docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
-  docvar('chbdiv',  'starting with, ratio of the divergence with the sum of the absolute of each spatial derivative [simu units]')
-  docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'GRADVECT_QUANT', GRADVECT_QUANT, get_gradients_vect.__doc__)
+    docvar('div',  'starting with, divergence [simu units]')
+    docvar('rot',  'starting with, rotational (a.k.a. curl) [simu units]')
+    docvar('she',  'starting with, shear [simu units]')
+    docvar('curlcc',  'starting with, curl but shifted (via interpolation) back to original location on cell [simu units]')
+    docvar('curvec',  'starting with, curl of face-centered vector [simu units]')
+    docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
+    docvar('chbdiv',  'starting with, ratio of the divergence with the sum of the absolute of each spatial derivative [simu units]')
+    docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
+    return None
 
-
-  if (quant == '') or not (quant[:6] in GRADVECT_QUANT or quant[:3] in GRADVECT_QUANT):
+  if not (quant[:6] in GRADVECT_QUANT or quant[:3] in GRADVECT_QUANT):
       return None
 
   if quant[:3] == 'chk':
@@ -392,6 +394,25 @@ def get_gradients_vect(obj,quant):
     if getattr(obj, 'nz') > 5:
       result += obj.get_var('d' + q + 'zdzup')
 
+  elif quant[:6] == 'curlcc': # re-aligned curl
+    q = quant[6:-1]
+    x = quant[-1]  # axis, 'x', 'y', 'z'
+    y,z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    dqz_dy = obj.get_var('d' + q + z + 'd' + y + 'dn' + y + 'up')
+    dqy_dz = obj.get_var('d' + q + y + 'd' + z + 'dn' + z + 'up')
+    result = dqz_dy - dqy_dz
+
+  elif quant[:6] == 'curvec': # curl of vector which is originally on face of cell
+    q = quant[6:-1]
+    x = quant[-1]  # axis, 'x', 'y', 'z'
+    y,z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    # interpolation notes:
+    ## qz is at (0, 0, -0.5); dqzdydn is at (0, -0.5, -0.5)
+    ## qy is at (0, -0.5, 0); dqydzdn is at (0, -0.5, -0.5)
+    dqz_dydn = obj.get_var('d' + q + z + 'd' + y + 'dn')
+    dqy_dzdn = obj.get_var('d' + q + z + 'd' + y + 'dn')
+    result = dqz_dydn - dqy_dzdn
+
   elif quant[:3] == 'rot' or quant[:3] == 'she':
     q = quant[3:-1]  # base variable
     qaxis = quant[-1]
@@ -425,7 +446,7 @@ def get_gradients_vect(obj,quant):
           result -= obj.get_var('d' + q + 'xdyup')
         else:  # shear
           result += obj.get_var('d' + q + 'xdyup')
-    return result
+  return result
 
 
 def get_gradients_scalar(obj,quant):
@@ -559,33 +580,62 @@ def get_projections(obj,quant):
 
 
 def get_vector_product(obj,quant):
-  VECO_QUANT = ['times']
-  
-  docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
-  docvar('times',  'in between with, vectorial products or two vectors [simu units]')
+  '''cross product between two vectors.
+  call via <v1><times><v2><x>.
+  Example, for the x component of b cross u, you should call get_var('b_facecross_ux').
+  '''
+  VECO_QUANT = ['times', '_facecross_', '_edgecross_']
 
-  if (quant == '') or not quant[1:6] in VECO_QUANT:
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
+    docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
+    docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u.'
+                           'result is edge-centered. E.g. x component --> ( 0  , -0.5, -0.5).'))
+    docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I.'
+                           'result is face-centered. E.g. x component --> (-0.5,  0  ,  0  ).'))
     return None
 
-  warnings.warn('interpolation not implemented properly for cross product.')
-  # vectors are on faces or edges of grid cell, so we need to align them before multiplying.
+  cross = ''
+  for times in VECO_QUANT:
+    A, cross, q = quant.partition(times)
+    if cross==times: # then the partition was successful, i.e. (times in quant).
+      B, x = q[:-1], q[-1]
+      y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+      break
 
-  # projects v1 onto v2
-  v1 = quant[0]
-  v2 = quant[-2]
-  axis = quant[-1]
-  if axis == 'x':
-    varsn = ['y', 'z']
-  elif axis == 'y':
-    varsn = ['z', 'y']
-  elif axis == 'z':
-    varsn = ['x', 'y']
-  #return (obj.get_var(v1 + varsn[0] + 'c') *
-  #    obj.get_var(v2 + varsn[1] + 'c') - obj.get_var(v1 + varsn[1] + 'c') *
-  #    obj.get_var(v2 + varsn[0] + 'c'))
-  return (obj.get_var(v1 + varsn[0]) *
-      obj.get_var(v2 + varsn[1]) - obj.get_var(v1 + varsn[1]) *
-      obj.get_var(v2 + varsn[0]))
+  if cross == '':
+    return None
+
+  elif cross == 'times':
+    return (obj.get_var(A + y) * obj.get_var(B + z) -
+            obj.get_var(A + z) * obj.get_var(B + y))
+
+  elif cross == '_facecross_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (0, -0.5, -0.5)
+    ## Ay, By are at (0, -0.5,  0  ).  we must shift by zdn to align with result.
+    ## Az, Bz are at (0,  0  , -0.5).  we must shift by ydn to align with result.
+    ydn, zdn = y+'dn', z+'dn'
+    Ay = obj.get_var(A+y + zdn)
+    By = obj.get_var(B+y + zdn)
+    Az = obj.get_var(A+z + ydn)
+    Bz = obj.get_var(B+z + ydn)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
+  elif cross == '_edgecross_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (-0.5, 0, 0)
+    ## Ay, By are at (-0.5,  0  , -0.5).  we must shift by zup to align with result.
+    ## Az, Bz are at (-0.5, -0.5,  0  ).  we must shift by yup to align with result.
+    yup, zup = y+'up', z+'up'
+    Ay = obj.get_var(A+y + zup)
+    By = obj.get_var(B+y + zup)
+    Az = obj.get_var(A+z + yup)
+    Bz = obj.get_var(B+z + yup)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
 
 
 def threadQuantity(task, numThreads, *args):
