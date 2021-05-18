@@ -17,7 +17,9 @@ except ImportError:
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
                       CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
                       SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
-                      ONEFLUID_QUANT=None, ELECTRON_QUANT=None, FB_INSTAB_QUANT=None,
+                      ONEFLUID_QUANT=None, ELECTRON_QUANT=None, 
+                      CFL_QUANT=None,
+                      WAVE_QUANT=None, FB_INSTAB_QUANT=None,
                       **kwargs):
 
   quant = quant.lower()
@@ -45,8 +47,12 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
     val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
   if val is None:
     val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT)  
+  if val is None:
+    val = get_cfl_quant(obj, quant, CFL_QUANT=CFL_QUANT)
   if val is None: 
     val = get_mf_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
+  if val is None:
+    val = get_mf_wavequant(obj, quant, WAVE_QUANT=WAVE_QUANT)
   if val is None:
     val = get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=FB_INSTAB_QUANT)
   return val
@@ -70,9 +76,10 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   '''Variables which are calculated by looping through species or levels.'''
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'rc', 'rneu', 'tot_e', 'tot_ke',
+      GLOBAL_QUANT = ['totr', 'rc', 'rneu',
+                      'tot_e', 'tot_ke', 'e_ef', 'e_b', 'total_energy',
                       'tot_px', 'tot_py', 'tot_pz',
-                      'grph', 'tot_part', 'mu', 'pe',
+                      'grph', 'tot_part', 'mu',
                       'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
                       ]
 
@@ -83,6 +90,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
     docvar('tot_e',  'sum of internal energy densities of all fluids [simu. energy density units]')
     docvar('tot_ke', 'sum of kinetic  energy densities of all fluids [simu. energy density units]')
+    docvar('e_ef', 'energy density in electric field [simu. energy density units]')
+    docvar('e_b', 'energy density in magnetic field [simu. energy density units]')
+    docvar('total_energy', 'total energy density. tot_e + tot_ke + e_ef + e_b [simu units].')
     for axis in ['x', 'y', 'z']:
       docvar('tot_p'+axis, 'sum of '+axis+'-momentum densities of all fluids [simu. mom. dens. units]')
     docvar('grph',  'grams per hydrogen atom')
@@ -128,14 +138,29 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     output = obj.get_var('eke')   # kinetic energy density of electrons
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('ke', ifluid=fluid.SL)  # kinetic energy density of fluid
+
+  elif var == 'e_ef':
+    ef2  = obj.get_var('ef2')   # |E|^2  [simu E-field units, squared]
+    eps0 = obj.uni.permsi       # epsilon_0 [SI units]
+    units = obj.uni.usi_ef**2 / obj.uni.usi_e   # convert ef2 * eps0 to [simu energy density units]
+    return (0.5 * eps0 * units) * ef2
+
+  elif var == 'e_b':
+    b2   = obj.get_var('b2')    # |B|^2  [simu B-field units, squared]
+    mu0  = obj.uni.mu0si        # mu_0 [SI units]
+    units = obj.uni.usi_b**2 / obj.uni.usi_e    # convert b2 * mu0 to [simu energy density units]
+    return (0.5 * mu0 * units) * b2
+
+  elif var == 'total_energy':
+    output  = obj.get_var('tot_e')
+    output += obj.get_var('tot_ke')
+    output += obj.get_var('e_ef')
+    output += obj.get_var('e_b')
   
   elif var.startswith('tot_p'):  # note: must be tot_px, tot_py, or tot_pz.
     axis = var[-1]
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('p'+axis, ifluid=fluid.SL)   # momentum density of fluid
-
-  elif var == 'pe':
-    output = (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
   elif var == 'grph':
     for ispecies in obj.att:
@@ -178,16 +203,25 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   elif var in ['jx', 'jy', 'jz']:
     # J = curl (B) / mu_0
     warnings.warn('j does not (yet) add contribution from imposed current if it exists.')
-    ## TODO: do calculation in simu. units; add contribution from ic_ix if it exists.
     x = var[-1]
-    ic_ix = obj.get_param('ic_i'+x, 0) * (obj.get_param('do_imposed_current', 0) > 0)
+    # imposed current (imposed "additional" current, added artificially to system)
+    if obj.get_param('do_imposed_current', 0) > 0:
+      ic_units = obj.get_param('ic_units', 'ebysus')
+      ic_ix    = obj.get_param('ic_i'+x, 0)      # ic_ix [ic_units]
+      if   ic_units.strip().lower() == 'si':
+        ic_ix /= obj.uni.usi_i     # ic_ix [simu. units]
+      elif ic_units.strip().lower() == 'cgs':
+        ic_ix /= obj.uni.u_i       # ic_ix [simu. units]
+    else:
+      ic_ix = 0
+    # calculated current
     curlb_x =  obj.get_var('curvec'+'b'+x) * obj.uni.usi_b / obj.uni.usi_l  # (curl b)_x [si units]
     jx = curlb_x / obj.uni.mu0si   # j [si units]
     jx = jx / obj.uni.usi_i        # j [simu. units]
     return ic_ix + jx              # j [simu. units]
 
   elif var in ['efx', 'efy', 'efz']:
-    # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
+    # E = - ue x B + (ne |qe|)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
     # ----- calculate the necessary component of -ue x B (== B x ue) ----- #
     # There is a flag, "do_hall", when "false", we don't let the contribution
     ## from current to ue to enter in to the B x ue for electric field.
@@ -203,7 +237,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     # make sure we get the interpolation correct:
     ## B and ue are face-centered vectors.
     ## Thus we use _facecross_ from load_arithmetic_quantities.
-    B_cross_ue__x = obj.get_var('b_facecross_ue'+x)
+    B_cross_ue__x = obj.get_var('b_facecross_'+ue+x)
     # ----- calculate grad pressure ----- #
     ## efx is at (0, -1/2, -1/2).
     ## P is at (0,0,0).
@@ -253,7 +287,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     obj.get_var('ux') otherwise.
   '''
   if ONEFLUID_QUANT is None:
-    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke',
+    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 
                       'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
 
   if var=='':
@@ -272,6 +306,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
       docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix))
     for pix in ['pix', 'piy', 'piz']:
       docvar(pix, 'momentum density of ifluid [simu. momentum density units]. '+equivstr(pix))
+    docvar('vitherm', 'thermal speed of ifluid [simu. velocity units].')
     return None
 
   if var not in ONEFLUID_QUANT:
@@ -317,20 +352,24 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
   if ELECTRON_QUANT is None:
-    ELECTRON_QUANT = ['nel', 're', 'eke']
+    ELECTRON_QUANT = ['nel', 're', 'eke', 'pe']
     ELECTRON_QUANT += [ue + x for ue in ['ue', 'pe', 'uej', 'uep'] for x in ['x', 'y', 'z']]
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
     docvar('nel',  'electron number density [cm^-3]')
     docvar('re',   'mass density of electrons [simu. mass density units]')
-    untested_warning = \
-      ' Tested uex agrees between helita (uex) & ebysus (eux), for one set of units, for current=0. - SE Apr 4 2021.'
-    for v in 'uex', 'uey', 'uez':
-      docvar(v, '{}-component of electron velocity [simu. velocity units]'.format(v[-1]) + untested_warning)
-    for v in 'pex', 'pey', 'pez':
-      docvar(v, '{}-component of electron momentum density [simu. momentum density units]'.format(v[-1]))
     docvar('eke',  'electron kinetic energy density [simu. energy density units]')
+    docvar('pe',   'electron pressure [simu. pressure units]')
+    AXES = ['x', 'y', 'z']
+    for x in AXES:
+      docvar('ue'+x, '{}-component of electron velocity [simu. velocity units]'.format(x))
+    for x in AXES:
+      docvar('pe'+x, '{}-component of electron momentum density [simu. momentum density units]'.format(x))
+    for x in AXES:
+      docvar('uej'+x, '{}-component of current contribution to electron velocity [simu. velocity units]'.format(x))
+    for x in AXES:
+      docvar('uep'+x, '{}-component of species velocities contribution to electron velocity [simu. velocity units]'.format(x))
     return None
 
   if (var not in ELECTRON_QUANT):
@@ -345,6 +384,12 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
   elif var == 're': # mass density of electrons [simu. mass density units]
     return obj.get_var('nr') * obj.uni.simu_m_e
+
+  elif var == 'eke': #electron kinetic energy density [simu. energy density units]
+    return obj.get_var('ke', mf_ispecies=-1)
+
+  elif var == 'pe':
+    return (obj.uni.gamma-1) * obj.get_var('e', mf_ispecies=-1) 
 
   elif var in ['uepx', 'uepy', 'uepz']: # electron velocity (contribution from momenta)
     # i = sum_j (nj uj qj) + ne qe ue
@@ -416,9 +461,6 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     uex = obj.get_var('ue'+x)       # [simu. velocity units]
     return re * uex                 # [simu. momentum density units]
 
-  elif var == 'eke': #electron kinetic energy density [simu. energy density units]
-    return obj.get_var('ke', mf_ispecies=-1)
-
 
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   '''spitzer conductivies'''
@@ -482,7 +524,13 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 
 
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
-  '''quantities related to collision frequency.'''
+  '''quantities related to collision frequency.
+
+  Note the collision frequencies here are the momentum transer collision frequencies.
+  These obey the identity m_a  n_a  nu_ab  =  m_b  n_b  nu_ba.
+  This identity ensures total momentum (sum over all species) does not change due to collisions.
+  '''
+
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['nu_ij','nu_sj','rijx','rijy','rijz',      # basics: frequencies & mom exchange
                     'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
@@ -492,15 +540,14 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
-    cfid = ' Note: m_a  n_a  nu_ab  =  m_b  n_b  nu_ba'  #identity for momentum transfer col. freq.s
     mtra = 'momentum transfer collision frequency [simu. frequency units] between ifluid & jfluid. '
     for nu_ij in ['nu_ij', 'nu_sj']:
-      docvar(nu_ij, mtra + 'Use species<0 for electrons.' + cfid, nfluid=2)
+      docvar(nu_ij, mtra + 'Use species<0 for electrons.', nfluid=2)
     for x in ['x', 'y', 'z']:
       docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
                        '[simu. momentum density units / simu. time units]. ' +\
                        'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2)
-    sstr = 'sum of momentum transfer collision frequencies [simu. frequency units] between {} & {}.' + cfid
+    sstr = 'sum of momentum transfer collision frequencies [simu. frequency units] between {} & {}.'
     docvar('nu_si', sstr.format('ifluid', 'ion fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
@@ -658,7 +705,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     euler_constant = 0.577215
     b_0      = abs(icharge*jcharge)/(4 * np.pi * obj.uni.permsi * E_alpha)  # [m]  # permsi == epsilon_0
     #b_0      = abs(icharge*jcharge)/(2 * obj.uni.ksi_b*obj.uni.permsi * tgij)  # [m]   # permsi == epsilon_0
-    cross    = np.pi*2.0*(b_0**2)*(np.log(obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant) # [m2]
+    cross    = 2.0*(b_0**2)*(np.log(obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant) # [m2]
 
     #calculate & return nu_ij:
     nu_ij = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
@@ -772,18 +819,42 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   return cross
 
 
+def get_cfl_quant(obj, quant, CFL_QUANT=None):
+  '''CFL quantities. All are in simu. frequency units.'''
+  if CFL_QUANT is None:
+    CFL_QUANTS = ['ohm']
+    CFL_QUANT = ['cfl_' + q for q in CFL_QUANTS]
+
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'CFL_QUANT', CFL_QUANT, get_cfl_quant.__doc__)
+    docvar('cfl_ohm', 'cfl condition for ohmic module. (me / ms) ((qs / qe) + (ne / ns)) nu_es', nfluid=1)
+    return None
+
+  _, cfl_, quant = quant.partition('cfl_')
+  if quant=='':
+    return None
+
+  elif quant=='ohm':
+    fluid = obj.ifluid
+    nrat  = obj.get_var('nr', iS=-1) / obj.get_var('nr', ifluid=fluid)   # ne / ns
+    mrat  = obj.uni.msi_electron / obj.get_mass(fluid, units='si')       # me / ms
+    qrat  = obj.get_charge(fluid) / -1                                  # qs / qe
+    nu_es = obj.get_var('nu_ij', iS=-1, jfluid=fluid)                   # nu_es
+    return mrat * (qrat + nrat) * nu_es
+
+
 def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   '''plasma parameters, e.g. plasma beta, sound speed, pressure scale height'''
   if PLASMA_QUANT is None:
-    PLASMA_QUANT = ['beta', 'va', 'cs', 'ci', 's', 'ke', 'mn', 'man', 'hp',
+    PLASMA_QUANT = ['beta', 'beta_ions', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                 'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
     docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
+    docvar('beta_ions', "plasma beta using sum of ion pressures. P / (B^2 / (2 mu0)).", nfluid=0)
     docvar('va', "alfven speed [simu. units]", nfluid=1)
     docvar('cs', "sound speed [simu. units]", nfluid='???')
-    docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]", nfluid=1)
     docvar('s', "entropy [log of quantities in simu. units]", nfluid='???')
     docvar('mn', "mach number (using sound speed)", nfluid=1)
     docvar('man', "mach number (using alfven speed)", nfluid=1)
@@ -823,6 +894,13 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     elif quant == 'beta':
       return 2 * var / obj.get_var('b2')
 
+  if quant == 'beta_ions':
+    p = np.zeros(obj.r.shape)
+    for fluid in fl.Fluids(dd=obj).ions():
+      p += obj.get_var('p', ifluid=fluid)
+    bp = obj.get_var('b2') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
+    return p / bp
+
   if quant in ['mn', 'man']:
     var = obj.get_var('modu')
     if quant == 'mn':
@@ -851,21 +929,6 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
               obj.get_var('r') * var)
     else:
       return obj.get_var('u2') * var * 0.5
-
-  if quant == 'ci':
-    assert obj.mf_ispecies != -1, "ifluid {} must be ion to get ci, but got electron.".format(obj.ifluid)
-    fluids = fl.Fluids(dd=obj)
-    ion = fluids[obj.ifluid]
-    assert ion.ionization >= 1, "ifluid {} is not ionized; cannot get ci (==ion acoustic speed).".format(obj.ifluid)
-    # (we only want to get ion acoustic speed for ions; it doesn't make sense to get it for neutrals.)
-    itg = obj.get_var('tg')                  # [K] temperature of fluid
-    etg = obj.get_var('tg', mf_ispecies=-1)  # [K] temperature of electrons
-    igamma = obj.uni.gamma        # gamma (ratio of specific heats) of fluid
-    egamma = obj.uni.gamma        # gamma (ratio of specific heats) of electrons
-    ci2_p = ((ion.ionization * igamma * itg + egamma * etg) / ion.atomic_weight) # ci**2 if kB=amu=1
-    ci_cgs = np.sqrt((obj.uni.k_b / obj.uni.amu) * ci2_p ) # ci [cm/s]
-    ci_sim = ci_cgs / obj.uni.u_u                          # ci [simu. velocity units]
-    return ci_sim
 
   if quant == 'sgyrof':
     B = obj.get_var('modb')                       # magnitude of B [simu. B-field units]
@@ -902,10 +965,48 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     return 1/ldeb_inv_sum
 
 
+def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
+  '''quantities related most directly to waves in plasmas.'''
+  if WAVE_QUANT is None:
+    WAVE_QUANT = ['ci', 'kmaxx', 'kmaxy', 'kmaxz']
+
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, 'WAVE_QUANT', WAVE_QUANT, get_mf_wavequant.__doc__)
+    docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]", nfluid=1)
+    for x in ['x', 'y', 'z']:
+      docvar('kmax'+x, "maximum resolvable wavevector in "+x+" direction. Determined via 2*pi/obj.d"+x+"1d", nfluid=0)
+    return None
+
+  if quant == 'ci':
+    assert obj.mf_ispecies != -1, "ifluid {} must be ion to get ci, but got electron.".format(obj.ifluid)
+    fluids = fl.Fluids(dd=obj)
+    ion = fluids[obj.ifluid]
+    assert ion.ionization >= 1, "ifluid {} is not ionized; cannot get ci (==ion acoustic speed).".format(obj.ifluid)
+    # (we only want to get ion acoustic speed for ions; it doesn't make sense to get it for neutrals.)
+    itg = obj.get_var('tg')                  # [K] temperature of fluid
+    etg = obj.get_var('tg', mf_ispecies=-1)  # [K] temperature of electrons
+    igamma = obj.uni.gamma        # gamma (ratio of specific heats) of fluid
+    egamma = obj.uni.gamma        # gamma (ratio of specific heats) of electrons
+    ci2_p = ((ion.ionization * igamma * itg + egamma * etg) / ion.atomic_weight) # ci**2 if kB=amu=1
+    ci_cgs = np.sqrt((obj.uni.k_b / obj.uni.amu) * ci2_p ) # ci [cm/s]
+    ci_sim = ci_cgs / obj.uni.u_u                          # ci [simu. velocity units]
+    return ci_sim
+
+  elif quant in ['kmaxx', 'kmaxy', 'kmaxz']:
+    x = quant[-1] # axis; 'x', 'y', or 'z'.
+    xidx = dict(x=0, y=1, z=2)[x]  # axis; 0, 1, or 2.
+    dx1d = getattr(obj, 'd'+x+'1d')  # 1D; needs dims to be added. add dims below.
+    dx1d = np.expand_dims(dx1d, axis=tuple(set((0,1,2)) - set([xidx])))
+    return (2 * np.pi / dx1d) + np.zeros_like(obj.r)
+
+
 def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
   '''very specific quantities which are related to the Farley-Buneman instability.'''
   if FB_INSTAB_QUANT is None:
-    FB_INSTAB_QUANT = ['psi0', 'psii', 'vde', 'fb_ssi_vdtrigger', 'fb_ssi_possible']
+    FB_INSTAB_QUANT = ['psi0', 'psii', 'vde', 'fb_ssi_vdtrigger', 'fb_ssi_possible', 'fb_ssi_growth_rate']
+    vecs = ['fb_ssi_growth_rate_max', 'fb_ssi_growth_time_min']
+    FB_INSTAB_QUANT += [v+x for v in vecs for x in ['x', 'y', 'z']]
+
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'FB_INSTAB_QUANT', FB_INSTAB_QUANT, get_fb_instab_quant.__doc__)
     for psi in ['psi0', 'psii']:
@@ -915,6 +1016,16 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
              'in the case of SSI (single-species-ion). We assume ifluid is the single ion species.', nfluid=1)
     docvar('fb_ssi_possible', 'whether SSI Farley Buneman instability can occur (vde > fb_ssi_vdtrigger). ' +\
              'returns an array of booleans, with "True" meaning "can occur at this point".', nfluid=1)
+    docvar('fb_ssi_growth_rate', 'SSI FB instability growth rate divided by wavevector squared. ' +\
+             'assumes wavevector in E x B direction. == (Vd^2/(1+psi0)^2 - Ci^2)/(nu_in*(1+1/psi0)). ' +\
+             'result is in units of [simu. frequency * simu. length].', nfluid=2)
+    for x in ['x', 'y', 'z']:
+      docvar('fb_ssi_growth_rate_max'+x, 'SSI FB instability max growth rate in '+x+' direction ' +\
+               '[simu. frequency units]. calculated using fb_ssi_growth_rate * kmax'+x, nfluid=2)
+    for x in ['x', 'y', 'z']:
+      docvar('fb_ssi_growth_time_min'+x, 'SSI FB instability min growth time in '+x+' direction ' +\
+               '[simu. time units]. This is the amount of time it takes for the wave amplitude for the wave ' +\
+               'with the largest wave vector to grow by a factor of e. == 1/fb_ssi_growth_rate_max'+x, nfluid=2)
     return None
 
   if quant not in FB_INSTAB_QUANT:
@@ -939,3 +1050,25 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
 
   elif quant == 'fb_ssi_possible':
     return obj.get_var('vde') > obj.get_var('fb_ssi_vdtrigger')
+
+  elif quant == 'fb_ssi_growth_rate':
+    icharge = obj.get_charge(obj.ifluid)
+    assert icharge > 0, "expected ifluid to be an ion but got ifluid charge == {}".format(icharge)
+    jcharge = obj.get_charge(obj.jfluid)
+    assert jcharge == 0, "expected jfluid to be neutral but got jfluid charge == {}".format(jcharge)
+    # growth rate = (k_x)^2 * (Vd^2/(1+psi0)^2 - Ci^2)/(nu_in*(1+1/psi0))
+    Vd    = obj.get_var('vde')
+    psi0  = obj.get_var('psi0')
+    Ci    = obj.get_var('ci')
+    nu_in = obj.get_var('nu_ij')
+    return (Vd**2 / (1 + psi0)**2 - Ci**2) / (nu_in * (1 + 1/psi0))
+
+  elif quant in ['fb_ssi_growth_rate_max'+x for x in ['x', 'y', 'z']]:
+    x = quant[-1]
+    growth_rate = obj.get_var('fb_ssi_growth_rate')
+    kmaxx       = obj.get_var('kmax'+x)
+    return kmaxx**2 * growth_rate
+
+  elif quant in ['fb_ssi_growth_time_min'+x for x in ['x', 'y', 'z']]:
+    x = quant[-1]
+    return 1/obj.get_var('fb_ssi_growth_rate_max'+x)

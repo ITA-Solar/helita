@@ -191,7 +191,7 @@ class BifrostData(object):
                 else:
                     tmp = glob("%s.idl" % self.file_root)
                     snap = 0
-            except:
+            except Exception:
                 try:
                     tmp = sorted(glob("%s*idl.scr" % self.file_root))[0]
                     snap = -1
@@ -274,10 +274,14 @@ class BifrostData(object):
                         'u_b': 1.121e3, 'u_ee': 1.e12}
             for unit in unit_def:
                 if unit not in params:
-                    print("(WWW) read_params:"" %s not found, using "
-                          "default of %.3e" % (unit, unit_def[unit]), 2*whsp,
-                          end="\r", flush=True)
-                    params[unit] = unit_def[unit]
+                    default = unit_def[unit]
+                    if hasattr(self, 'uni'):
+                        default = getattr(self.uni, unit, default)
+                    if getattr(self, 'verbose', True):
+                        print("(WWW) read_params:"" %s not found, using "
+                              "default of %.3e" % (unit, default), 2*whsp,
+                              end="\r", flush=True)
+                    params[unit] = default
 
         self.params = {}
         for key in self.paramList[0]:
@@ -1351,7 +1355,7 @@ class Bifrost_units(object):
                         return
                     try:
                         value = self.params[key]
-                    except:
+                    except Exception:
                         value = DEFAULT_UNITS[key]
                         if verbose:
                             printstr = ("(WWW) the file '{file}' does not contain '{unit}'. "
@@ -1581,11 +1585,9 @@ class Bifrost_units(object):
         if u is None:
             result = self.doc_units
         else:
-            result = dict()
-            try:
-                next(iter(u))
-            except TypeError:
+            if isinstance(u, str):
                 u = [u]
+            result = dict()
             for unit in u:
                 unit = self._unit_name(unit)
                 doc  = self.doc_units.get(unit, "u='{}' is not yet documented!".format(unit))
@@ -2231,7 +2233,7 @@ def read_idl_ascii(filename,firstime=False):
                                 value2[0].find('.') >= 0)):
                             value = value2.astype(np.float)
 
-                except:
+                except Exception:
                     value = value
             elif (value.find("'") >= 0):
                 value = value.strip("'")
@@ -2241,7 +2243,7 @@ def read_idl_ascii(filename,firstime=False):
                         if ((value2[0].upper().find('E') >= 0) or (
                                 value2[0].find('.') >= 0)):
                             value = value2.astype(np.float)
-                except:
+                except Exception:
                     value = value
             elif (value.lower() in ['.false.', '.true.']):
                 # bool type

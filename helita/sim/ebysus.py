@@ -328,6 +328,8 @@ class EbysusData(BifrostData):
     for func in [set_mf_fluid, set_mfi, set_mfj]:
         func.__doc__ = func.__doc__.replace('obj', 'self')
 
+    del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
+
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
         result = {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
@@ -522,6 +524,12 @@ class EbysusData(BifrostData):
             val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
 
         return val
+
+    def get_varm(self, *args__get_var, **kwargs__get_var):
+        '''get_var but returns np.mean() of result.
+        provided for convenience for quicker debugging.
+        '''
+        return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
 
     def _get_simple_var(
             self,
@@ -911,6 +919,21 @@ class EbysusData(BifrostData):
 
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
+
+    # include methods related to wavegrowth, for convenience
+    def get_lmin(self):
+        '''return smallest length resolvable for each direction ['x', 'y', 'z'].
+        result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
+        '''
+        return np.array([getattr(self, 'd'+x+'1d').min() for x in ['x', 'y', 'z']])
+
+    def get_kmax(self):
+        '''return largest value of each component of wavevector resolvable by self.
+        I.e. returns [max kx, max ky, max kz].
+        result is in [1/ simu. length units]. Divide by self.uni.usi_l to convert to SI.
+        '''
+        return 2 * np.pi / self.get_lmin()
+
 
     # include methods from fluid_tools.
     def MaintainingFluids(self):
