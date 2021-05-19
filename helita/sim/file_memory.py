@@ -36,8 +36,8 @@ MM_PERSNAP     = 'mm_persnap'
 ## hard limit on number of open files = limit set by system; cannot be changed.
 _, HARD = resource.getrlimit(resource.RLIMIT_NOFILE)
 ## soft limit on number of open files = limit observed by programs; can be changed, must always be less than HARD.
-SOFT_INCREASE = 2.0     # amount to increase soft limit, when increasing.     int -> add; float -> multiply.
-MAX_SOFT      = int(min(1e5, 0.1 * HARD))  # we will never set the soft limit to a value larger than this.
+SOFT_INCREASE = 1.2     # amount to increase soft limit, when increasing.     int -> add; float -> multiply.
+MAX_SOFT      = int(min(1e6, 0.1 * HARD))  # we will never set the soft limit to a value larger than this.
 SOFT_WARNING  = 8192    # if soft limit exceeds this value we will warn user every time we increase it.
 SOFT_PER_OBJ  = 0.1     # limit number of open memmaps in one object to SOFT_PER_OBJ * soft limit.
 
@@ -191,7 +191,7 @@ def manage_memmaps(MEMORYATTR, kw_mem=['dtype', 'order', 'offset', 'shape']):
                             try:
                                 increase_soft_limit(soft)
                             except ValueError: # we are not allowed to increase soft limit any more.
-                                print('cannot increase soft limit further!', soft)
+                                warnings.warn('refusing to increase soft Nfile limit further than {}!'.format(soft))
                                 forget_one = True
                     elif val < 0:
                         raise ValueError('obj.'+NMLIM_ATTR+'must be -1 or 0 or >0 but got {}'.format(val))
