@@ -1037,7 +1037,7 @@ class PlutoData(object):
 
 
   def make_loop(self,var,loop): 
-    R = np.max(self.zorig)/np.pi/2.0
+    R = np.max(self.zorig)/np.pi*2
     rad=self.xorig+np.max(self.x_loop)-np.max(self.xorig)
     angl=self.zorig / R 
     var_new=np.zeros((self.nx,self.ny,self.nz))
@@ -1064,7 +1064,7 @@ class PlutoData(object):
       self.yorig = self.y
       self.zorig = self.z
       if loop != None:
-        R = np.max(self.z)/np.pi/2.0
+        R = np.max(self.z)/np.pi*2
         self.x_loop=np.linspace(R*np.cos([np.pi/loop]),R+np.max(self.x),
                       int((R-R*np.cos([np.pi/loop])+np.max(self.x))/np.min(self.dx1d)))
         self.z_loop=np.linspace(0,R*np.sin([np.pi/loop])+np.max(self.x),
