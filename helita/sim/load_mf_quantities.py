@@ -76,7 +76,7 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   '''Variables which are calculated by looping through species or levels.'''
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'rc', 'rneu',
+      GLOBAL_QUANT = ['totr', 'rc', 'rions', 'rneu',
                       'tot_e', 'tot_ke', 'e_ef', 'e_b', 'total_energy',
                       'tot_px', 'tot_py', 'tot_pz',
                       'grph', 'tot_part', 'mu',
@@ -86,7 +86,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__, nfluid=0)
     docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
-    docvar('rc',   'sum of mass densities of all ionized fluids [simu. mass density units]')
+    for rc in ['rc', 'rions']:
+      docvar(rc,   'sum of mass densities of all ionized fluids [simu. mass density units]')
     docvar('rneu', 'sum of mass densities of all neutral species [simu. mass density units]')
     docvar('tot_e',  'sum of internal energy densities of all fluids [simu. energy density units]')
     docvar('tot_ke', 'sum of kinetic  energy densities of all fluids [simu. energy density units]')
@@ -94,7 +95,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('e_b', 'energy density in magnetic field [simu. energy density units]')
     docvar('total_energy', 'total energy density. tot_e + tot_ke + e_ef + e_b [simu units].')
     for axis in ['x', 'y', 'z']:
-      docvar('tot_p'+axis, 'sum of '+axis+'-momentum densities of all fluids [simu. mom. dens. units]')
+      docvar('tot_p'+axis, 'sum of '+axis+'-momentum densities of all fluids [simu. mom. dens. units] ' +\
+                           'NOTE: does not include "electron momentum" which is assumed to be ~= 0.')
     docvar('grph',  'grams per hydrogen atom')
     docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
     docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
@@ -115,12 +117,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       for ilevel in range(1,nlevels+1):
         output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
 
-  elif var == 'rc':  # total ionized density
-    for ispecies in obj.att:
-      nlevels = obj.att[ispecies].params.nlevel
-      for ilevel in range(1,nlevels+1):
-        if (obj.att[ispecies].params.levels['stage'][ilevel-1] > 1): 
-          output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
+  elif var in ['rc', 'rions']:  # total ionized density
+    for fluid in fl.Fluids(dd=obj).ions():
+      output += obj.get_var('r', ifluid=fluid)
 
   elif var == 'rneu':  # total neutral density
     for ispecies in obj.att:
@@ -846,14 +845,15 @@ def get_cfl_quant(obj, quant, CFL_QUANT=None):
 def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   '''plasma parameters, e.g. plasma beta, sound speed, pressure scale height'''
   if PLASMA_QUANT is None:
-    PLASMA_QUANT = ['beta', 'beta_ions', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+    PLASMA_QUANT = ['beta', 'beta_ions', 'va', 'va_ions', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                 'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                 'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei']
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
     docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
     docvar('beta_ions', "plasma beta using sum of ion pressures. P / (B^2 / (2 mu0)).", nfluid=0)
-    docvar('va', "alfven speed [simu. units]", nfluid=1)
+    docvar('va', "alfven speed [simu. units]", nfluid=0)
+    docvar('va_ions', "alfven speed [simu. units], using density := density of ions.", nfluid=0)
     docvar('cs', "sound speed [simu. units]", nfluid='???')
     docvar('s', "entropy [log of quantities in simu. units]", nfluid='???')
     docvar('mn', "mach number (using sound speed)", nfluid=1)
@@ -915,6 +915,10 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     else:
       axis = quant[-1]
       return np.sqrt(obj.get_var('b' + axis + 'c') ** 2 / var)
+
+  if quant in ['va_ions']:
+    r = obj.get_var('rions')
+    return obj.get_var('modb') / np.sqrt(r)
 
   if quant in ['hx', 'hy', 'hz', 'kx', 'ky', 'kz']:
     axis = quant[-1]
@@ -1003,8 +1007,9 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
 def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
   '''very specific quantities which are related to the Farley-Buneman instability.'''
   if FB_INSTAB_QUANT is None:
-    FB_INSTAB_QUANT = ['psi0', 'psii', 'vde', 'fb_ssi_vdtrigger', 'fb_ssi_possible', 'fb_ssi_growth_rate']
-    vecs = ['fb_ssi_growth_rate_max', 'fb_ssi_growth_time_min']
+    FB_INSTAB_QUANT = ['psi0', 'psii', 'vde', 'fb_ssi_vdtrigger', 'fb_ssi_possible',
+                       'fb_ssi_freq', 'fb_ssi_growth_rate']
+    vecs = ['fb_ssi_freq_max', 'fb_ssi_growth_rate_max', 'fb_ssi_growth_time_min']
     FB_INSTAB_QUANT += [v+x for v in vecs for x in ['x', 'y', 'z']]
 
   if quant=='':
@@ -1016,9 +1021,15 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
              'in the case of SSI (single-species-ion). We assume ifluid is the single ion species.', nfluid=1)
     docvar('fb_ssi_possible', 'whether SSI Farley Buneman instability can occur (vde > fb_ssi_vdtrigger). ' +\
              'returns an array of booleans, with "True" meaning "can occur at this point".', nfluid=1)
-    docvar('fb_ssi_growth_rate', 'SSI FB instability growth rate divided by wavevector squared. ' +\
+    docvar('fb_ssi_freq', 'SSI FB instability wave frequency (real part) divided by wavenumber (k). ' +\
+             'assumes wavevector in E x B direction. == Vd / (1 + psi0). ' +\
+             'result is in units of [simu. frequency * simu. length].', nfluid=2)
+    docvar('fb_ssi_growth_rate', 'SSI FB instability growth rate divided by wavenumber (k) squared. ' +\
              'assumes wavevector in E x B direction. == (Vd^2/(1+psi0)^2 - Ci^2)/(nu_in*(1+1/psi0)). ' +\
              'result is in units of [simu. frequency * simu. length].', nfluid=2)
+    for x in ['x', 'y', 'z']:
+      docvar('fb_ssi_freq_max'+x, 'SSI FB instability max frequency in '+x+' direction ' +\
+               '[simu. frequency units]. calculated using fb_ssi_freq * kmax'+x, nfluid=2)
     for x in ['x', 'y', 'z']:
       docvar('fb_ssi_growth_rate_max'+x, 'SSI FB instability max growth rate in '+x+' direction ' +\
                '[simu. frequency units]. calculated using fb_ssi_growth_rate * kmax'+x, nfluid=2)
@@ -1026,6 +1037,7 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
       docvar('fb_ssi_growth_time_min'+x, 'SSI FB instability min growth time in '+x+' direction ' +\
                '[simu. time units]. This is the amount of time it takes for the wave amplitude for the wave ' +\
                'with the largest wave vector to grow by a factor of e. == 1/fb_ssi_growth_rate_max'+x, nfluid=2)
+
     return None
 
   if quant not in FB_INSTAB_QUANT:
@@ -1051,17 +1063,29 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
   elif quant == 'fb_ssi_possible':
     return obj.get_var('vde') > obj.get_var('fb_ssi_vdtrigger')
 
-  elif quant == 'fb_ssi_growth_rate':
+  elif quant == 'fb_ssi_freq':
     icharge = obj.get_charge(obj.ifluid)
     assert icharge > 0, "expected ifluid to be an ion but got ifluid charge == {}".format(icharge)
     jcharge = obj.get_charge(obj.jfluid)
     assert jcharge == 0, "expected jfluid to be neutral but got jfluid charge == {}".format(jcharge)
-    # growth rate = (k_x)^2 * (Vd^2/(1+psi0)^2 - Ci^2)/(nu_in*(1+1/psi0))
+    # freq (=real part of omega) = Vd * k_x / (1 + psi0)
     Vd    = obj.get_var('vde')
+    psi0  = obj.get_var('psi0')
+    return Vd / (1 + psi0)
+
+  elif quant == 'fb_ssi_growth_rate':
+    # growth rate = ((omega_r/k_x)^2 - Ci^2) * (k_x)^2/(nu_in*(1+1/psi0))
+    w_r_k = obj.get_var('fb_ssi_freq')  # omega_r / k_x
     psi0  = obj.get_var('psi0')
     Ci    = obj.get_var('ci')
     nu_in = obj.get_var('nu_ij')
-    return (Vd**2 / (1 + psi0)**2 - Ci**2) / (nu_in * (1 + 1/psi0))
+    return (w_r_k**2 - Ci**2) / (nu_in * (1 + 1/psi0))
+
+  elif quant in ['fb_ssi_freq_max'+x for x in ['x', 'y', 'z']]:
+    x = quant[-1]
+    freq        = obj.get_var('fb_ssi_freq')
+    kmaxx       = obj.get_var('kmax'+x)
+    return kmaxx**2 * freq
 
   elif quant in ['fb_ssi_growth_rate_max'+x for x in ['x', 'y', 'z']]:
     x = quant[-1]
