@@ -846,18 +846,22 @@ class EbysusData(BifrostData):
         remembersnaps = self.snap                   # remember self.snap (restore later if crash)
         if hasattr(self, 'recoverData'):
             delattr(self, 'recoverData')            # smash any existing saved data
-        now = time.time()                           # track timing, so we can make updates.
-        printed_update = False
+        timestart = now = time.time()               # track timing, so we can make updates.
+        printed_update  = False
+        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
+            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
         try:
             for it in range(0, snapLen):
                 self.snapInd = it
                 # print update if it is time to print update
                 if (print_freq > 0) and (time.time() - now > print_freq):
-                    print('\r'+ ' '*100 +'\r',end='') # clear 100 chars, and move cursor to start of line.
-                    print('Getting {:^10s}; at snap={:2d}. (snap_it={:2d} out of {:2d})'.format(
+                    _print_clearline()
+                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
                                     var,     snap[it],         it,    snapLen        ), end='')
-                    printed_update=True
                     now = time.time()
+                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                    printed_update=True
+                    
                 # actually get the values here:
                 value[..., it] = self.get_var(var, snap=snap[it],
                     iix=self.iix, iiy=self.iiy, iiz=self.iiz,
@@ -875,7 +879,7 @@ class EbysusData(BifrostData):
         finally:
             self.snap = remembersnaps                # restore snaps
             if printed_update:
-                print('\r'+ ' '*100 +'\r',end='') # clear 100 chars, and move cursor to start of line.
+                _print_clearline()
             
                 
         return value
