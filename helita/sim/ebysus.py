@@ -777,7 +777,7 @@ class EbysusData(BifrostData):
 
     def get_varTime(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                    ifluid=None, jfluid=None,
+                    ifluid=None, jfluid=None, print_freq=None,
                     *args, **kwargs):
         """ Gets and returns the value of var over multiple snaps.
 
@@ -800,6 +800,9 @@ class EbysusData(BifrostData):
             if still None, use self.mf_ilevel
         ifluid - tuple of integers, or None (default)
             if not None: (mf_ispecies, mf_ilevel) = ifluid
+        print_freq - number, default 2
+            print progress update every print_freq seconds.
+            Use print_freq <= 0 to never print update.
         **kwargs may contain the following:
             snaps  - alias for snap
             iSL    - alias for ifluid
@@ -809,6 +812,12 @@ class EbysusData(BifrostData):
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
         """
+
+        # set print_freq
+        if print_freq is None:
+            print_freq = getattr(self, 'print_freq', 2) # default 2
+        else:
+            setattr(self, 'print_freq', print_freq)
 
         # set snap
         if snap is None:
@@ -837,23 +846,37 @@ class EbysusData(BifrostData):
         remembersnaps = self.snap                   # remember self.snap (restore later if crash)
         if hasattr(self, 'recoverData'):
             delattr(self, 'recoverData')            # smash any existing saved data
+        now = time.time()                           # track timing, so we can make updates.
+        printed_update = False
         try:
             for it in range(0, snapLen):
-                self.snapInd = 0
+                self.snapInd = it
+                # print update if it is time to print update
+                if (print_freq > 0) and (time.time() - now > print_freq):
+                    print('\r'+ ' '*100 +'\r',end='') # clear 100 chars, and move cursor to start of line.
+                    print('Getting {:^10s}; at snap={:2d}. (snap_it={:2d} out of {:2d})'.format(
+                                    var,     snap[it],         it,    snapLen        ), end='')
+                    printed_update=True
+                    now = time.time()
                 # actually get the values here:
                 value[..., it] = self.get_var(var, snap=snap[it],
                     iix=self.iix, iiy=self.iiy, iiz=self.iiz,
                     mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
                     mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
                     **kwargs)
-        finally:
-            self.snap = remembersnaps                # restore snaps
+        except:   # here it is ok to except all errors, because we always raise.
             if it > 0:
                 self.recoverData = value[..., :it]   # save data 
                 if self.verbose:
                     print(('Crashed during get_varTime, but managed to get data from {} '
                            'snaps before crashing. Data was saved and can be recovered '
                            'via self.recoverData.'.format(it)))
+            raise
+        finally:
+            self.snap = remembersnaps                # restore snaps
+            if printed_update:
+                print('\r'+ ' '*100 +'\r',end='') # clear 100 chars, and move cursor to start of line.
+            
                 
         return value
 
