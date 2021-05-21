@@ -326,6 +326,7 @@ class EbysusData(BifrostData):
     set_mf_fluid = fluid_tools.set_mf_fluid
     set_mfi      = fluid_tools.set_mfi
     set_mfj      = fluid_tools.set_mfj
+    set_fluids   = fluid_tools.set_fluids
     # docstrings for fluid-setting functions
     for func in [set_mf_fluid, set_mfi, set_mfj]:
         func.__doc__ = func.__doc__.replace('obj', 'self')
@@ -399,31 +400,13 @@ class EbysusData(BifrostData):
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
-        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            fluid_tools._interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel,
-                                             ifluid, jfluid, **kwargs)
+        # set fluids as appropriate to kwargs
+        kw__fluids = dict(mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
+                          mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
+                          **kwargs)
+        self.set_fluids(**kw__fluids)
 
-        if var in self.varsmfc:
-            if mf_ilevel is None and self.mf_ilevel == 1:
-                mf_ilevel = 2
-                print("Warning: mfc is only for ionized species,"
-                      "Level changed to 2")
-            if mf_ilevel == 1:
-                mf_ilevel = 2
-                print("Warning: mfc is only for ionized species."
-                      " Level changed to 2")
-
-        #if var not in self.snapevars:
-        #    if (mf_ispecies is None):
-        #        if self.mf_ispecies < 1:
-        #            mf_ispecies = 1
-        #            print("Warning: variable is only for electrons, "
-        #                  "iSpecie changed to 1")
-        #    elif (mf_ispecies < 1):
-        #        mf_ispecies = 1
-        #        print("Warning: variable is only for electrons, "
-        #              "iSpecie changed to 1")
-
+        # set iix, iiy, iiz appropriately (TODO: encapsulate in helper function)
         if not hasattr(self, 'iix'):
             self.set_domain_iiaxis(iinum=iix, iiaxis='x')
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
@@ -453,14 +436,8 @@ class EbysusData(BifrostData):
                 'WARNING: cstagger use has been turned off,',
                 'turn it back on with "dd.cstagop = True"')
 
-        # set fluid before set_snap.
-        ## setting fluid MUST happen before setting snap,
-        ## because set_snap may call _init_vars, which calls _get_simple_var,
-        ## and we want to make sure we are getting vars for the correct fluids!
-        self.set_mfi(mf_ispecies, mf_ilevel)
-        self.set_mfj(mf_jspecies, mf_jlevel)
-
-        if ((snap is not None) and np.any(snap != self.snap)):
+        # set snapshot as needed
+        if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
 
         # get value of variable; restore ifluid & jfluid afterwards.
@@ -485,6 +462,7 @@ class EbysusData(BifrostData):
                 if val is None:
                     val = load_arithmetic_quantities(self,var)
 
+        # handle documentation case
         if document_vars.creating_vardict(self):
             return None
         elif var == '':
@@ -496,6 +474,7 @@ class EbysusData(BifrostData):
                 self.vardocs()
             return None
 
+        # handle "don't know how to get this var" case
         if val is None:
             raise ValueError(('get_var: do not know (yet) how to '
                           'calculate quantity %s. Note that simple_var '
@@ -507,6 +486,7 @@ class EbysusData(BifrostData):
         if DEBUG:
             self._check_mm_refs(val, 0)
 
+        # reshape if necessary... (? I don't understand when it could be necessary -SE May 21 2021)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
             if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
@@ -795,7 +775,7 @@ class EbysusData(BifrostData):
         else:
             return None
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
+    def get_varTime(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                     ifluid=None, jfluid=None,
                     *args, **kwargs):
@@ -829,93 +809,51 @@ class EbysusData(BifrostData):
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
         """
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
 
+        # set snap
         if snap is None:
             if 'snaps' in kwargs:
                 snap = kwargs['snaps']
             if snap is None:
                 snap = self.snap
         snap = np.array(snap, copy=False)
+        if len(snap.shape)==0:
+            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
             self.variables={}
 
-        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            fluid_tools._interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel,
-                                             ifluid, jfluid, **kwargs)
-
-        if var in self.varsmfc:
-            if mf_ilevel is None and self.mf_ilevel == 1:
-                mf_ilevel = 2
-                self.variables={}
-                print("Warning: mfc is only for ionized species,"
-                      "Level changed to 2")
-            if mf_ilevel == 1:
-                mf_ilevel = 2
-                self.variables={}
-                print("Warning: mfc is only for ionized species."
-                      "Level changed to 2")
-
-        #if var not in self.snapevars:
-        #    if (mf_ispecies is None):
-        #        if self.mf_ispecies < 1:
-        #            mf_ispecies = 1
-        #            print("Warning: variable is only for electrons,"
-        #                  "iSpecie changed to 1")
-        #    elif (mf_ispecies < 1):
-        #        mf_ispecies = 1
-        #        print("Warning: variable is only for electrons,"
-        #              "iSpecie changed to 1")
-
-        if (((mf_ispecies is not None) and (
-                mf_ispecies != self.mf_ispecies)) or ((
-                mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
-            self.set_mfi(mf_ispecies, mf_ilevel)
-            self.variables={}
-        if (((mf_jspecies is not None) and (
-                mf_jspecies != self.mf_jspecies)) or ((
-                mf_jlevel is not None) and (mf_jlevel != self.mf_jlevel))):
-            self.set_mfj(mf_jspecies, mf_jlevel)
-            self.variables={}
         # lengths for dimensions of return array
-        self.xLength = 0
-        self.yLength = 0
-        self.zLength = 0
-
-        for dim in ('iix', 'iiy', 'iiz'):
-            if getattr(self, dim) is None:
-                if dim[2] == 'z':
-                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]+'b'))
-                    setattr(self, dim, np.arange(0,getattr(self, 'n' + dim[2]+'b')))
-                else:
-                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                    setattr(self, dim, np.arange(0,getattr(self, 'n' + dim[2])))
-                setattr(self, dim, slice(None))
-            else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
+        self.iix = iix
+        self.iiy = iiy
+        self.iiz = iiz
+        slicer   = (self.iix, self.iiy, self.iiz)
+        self.xLength, self.yLength, self.zLength = self.r[slicer].shape
+        #   note it is ok to use self.r because many get_var methods already assume self.r exists.
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-        remembersnaps = self.snap
+        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
+        if hasattr(self, 'recoverData'):
+            delattr(self, 'recoverData')            # smash any existing saved data
         try:
             for it in range(0, snapLen):
                 self.snapInd = 0
+                # actually get the values here:
                 value[..., it] = self.get_var(var, snap=snap[it],
                     iix=self.iix, iiy=self.iiy, iiz=self.iiz,
-                    mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
-                    mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
-        except Exception:    # restore self.snaps
-            self.snap=remembersnaps
-            raise
-
-
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
+                    mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
+                    mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
+                    **kwargs)
+        finally:
+            self.snap = remembersnaps                # restore snaps
+            if it > 0:
+                self.recoverData = value[..., :it]   # save data 
+                if self.verbose:
+                    print(('Crashed during get_varTime, but managed to get data from {} '
+                           'snaps before crashing. Data was saved and can be recovered '
+                           'via self.recoverData.'.format(it)))
                 
         return value
 
