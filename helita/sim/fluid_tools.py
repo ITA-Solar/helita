@@ -64,6 +64,12 @@ def set_mfj(obj, mf_jspecies=None, mf_jlevel=None):
     '''
     return obj.set_mf_fluid(mf_jspecies, mf_jlevel, 'j')
 
+def set_fluids(obj, **kw__fluids):
+    '''interprets kw__fluids then sets them using set_mfi and set_mfj.'''
+    (si, li, sj, lj) = _interpret_kw_fluids(**kw__fluids)
+    obj.set_mfi(si, li)
+    obj.set_mfj(sj, lj)
+    return (si, li, sj, lj)
 
 ''' --------------------- fluid kwargs --------------------- '''
 
