@@ -83,9 +83,19 @@ def remember_and_recall(MEMORYATTR, ORDERED=False, kw_mem=[]):
                     timestamp = os.stat(filename).st_mtime   # timestamp of when file was last modified
                 else:
                     timestamp = '???'
-                filekey   = filename.lower()
+                # set filekey (key string for memory dict with filename keys)
+                filekey   = filename.lower()   # this would be enough, but we remove common prefix for readability.
+                if hasattr(obj, '_memory_filekey_fdir'):
+                    _memory_filekey_fdir = obj._memory_filekey_fdir
+                elif hasattr(obj, 'fdir'):
+                    _memory_filekey_fdir = os.path.abspath(obj.fdir).lower()
+                    obj._memory_filekey_fdir = _memory_filekey_fdir
+                else:
+                    _memory_filekey_fdir = os.path.abspath(os.sep)  # 'root directory' (plays nicely with relpath, below)
+                filekey = os.path.relpath(filekey, _memory_filekey_fdir)
                 # determine whether we have this (filename, timestamp, kwargs) in memory already.
                 need_to_read = True
+                existing_mid = None
                 if filekey in memdata.keys():
                     memfile = memdata[filekey]
                     for mid, memdict in memfile['memdicts'].items():
@@ -109,23 +119,33 @@ def remember_and_recall(MEMORYATTR, ORDERED=False, kw_mem=[]):
                     if not need_to_read:
                         if 'value' not in memdict.keys():
                             need_to_read = True
+                            existing_mid = mid      # mid is the unique index for this (timestamp, kwargs)
+                                                    # combination, for this filekey. This allows to have
+                                                    # a unique dict key which is (filekey, mid); and use
+                                                    # (filekey, mid) to uniquely specify (file, timestamp, kwargs).
                 else:
-                    memdata[filekey] = dict(memdicts=dict(), read_n=0) #read_n is number of times this file has been read.
+                    memdata[filekey] = dict(memdicts=dict(), mid_next=1) # mid_next is the next available mid.
                     memfile = memdata[filekey]
                 # read file if necessary (and store result to memory)
                 if need_to_read:
-                    result  = f(filename, *args, **kwargs)    # here is where we call f, if obj is not None.
-                    mid = memfile['read_n']  # mid is the unique index for this (timestamp, kwargs) for this filekey.
-                    memfile['read_n'] = mid + 1
-                    memdict = dict(value=result, file_timestamp=timestamp, mid=mid, recalled=0)
-                    memdict.update(kwargs)
-                    memfile['memdicts'][mid] = memdict
-                    memory['len']   += 1    # total number of 'value's in memory
+                    result  = f(filename, *args, **kwargs) # here is where we call f, if obj is not None.
+                    if not existing_mid:
+                        mid                 = memfile['mid_next']
+                        memfile['mid_next'] = mid + 1
+                        memdict = dict(value=result,                                   # value is in memdict
+                                       file_timestamp=timestamp, mid=mid, recalled=0)  # << metadata about file, kwargs, etc
+                        memdict.update(kwargs)                                         # << metadata about file, kwargs, etc
+                        memfile['memdicts'][mid] = memdict    # store memdict in memory.
+                    else:
+                        mid                 = existing_mid
+                        memdict             = memfile['memdicts'][mid]
+                        memdict['value']    = result
+                    memory['len']   += 1    # total number of 'value's stored in memory
                     if ORDERED:
                         memory['order'][(filekey, mid)] = None
                         # this is faster than a list due to the re-ordering of memory['order']
                         ## which occurs if we ever access the elements again.
-                        ## really a dict is unnecessary, we just need a "hashed" list,
+                        ## Really, a dict is unnecessary, we just need a "hashed" list,
                         ## but we can abuse OrderedDict to get that.
                 else:
                     memory['recalled'] += 1
@@ -136,7 +156,7 @@ def remember_and_recall(MEMORYATTR, ORDERED=False, kw_mem=[]):
                         memory['order'].move_to_end((filekey, memdict['mid']))
                 # return value from memory
                 return memdict['value']
-            else:
+            else:  # obj is None, so there is no memory, so we just call f and return the result.
                 return f(filename, *args, **kwargs)           # here is where we call f, if obj is None.
         return f_but_remember_and_recall
     return decorator
