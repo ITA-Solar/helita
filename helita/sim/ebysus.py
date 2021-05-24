@@ -437,8 +437,9 @@ class EbysusData(BifrostData):
                 'turn it back on with "dd.cstagop = True"')
 
         # set snapshot as needed
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
+        if snap is not None:
+            if not np.array_equal(snap, self.snap):
+                self.set_snap(snap)
 
         # get value of variable; restore ifluid & jfluid afterwards.
         with self.MaintainFluids():
@@ -877,7 +878,7 @@ class EbysusData(BifrostData):
                            'via self.recoverData.'.format(it)))
             raise
         finally:
-            self.snap = remembersnaps                # restore snaps
+            self.set_snap(remembersnaps)             # restore snaps
             if printed_update:
                 _print_clearline()
             
