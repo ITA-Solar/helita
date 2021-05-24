@@ -286,7 +286,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     obj.get_var('ux') otherwise.
   '''
   if ONEFLUID_QUANT is None:
-    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 
+    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 'vtherm',
                       'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
 
   if var=='':
@@ -300,12 +300,12 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     docvar('ke', 'kinetic energy density of ifluid [simu. units]')
     _equivstr = " Equivalent to obj.get_var('{ve:}') when obj.mf_ispecies < 0; obj.get_var('{vf:}'), otherwise."
     equivstr = lambda v: _equivstr.format(ve=v.replace('i', 'e'), vf=v.replace('i', ''))
+    docvar('vtherm', 'thermal speed of ifluid [simu. velocity units]. = sqrt (8 * k_b * T_i / (pi * m_i) )')
     docvar('ri', 'mass density of ifluid [simu. mass density units]. '+equivstr('ri'))
     for uix in ['uix', 'uiy', 'uiz']:
       docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix))
     for pix in ['pix', 'piy', 'piz']:
       docvar(pix, 'momentum density of ifluid [simu. momentum density units]. '+equivstr(pix))
-    docvar('vitherm', 'thermal speed of ifluid [simu. velocity units].')
     return None
 
   if var not in ONEFLUID_QUANT:
@@ -336,6 +336,13 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
 
   elif var == 'ke':
     return 0.5 * obj.get_var('ri') * obj.get_var('ui2')
+
+  elif var == 'vtherm':
+    Ti     = obj.get_var('tg')                           # [K]
+    mi     = obj.get_mass(obj.mf_ispecies, units='si')   # [kg]
+    vtherm = np.sqrt(obj.uni.ksi_b * Ti / mi)            # [m / s]
+    consts = np.sqrt(8 / np.pi)
+    return consts * vtherm / obj.uni.usi_u                   # [simu. velocity units]
 
   else:
     if var in ['ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']:
