@@ -1,5 +1,12 @@
 """
 Set of programs to read and interact with output from Multifluid/multispecies
+
+TODO:
+    - add "physical"/"match_ebysus" option which does:
+        - physical: always returns physical values.
+            e.g. for nu_es always calculate and return the physical value.
+        - match_ebysus: always match ebysus values.
+            e.g. for nu_es if do_ohm_ecol=0, return 0.
 """
 
 DEBUG = False  # if True, change some things, to make debugging easier. (remove this in the long-term.)
@@ -1128,28 +1135,25 @@ def read_mftab_ascii(filename):
     '''
     convert_to_ints = False   # True starting when we hit key=='COLLISIONS_MAP'
     colstartkeys = ['COLLISIONS_MAP', 'COLISIONS_MAP'] # or another key in colstartkeys.
-    params = {}
+    params = dict()
     # go through the file, add stuff to dictionary
     with open(filename) as fp:
         for line in fp:
-            # remove comments
-            line, _, _ = line.partition('#')
-            line, _, _ = line.partition(';')
-            tokens = line.split()
+            line, _, comment = line.partition('#')  # remove comments (#)
+            line, _, comment = line.partition(';')  # remove comments (;)
+            tokens = line.split()                   # split by whitespace
             if len(tokens) == 0:
                 continue
             elif len(tokens) == 1:
                 key = tokens[0]
+                params[key] = []
                 for colstart in colstartkeys:
                     if key.startswith(colstart):
                         convert_to_ints = True
             else:
                 if convert_to_ints:
                     tokens = [int(token) for token in tokens]
-                if key not in params.keys():
-                    params[key] = [tokens]
-                else:
-                    params[key] += [tokens]
+                params[key] += [tokens]
 
     for key in params.keys():
         params[key] = np.array(params[key])
