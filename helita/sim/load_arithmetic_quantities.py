@@ -410,7 +410,7 @@ def get_gradients_vect(obj,quant):
     ## qz is at (0, 0, -0.5); dqzdydn is at (0, -0.5, -0.5)
     ## qy is at (0, -0.5, 0); dqydzdn is at (0, -0.5, -0.5)
     dqz_dydn = obj.get_var('d' + q + z + 'd' + y + 'dn')
-    dqy_dzdn = obj.get_var('d' + q + z + 'd' + y + 'dn')
+    dqy_dzdn = obj.get_var('d' + q + y + 'd' + z + 'dn')
     result = dqz_dydn - dqy_dzdn
 
   elif quant[:3] == 'rot' or quant[:3] == 'she':
