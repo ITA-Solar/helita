@@ -588,6 +588,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       mf_param_file = obj.get_param('mf_param_file', default='mf_params.in')
       raise ValueError(errmsg.format(obj.ifluid, obj.jfluid, mf_param_file))
     else:
+      if coll_type[0] == 'EE':     # electrons --> use "implied" coll type.
+        coll_type = coll_type[1]   # TODO: add coll_keys to mf_eparams.in??
       nu_ij_varname = 'nu_ij_{}'.format(coll_type.lower())  # nu_ij_el, nu_ij_mx, or nu_ij_cl
       return obj.get_var(nu_ij_varname)
 
