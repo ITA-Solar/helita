@@ -14,6 +14,7 @@ from .load_noeos_quantities import *
 import scipy.constants as const
 from scipy.ndimage import rotate
 from . import document_vars
+from scipy import interpolate
 
 #from matplotlib.pyplot import *
 #from matplotlib.mlab import *
@@ -908,7 +909,7 @@ class PlutoData(object):
 
       return None
 
-    self.trans2noncommaxes()
+    #self.trans2noncommaxes()
 
     return self.data
 
@@ -954,7 +955,7 @@ class PlutoData(object):
 
 
 
-  def trans2comm(self, varname, snap=None, angle=45): 
+  def trans2comm(self, varname, snap=None, angle=0, loop=2): 
     '''
     Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
     is: 
@@ -982,31 +983,73 @@ class PlutoData(object):
 
     self.sel_units = 'cgs'
 
-    self.trans2commaxes 
+    self.trans2commaxes(loop)
 
-    if angle != 0: 
-        if varname[0] in ['u']: 
-            if varname[-1] in ['x']: 
-                varx = self.get_var(varname,snap=snap)
-                vary = self.get_var(varname[0]+'y',snap=snap)
-                var = varx * np.cos(angle/90.0*np.pi/2.0) - vary * np.sin(angle/90.0*np.pi/2.0)
-            elif varname[-1] in ['y']: 
-                vary = self.get_var(varname,snap=snap)
-                varx = self.get_var(varname[0]+'x',snap=snap)
-                var = vary * np.cos(angle/90.0*np.pi/2.0) + varx * np.sin(angle/90.0*np.pi/2.0)
-            else:  # component z
-                var = self.get_var(varname,snap=snap)
-            var = rotate(var, angle=angle, reshape=False, mode='nearest', axes=(0,1))
-        else: 
+    if angle == None and not hasattr(self,'trans2comm_angle'): 
+        self.trans2comm_angle = 45
+    if angle != None: 
+        self.trans2comm_angle = angle
+
+    if self.trans2comm_angle != 0: 
+        if varname[-1] in ['x']: 
+            varx = self.get_var(varname,snap=snap)
+            vary = self.get_var(varname[0]+'y',snap=snap)
+            var = varx * np.cos(self.trans2comm_angle/90.0*np.pi/2.0) - vary * np.sin(self.trans2comm_angle/90.0*np.pi/2.0)
+        elif varname[-1] in ['y']: 
+            vary = self.get_var(varname,snap=snap)
+            varx = self.get_var(varname[0]+'x',snap=snap)
+            var = vary * np.cos(self.trans2comm_angle/90.0*np.pi/2.0) + varx * np.sin(self.trans2comm_angle/90.0*np.pi/2.0)
+        else:  # component z
             var = self.get_var(varname,snap=snap)
-            var = rotate(var, angle=angle, reshape=False, mode='nearest',axes=(0,1))
+            var = rotate(var, angle=self.trans2comm_angle, reshape=False, mode='nearest', axes=(0,1))
     else: 
         var = self.get_var(varname,snap=snap)
-            
+    
+    if self.typemodel == 'Kostas': 
+        var=var[...,::-1].copy()
+    
+    if loop != None:         
+        if varname[-1] in ['x']: 
+            var = self.make_loop(var,loop)
+            varz = self.get_var(varname[0]+'z',snap=snap)
+            if self.typemodel == 'Kostas': 
+                varz=varz[...,::-1].copy()
+            varz = self.make_loop(varz,loop)
+            xx, zz = np.meshgrid(self.x,self.z)
+            aa=np.angle(xx+1j*zz)
+            for iiy, iy in enumerate(self.y):
+                var[:,iiy,:] = var[:,iiy,:] * np.cos(aa.T) - varz[:,iiy,:] * np.sin(aa.T)
+        elif varname[-1] in ['z']: 
+            var = self.make_loop(var,loop)
+            varx = self.get_var(varname[0]+'x',snap=snap)
+            if self.typemodel == 'Kostas': 
+                varx=varx[...,::-1].copy()
+            varx = self.make_loop(varx,loop)
+            xx, zz = np.meshgrid(self.x,self.z)
+            aa=np.angle(xx+1j*zz)
+            for iiy, iy in enumerate(self.y):
+                var[:,iiy,:] = var[:,iiy,:] * np.cos(aa.T) + varx[:,iiy,:] * np.sin(aa.T)
+        else: 
+            var = self.make_loop(var,loop)
+                
+        
     return var
 
 
-  def trans2commaxes(self): 
+  def make_loop(self,var,loop): 
+    R = np.max(self.zorig)/np.pi*2
+    rad=self.xorig+np.max(self.x_loop)-np.max(self.xorig)
+    angl=self.zorig / R 
+    var_new=np.zeros((self.nx,self.ny,self.nz))
+    #iiy0=np.argmin(np.abs(self.yorig))
+    iiy0=0
+    for iiy, iy in enumerate(self.y): 
+        temp=var[:,iiy+iiy0,:]
+        data = polar2cartesian(rad,angl,temp,self.z,self.x)
+        var_new[:,iiy,:] = data
+    return var_new
+
+  def trans2commaxes(self, loop=2): 
 
     if self.transunits == False:
       self.transunits = True
@@ -1017,6 +1060,28 @@ class PlutoData(object):
         self.z -= self.z[0]
         self.nz = np.size(self.z)
       self.dz1d = np.gradient(self.z)
+      self.xorig = self.x-np.min(self.x)
+      self.yorig = self.y
+      self.zorig = self.z
+      if loop != None:
+        R = np.max(self.z)/np.pi*2
+        self.x_loop=np.linspace(R*np.cos([np.pi/loop]),R+np.max(self.x),
+                      int((R-R*np.cos([np.pi/loop])+np.max(self.x))/np.min(self.dx1d)))
+        self.z_loop=np.linspace(0,R*np.sin([np.pi/loop])+np.max(self.x),
+                      int((R*np.sin([np.pi/loop])+np.max(self.x))/np.min(self.dx1d))) 
+
+        self.x=self.x_loop.squeeze()
+        self.z=self.z_loop.squeeze()
+
+        #self.y=self.y[np.argmin(np.abs(self.y)):]
+
+        self.dx1d = np.gradient(self.x)
+        self.dy1d = np.gradient(self.y)
+        self.dz1d = np.gradient(self.z)
+        self.nx=np.size(self.x)
+        self.ny=np.size(self.y)
+        self.nz=np.size(self.z)
+
       #self.dz1d = self.dz1d[::-1].copy()
     
   def trans2noncommaxes(self): 

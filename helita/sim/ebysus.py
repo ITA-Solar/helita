@@ -1,28 +1,46 @@
 """
 Set of programs to read and interact with output from Multifluid/multispecies
+
+TODO:
+    - add "physical"/"match_ebysus" option which does:
+        - physical: always returns physical values.
+            e.g. for nu_es always calculate and return the physical value.
+        - match_ebysus: always match ebysus values.
+            e.g. for nu_es if do_ohm_ecol=0, return 0.
 """
+
+DEBUG = False  # if True, change some things, to make debugging easier. (remove this in the long-term.)
+               # presently, debug mode is not working properly. - SE Apr 16 2021
+if DEBUG:
+    print('we have loaded ebysus.py in debug mode.')
 
 # import built-in modules
 import os
 import time
+if DEBUG:
+    import sys
 
 # import local modules
 from .bifrost import (
     BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
-    read_idl_ascii, subs2grph, remember_and_recall,
+    read_idl_ascii, subs2grph,
 )
 from . import cstagger
 from .load_mf_quantities import *
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import document_vars
-from . import manage_memmaps
+from . import file_memory
+from . import fluid_tools
 
 # import external public modules
 import numpy as np
 
 # import external private modules
-from at_tools import atom_tools as at
+try:
+    from at_tools import atom_tools as at
+except ImportError:
+    warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
 
 class EbysusData(BifrostData):
 
@@ -31,39 +49,85 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=20, **kwargs):
+    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, **kwargs):
         ''' initialize EbysusData object.
 
-        N_memmap: int (default 20)
+        N_memmap: int (default 0)
             keep the N_memmap most-recently-created memmaps stored in self._memory_numpy_memmap.
             -1  --> try to never forget any memmaps.
                     May increase (for this python session) the default maximum number of files
                     allowed to be open simultaneously. Tries to be conservative about doing so.
-                    See manage_memmaps.py for more details.
+                    See file_memory.py for more details.
             0   --> never remember any memmaps.
-                    Turns off remembering memmaps. Not recommended; causes major slowdown.
+                    Turns off remembering memmaps.
+                    Not recommended; causes major slowdown.
             >=1 --> remember up to this many memmaps.
+
+        mm_persnap: True (default) or False
+            whether to delete all memmaps in self._memory_memmap when we set_snap to a new snap.
+
+        fast: True (default) or False
+            whether to be fast.
+            True -> don't create memmaps for all simple variables when snapshot changes.
+            False -> do create memmaps for all simple variables when snapshot changes.
+                     Not recommended; causes major slowdown.
+                     This option is included in case legacy code assumes values
+                     via self.var, or self.variables[var], instead of self.get_var(var).
+                     As long as you use get_var to get var values, you can safely use fast=True.
+
+        *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
 
-        setattr(self, manage_memmaps.NMLIM_ATTR, N_memmap)
+        setattr(self, file_memory.NMLIM_ATTR, N_memmap)
+        setattr(self, file_memory.MM_PERSNAP, mm_persnap)
 
-        super(EbysusData, self).__init__(*args, **kwargs)
+        super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
         self.att = {}
-        if len(np.shape(self.mf_tabparam['SPECIES']))==1:
-            self.mf_nspecies = 1
-        else:
-            self.mf_nspecies = len(self.mf_tabparam['SPECIES'])
+        tab_species = self.mf_tabparam['SPECIES']
+        self.mf_nspecies = len(tab_species)
         self.mf_total_nlevel=0
-        for ispecies in range(1,int(self.mf_nspecies)+1):
-            if (self.mf_nspecies == 1):
-                self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][2],fdir=self.fdir)
-            else:
-                self.att[ispecies]=at.Atom_tools(atom_file=self.mf_tabparam['SPECIES'][ispecies-1][2],fdir=self.fdir)
-            self.mf_total_nlevel+=self.att[ispecies].params.nlevel
+        for row in tab_species:
+            # example row looks like: ['01', 'H', 'H_2.atom']
+            mf_ispecies = int(row[0])
+            self.att[mf_ispecies] = at.Atom_tools(atom_file=row[2], fdir=self.fdir)
+            self.mf_total_nlevel += self.att[mf_ispecies].params.nlevel
 
-        document_vars.create_vardict(self)
-        document_vars.set_vardocs(self)
+        self._init_vars_get(firstime=True)
+        self._init_coll_keys()
+
+    def _init_coll_keys(self):
+        '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
+        self.coll_keys will be a dict with keys (ispecies, jspecies) values (collision type).
+        collision types are:
+            'CL' ("coulomb"; whether coulomb collisions are allowed between these species)
+            'EL' ("elastic"; previous default in ebysus)
+            'MX' ("maxwell"; this one is usable even if we don't have cross section file)
+            Note that MX and EL are (presently) mutually exclusive.
+        '''
+        _enforce_symmetry_in_collisions = False
+        # ^^ whether to manually put   (B,A):value   if  (A,B):value    is in coll_keys.
+        # disabled now because presently, ebysus simulation does not enforce
+        # that symmetry; e.g. it is possible to have (1,2):'EL' and (2,1):'MX',
+        # though I don't know what that combination would mean...  - SE May 26 2021
+
+        # begin processing:
+        result = dict()
+        x = self.mf_tabparam['COLL_KEYS']
+        for tokenline in x:      # example tokenline: ['01', '02', 'EL']
+            ispec, jspec, collkey = tokenline
+            ispec, jspec = int(ispec), int(jspec)
+            key = (ispec, jspec)
+            try:
+                result[key] += [collkey]
+            except KeyError:
+                result[key] = [collkey]
+        if _enforce_symmetry_in_collisions:
+            for key in list(result.keys()): #list() because changing size of result
+                rkey = (key[1], key[0])  # reversed
+                if rkey not in result.keys():
+                    result[rkey] = result[key]
+        self.coll_keys = result
 
     def _set_snapvars(self,firstime=False):
 
@@ -143,8 +207,30 @@ class EbysusData(BifrostData):
         if (self.do_mhd):
             self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
 
-    # def set_snap(self,snap):
-    #     super(EbysusData, self).set_snap(snap)
+    def set_snap(self,snap,*args__set_snap,**kwargs__set_snap):
+        '''call set_snap from BifrostData,
+        but also if mm_persnap, then delete all the memmaps in memory..
+        '''
+        if getattr(self, file_memory.MM_PERSNAP, False) and np.shape(self.snap)==():
+            if hasattr(self, file_memory.MEMORY_MEMMAP):
+                delattr(self, file_memory.MEMORY_MEMMAP)
+        super(EbysusData, self).set_snap(snap, *args__set_snap, **kwargs__set_snap)
+
+    def get_param(self, param, default=None, warning=None):
+        ''' get param via self.params[param][self.snapInd].
+        if param not in self.params.keys():
+            return default.
+            if warning not None, also do warnings.warn(warning).
+        '''
+        try:
+            p = self.params[param]
+        except KeyError:
+            p = default
+            if warning is not None:
+                warnings.warn(warning)
+        else:
+            p = p[self.snapInd]
+        return p
 
     def _read_params(self,firstime=False):
         ''' Reads parameter file specific for Multi Fluid Bifrost '''
@@ -164,25 +250,36 @@ class EbysusData(BifrostData):
             self.with_electrons = self.params['mf_electrons'][self.snapInd]
         except KeyError:
             raise KeyError(
-                'read_params: could not find with_electrons in idl file!')
+                'read_params: could not find mf_electrons in idl file!')
+        # mf_total_nlevel
+        self.mf_total_nlevel = self.get_param('mf_total_nlevel',
+                        warning='warning, this idl file does not include mf_total_nlevel')
+        # mf_param_file
+        param_file = self.get_param('mf_param_file', default='mf_params.in',
+                        warning='mf_param_file not found in this idl file; trying to use mf_params.in')
+        file = os.path.join(self.fdir, param_file.strip())
+        self.mf_tabparam = read_mftab_ascii(file, obj=self)
+        # mf_eparam_file
+        do_ohm_ecol = self.get_param('do_ohm_ecol', 0)
+        warning = 'mf_eparam_file parameter not found; trying to use mf_eparams.in' if do_ohm_ecol else None
+        eparam_file = self.get_param('mf_eparam_file', default='mf_eparams.in', warning=warning)
+        file = os.path.join(self.fdir, eparam_file.strip())
         try:
-            self.mf_total_nlevel = self.params['mf_total_nlevel'][self.snapInd]
-        except KeyError:
-            print('warning, this idl file does not include mf_total_nlevel')
-        try:
-            file = os.path.join(
-                self.fdir, self.params['mf_param_file'][self.snapInd].strip())
-            self.mf_tabparam = read_mftab_ascii(file, obj=self)
-        except KeyError:
-            print('warning, this idl file does not include mf_param_file')
+            self.mf_etabparam = read_mftab_ascii(file, obj=self)
+        except FileNotFoundError:
+            # if do_ohm_ecol, crash; otherwise quietly ignore error.
+            if do_ohm_ecol:
+                raise
 
-    def _init_vars(self, firstime=False, fast=None, *args, **kwargs):
+    def _init_vars(self, firstime=False, fast=None, *args__get_simple_var, **kw__get_simple_var):
         """
         Initialises variables (common for all fluid)
         
         fast: None, True, or False.
             whether to only read density (and not all the other variables).
             if None, use self.fast instead.
+
+        *args and **kwargs go to _get_simple_var
         """
         fast = fast if fast is not None else self.fast
         if self._fast_skip_flag is True:
@@ -209,72 +306,94 @@ class EbysusData(BifrostData):
         self.set_mfi(None, None)
         self.set_mfj(None, None)
 
-        
-        varlist = ['r'] if fast else self.simple_vars
+        if not firstime:
+            self._init_vars_get(firstime=False, *args__get_simple_var, **kw__get_simple_var)
+            
+    def _init_vars_get(self, firstime=False, *args__get_simple_var, **kw__get_simple_var):
+        '''get vars for _init_vars.'''
+        varlist = ['r'] if self.fast else self.simple_vars
         for var in varlist:
             try:
-                self.variables[var] = self._get_simple_var(
-                    var, self.mf_ispecies, self.mf_ilevel, *args, **kwargs)
+                # try to get var via _get_simple_var.
+                self.variables[var] = self._get_simple_var(var,
+                    *args__get_simple_var, **kw__get_simple_var)
+            except Exception as error:
+                # if an error occurs, then...
+                if var=='r' and firstime:
+                    # RAISE THE ERROR
+                    ## Many methods depend on self.r being set. So if we can't get it, the code needs to crash.
+                    raise
+                elif isinstance(error, ValueError) and (self.mf_ispecies < 0 or self.mf_ilevel < 0):
+                    # SILENTLY HIDE THE ERROR.
+                    ## We assume it came from doing something like get_var('r', mf_ispecies=-1),
+                    ##  which is is _supposed_ to fail. We hope it came from that, at least....
+                    ## To be cautious / help debugging, we will store any such errors in self._hidden_errors.
+                    if not hasattr(self, '_hidden_errors'):
+                        self._hidden_errors = []
+                    if not hasattr(self, '_hidden_errors_max_len'):
+                        self._hidden_errors_max_len = 100  # don't keep track of more than this many errors.
+                    errmsg = "during _init_vars_get, with var='{}', {}".format(var, self.quick_look())
+                    errmsg.format(var, self.snap, self.ifluid, self.jfluid)
+                    self._hidden_errors += [(errmsg, error)]
+                    if len(self._hidden_errors) > self._hidden_errors_max_len:
+                        del self._hidden_errors[0]
+                else:
+                    # MAKE A WARNING but don't crash the code.
+                    ## Note: warnings with the same exact contents will only appear once per session, by default.
+                    ## You can change this behavior via, e.g.: import warnings; warnings.simplefilter('always')
+                    errmsg = error if (self.verbose or firstime) else type(error).__name__
+                    warnings.warn("init_vars failed to read variable '{}' due to: {}".format(var, errmsg))
+            else:
+                # if there was no error, then set self.var to the result.
+                ## also set self.variables['metadata'] to self._metadata.
+                ## this ensures we only pull data from self.variables when
+                ## it is the correct snapshot, ifluid, and jfluid.
                 setattr(self, var, self.variables[var])
-            except Exception as e:
-                if var=='r':
-                    raise     # we need to be able to read r or many methods will fail.
-                warnings.warn('init_vars failed to read variable {} due to {}'.format(var, e))
-                if self.verbose:
-                    if not (self.mf_ilevel == 1 and var in self.varsmfc):
-                        if (firstime):
-                            print(('(WWW) init_vars: could not read '
-                                'variable %s' % var))
+                self.variables['metadata'] = self._metadata()
 
         rdt = self.r.dtype
         if (self.nz>1):
             cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
                               self.zdn.astype(rdt), self.dzidzup.astype(rdt),
                               self.dzidzdn.astype(rdt))
+            self.cstagger_exists = True   # we can use cstagger methods!
+        else:
+            self.cstagger_exists = False
+            #cstagger.init_stagger_mz1(self.nz, self.dx, self.dy, self.z.astype(rdt))
+            #self.cstagger_exists = True  # we must avoid using cstagger methods.
 
-    def set_mfi(self, mf_ispecies=None, mf_ilevel=None):
-        """
-        adds mf_ispecies and mf_ilevel attributes if they don't exist and
-        changes mf_ispecies and mf_ilevel if needed. It will set defaults to 1
-        """
 
-        if (mf_ispecies is not None):
-            if (mf_ispecies != self.mf_ispecies):
-                self.mf_ispecies = mf_ispecies
-            elif not hasattr(self, 'mf_ispecies'):
-                self.mf_ispecies = 1
-        elif not hasattr(self, 'mf_ispecies'):
-            self.mf_ispecies = 1
+    # fluid-setting functions
+    set_mf_fluid = fluid_tools.set_mf_fluid
+    set_mfi      = fluid_tools.set_mfi
+    set_mfj      = fluid_tools.set_mfj
+    set_fluids   = fluid_tools.set_fluids
+    # docstrings for fluid-setting functions
+    for func in [set_mf_fluid, set_mfi, set_mfj]:
+        func.__doc__ = func.__doc__.replace('obj', 'self')
 
-        if (mf_ilevel is not None):
-            if (mf_ilevel != self.mf_ilevel):
-                self.mf_ilevel = mf_ilevel
-            elif not hasattr(self, 'mf_ilevel'):
-                self.mf_ilevel = 1
-        elif not hasattr(self, 'mf_ilevel'):
-            self.mf_ilevel = 1
+    del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
 
-    def set_mfj(self, mf_jspecies=None, mf_jlevel=None):
-        """
-        adds mf_ispecies and mf_ilevel attributes if they don't exist and
-        changes mf_ispecies and mf_ilevel if needed. It will set defaults to 1
-        """
+    def _metadata(self, none=None):
+        '''returns dict of snap, ifluid, jfluid for self.'''
+        result = {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
+        if result['snap'] is not none:
+            if np.size(result['snap'])>1: result['snap'] = self.snap[self.snapInd]
+        return result
 
-        if (mf_jspecies is not None):
-            if (mf_jspecies != self.mf_jspecies):
-                self.mf_jspecies = mf_jspecies
-            elif not hasattr(self, 'mf_jspecies'):
-                self.mf_ispecies = 1
-        elif not hasattr(self, 'mf_jspecies'):
-            self.mf_jspecies = 1
+    def quick_look(self):
+        '''returns string with snap, ifluid, and jfluid.'''
+        x = self._metadata(none='(not set)')
+        return 'snap={}, ifluid={}, jfluid={}'.format(x['snap'], x['ifluid'], x['jfluid'])
 
-        if (mf_jlevel is not None):
-            if (mf_jlevel != self.mf_jlevel):
-                self.mf_jlevel = mf_jlevel
-            elif not hasattr(self, 'mf_jlevel'):
-                self.mf_jlevel = 1
-        elif not hasattr(self, 'mf_jlevel'):
-            self.mf_jlevel = 1
+    def _metadata_equals(self, alt_metadata, none=None):
+        '''return whether self._metadata(none) equals to self.alt_metadata.'''
+        x = self._metadata(none=none)
+        if set(x.keys()) != set(alt_metadata.keys()): return False
+        if x['ifluid'] != alt_metadata['ifluid']: return False
+        if x['jfluid'] != alt_metadata['jfluid']: return False
+        if np.any(x['snap'] != alt_metadata['snap']): return False
+        return True
 
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
@@ -285,6 +404,8 @@ class EbysusData(BifrostData):
 
         >>> Use self.get_var('') for help.
         >>> Use self.vardocs() to prettyprint the available variables and what they mean.
+
+        sets fluid-related attributes (e.g. self.ifluid) based on fluid-related kwargs.
 
         returns the data for the variable (as a 3D array with axes 0,1,2 <-> x,y,z).
 
@@ -320,30 +441,13 @@ class EbysusData(BifrostData):
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
-        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
+        # set fluids as appropriate to kwargs
+        kw__fluids = dict(mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
+                          mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
+                          **kwargs)
+        self.set_fluids(**kw__fluids)
 
-        if var in self.varsmfc:
-            if mf_ilevel is None and self.mf_ilevel == 1:
-                mf_ilevel = 2
-                print("Warning: mfc is only for ionized species,"
-                      "Level changed to 2")
-            if mf_ilevel == 1:
-                mf_ilevel = 2
-                print("Warning: mfc is only for ionized species."
-                      " Level changed to 2")
-
-        #if var not in self.snapevars:
-        #    if (mf_ispecies is None):
-        #        if self.mf_ispecies < 1:
-        #            mf_ispecies = 1
-        #            print("Warning: variable is only for electrons, "
-        #                  "iSpecie changed to 1")
-        #    elif (mf_ispecies < 1):
-        #        mf_ispecies = 1
-        #        print("Warning: variable is only for electrons, "
-        #              "iSpecie changed to 1")
-
+        # set iix, iiy, iiz appropriately (TODO: encapsulate in helper function)
         if not hasattr(self, 'iix'):
             self.set_domain_iiaxis(iinum=iix, iiaxis='x')
             self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
@@ -373,49 +477,34 @@ class EbysusData(BifrostData):
                 'WARNING: cstagger use has been turned off,',
                 'turn it back on with "dd.cstagop = True"')
 
-        if ((snap is not None) and np.any(snap != self.snap)):
-            self.set_snap(snap)
-            self.variables={}
+        # set snapshot as needed
+        if snap is not None:
+            if not np.array_equal(snap, self.snap):
+                self.set_snap(snap)
 
-        if ((mf_ispecies is not None) and (mf_ispecies != self.mf_ispecies)):
-            self.set_mfi(mf_ispecies, mf_ilevel)
-            self.variables={}
-        elif (( mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel)):
-            self.set_mfi(mf_ispecies, mf_ilevel)
-            self.variables={}
-        if ((mf_jspecies is not None) and (mf_jspecies != self.mf_jspecies)):
-            self.set_mfj(mf_jspecies, mf_jlevel)
-            self.variables={}
-        elif (( mf_ilevel is not None) and (mf_jlevel != self.mf_jlevel)):
-            self.set_mfj(mf_jspecies, mf_jlevel)
-            self.variables={}
+        # get value of variable; restore ifluid & jfluid afterwards.
+        with self.MaintainFluids():
+            if self._metadata_equals(self.variables) and var in self.variables:
+                return self.variables[var]
+            elif var in self.simple_vars:
+                val = self._get_simple_var(var, panic=panic)
+            elif var in self.auxxyvars:
+                val =  super(EbysusData, self)._get_simple_var_xy(var)
+            elif var in self.compvars:
+                val =  super(EbysusData, self)._get_composite_var(var)
+            else:
+                # Loading quantities
+                val = load_quantities(self,var,PLASMA_QUANT='',
+                            CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                            IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                            DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                            COULOMB_COL_QUANT='', AMB_QUANT='')
+                if val is None:
+                    val = load_mf_quantities(self,var)
+                if val is None:
+                    val = load_arithmetic_quantities(self,var)
 
-        # This should not be here because mf_ispecies < 0 is for electrons.
-        #assert (self.mf_ispecies > 0 and self.mf_ispecies <= 28)
-
-        # # check if already in memmory
-        if var in self.variables:
-            return self.variables[var]
-        elif var in self.simple_vars:  # is variable already loaded?
-            val = self._get_simple_var(var, self.mf_ispecies, self.mf_ilevel,
-                                self.mf_jspecies, self.mf_jlevel,panic=panic)
-        elif var in self.auxxyvars:
-            val =  super(EbysusData, self)._get_simple_var_xy(var)
-        elif var in self.compvars:
-            val =  super(EbysusData, self)._get_composite_var(var)
-        else:
-            # Loading quantities
-            val = load_quantities(self,var,PLASMA_QUANT='',
-                        CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                        IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                        DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                        COULOMB_COL_QUANT='', AMB_QUANT='')
-            # Loading arithmetic quantities
-            if np.shape(val) is ():
-                val = load_arithmetic_quantities(self,var)
-            if np.shape(val) is ():
-                val = load_mf_quantities(self,var)
-
+        # handle documentation case
         if document_vars.creating_vardict(self):
             return None
         elif var == '':
@@ -427,14 +516,19 @@ class EbysusData(BifrostData):
                 self.vardocs()
             return None
 
-        if np.shape(val) is ():
+        # handle "don't know how to get this var" case
+        if val is None:
             raise ValueError(('get_var: do not know (yet) how to '
                           'calculate quantity %s. Note that simple_var '
                           'available variables are: %s.\nIn addition, '
                           'get_quantity can read others computed variables '
-                          'see e.g. help(self.get_var) or get_var('')) for guidance'
+                          "see e.g. help(self.get_var) or get_var('')) for guidance"
                           '.' % (var, repr(self.simple_vars))))
 
+        if DEBUG:
+            self._check_mm_refs(val, 0)
+
+        # reshape if necessary... (? I don't understand when it could be necessary -SE May 21 2021)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
             if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
@@ -454,6 +548,12 @@ class EbysusData(BifrostData):
             val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
 
         return val
+
+    def get_varm(self, *args__get_var, **kwargs__get_var):
+        '''get_var but returns np.mean() of result.
+        provided for convenience for quicker debugging.
+        '''
+        return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
 
     def _get_simple_var(
             self,
@@ -490,6 +590,9 @@ class EbysusData(BifrostData):
         """
         if var == '':
             print(help(self._get_simple_var))
+
+        self.set_mfi(mf_ispecies, mf_ilevel)
+        self.set_mfj(mf_jspecies, mf_jlevel)
 
         if (np.size(self.snap) > 1):
             currSnap = self.snap[self.snapInd]
@@ -590,6 +693,10 @@ class EbysusData(BifrostData):
                 dirvars = '%s.io/mf_%02i_%02i/mfc/' % (self.file_root,
                         self.mf_ispecies, self.mf_ilevel)
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
+            else:
+                errmsg = "Failed to find '{}' in simple vars for {}. (at point 1 in ebysus.py)"
+                errmsg = errmsg.format(var, self.quick_look())
+                raise ValueError(errmsg)
         else:
             dirvars = ''
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
@@ -630,7 +737,6 @@ class EbysusData(BifrostData):
                             jdx += 1
                         elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
                             jdx += 1
-
             elif var in self.varsmfr:
                 idx = self.varsmfr.index(var)
                 fsuffix_a = '.aux'
@@ -647,6 +753,10 @@ class EbysusData(BifrostData):
                 idx = self.varsmfc.index(var)
                 fsuffix_a = '.aux'
                 filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
+            else:
+                errmsg = "Failed to find '{}' in simple vars for {}. (at point 2 in ebysus.py)"
+                errmsg = errmsg.format(var, self.quick_look())
+                raise ValueError(errmsg)
 
         if panic: 
             if fsuffix_a == '.aux': 
@@ -676,11 +786,40 @@ class EbysusData(BifrostData):
             else:
                 kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
                 result = get_numpy_memmap(filename, **kw__get_mmap)
+        if DEBUG:
+            self._check_mm_refs(result, 0)
         return result
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
+    if DEBUG:
+        def _check_mm_refs(self, x, N_external, in_memory=None):
+            '''checks whether there are the correct number of refs to memmap x.
+            N_external is guess of how many references there are besides the x which is passed here.
+            in_memory: bool or None. None -> (getattr(self, file_memory.NMLIM_ATTR, 0)==0)
+            '''
+            # total number of refs should be 3 + N_external + (1 if x is in _memory_memmap else 0)
+            ## the 3 are: original x, local x in this function, local x in sys.getrefcount.
+            errstr = 'Too many references. Expected {} from memory plus {} from external, but got {} total. ' + self.quick_look()
+            if in_memory is None: in_memory = getattr(self, file_memory.NMLIM_ATTR, 0)==0
+            Nref = sys.getrefcount(x)
+            memref = (1 if in_memory else 0)
+            expected = 3 + N_external + memref
+            assert Nref == expected, errstr.format(memref, N_external, Nref-3)
+            return True
+
+    def get_var_if_in_aux(self, var, *args__get_var, **kw__get_var):
+        """ get_var but only if it appears in aux (i.e. self.params['aux'][self.snapInd])
+        
+        if var not in aux, return None.
+        *args and **kwargs go to get_var.
+        """
+        if var in self.params['aux'][self.snapInd].split():
+            return self.get_var(var, *args__get_var, **kw__get_var)
+        else:
+            return None
+
+    def get_varTime(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                    ifluid=None, jfluid=None,
+                    ifluid=None, jfluid=None, print_freq=None,
                     *args, **kwargs):
         """ Gets and returns the value of var over multiple snaps.
 
@@ -703,7 +842,11 @@ class EbysusData(BifrostData):
             if still None, use self.mf_ilevel
         ifluid - tuple of integers, or None (default)
             if not None: (mf_ispecies, mf_ilevel) = ifluid
+        print_freq - number, default 2
+            print progress update every print_freq seconds.
+            Use print_freq <= 0 to never print update.
         **kwargs may contain the following:
+            snaps  - alias for snap
             iSL    - alias for ifluid
             jSL    - alias for jfluid
             iS, iL - alias for ifluid[0], ifluid[1]
@@ -711,175 +854,116 @@ class EbysusData(BifrostData):
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
         """
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
 
-        if snap is None: snap = self.snap
+        # set print_freq
+        if print_freq is None:
+            print_freq = getattr(self, 'print_freq', 2) # default 2
+        else:
+            setattr(self, 'print_freq', print_freq)
+
+        # set snap
+        if snap is None:
+            if 'snaps' in kwargs:
+                snap = kwargs['snaps']
+            if snap is None:
+                snap = self.snap
         snap = np.array(snap, copy=False)
+        if len(snap.shape)==0:
+            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
             self.variables={}
 
-        mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel = \
-            _interpret_kw_fluids(mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel, ifluid, jfluid, **kwargs)
-
-        if var in self.varsmfc:
-            if mf_ilevel is None and self.mf_ilevel == 1:
-                mf_ilevel = 2
-                self.variables={}
-                print("Warning: mfc is only for ionized species,"
-                      "Level changed to 2")
-            if mf_ilevel == 1:
-                mf_ilevel = 2
-                self.variables={}
-                print("Warning: mfc is only for ionized species."
-                      "Level changed to 2")
-
-        #if var not in self.snapevars:
-        #    if (mf_ispecies is None):
-        #        if self.mf_ispecies < 1:
-        #            mf_ispecies = 1
-        #            print("Warning: variable is only for electrons,"
-        #                  "iSpecie changed to 1")
-        #    elif (mf_ispecies < 1):
-        #        mf_ispecies = 1
-        #        print("Warning: variable is only for electrons,"
-        #              "iSpecie changed to 1")
-
-        if (((mf_ispecies is not None) and (
-                mf_ispecies != self.mf_ispecies)) or ((
-                mf_ilevel is not None) and (mf_ilevel != self.mf_ilevel))):
-            self.set_mfi(mf_ispecies, mf_ilevel)
-            self.variables={}
-        if (((mf_jspecies is not None) and (
-                mf_jspecies != self.mf_jspecies)) or ((
-                mf_jlevel is not None) and (mf_jlevel != self.mf_jlevel))):
-            self.set_mfj(mf_jspecies, mf_jlevel)
-            self.variables={}
         # lengths for dimensions of return array
-        self.xLength = 0
-        self.yLength = 0
-        self.zLength = 0
-
-        for dim in ('iix', 'iiy', 'iiz'):
-            if getattr(self, dim) is None:
-                if dim[2] == 'z':
-                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]+'b'))
-                    setattr(self, dim, np.arange(0,getattr(self, 'n' + dim[2]+'b')))
-                else:
-                    setattr(self, dim[2] + 'Length', getattr(self, 'n' + dim[2]))
-                    setattr(self, dim, np.arange(0,getattr(self, 'n' + dim[2])))
-                setattr(self, dim, slice(None))
-            else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
+        self.iix = iix
+        self.iiy = iiy
+        self.iiz = iiz
+        slicer   = (self.iix, self.iiy, self.iiz)
+        self.xLength, self.yLength, self.zLength = self.r[slicer].shape
+        #   note it is ok to use self.r because many get_var methods already assume self.r exists.
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-        remembersnaps = self.snap
+        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
+        if hasattr(self, 'recoverData'):
+            delattr(self, 'recoverData')            # smash any existing saved data
+        timestart = now = time.time()               # track timing, so we can make updates.
+        printed_update  = False
+        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
+            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
         try:
             for it in range(0, snapLen):
-                self.snapInd = 0
+                self.snapInd = it
+                # print update if it is time to print update
+                if (print_freq > 0) and (time.time() - now > print_freq):
+                    _print_clearline()
+                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
+                                    var,     snap[it],         it,    snapLen        ), end='')
+                    now = time.time()
+                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                    printed_update=True
+                    
+                # actually get the values here:
                 value[..., it] = self.get_var(var, snap=snap[it],
                     iix=self.iix, iiy=self.iiy, iiz=self.iiz,
-                    mf_ispecies = self.mf_ispecies, mf_ilevel=self.mf_ilevel,
-                    mf_jspecies = self.mf_jspecies, mf_jlevel=self.mf_jlevel)
-        except Exception:    # restore self.snaps
-            self.snap=remembersnaps
+                    mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
+                    mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
+                    **kwargs)
+        except:   # here it is ok to except all errors, because we always raise.
+            if it > 0:
+                self.recoverData = value[..., :it]   # save data 
+                if self.verbose:
+                    print(('Crashed during get_varTime, but managed to get data from {} '
+                           'snaps before crashing. Data was saved and can be recovered '
+                           'via self.recoverData.'.format(it)))
             raise
-
-
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
+        finally:
+            self.set_snap(remembersnaps)             # restore snaps
+            if printed_update:
+                _print_clearline()
+            
                 
         return value
 
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
-##################
-#  FLUID KWARGS  #
-##################
+    # include methods related to wavegrowth, for convenience
+    def get_lmin(self):
+        '''return smallest length resolvable for each direction ['x', 'y', 'z'].
+        result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
+        '''
+        return np.array([getattr(self, 'd'+x+'1d').min() for x in ['x', 'y', 'z']])
 
-def _interpret_kw_fluids(mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                         ifluid=None, jfluid=None, iSL=None, jSL=None,
-                         iS=None, iL=None, jS=None, jL=None,
-                         **kw__None):
-    '''interpret kwargs entered for fluids. Returns (mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel).
-    kwargs are meant to be shorthand notation. If conflicting kwargs are entered, raise ValueError.
-    **kw__None are ignored; it is part of the function def'n so that it will not break if extra kwargs are entered.
-    Meanings for non-None kwargs (similar for j, only writing for i here):
-        mf_ispecies, mf_ilevel = ifluid
-        mf_ispecies, mf_ilevel = iSL
-        mf_ispecies, mf_ilevel = iS, iL
-    Examples:
-        These all return (1,2,3,4) (they are equivalent):
-            _interpret_kw_fluids(mf_ispecies=1, mf_ilevel=2, mf_jspecies=3, mf_jlevel=4)
-            _interpret_kw_fluids(ifluid=(1,2), jfluid=(3,4))
-            _interpret_kw_fluids(iSL=(1,2), jSL=(3,4))
-            _interpret_kw_fluids(iS=1, iL=2, jS=3, jL=4)
-        Un-entered fluids will be returned as None:
-            _interpret_kw_fluids(ifluid=(1,2))
-            >> (1,2,None,None)
-        Conflicting non-None kwargs will cause ValueError:
-            _interpret_kw_fluids(mf_ispecies=3, ifluid=(1,2))
-            >> ValueError('mf_ispecies (==3) was incompatible with ifluid[0] (==1)')
-            _interpret_kw_fluids(mf_ispecies=1, ifluid=(1,2))
-            >> (1,2,None,None)
-    '''
-    si, li = _interpret_kw_fluid(mf_ispecies, mf_ilevel, ifluid, iSL, iS, iL, i='i')
-    sj, lj = _interpret_kw_fluid(mf_jspecies, mf_jlevel, jfluid, jSL, jS, jL, i='j')
-    return (si, li, sj, lj)
+    def get_kmax(self):
+        '''return largest value of each component of wavevector resolvable by self.
+        I.e. returns [max kx, max ky, max kz].
+        result is in [1/ simu. length units]. Divide by self.uni.usi_l to convert to SI.
+        '''
+        return 2 * np.pi / self.get_lmin()
 
-def _interpret_kw_ifluid(mf_ispecies=None, mf_ilevel=None, ifluid=None, iSL=None, iS=None, iL=None, None_ok=True):
-    '''interpret kwargs entered for ifluid. See _interpret_kw_fluids for more documentation.'''
-    return _interpret_kw_fluid(mf_ispecies, mf_ilevel, ifluid, iSL, iS, iL, None_ok=None_ok, i='i')
 
-def _interpret_kw_jfluid(mf_jspecies=None, mf_jlevel=None, jfluid=None, jSL=None, jS=None, jL=None, None_ok=True):
-    '''interpret kwargs entered for jfluid. See _interpret_kw_fluids for more documentation.'''
-    return _interpret_kw_fluid(mf_jspecies, mf_jlevel, jfluid, jSL, jS, jL, None_ok=None_ok, i='j')
+    # include methods from fluid_tools.
+    def MaintainingFluids(self):
+        return fluid_tools._MaintainingFluids(self)
+    MaintainingFluids.__doc__ = fluid_tools._MaintainingFluids.__doc__.replace(
+                                '_MaintainingFluids(dd', 'dd.MaintainingFluids(')  # set docstring
+    MaintainFluids = MaintainingFluids  # alias
 
-def _interpret_kw_fluid(mf_species=None, mf_level=None, fluid=None, SL=None, S=None, L=None, i='', None_ok=True):
-    '''interpret kwargs entered for fluid. Returns (mf_ispecies, mf_ilevel).
-    See _interpret_kw_fluids for more documentation.
-    i      : 'i', or 'j'; Used to make clearer error messages, if entered.
-    None_ok: True (default) or False;
-        whether to allow answer of None or species and/or level.
-        if False and species and/or level is None, raise TypeError.
-    '''
-    s  , l   = None, None
-    kws, kwl = '', ''
-    def set_sl(news, newl, newkws, newkwl, olds, oldl, oldkws, oldkwl, i):
-        newkws, newkwl = newkws.format(i), newkwl.format(i)
-        errmsg = 'Two incompatible fluid kwargs entered! {oldkw:} and {newkw:} must be equal ' + \
-                 '(unless one is None), but got {oldkw:}={oldval:} and {newkw:}={newval:}'
-        if (olds is not None):
-            if (news is not None):
-                if (news != olds):
-                    raise ValueError(errmsg.format(newkw=newkws, newval=news, oldkw=oldkws, oldval=olds))
-            else:
-                news = olds
-        if (oldl is not None):
-            if (newl is not None):
-                if (newl != oldl):
-                    raise ValueError(errmsg.format(newkw=newkwl, newval=newl, oldkw=oldkwl, oldval=oldl))
-            else:
-                newl = oldl
-        return news, newl, newkws, newkwl
+    def UsingFluids(self, **kw__fluids):
+        return fluid_tools._UsingFluids(self, **kw__fluids)
+    UsingFluids.__doc__ = fluid_tools._UsingFluids.__doc__.replace(
+                                '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
+    UseFluids = UsingFluids  # alias
 
-    if fluid is None: fluid = (None, None)
-    if SL    is None: SL    = (None, None)
-    s, l, kws, kwl = set_sl(mf_species, mf_level, 'mf_{:}species', 'mf_{:}level', s, l, kws, kwl, i)
-    s, l, kws, kwl = set_sl(fluid[0]  , fluid[1], '{:}fluid[0]'  , '{:}fluid[1]', s, l, kws, kwl, i)
-    s, l, kws, kwl = set_sl(SL[0]     , SL[1]   , '{:}SL[0]'     , '{:}SL[1]'   , s, l, kws, kwl, i)
-    s, l, kws, kwl = set_sl(S         , L       , '{:}S'         , '{:}L'       , s, l, kws, kwl, i)
-    if not None_ok:
-        if s is None or l is None:
-            raise TypeError('{0:}species and {0:}level cannot be None, but got: '.format(i) +
-                            'mf_{0:}species={1:}; mf_{0:}level={2:}.'.format(i, s, l))
-    return s, l
+# include methods from fluid_tools in EbysusData object.
+for func in ['get_species_name', 'get_mass', 'get_charge',
+            'get_cross_tab', 'get_cross_sect', 'get_coll_type']:
+    setattr(EbysusData, func, getattr(fluid_tools, func, None))
+
+del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
+
 
 ###########
 #  TOOLS  #
@@ -894,7 +978,7 @@ def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
         - (mf_ispecies and mf_ilevel)
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
+    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -917,7 +1001,7 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilev
         - (mf_ispecies and mf_ilevel)
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
+    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -967,7 +1051,7 @@ def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
         - mf_ispecies and mf_ilevel
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = _interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
+    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
@@ -1072,100 +1156,43 @@ def printi(fdir='./',rootname='',it=1):
     print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
 
 
-_MEMORY_NP_MEMMAP = '_memory_numpy_memmap'
-@manage_memmaps.manage_memmaps(_MEMORY_NP_MEMMAP)
-@remember_and_recall(_MEMORY_NP_MEMMAP, manage_memmaps.LastUpdatedOrderedDict)
+@file_memory.manage_memmaps(file_memory.MEMORY_MEMMAP)
+@file_memory.remember_and_recall(file_memory.MEMORY_MEMMAP, ORDERED=True)
 def get_numpy_memmap(filename, **kw__np_memmap):
     '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
     return np.memmap(filename, **kw__np_memmap)
 
 
-@remember_and_recall('_memory_read_mftab_ascii')
+@file_memory.remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
     '''
-    li = 0
-    params = {}
+    convert_to_ints = False   # True starting when we hit key=='COLLISIONS_MAP'
+    colstartkeys = ['COLLISIONS_MAP', 'COLISIONS_MAP'] # or another key in colstartkeys.
+    params = dict()
     # go through the file, add stuff to dictionary
     with open(filename) as fp:
         for line in fp:
-            # ignore empty lines and comments
-            line = line.strip()
-            if len(line) < 1:
-                li += 1
+            line, _, comment = line.partition('#')  # remove comments (#)
+            line, _, comment = line.partition(';')  # remove comments (;)
+            tokens = line.split()                   # split by whitespace
+            if len(tokens) == 0:
                 continue
-            if line[0] == '#':
-                li += 1
-                continue
-            line, sep, tail = line.partition('#')
-            line = line.strip()
-            line = line.split(';')[0].split('\t')
-                    #SE should this change to .split() so that any whitespace is ok...?
-                    #SE quicktested Apr 9 2021, for some reason .split() causes issue.
-                    #Probably somewhere this function assumes specifically that we used .split('\t') or something like that.
-            # if (len(line) > 2):
-            #  print(('(WWW) read_params: line %i is invalid, skipping' % li))
-            #    li += 1
-            #    continue
-            if (np.size(line) == 1):
-                key = line
-                ii = 0
-            # force lowercase because IDL is case-insensitive
-            if (np.size(line) == 2):
-                value = line[0].strip()
-                text = line[1].strip().lower()
-                try:
-                    value = int(value)
-                except BaseException:
-                    print('(WWW) read_mftab_ascii: could not find datatype in'
-                          'line %i, skipping' % li)
-                    li += 1
-                    continue
-                if not (key[0] in params):
-                    params[key[0]] = [value, text]
-                else:
-                    params[key[0]] = np.vstack((params[key[0]], [value, text]))
-            if (np.size(line) == 3):
-                value = line[0].strip()
-                value2 = line[1].strip()
-                text = line[2].strip()
-                if key != 'species':
-                    try:
-                        value = int(value)
-                    except BaseException:
-                        print(
-                            '(WWW) read_mftab_ascii: could not find datatype'
-                            'in line %i, skipping' % li)
-                else:
-                    try:
-                        value = int(value)
-                        value2 = int(value2)
-                    except BaseException:
-                        print(
-                            '(WWW) read_mftab_ascii: could not find datatype'
-                            'in line %i, skipping' % li)
-                    li += 1
-                    continue
-                if not (key[0] in params):
-                    params[key[0]] = [value, value2, text]
-                else:
-                    params[key[0]] = np.vstack(
-                        (params[key[0]], [value, value2, text]))
-            if (np.size(line) > 3):
-                # int type
-                try:
-                    arr = [int(numeric_string) for numeric_string in line]
-                except BaseException:
-                    print('(WWW) read_mftab_ascii: could not find datatype in'
-                          'line %i, skipping' % li)
-                    li += 1
-                    continue
-                if not (key[0] in params):
-                    params[key[0]] = [arr]
-                else:
-                    params[key[0]] = np.vstack((params[key[0]], [arr]))
-            li += 1
+            elif len(tokens) == 1:
+                key = tokens[0]
+                params[key] = []
+                for colstart in colstartkeys:
+                    if key.startswith(colstart):
+                        convert_to_ints = True
+            else:
+                if convert_to_ints:
+                    tokens = [int(token) for token in tokens]
+                params[key] += [tokens]
+
+    for key in params.keys():
+        params[key] = np.array(params[key])
+
     return params
 
 def write_idlparamsfile(snapname,mx=1,my=1,mz=1):

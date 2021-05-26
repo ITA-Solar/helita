@@ -1,7 +1,58 @@
+"""
+These quantities relate to doing manipulations.
+Frequently, they are "added" to regular variable names.
+Examples:
+  - get_var('u2') is roughly equal to get_var('ux')**2 + get_var('uy')**2 + get_var('uz')**2
+  - get_var('drdxdn') takes derivative of 'r' and pushes down in x.
+  - get_var('rxup') pushes 'r' up in x, by interpolating.
+In general, these are not hard coded for every variable, but rather you will add to names.
+For example, you can do get_var('d'+var+'dxdn') for any var which get_var knows how to get.
+
+Interpolation guide:
+  'up' moves up by 0.5 (i.e. half a grid cell)
+  'dn' moves down by 0.5 (i.e. half a grid cell)
+  scalars are in center of cell, at (0,0,0).
+    e.g.: density, energy
+  B, p are on the faces of the cell. Example:
+    Bx at ( -0.5,  0  ,  0   )
+    By at (  0  , -0.5,  0   )
+    Bz at (  0  ,  0  , -0.5 )
+    B = magnetic field; p = momentum density.
+  E, i are on the edges of the cell. Example:
+    Ex at (  0  , -0.5, -0.5 )
+    Ey at ( -0.5,  0  , -0.5 )
+    Ez at ( -0.5, -0.5,  0   )
+    E = electric field; i = current per unit area.
+"""
+
+
+# import built-ins
 from multiprocessing.dummy import Pool as ThreadPool
-import numpy as np
+import warnings
+
+# import internal modules
 from . import cstagger
 from . import document_vars
+
+# import external public modules
+import numpy as np
+
+# we need to convert to float32 before doing cstagger.do.
+## not sure why this conversion isnt done in the cstagger method, but it is a bit 
+## painful to change the method itself (required re-installing helita for me) so we will
+## instead just change our calls to the method here. -SE Apr 22 2021
+CSTAGGER_TYPES = ['float32']  # these are the allowed types
+def do_cstagger(arr, operation='xup', default_type=CSTAGGER_TYPES[0]):
+  '''does cstagger, after ensuring arr is the correct type, converting if necessary.
+  if type conversion is necessary, convert to default_type.
+  '''
+  arr = np.array(arr, copy=False)     # make numpy array, if necessary.
+  if arr.dtype not in CSTAGGER_TYPES: # if necessary,
+    arr = arr.astype(default_type)      # convert type
+  return cstagger.do(arr, operation)  # call the original cstagger function
+
+
+''' --------------------- functions to load quantities --------------------- '''
 
 def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   quant = quant.lower()
@@ -9,33 +60,53 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   document_vars.set_meta_quant(obj, 'arquantities', 'Computes arithmetic quantities')
 
   val = get_center(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     if obj.cstagop != False: # this is only for cstagger routines 
       val = get_deriv(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
+    val = get_interp(obj,quant)
+  if val is None:
     val = get_module(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_horizontal_average(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_gradients_vect(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     if obj.cstagop != False:  # this is only for cstagger routines 
       val = get_gradients_scalar(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_square(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_lg(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_ratios(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_projections(obj,quant)
-  if np.shape(val) == ():
+  if val is None:
     val = get_vector_product(obj,quant)
   return val
 
+def _can_interp(obj, axis, warn=True):
+  '''return whether we can interpolate. Make warning if we can't.'''
+  if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
+    return False       # intentionally turned off interpolation. So we don't make warning.
+  if not getattr(obj, 'cstagger_exists', False):
+    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(obj) +\
+              'We will skip the interpolation, and instead return the original value.'
+    warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
+    return False
+  if not getattr(obj, 'n'+axis, 0) >=5:
+    warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\
+              'We will skip this interpolation, and instead return the original value.'
+    warnings.warn(warnmsg) # warn user we will not be interpolating! (dimension is too small)
+    return False
+  return True
+  
+
 def get_deriv(obj,quant):
   '''
-  Computes derivative of quantity
+  Computes derivative of quantity.
+  Example: 'drdxup' does dxup for var 'r'.
   '''
   quant = quant.lower()
 
@@ -56,8 +127,19 @@ def get_deriv(obj,quant):
   q = quant[1:-4]  # base variable 
   var = obj.get_var(q)
 
+  if not _can_interp(obj, axis):
+    warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
+    xidx = dict(x=0, y=1, z=2)[axis]  # axis; 0, 1, or 2.
+    if var.shape[xidx] <= 1:
+      return np.zeros_like(var)
+    dvar = np.gradient(var, axis=xidx)  # 3D
+    dx   = getattr(obj, 'd'+axis+'1d')  # 1D; needs dims to be added. add dims below.
+    dx   = np.expand_dims(dx, axis=tuple(set((0,1,2)) - set([xidx])))
+    dvardx = dvar / dx
+    return dvardx
+
   def deriv_loop(var, quant):
-    return cstagger.do(var.astype('float32'), 'd' + quant[0])
+    return do_cstagger(var, 'd' + quant[0])
 
   if getattr(obj, 'n' + axis) < 5:  # 2D or close
     print('(WWW) get_quantity: DERIV_QUANT: '
@@ -77,18 +159,18 @@ def get_deriv(obj,quant):
         output = np.zeros_like(var)
         if axis != 'z':
           for iiz in range(obj.nz):
-            output[:, :, iiz] = np.reshape(
-               cstagger.do((var[:, :, iiz].reshape((
-               obj.nx, obj.ny, 1)).astype('float32')), 'd' + quant[-4:]),(obj.nx, obj.ny))
+            slicer = np.s_[:, :, iiz:iiz+1]
+            staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+            output[slicer] = staggered
         else:
           for iiy in range(obj.ny):
-            output[:, iiy, :] = np.reshape(
-               cstagger.do((var[:, iiy, :].reshape((
-               obj.nx, 1, obj.nz)).astype('float32')), 'd' + quant[-4:]),(obj.nx, obj.nz))
+            slicer = np.s_[:, iiy:iiy+1, :]
+            staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+            output[slicer] = staggered
 
         return output
       else:
-        return cstagger.do(var.astype('float32'), 'd' + quant[-4:])
+        return do_cstagger(var, 'd' + quant[-4:])
 
 
 def get_center(obj,quant, *args, **kwargs):
@@ -117,54 +199,50 @@ def get_center(obj,quant, *args, **kwargs):
   transf = AXIS_TRANSFORM[axis]
 
   var = obj.get_var(q, **kwargs)
-  # 2D
-  if getattr(obj, 'n' + axis) < 5 or obj.cstagop == False:
-    return var
-  else:
-    if len(transf) == 2:
-      if obj.lowbus:
-        output = np.zeros_like(var)
-        if transf[0][0] != 'z':
+  # do interpolation
+  if obj.lowbus:
+    # do "lowbus" version of interpolation  # not sure what is this? -SE Apr21 2021
+    output = np.zeros_like(var)
+    for interp in transf:
+      axis = interp[0]
+      if _can_interp(obj, axis):
+        if axis != 'z':
           for iiz in range(obj.nz):
-            output[:, :, iiz] = np.reshape(cstagger.do(
-                (var[:, :, iiz].reshape((obj.nx, obj.ny, 1))).astype('float32'),
-                transf[0]), (obj.nx, obj.ny))
+            slicer = np.s_[:, :, iiz:iiz+1]
+            staggered = do_cstagger(var[slicer], interp)
+            output[slicer] = staggered
         else:
-            for iiy in range(obj.ny):
-              output[:, iiy, :] = np.reshape(cstagger.do(
-                  (var[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
-                  transf[0]), (obj.nx, obj.nz))
+          for iiy in range(obj.ny):
+            slicer = np.s_[:, iiy:iiy+1, :]
+            staggered = do_cstagger(var[slicer], interp)
+            output[slicer] = staggered
+  else:
+    # do "regular" version of interpolation
+    for interp in transf:
+      if _can_interp(obj, interp[0]):
+        var = do_cstagger(var, interp)
+  return var
 
-        if transf[1][0] != 'z':
-            for iiz in range(obj.nz):
-              output[:, :, iiz] = np.reshape(cstagger.do(
-                  output[:, :, iiz].reshape((obj.nx, obj.ny, 1)),
-                  transf[1]), (obj.nx, obj.ny))
-        else:
-            for iiy in range(obj.ny):
-              output[:, iiy, :] = np.reshape(cstagger.do(
-                  (output[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
-                  transf[1]), (obj.nx, obj.nz))
-        return output
-      else:
-          tmp = cstagger.do(var.astype('float32'), transf[0])
-          return cstagger.do(tmp.astype('float32'), transf[1])
-    else:
-        if obj.lowbus:
-          output = np.zeros_like(var)
-          if axis != 'z':
-            for iiz in range(obj.nz):
-                output[:, :, iiz] = np.reshape(cstagger.do(
-                    (var[:, :, iiz].reshape((obj.nx, obj.ny, 1))).astype('float32'),
-                    transf[0]), (obj.nx, obj.ny))
-          else:
-            for iiy in range(obj.ny):
-                output[:, iiy, :] = np.reshape(cstagger.do(
-                    (var[:, iiy, :].reshape((obj.nx, 1, obj.nz))).astype('float32'),
-                    transf[0]), (obj.nx, obj.nz))
-          return output
-        else:
-          return cstagger.do(var.astype('float32'), transf[0])
+def get_interp(obj, quant):
+  '''simple interpolation. var must end in interpolation instructions.
+  e.g. get_var('rxup') --> do_cstagger(get_var('r'), 'xup')
+  '''
+  INTERP_QUANT = ['xup', 'yup', 'zup',
+                  'xdn', 'ydn', 'zdn']
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, 'INTERP_QUANT', INTERP_QUANT, get_interp.__doc__)
+    for xup in INTERP_QUANT:
+      docvar(xup, 'move half grid {up:} in the {x:} axis'.format(up=xup[1:], x=xup[0]))
+    return None
+
+  varname, interp = quant[:-3], quant[-3:]
+  if not interp in INTERP_QUANT:
+    return None
+  else:
+    val = obj.get_var(varname)      # un-interpolated value
+    if _can_interp(obj, interp[0]):
+      val = do_cstagger(val, interp) # interpolated value
+    return val
 
 
 def get_module(obj,quant):
@@ -224,19 +302,25 @@ def get_horizontal_average(obj,quant):
 def get_gradients_vect(obj,quant):
   '''
   Vectorial derivative opeartions
+
+  for rot, she, curlcc, curvec, ensure that quant ends with axis.
+  e.g. curvecbx gets the x component of curl of b.
   '''
-  GRADVECT_QUANT = ['div', 'rot', 'she', 'chkdiv', 'chbdiv', 'chhdiv']
+  GRADVECT_QUANT = ['div', 'rot', 'she', 'curlcc', 'curvec', 'chkdiv', 'chbdiv', 'chhdiv']
 
-  docvar = document_vars.vars_documenter(obj, 'GRADVECT_QUANT', GRADVECT_QUANT, get_gradients_vect.__doc__)
-  docvar('div',  'starting with, divergence [simu units]')
-  docvar('rot',  'starting with, rotational [simu units]')
-  docvar('she',  'starting with, shear [simu units]')
-  docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
-  docvar('chbdiv',  'starting with, ratio of the divergence with the sum of the absolute of each spatial derivative [simu units]')
-  docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'GRADVECT_QUANT', GRADVECT_QUANT, get_gradients_vect.__doc__)
+    docvar('div',  'starting with, divergence [simu units]')
+    docvar('rot',  'starting with, rotational (a.k.a. curl) [simu units]')
+    docvar('she',  'starting with, shear [simu units]')
+    docvar('curlcc',  'starting with, curl but shifted (via interpolation) back to original location on cell [simu units]')
+    docvar('curvec',  'starting with, curl of face-centered vector (e.g. B, p) [simu units]')
+    docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
+    docvar('chbdiv',  'starting with, ratio of the divergence with the sum of the absolute of each spatial derivative [simu units]')
+    docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
+    return None
 
-
-  if (quant == '') or not (quant[:6] in GRADVECT_QUANT or quant[:3] in GRADVECT_QUANT):
+  if not (quant[:6] in GRADVECT_QUANT or quant[:3] in GRADVECT_QUANT):
       return None
 
   if quant[:3] == 'chk':
@@ -310,6 +394,25 @@ def get_gradients_vect(obj,quant):
     if getattr(obj, 'nz') > 5:
       result += obj.get_var('d' + q + 'zdzup')
 
+  elif quant[:6] == 'curlcc': # re-aligned curl
+    q = quant[6:-1]
+    x = quant[-1]  # axis, 'x', 'y', 'z'
+    y,z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    dqz_dy = obj.get_var('d' + q + z + 'd' + y + 'dn' + y + 'up')
+    dqy_dz = obj.get_var('d' + q + y + 'd' + z + 'dn' + z + 'up')
+    result = dqz_dy - dqy_dz
+
+  elif quant[:6] == 'curvec': # curl of vector which is originally on face of cell
+    q = quant[6:-1]
+    x = quant[-1]  # axis, 'x', 'y', 'z'
+    y,z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    # interpolation notes:
+    ## qz is at (0, 0, -0.5); dqzdydn is at (0, -0.5, -0.5)
+    ## qy is at (0, -0.5, 0); dqydzdn is at (0, -0.5, -0.5)
+    dqz_dydn = obj.get_var('d' + q + z + 'd' + y + 'dn')
+    dqy_dzdn = obj.get_var('d' + q + y + 'd' + z + 'dn')
+    result = dqz_dydn - dqy_dzdn
+
   elif quant[:3] == 'rot' or quant[:3] == 'she':
     q = quant[3:-1]  # base variable
     qaxis = quant[-1]
@@ -343,7 +446,7 @@ def get_gradients_vect(obj,quant):
           result -= obj.get_var('d' + q + 'xdyup')
         else:  # shear
           result += obj.get_var('d' + q + 'xdyup')
-    return result
+  return result
 
 
 def get_gradients_scalar(obj,quant):
@@ -386,7 +489,7 @@ def get_square(obj,quant):
     result += obj.get_var(quant[:-1] + 'yc') ** 2
     result += obj.get_var(quant[:-1] + 'zc') ** 2
     return result
-  except:
+  except Exception:
     return None
 
 
@@ -402,7 +505,7 @@ def get_lg(obj,quant):
 
   try: 
     return np.log10(obj.get_var(quant[2:]))
-  except:
+  except Exception:
     return None
 
 
@@ -477,30 +580,62 @@ def get_projections(obj,quant):
 
 
 def get_vector_product(obj,quant):
-  VECO_QUANT = ['times']
-  
-  docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
-  docvar('times',  'in between with, vectorial products or two vectors [simu units]')
+  '''cross product between two vectors.
+  call via <v1><times><v2><x>.
+  Example, for the x component of b cross u, you should call get_var('b_facecross_ux').
+  '''
+  VECO_QUANT = ['times', '_facecross_', '_edgecross_']
 
-  if (quant == '') or not quant[1:6] in VECO_QUANT:
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
+    docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
+    docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u. '
+                           'result is edge-centered. E.g. result_x --> ( 0  , -0.5, -0.5).'))
+    docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I. '
+                           'result is face-centered. E.g. result_x --> (-0.5,  0  ,  0  ).'))
     return None
 
-  # projects v1 onto v2
-  v1 = quant[0]
-  v2 = quant[-2]
-  axis = quant[-1]
-  if axis == 'x':
-    varsn = ['y', 'z']
-  elif axis == 'y':
-    varsn = ['z', 'y']
-  elif axis == 'z':
-    varsn = ['x', 'y']
-  #return (obj.get_var(v1 + varsn[0] + 'c') *
-  #    obj.get_var(v2 + varsn[1] + 'c') - obj.get_var(v1 + varsn[1] + 'c') *
-  #    obj.get_var(v2 + varsn[0] + 'c'))
-  return (obj.get_var(v1 + varsn[0]) *
-      obj.get_var(v2 + varsn[1]) - obj.get_var(v1 + varsn[1]) *
-      obj.get_var(v2 + varsn[0]))
+  cross = ''
+  for times in VECO_QUANT:
+    A, cross, q = quant.partition(times)
+    if cross==times: # then the partition was successful, i.e. (times in quant).
+      B, x = q[:-1], q[-1]
+      y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+      break
+
+  if cross == '':
+    return None
+
+  elif cross == 'times':
+    return (obj.get_var(A + y) * obj.get_var(B + z) -
+            obj.get_var(A + z) * obj.get_var(B + y))
+
+  elif cross == '_facecross_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (0, -0.5, -0.5)
+    ## Ay, By are at (0, -0.5,  0  ).  we must shift by zdn to align with result.
+    ## Az, Bz are at (0,  0  , -0.5).  we must shift by ydn to align with result.
+    ydn, zdn = y+'dn', z+'dn'
+    Ay = obj.get_var(A+y + zdn)
+    By = obj.get_var(B+y + zdn)
+    Az = obj.get_var(A+z + ydn)
+    Bz = obj.get_var(B+z + ydn)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
+  elif cross == '_edgecross_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (-0.5, 0, 0)
+    ## Ay, By are at (-0.5,  0  , -0.5).  we must shift by zup to align with result.
+    ## Az, Bz are at (-0.5, -0.5,  0  ).  we must shift by yup to align with result.
+    yup, zup = y+'up', z+'up'
+    Ay = obj.get_var(A+y + zup)
+    By = obj.get_var(B+y + zup)
+    Az = obj.get_var(A+z + yup)
+    Bz = obj.get_var(B+z + yup)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
 
 
 def threadQuantity(task, numThreads, *args):

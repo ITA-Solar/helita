@@ -1,6 +1,9 @@
 from astropy.io import fits
 import numpy as np
 import os, fnmatch
+from scipy import interpolate
+from scipy import ndimage
+
 
 def writefits(obj, varname, snap=None, instrument = 'MURaM', 
               name='ar098192', origin='HGCR    ', z_tau51m = None): 
@@ -124,7 +127,7 @@ def convertcsgsi(obj):
       obj.unisi['ee']     = obj.unisi['u']**2
       obj.unisi['e']      = obj.unisi['rho'] * obj.unisi['ee'] 
       obj.unisi['b']      = obj.uni['b'] * 1e-4 # T
-  except:  
+  except Exception:  
     if obj.verbose: 
         print('Some unisi did not run')
 
@@ -136,7 +139,7 @@ def globalvars(obj):
   from astropy import units
   
   '''
-  Conversion from cgs units to SI
+  global units
   '''
 
   obj.mu = 0.8
@@ -173,6 +176,13 @@ def globalvars(obj):
   obj.stefboltz = aconst.sigma_sb.cgs.value
   obj.mion = obj.m_h            # Ion mass [g]
   obj.r_ei = 1.44E-7        # e^2 / kT = 1.44x10^-7 T^-1 cm
+  obj.mu0si = aconst.mu0.to_value('N/A2')  # magnetic constant [SI units]
+
+  # --- Aliases, for convenience
+  obj.msi_electron = obj.msi_e
+  obj.m_e = obj.m_electron
+  obj.q_e = obj.q_electron
+  obj.qsi_e = obj.qsi_electron
 
   # --- Unit conversions
   obj.ev_to_erg = units.eV.to('erg')
@@ -220,30 +230,26 @@ def globalvars(obj):
            'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
 
 
-
 def polar2cartesian(r, t, grid, x, y, order=3):
     '''
     Converts polar grid to cartesian grid
     '''
-
-
+    
     X, Y = np.meshgrid(x, y)
 
     new_r = np.sqrt(X * X + Y * Y)
     new_t = np.arctan2(X, Y)
 
-    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False)
-    it = interpolate.interp1d(t, np.arange(len(t)))
-
+    ir = interpolate.interp1d(r, np.arange(len(r)), bounds_error=False, fill_value=0.0)
+    it = interpolate.interp1d(t, np.arange(len(t)), bounds_error=False, fill_value=0.0)
     new_ir = ir(new_r.ravel())
     new_it = it(new_t.ravel())
 
     new_ir[new_r.ravel() > r.max()] = len(r) - 1
     new_ir[new_r.ravel() < r.min()] = 0
 
-    return map_coordinates(grid, np.array([new_ir, new_it]),
+    return ndimage.map_coordinates(grid, np.array([new_ir, new_it]),
                            order=order).reshape(new_r.shape)
-
 
 def cartesian2polar(x, y, grid, r, t, order=3):
     '''
@@ -267,7 +273,7 @@ def cartesian2polar(x, y, grid, r, t, order=3):
     new_iy[new_y.ravel() > y.max()] = len(y) - 1
     new_iy[new_y.ravel() < y.min()] = 0
 
-    return map_coordinates(grid, np.array([new_ix, new_iy]),
+    return ndimage.map_coordinates(grid, np.array([new_ix, new_iy]),
                            order=order).reshape(new_x.shape)
 
 

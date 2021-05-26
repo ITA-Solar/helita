@@ -7,11 +7,37 @@ from . import document_vars
 elemlist = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's',
         'k', 'ca', 'cr', 'fe', 'ni']
 
+# put quant default lists that are based on elemlist here
+## (instead of calculating inside each function,)
+## because it takes non-negligible time to calculate these repeatedly
 CROSTAB_LIST = ['e_' + clist for clist in elemlist]
 CROSTAB_LIST += [clist+'_e' for clist in elemlist]
 for iel in elemlist:
   CROSTAB_LIST = CROSTAB_LIST + [
     iel + '_' + clist for clist in elemlist]
+_COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_LIST]
+_COLFRE_QUANT += ['nu%s_mag' % clist for clist in CROSTAB_LIST]
+_COLFRE_QUANT += ['nue_' + clist for clist in elemlist]
+_COLFREMX_QUANT = ['numx' + clist for clist in CROSTAB_LIST]
+_COLFREMX_QUANT += ['numx%s_mag' % clist for clist in CROSTAB_LIST]
+_COLCOU_QUANT = ['nucou' + clist for clist in CROSTAB_LIST]
+_COLCOU_QUANT += ['nucoue_' + clist for clist in elemlist]
+_COLCOUMS_QUANT = ['nucou_ei', 'nucou_ii']
+_COLCOUMS_QUANT += ['nucou' + clist + '_i' for clist in elemlist]
+_COLFRI_QUANT = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
+_COLFRI_QUANT += ['nu' + clist + '_i' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_i' for clist in elemlist]
+_COLFRI_QUANT += ['nu' + clist + '_i_mag' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_i_mag' for clist in elemlist]
+_COLFRI_QUANT += ['nu' + clist + '_n' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_n' for clist in elemlist]
+_COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
+_COLFRI_QUANT += ['numx' + clist + '_n_mag' for clist in elemlist]
+_COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
+_GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
+_KAPPA_QUANT = ['kappa' + clist for clist in elemlist]
+_IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
+_IONP_QUANT += ['r' + clist + '-' for clist in elemlist]
 
 whsp = '  '
 
@@ -32,47 +58,47 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
     val = get_em(obj, quant, EM_QUANT=EM_QUANT, **kwargs)  
   else: 
     val = None
-  if np.shape(val) == () and COULOMB_COL_QUANT != '':
+  if val is None and COULOMB_COL_QUANT != '':
     val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT, **kwargs)
-  if np.shape(val) == () and COLFRE_QUANT != '':
+  if val is None and COLFRE_QUANT != '':
     val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT,**kwargs)
-  if np.shape(val) == () and CROSTAB_QUANT != '':
+  if val is None and CROSTAB_QUANT != '':
     val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT,**kwargs)
-  if np.shape(val) == () and COLFRI_QUANT != '':
+  if val is None and COLFRI_QUANT != '':
     val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT, **kwargs)
-  if np.shape(val) == () and CURRENT_QUANT != '':
+  if val is None and CURRENT_QUANT != '':
     val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT, **kwargs)
-  if np.shape(val) == () and FLUX_QUANT != '':
+  if val is None and FLUX_QUANT != '':
     val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT, **kwargs)
-  if np.shape(val) == () and PLASMA_QUANT != '':
+  if val is None and PLASMA_QUANT != '':
     val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT, **kwargs)
-  if np.shape(val) == () and WAVE_QUANT != '':
+  if val is None and WAVE_QUANT != '':
     val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT, **kwargs)
-  if np.shape(val) == () and CYCL_RES != '':
+  if val is None and CYCL_RES != '':
     val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES, **kwargs)
-  if np.shape(val) == () and GYROF_QUANT != '':
+  if val is None and GYROF_QUANT != '':
     val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT, **kwargs)
-  if np.shape(val) == () and KAPPA_QUANT != '':
+  if val is None and KAPPA_QUANT != '':
     val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT, **kwargs)
-  if np.shape(val) == () and DEBYE_LN_QUANT != '':
+  if val is None and DEBYE_LN_QUANT != '':
     val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT, **kwargs)
-  if np.shape(val) == () and IONP_QUANT != '':
+  if val is None and IONP_QUANT != '':
     val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT, **kwargs)
-  if np.shape(val) == () and AMB_QUANT != '':
+  if val is None and AMB_QUANT != '':
     val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT, **kwargs)
-  if np.shape(val) == () and HALL_QUANT != '':
+  if val is None and HALL_QUANT != '':
     val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT, **kwargs)
-  if np.shape(val) == () and BATTERY_QUANT != '':
+  if val is None and BATTERY_QUANT != '':
     val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT, **kwargs)  
-  if np.shape(val) == () and SPITZER_QUANT != '':
+  if val is None and SPITZER_QUANT != '':
     val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT, **kwargs) 
-  if np.shape(val) == () and EOSTAB_QUANT != '': 
+  if val is None and EOSTAB_QUANT != '': 
     val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT, **kwargs)
-  if np.shape(val) == () and COLCOU_QUANT != '': 
+  if val is None and COLCOU_QUANT != '': 
     val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT, **kwargs)
-  if np.shape(val) == () and COLCOUMS_QUANT != '': 
+  if val is None and COLCOUMS_QUANT != '': 
     val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT, **kwargs)
-  if np.shape(val) == () and COLFREMX_QUANT != '': 
+  if val is None and COLFREMX_QUANT != '': 
     val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT, **kwargs)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
@@ -168,7 +194,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   if cross_tab == None: 
     try: 
       cross_tab = cross_dict[spic1,spic2]
-    except:  
+    except Exception:  
       if not(maxwell): 
         if (spic1_ele == 'h'):
           cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['h'] * \
@@ -257,9 +283,7 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
   tables does not exist. 
   '''
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_LIST]
-    COLFRE_QUANT += ['nu%s_mag' % clist for clist in CROSTAB_LIST]
-    COLFRE_QUANT += ['nue_' + clist for clist in elemlist]
+    COLFRE_QUANT = _COLFRE_QUANT
 
   if quant=='':  
     docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_collision.__doc__)
@@ -304,8 +328,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
   Maxwell molecular collision frequency 
   '''
   if COLFREMX_QUANT is None:
-    COLFREMX_QUANT = ['numx' + clist for clist in CROSTAB_LIST]
-    COLFREMX_QUANT += ['numx%s_mag' % clist for clist in CROSTAB_LIST]
+    COLFREMX_QUANT = _COLFREMX_QUANT
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLFREMX_QUANT', COLFREMX_QUANT, get_collision_maxw.__doc__)
@@ -411,8 +434,7 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
   (Hansteen et al. 1997)
   '''
   if COLCOU_QUANT is None:
-    COLCOU_QUANT = ['nucou' + clist for clist in CROSTAB_LIST]
-    COLCOU_QUANT += ['nucoue_' + clist for clist in elemlist]
+    COLCOU_QUANT = _COLCOU_QUANT
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLCOU_QUANT', COLCOU_QUANT, get_collcoul.__doc__)
@@ -447,8 +469,7 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
   all ionized elements (cgs)
   '''
   if (COLCOUMS_QUANT == None):
-    COLCOUMS_QUANT = ['nucou_ei', 'nucou_ii']
-    COLCOUMS_QUANT += ['nucou' + clist + '_i' for clist in elemlist]
+    COLCOUMS_QUANT = _COLCOUMS_QUANT
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLCOUMS_QUANT', COLCOUMS_QUANT, get_collcoul_ms.__doc__)
@@ -488,15 +509,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   '''
 
   if (COLFRI_QUANT == None):
-    COLFRI_QUANT = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
-    COLFRI_QUANT += ['nu' + clist + '_i' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_i' for clist in elemlist]
-    COLFRI_QUANT += ['nu' + clist + '_i_mag' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_i_mag' for clist in elemlist]
-    COLFRI_QUANT += ['nu' + clist + '_n' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_n' for clist in elemlist]
-    COLFRI_QUANT += ['nu' + clist + '_n_mag' for clist in elemlist]
-    COLFRI_QUANT += ['numx' + clist + '_n_mag' for clist in elemlist]
+    COLFRI_QUANT = _COLFRI_QUANT
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COLFRI_QUANT', COLFRI_QUANT, get_collision_ms.__doc__)
@@ -604,7 +617,7 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
   Coulomb collision frequency in Hz
   '''
   if COULOMB_COL_QUANT is None:
-    COULOMB_COL_QUANT = ['coucol' + clist for clist in elemlist]
+    COULOMB_COL_QUANT = _COULOMB_COL_QUANT
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'COULOMB_COL_QUANT', COULOMB_COL_QUANT, get_coulomb.__doc__)
@@ -890,7 +903,7 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
   gf+ ionization state
   '''
   if (GYROF_QUANT is None):
-    GYROF_QUANT = ['gfe'] + ['gf' + clist for clist in elemlist]
+    GYROF_QUANT = _GYROF_QUANT
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'GYROF_QUANT', GYROF_QUANT, get_gyrof.__doc__)
@@ -915,8 +928,8 @@ def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
   at the end it must have the ionization
   '''
   if (KAPPA_QUANT is None):
-    KAPPA_QUANT = ['kappanorm_', 'kappae'] + \
-        ['kappa' + clist for clist in elemlist]
+    KAPPA_QUANT = ['kappanorm_', 'kappae'] + _KAPPA_QUANT
+        
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'KAPPA_QUANT', KAPPA_QUANT, get_kappa.__doc__)
@@ -950,7 +963,7 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'DEBYE_LN_QUANT', DEBYE_LN_QUANT, get_debye_ln.__doc__)
-    docvar('debye_ln', "Debye length [Unknown]")
+    docvar('debye_ln', "Debye length [u.u_l]")
 
   if (quant == '') or not quant in DEBYE_LN_QUANT:
     return None
@@ -974,8 +987,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   densities for specific ionized species
   '''
   if (IONP_QUANT is None):
-    IONP_QUANT = ['n' + clist + '-' for clist in elemlist]
-    IONP_QUANT += ['r' + clist + '-' for clist in elemlist]
+    IONP_QUANT = _IONP_QUANT
     IONP_QUANT += ['rneu', 'rion', 'nion', 'nneu', 'nelc']
     IONP_QUANT += ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']
 
@@ -1280,7 +1292,7 @@ def get_hallparam(obj, quant, HALL_QUANT=None, **kwargs):
   if quant[0] == 'u':
     try:
       result = obj.get_var('i' + quant[-1])
-    except:
+    except Exception:
       result = obj.get_var('rotb' + quant[-1])   
   elif quant == 'eta_hall':
     nel = obj.get_var('nel')
@@ -1308,6 +1320,13 @@ def get_batteryparam(obj, quant, BATTERY_QUANT=None, **kwargs):
   
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'BATTERY_QUANT', BATTERY_QUANT, get_batteryparam.__doc__)
+    docvar('bb_constqe', "constant coefficient involved in the battery term")
+    docvar('dxpe', "Gradient of electron pressure in the x direction [simu.u_p/simu.u_l]")
+    docvar('dype', "Gradient of electron pressure in the y direction [simu.u_p/simu.u_l]")
+    docvar('dzpe', "Gradient of electron pressure in the z direction [simu.u_p/simu.u_l]")
+    docvar('bb_batx', "Component of the battery term  in the x direction, (1/ne qe)*dx(pe)")
+    docvar('bb_baty', "Component of the battery term  in the y direction, (1/ne qe)*dy(pe)")
+    docvar('bb_batz', "Component of the battery term  in the z direction, (1/ne qe)*dz(pe)")
 
   if (quant == '') or not (quant in BATTERY_QUANT):
     return None
@@ -1349,6 +1368,10 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None, **kwargs):
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'SPITZER_QUANT', SPITZER_QUANT, get_spitzerparam.__doc__)
+    docvar('fcx', "X component of the anisotropic electron heat flux, i.e., (kappae(B)*grad(Te))_x")
+    docvar('fcy', "Y component of the anisotropic electron heat flux, i.e., (kappae(B)*grad(Te))_y")
+    docvar('fcz', "Z component of the anisotropic electron heat flux, i.e., (kappae(B)*grad(Te))_z")
+    docvar('qspitz', "Electron heat flux, i.e., Qspitz [simu.u_e/simu.u_t] erg.s-1")
 
   if (quant == '') or not (quant in SPITZER_QUANT):
     return None
