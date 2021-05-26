@@ -94,6 +94,40 @@ class EbysusData(BifrostData):
             self.mf_total_nlevel += self.att[mf_ispecies].params.nlevel
 
         self._init_vars_get(firstime=True)
+        self._init_coll_keys()
+
+    def _init_coll_keys(self):
+        '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
+        self.coll_keys will be a dict with keys (ispecies, jspecies) values (collision type).
+        collision types are:
+            'CL' ("coulomb"; whether coulomb collisions are allowed between these species)
+            'EL' ("elastic"; previous default in ebysus)
+            'MX' ("maxwell"; this one is usable even if we don't have cross section file)
+            Note that MX and EL are (presently) mutually exclusive.
+        '''
+        _enforce_symmetry_in_collisions = False
+        # ^^ whether to manually put   (B,A):value   if  (A,B):value    is in coll_keys.
+        # disabled now because presently, ebysus simulation does not enforce
+        # that symmetry; e.g. it is possible to have (1,2):'EL' and (2,1):'MX',
+        # though I don't know what that combination would mean...  - SE May 26 2021
+
+        # begin processing:
+        result = dict()
+        x = self.mf_tabparam['COLL_KEYS']
+        for tokenline in x:      # example tokenline: ['01', '02', 'EL']
+            ispec, jspec, collkey = tokenline
+            ispec, jspec = int(ispec), int(jspec)
+            key = (ispec, jspec)
+            try:
+                result[key] += [collkey]
+            except KeyError:
+                result[key] = [collkey]
+        if _enforce_symmetry_in_collisions:
+            for key in list(result.keys()): #list() because changing size of result
+                rkey = (key[1], key[0])  # reversed
+                if rkey not in result.keys():
+                    result[rkey] = result[key]
+        self.coll_keys = result
 
     def _set_snapvars(self,firstime=False):
 
@@ -924,7 +958,8 @@ class EbysusData(BifrostData):
     UseFluids = UsingFluids  # alias
 
 # include methods from fluid_tools in EbysusData object.
-for func in ['get_species_name', 'get_mass', 'get_charge', 'get_cross_tab', 'get_cross_sect']:
+for func in ['get_species_name', 'get_mass', 'get_charge',
+            'get_cross_tab', 'get_cross_sect', 'get_coll_type']:
     setattr(EbysusData, func, getattr(fluid_tools, func, None))
 
 del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)

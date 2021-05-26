@@ -65,11 +65,13 @@ def set_mfj(obj, mf_jspecies=None, mf_jlevel=None):
     return obj.set_mf_fluid(mf_jspecies, mf_jlevel, 'j')
 
 def set_fluids(obj, **kw__fluids):
-    '''interprets kw__fluids then sets them using set_mfi and set_mfj.'''
+    '''interprets kw__fluids then sets them using set_mfi and set_mfj.
+    returns (ifluid, jfluid).
+    '''
     (si, li, sj, lj) = _interpret_kw_fluids(**kw__fluids)
     obj.set_mfi(si, li)
     obj.set_mfj(sj, lj)
-    return (si, li, sj, lj)
+    return (obj.ifluid, obj.jfluid)
 
 ''' --------------------- fluid kwargs --------------------- '''
 
@@ -340,11 +342,7 @@ def get_cross_tab(obj, iSL=None, jSL=None, **kw__fluids):
     either ifluid or jfluid must be neutral. (charged -> Coulomb collisions.)
     iSL, jSL, kw__fluids behavior is the same as in get_var.
     '''
-    iS, iL, jS, jL = _interpret_kw_fluids(iSL=iSL, jSL=jSL, **kw__fluids)
-    obj.set_mfi(iS, iL)
-    obj.set_mfj(jS, jL)
-    iSL = obj.ifluid
-    jSL = obj.jfluid
+    iSL, jSL = obj.set_fluids(iSL=iSL, jSL=jSL, **kw__fluids)
     if iSL==jSL:
         warnings.warn('Tried to get cross_tab when ifluid==jfluid. (Both equal {})'.format(iSL))
     icharge, jcharge = (get_charge(obj, SL) for SL in (iSL, jSL))
@@ -386,3 +384,36 @@ def get_cross_sect(obj, **kw__fluids):
     obj.get_cross_sect().tab_interp(tg_array)
     '''
     return obj.cross_sect([obj.get_cross_tab(**kw__fluids)])
+
+def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
+    '''return type of collisions between obj.ifluid, obj.jfluid.
+    use S=-1 for electrons. (e.g. iSL=(-1,1) represents electrons.)
+    iSL, jSL, kw__fluids behavior is the same as in get_var.
+
+    result is 'EL' for elastic collisions, 'MX' for maxwell, 'CL' for coulomb, or None
+    In the following cases, return None:
+        - ifluid and jfluid are not both charged and 'EL' and 'MX' are not in their coll_keys.
+        - ifluid and jfluid   are   both charged and 'CL' is not in their coll_keys.
+    '''
+    iSL, jSL = obj.set_fluids(iSL=iSL, jSL=jSL, **kw__fluids)
+    coll_keys = obj.coll_keys[(iSL[0], jSL[0])]   # obj.coll_keys only knows about species.
+    icharge = obj.get_charge(iSL)
+    jcharge = obj.get_charge(jSL)
+    if icharge != 0 and jcharge != 0:    # two charged fluids --> return CL or None
+        if 'CL' in coll_keys:
+            return 'CL'
+        else:
+            return None
+    else:                                # at least one neutral --> return EL or MX or None.
+        EL = 'EL' in coll_keys
+        MX = 'MX' in coll_keys
+        if EL and MX:
+            errmsg = 'got EL and MX in coll_keys for ifluid={}, jfluid={}.' +\
+                     'But EL and MX are mutually exclusive. Crashing...'
+            raise ValueError(errmsg.format(ifluid=iSL, jfluid=jSL))
+        elif EL:
+            return 'EL'
+        elif MX:
+            return 'MX'
+        else:
+            return None
