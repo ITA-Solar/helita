@@ -540,7 +540,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if COLFRE_QUANT is None:
     COLFRE_QUANT = ['nu_ij','nu_sj','rijx','rijy','rijz',      # basics: frequencies & mom exchange
                     'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
-                    'nu_ij_mx','nu_ij_res','nu_se_spitzcoul', 'nu_ij_capcoul', # alternative formulae
+                    'nu_ij_el', 'nu_ij_mx', 'nu_ij_cl',        # colfreq by type
+                    'nu_ij_res', 'nu_se_spitzcoul', 'nu_ij_capcoul', # alternative colfreq formulae
                     'nu_ij_to_ji', 'nu_sj_to_js',              # conversion factor nu_ij --> nu_ji
                     'c_tot_per_vol', '1dcolslope',]            # misc.
 
@@ -558,8 +559,10 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
     docvar('nu_en', sstr.format('electrons', 'neutral fluids'), nfluid=0)
-    docvar('nu_ij_mx', mtra + 'Assumes maxwell molecules; formula does not depend on temperatures. '+\
+    docvar('nu_ij_el', 'Elastic ' + mtra, nfluid=2)
+    docvar('nu_ij_mx', 'Maxwell ' + mtra + 'NOTE: assumes maxwell molecules; result independent of temperatures. '+\
                         'presently, only properly implemented when ifluid=H or jfluid=H.', nfluid=2)
+    docvar('nu_ij_cl', 'Coulomb ' + mtra, nfluid=2)
     docvar('nu_ij_res', 'resonant collisions between ifluid & jfluid. '+\
                         'presently, only properly implemented for ifluid=H+, jfluid=H.', nfluid=2)
     docvar('nu_se_spitzcoul', 'coulomb collisions between s & e-, including spitzer correction. ' +\
@@ -575,71 +578,53 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   if var not in COLFRE_QUANT:
     return None
 
+  # collision frequency between ifluid and jfluid
   if var in ['nu_ij', 'nu_sj']:
+    coll_type = obj.get_coll_type()   # gets 'EL', 'MX', 'CL', or None
+    if coll_type is None:
+      errmsg = ("Found no valid coll_keys for ifluid={}, jfluid={}. "
+        "looked for 'CL' for coulomb collisions, or 'EL' or 'MX' for other collisions. "
+        "You can enter coll_keys in the COLL_KEYS section in mf_param_file='{}'.")
+      mf_param_file = obj.get_param('mf_param_file', default='mf_params.in')
+      raise ValueError(errmsg.format(obj.ifluid, obj.jfluid, mf_param_file))
+    else:
+      nu_ij_varname = 'nu_ij_{}'.format(coll_type.lower())  # nu_ij_el, nu_ij_mx, or nu_ij_cl
+      return obj.get_var(nu_ij_varname)
+
+  # collision frequency - elastic or coulomb
+  if var in ['nu_ij_el', 'nu_ij_cl']:
     iSL = obj.ifluid
     jSL = obj.jfluid
     # get ifluid info
     tgi  = obj.get_var('tg', ifluid=iSL)      # [K]
-    m_i  = obj.get_mass(iSL[0])  # [amu]
+    m_i  = obj.get_mass(iSL[0])               # [amu]
     # get jfluid info, then restore original iSL & jSL
     with obj.MaintainFluids():
       n_j   = obj.get_var('nr', ifluid=jSL) * obj.uni.u_nr # [cm^-3]
       tgj   = obj.get_var('tg', ifluid=jSL)                # [K]
-      m_j   = obj.get_mass(jSL[0])            # [amu]
+      m_j   = obj.get_mass(jSL[0])                         # [amu]
 
     # compute some values:
     m_jfrac = m_j / (m_i + m_j)                      # [(dimensionless)]
     m_ij    = m_i * m_jfrac                          # [amu]
     tgij    = (m_i * tgj + m_j * tgi) / (m_i + m_j)  # [K]
     
-    # if both fluids have nonzero charge, use coulomb collisions formula.
-    icharge = obj.get_charge(iSL)   # [elementary charge == 1]
-    jcharge = obj.get_charge(jSL)   # [elementary charge == 1]
-    if icharge != 0 and jcharge != 0:
+    # coulomb collisions:
+    if var.endswith('cl'):
+      icharge = obj.get_charge(iSL)   # [elementary charge == 1]
+      jcharge = obj.get_charge(jSL)   # [elementary charge == 1]
       m_h = obj.uni.m_h / obj.uni.amu            # [amu]
       logcul = obj.get_var('logcul')
       scalars = 1.7 * 1/20.0 * (m_h/m_i) * (m_ij/m_h)**0.5 * icharge**2 * jcharge**2 / obj.uni.u_hz
-      return scalars * logcul * n_j / tgij**1.5
+      return scalars * logcul * n_j / tgij**1.5  # [ simu frequency units]
       
-    # else, use charge-neutral collisions formula.
-    cross    = obj.get_var('cross')    # [cm^2]
-    tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
-    #calculate & return nu_ij:
-    return 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
+    # elastic collisions:
+    elif var.endswith('el'):
+      cross    = obj.get_var('cross')    # [cm^2]
+      tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
+      return 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
 
-  elif var in ['rijx', 'rijy', 'rijz']:
-    if obj.ifluid==obj.jfluid:      # when ifluid==jfluid, u_j = u_i, so rij = 0.
-      return np.zeros(obj.r.shape)   # save time by returning 0 without reading any data.
-    x = var[-1]  # axis; x= 'x', 'y', or 'z'.
-    # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
-    nu_ij = obj.get_var('nu_ij')
-    ri  = obj.get_var('ri')
-    uix = obj.get_var('ui'+x)
-    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
-    return ri * nu_ij * (ujx - uix)
-
-  elif var == 'nu_si':
-    ifluid = obj.ifluid
-    result = np.zeros(np.shape(obj.r))
-    for fluid in fl.Fluids(dd=obj).ions():
-      if fluid.SL != ifluid:
-        result += obj.get_var('nu_ij', jfluid=fluid.SL)
-    return result
-
-  elif var == 'nu_sn':
-    ifluid = obj.ifluid
-    result = np.zeros(np.shape(obj.r))
-    for fluid in fl.Fluids(dd=obj).neutrals():
-      if fluid.SL != ifluid:
-        result += obj.get_var('nu_ij', jfluid=fluid.SL)
-    return result 
-
-  elif var == 'nu_ei':
-    return obj.get_var('nu_si', mf_ispecies=-1)
-
-  elif var == 'nu_en':
-    return obj.get_var('nu_sn', mf_ispecies=-1)
-  
+  # collision frequency - maxwell
   elif var == 'nu_ij_mx':
     #set constants. for more details, see eq2 in Appendix A of Oppenheim 2020 paper.
     CONST_MULT    = 1.96     #factor in front.
@@ -656,6 +641,43 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     #calculate & return nu_ij_test:
     return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j))) / obj.uni.usi_hz
 
+  # momentum transfer terms
+  elif var in ['rijx', 'rijy', 'rijz']:
+    if obj.ifluid==obj.jfluid:      # when ifluid==jfluid, u_j = u_i, so rij = 0.
+      return np.zeros(obj.r.shape)   # save time by returning 0 without reading any data.
+    x = var[-1]  # axis; x= 'x', 'y', or 'z'.
+    # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
+    nu_ij = obj.get_var('nu_ij')
+    ri  = obj.get_var('ri')
+    uix = obj.get_var('ui'+x)
+    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
+    return ri * nu_ij * (ujx - uix)
+
+  # sum of collision frequencies: sum_{i in ions} (nu_{ifluid, i})
+  elif var == 'nu_si':
+    ifluid = obj.ifluid
+    result = np.zeros(np.shape(obj.r))
+    for fluid in fl.Fluids(dd=obj).ions():
+      if fluid.SL != ifluid:
+        result += obj.get_var('nu_ij', jfluid=fluid.SL)
+    return result
+
+  # sum of collision frequencies: sum_{n in neutrals} (nu_{ifluid, n})
+  elif var == 'nu_sn':
+    ifluid = obj.ifluid
+    result = np.zeros(np.shape(obj.r))
+    for fluid in fl.Fluids(dd=obj).neutrals():
+      if fluid.SL != ifluid:
+        result += obj.get_var('nu_ij', jfluid=fluid.SL)
+    return result 
+
+  elif var == 'nu_ei':
+    return obj.get_var('nu_si', mf_ispecies=-1)
+
+  elif var == 'nu_en':
+    return obj.get_var('nu_sn', mf_ispecies=-1)
+
+  # collision frequency - resonant charge exchange for H, H+
   elif var == 'nu_ij_res':
     # formula assumes we are doing nu_{H+, H} collisions.
     ## it also happens to be valid for nu_{H, H+},
@@ -665,6 +687,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     tg = 0.5 * (obj.get_var('tg') + obj.get_var('tg', ifluid=obj.jfluid)) # [K]
     return 2.65e-16 * nH * np.sqrt(tg) * (1 - 0.083 * np.log10(tg))**2 / obj.uni.usi_hz
 
+  # collision frequency - spitzer coulomb formula
   elif var == 'nu_se_spitzcoul':
     icharge = obj.get_charge(obj.ifluid)
     assert icharge > 0, "ifluid must be ion, but got charge={} (ifluid={})".format(icharge, obj.ifluid)
@@ -683,6 +706,18 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     ln_   = np.log(12 * np.pi * ne) + 3 * np.log(ldebye)
     nuje0 = (const * ne) * mass_ * ln_ / (2 * tg)**(3/2)
 
+    # try again but with logs. Run this code to confirm that the above code is correct.
+    run_confirmation_routine = False   # change to True to run this code.
+    if run_confirmation_routine:
+      ln = np.log
+      tmp1 = ln(me) + ln(np.pi) + ln(ne) + 4*ln(qe) + ln(ln(12) + ln(np.pi) + ln(ne) + 3*ln(ldebye))  # numerator
+      tmp2 = ln(ms) + 2*(ln(4) + ln(np.pi) + ln(eps0)) + 0.5*(ln(ms) + 3*(ln(2) + ln(kb) + ln(tg)))  # denominator
+      tmp = tmp1 - tmp2
+      nuje1 = np.exp(tmp)
+      print('we expect these to be approximately equal:', nuje0.mean(), nuje1.mean())
+    return nuje0 / obj.uni.usi_hz
+
+  # collision frequency - capitelli coulomb formula
   elif var == 'nu_ij_capcoul':
     iSL = obj.ifluid
     jSL = obj.jfluid
@@ -717,17 +752,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     nu_ij = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
     return nu_ij
 
-    # try again but with logs. Run this code to confirm that the above code is correct.
-    run_confirmation_routine = False   # change to True to run this code.
-    if run_confirmation_routine:
-      ln = np.log
-      tmp1 = ln(me) + ln(np.pi) + ln(ne) + 4*ln(qe) + ln(ln(12) + ln(np.pi) + ln(ne) + 3*ln(ldebye))  # numerator
-      tmp2 = ln(ms) + 2*(ln(4) + ln(np.pi) + ln(eps0)) + 0.5*(ln(ms) + 3*(ln(2) + ln(kb) + ln(tg)))  # denominator
-      tmp = tmp1 - tmp2
-      nuje1 = np.exp(tmp)
-      print('we expect these to be approximately equal:', nuje0.mean(), nuje1.mean())
-    return nuje0 / obj.uni.usi_hz
-
+  # collision frequency conversion factor: nu_ij to nu_ji
   elif var in ['nu_ij_to_ji', 'nu_sj_to_js']:
     mi_ni = obj.get_var('ri', ifluid=obj.ifluid)  # mi * ni = ri
     mj_nj = obj.get_var('ri', ifluid=obj.jfluid)  # mj * nj = rj
