@@ -211,7 +211,7 @@ class EbysusData(BifrostData):
         '''call set_snap from BifrostData,
         but also if mm_persnap, then delete all the memmaps in memory..
         '''
-        if getattr(self, file_memory.MM_PERSNAP, False) and np.size(self.snap)==1:
+        if getattr(self, file_memory.MM_PERSNAP, False) and np.shape(self.snap)==():
             if hasattr(self, file_memory.MEMORY_MEMMAP):
                 delattr(self, file_memory.MEMORY_MEMMAP)
         super(EbysusData, self).set_snap(snap, *args__set_snap, **kwargs__set_snap)

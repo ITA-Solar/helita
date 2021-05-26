@@ -202,16 +202,18 @@ class BifrostData(object):
                     except IndexError:
                         raise ValueError(("(EEE) set_snap: snapshot not defined "
                                       "and no .idl files found"))
+        def snap_str_from_snap(snap):
+            if snap==0:
+                return ''
+            else:
+                return '_%03i' % snap
         self.snap = snap
-        if np.size(snap) > 1:
+        if np.shape(self.snap) != ():
             self.snap_str = []
             for num in snap:
-                self.snap_str.append('_%03i' % int(num))
+                self.snap_str.append(snap_str_from_snap(num))
         else:
-            if snap == 0:
-                self.snap_str = ''
-            else:
-                self.snap_str = '_%03i' % snap
+            self.snap_str = snap_str_from_snap(snap)
         self.snapInd = 0
 
         self._read_params(firstime=firstime)
@@ -795,7 +797,7 @@ class BifrostData(object):
         if var == '':
             print(help(self._get_simple_var))
 
-        if np.size(self.snap) > 1:
+        if np.shape(self.snap) != ():
             currSnap = self.snap[self.snapInd]
             currStr = self.snap_str[self.snapInd]
         else:
