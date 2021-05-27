@@ -17,7 +17,7 @@ except ImportError:
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
                       CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
                       SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
-                      ONEFLUID_QUANT=None, ELECTRON_QUANT=None, 
+                      ONEFLUID_QUANT=None, ELECTRON_QUANT=None, HEATING_QUANT=None,
                       CFL_QUANT=None,
                       WAVE_QUANT=None, FB_INSTAB_QUANT=None,
                       **kwargs):
@@ -37,6 +37,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
     val = get_electron_var(obj, quant, ELECTRON_QUANT=ELECTRON_QUANT)
   if val is None:
     val = get_onefluid_var(obj, quant, ONEFLUID_QUANT=ONEFLUID_QUANT)
+  if val is None:
+    val = get_heating_quant(obj, quant, HEATING_QUANT=HEATING_QUANT)
   if val is None:
     val = get_mf_colf(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
   if val is None:
@@ -352,6 +354,60 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
       else:                    # not electrons
         f_var = var.replace('i', '')
         return obj.get_var(f_var)
+
+
+def get_heating_quant(obj, var, HEATING_QUANT=None):
+  '''terms related to heating of fluids.'''
+  if HEATING_QUANT is None:
+    HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcolj',
+                     'qcol_u', 'qcol_tg', 'qcol']
+
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'HEATING_QUANT', HEATING_QUANT, get_heating_quant.__doc__)
+    docvar('qcol_uj', 'heating of ifluid [simu. energy density per time] due to jfluid, ' +\
+                      'due to collisions and velocity drifts.', nfluid=2)
+    docvar('qcol_tgj', 'heating of ifluid [simu. energy density per time] due to jfluid, ' +\
+                      'due to collisions and temperature differences.', nfluid=2)
+    docvar('qcolj',   'total heating of ifluid [simu. energy density per time] due to jfluid.', nfluid=2)
+    docvar('qcol_u', 'heating of ifluid [simu. energy density per time], ' +\
+                      'due to collisions and velocity drifts.', nfluid=2)
+    docvar('qcol_tg', 'heating of ifluid [simu. energy density per time], ' +\
+                      'due to collisions and temperature differences.', nfluid=2)
+    docvar('qcol',   'total heating of ifluid [simu. energy density per time].', nfluid=2)
+    return None
+
+  if var not in HEATING_QUANT:
+    return None
+
+  if var in ['qcol_uj', 'qcol_tgj']:
+    ni = obj.get_var('nr')             # [simu. units]
+    mi = obj.get_mass(obj.mf_ispecies) # [amu]
+    mj = obj.get_mass(obj.mf_jspecies) # [amu]
+    nu_ij = obj.get_var('nu_ij')       # [simu. units]
+    coeff = (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
+    if var == 'qcol_uj':
+      mj_simu = obj.get_mass(obj.mf_jspecies, units='simu') # [simu mass]
+      energy = mj_simu * obj.get_var('uid2')                # [simu energy]
+    elif var == 'qcol_tgj':
+      simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
+      tgi = obj.get_var('tg')                       # [K]
+      tgj = obj.get_var('tg', ifluid=obj.jfluid)    # [K]
+      energy = (2 / (obj.uni.gamma - 1)) * simu_kB * (tgj - tgi)
+    return coeff * energy  # [simu energy density / time]
+
+  elif var == 'qcolj':
+    return obj.get_var('qcol_uj') + obj.get_var('qcol_tgj')
+
+  elif var in ['qcol_u', 'qcol_tg']:
+    varj   = var + 'j'   # qcol_uj or qcol_tgj
+    output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
+    for fluid in fl.Fluids(dd=obj):
+      if fluid.SL != obj.ifluid:        # exclude varj for j = i
+        output += obj.get_var(varj, jfluid=fluid)
+    return output
+
+  elif var == 'qcol':
+    return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
 
 
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
@@ -793,7 +849,7 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
 def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
   '''var drift between fluids. I.e. var_ifluid - var_jfluid'''
   if DRIFT_QUANT is None:
-    DRIFT_QUANT = ['ud', 'pd', 'ed', 'rd', 'tgd']
+    DRIFT_QUANT = ['ud', 'pd', 'ed', 'rd', 'tgd', 'uid']
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__, nfluid=2)
@@ -802,6 +858,7 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
     def doc_axis(var):
       return ' Must append x, y, or z; e.g. {var}x for (ifluid {va_}x) - (jfluid {va_}x).'.format(var=var, va_=var[:-1])
     docvar('ud', doc_start(var='ud') + 'u = velocity [simu. units].' + doc_axis(var='ud'))
+    docvar('uid', doc_start(var='uid') + 'ui = velocity [simu. units].' + doc_axis(var='uid'))
     docvar('pd', doc_start(var='pd') + 'p = momentum density [simu. units].' + doc_axis(var='pd'))
     docvar('ed', doc_start(var='ed') + 'e = energy (density??) [simu. units].')
     docvar('rd', doc_start(var='rd') + 'r = mass density [simu. units].')
