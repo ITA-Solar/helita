@@ -357,27 +357,45 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
 
 
 def get_heating_quant(obj, var, HEATING_QUANT=None):
-  '''terms related to heating of fluids.'''
+  '''terms related to heating of fluids.
+
+  Note that the code in this section is written for maximum readability, not maximum efficiency.
+  For most vars in this section the code would run a bit faster if you write use-case specific code.
+
+  For example, qcolj gets qcol_uj + qcol_tgj, however each of those will separately calculate
+  number density (nr) and collision frequency (nu_ij); so the code will calculate the same value
+  of nr and nu_ij two separate times. It would be more efficient to calculate these only once.
+
+  As another example, qjoulei will re-calculate the electric field efx, efy, and efz
+  each time it is called; if you are doing a sum of multiple qjoulei terms it would be more
+  efficient to calculate each of these only once.
+
+  Thus, if you feel that code in this section is taking too long, you can speed it up by writing
+  your own code which reduces the number of times calculations are repeated.
+  (Note, if you had N_memmap = 0 or fast=False, first try using N_memmap >= 200, and fast=True.)
+  '''
   if HEATING_QUANT is None:
     HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcolj',
-                     'qcol_u', 'qcol_tg', 'qcol']
+                     'qcol_u', 'qcol_tg', 'qcol',
+                     'qjoulei']
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'HEATING_QUANT', HEATING_QUANT, get_heating_quant.__doc__)
-    docvar('qcol_uj', 'heating of ifluid [simu. energy density per time] due to jfluid, ' +\
-                      'due to collisions and velocity drifts.', nfluid=2)
-    docvar('qcol_tgj', 'heating of ifluid [simu. energy density per time] due to jfluid, ' +\
-                      'due to collisions and temperature differences.', nfluid=2)
-    docvar('qcolj',   'total heating of ifluid [simu. energy density per time] due to jfluid.', nfluid=2)
-    docvar('qcol_u', 'heating of ifluid [simu. energy density per time], ' +\
-                      'due to collisions and velocity drifts.', nfluid=2)
-    docvar('qcol_tg', 'heating of ifluid [simu. energy density per time], ' +\
-                      'due to collisions and temperature differences.', nfluid=2)
-    docvar('qcol',   'total heating of ifluid [simu. energy density per time].', nfluid=2)
+    units = '[simu. energy density per time]'
+    heati = 'heating of ifluid '+units
+    docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2)
+    docvar('qcol_tgj', heati + ' due to jfluid, due to collisions and temperature differences.', nfluid=2)
+    docvar('qcolj',    'total '+heati+' due to jfluid.', nfluid=2)
+    docvar('qcol_u',   heati + ' due to collisions and velocity drifts.', nfluid=1)
+    docvar('qcol_tg',  heati + ' due to collisions and temperature differences.', nfluid=1)
+    docvar('qcol',     'total '+heati+'.', nfluid=1)
+    docvar('qjoulei',  heati + ' due to Ji dot E. (Ji = qi ni ui).', nfluid=1)
     return None
 
   if var not in HEATING_QUANT:
     return None
+
+  # qcol terms
 
   if var in ['qcol_uj', 'qcol_tgj']:
     ni = obj.get_var('nr')             # [simu. units]
@@ -408,6 +426,30 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
 
   elif var == 'qcol':
     return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
+
+  # other terms
+
+  elif var == 'qjoulei':
+    # qjoulei = qi * ni * \vec{ui} dot \vec{E}
+    # ui is on grid cell faces while E is on grid cell edges.
+    # We must interpolate to align with energy density e, which is at center of grid cells.
+    # uix is at (-0.5, 0, 0) while Ex is at (0, -0.5, -0.5)
+    # --> we shift uix by xup, and Ex by yup zup
+    result = np.zeros(obj.r.shape)
+    qi = obj.get_charge(obj.ifluid, units='simu')    # [simu charge]
+    if qi == 0:
+      return result    # there is no contribution if qi is 0.
+    # else
+    ni = obj.get_var('nr')                           # [simu number density]
+    for x, y, z in [('x', 'y', 'z'), ('y', 'z', 'x'), ('z', 'x', 'y')]:
+      uix = obj.get_var('ui' + x + x+'up')           # [simu velocity]
+      efx = obj.get_var('ef' + x + y+'up' + z+'up')  # [simu electric field]
+      result += uix * efx
+    # << at this point, result = ui dot ef
+    return qi * ni * result
+
+
+
 
 
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
