@@ -306,13 +306,15 @@ def get_gradients_vect(obj,quant):
   for rot, she, curlcc, curvec, ensure that quant ends with axis.
   e.g. curvecbx gets the x component of curl of b.
   '''
-  GRADVECT_QUANT = ['div', 'rot', 'she', 'curlcc', 'curvec', 'chkdiv', 'chbdiv', 'chhdiv']
+  GRADVECT_QUANT = ['div', 'divup', 'divdn', 'rot', 'she', 'curlcc', 'curvec', 'chkdiv', 'chbdiv', 'chhdiv']
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'GRADVECT_QUANT', GRADVECT_QUANT, get_gradients_vect.__doc__)
-    docvar('div',  'starting with, divergence [simu units]')
-    docvar('rot',  'starting with, rotational (a.k.a. curl) [simu units]')
-    docvar('she',  'starting with, shear [simu units]')
+    for div in ['div', 'divup']:
+      docvar(div,     'starting with, divergence [simu units], shifting up (e.g. dVARdxup) for derivatives')
+    docvar('divdn',   'starting with, divergence [simu units], shifting down (e.g. dVARdxdn) for derivatives')
+    docvar('rot',     'starting with, rotational (a.k.a. curl) [simu units]')
+    docvar('she',     'starting with, shear [simu units]')
     docvar('curlcc',  'starting with, curl but shifted (via interpolation) back to original location on cell [simu units]')
     docvar('curvec',  'starting with, curl of face-centered vector (e.g. B, p) [simu units]')
     docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
@@ -320,7 +322,7 @@ def get_gradients_vect(obj,quant):
     docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
     return None
 
-  if not (quant[:6] in GRADVECT_QUANT or quant[:3] in GRADVECT_QUANT):
+  if not any(quant.startswith(GVQ) for GVQ in GRADVECT_QUANT):
       return None
 
   if quant[:3] == 'chk':
@@ -383,16 +385,16 @@ def get_gradients_vect(obj,quant):
                     varz[:, :, iiz]**2)))
     return result
 
-  elif quant[:3] == 'div':  # divergence of vector quantity
-    q = quant[3:]  # base variable
-    if getattr(obj, 'nx') < 5:  # 2D or close
-      result = np.zeros_like(obj.r)
+  elif any(quant.startswith(div) for div in ['div', 'divup', 'divdn']):  # divergence of vector quantity
+    q = quant[len('div'):]
+    if q.startswith('up') or q.startswith('dn'):
+      up, q = q[ :2], q[2: ]
     else:
-      result = obj.get_var('d' + q + 'xdxup')
-    if getattr(obj, 'ny') > 5:
-      result += obj.get_var('d' + q + 'ydyup')
-    if getattr(obj, 'nz') > 5:
-      result += obj.get_var('d' + q + 'zdzup')
+      up = 'up'  # use 'up' for case 'div'
+    result = 0
+    for xdx in ['xdx', 'ydy', 'zdz']:
+      result += obj.get_var('d' + q + xdx + up)
+    return result
 
   elif quant[:6] == 'curlcc': # re-aligned curl
     q = quant[6:-1]
