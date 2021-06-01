@@ -1001,7 +1001,7 @@ class PlutoData(object):
             var = vary * np.cos(self.trans2comm_angle/90.0*np.pi/2.0) + varx * np.sin(self.trans2comm_angle/90.0*np.pi/2.0)
         else:  # component z
             var = self.get_var(varname,snap=snap)
-            var = rotate(var, angle=self.trans2comm_angle, reshape=False, mode='nearest', axes=(0,1))
+        var = rotate(var, angle=self.trans2comm_angle, reshape=False, mode='nearest', axes=(0,1))
     else: 
         var = self.get_var(varname,snap=snap)
     
