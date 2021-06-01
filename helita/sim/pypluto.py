@@ -955,7 +955,7 @@ class PlutoData(object):
 
 
 
-  def trans2comm(self, varname, snap=None, angle=0, loop=2): 
+  def trans2comm(self, varname, snap=None, angle=45, loop=None): 
     '''
     Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
     is: 
