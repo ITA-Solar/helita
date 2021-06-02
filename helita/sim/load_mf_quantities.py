@@ -13,6 +13,10 @@ try:
 except ImportError:
   warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.load_mf_quantities may crash')
 
+# set constants
+MATCH_PHYSICS = 0  # don't change this value.  # this one is the default (see ebysus.py)
+MATCH_AUX     = 1  # don't change this value.
+
 
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
                       CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
@@ -21,6 +25,7 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
                       CFL_QUANT=None,
                       WAVE_QUANT=None, FB_INSTAB_QUANT=None,
                       **kwargs):
+  __tracebackhide__ = True  # hide this func from error traceback stack.
 
   quant = quant.lower()
 
@@ -112,7 +117,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   if var not in GLOBAL_QUANT:
       return None
 
-  output = np.zeros(np.shape(obj.r))    
+  output = obj.zero()    
   if var == 'totr':  # total density
     for ispecies in obj.att:
       nlevels = obj.att[ispecies].params.nlevel
@@ -226,7 +231,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     # ----- calculate the necessary component of -ue x B (== B x ue) ----- #
     # There is a flag, "do_hall", when "false", we don't let the contribution
     ## from current to ue to enter in to the B x ue for electric field.
-    if obj.get_param('do_hall', default="false")=="false":
+    if obj.match_aux() and obj.get_param('do_hall', default="false")=="false":
       ue = 'uep'  # include only the momentum contribution in ue, in our ef calculation.
       warnings.warn('do_hall=="false", so we are dropping the j (current) contribution to ef (E-field)')
     else:
@@ -323,7 +328,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   elif var == 'nq':
     charge = obj.get_charge(obj.ifluid, units='simu') # [simu. charge units]
     if charge == 0:
-      return np.zeros(obj.r.shape)
+      return obj.zero()
     else:
       return charge * obj.get_var('nr')
 
@@ -395,9 +400,19 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
   if var not in HEATING_QUANT:
     return None
 
-  # qcol terms
+  def heating_is_off():
+    '''returns whether we should treat heating as if it is turned off.'''
+    if obj.match_physics():
+      return False
+    if obj.mf_ispecies < 0 or obj.mf_jspecies < 0:  # electrons
+      return (obj.get_param('do_ohm_ecol', True) and obj.get_param('do_qohm', True))
+    else: # not electrons
+      return (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
 
+  # qcol terms
+  
   if var in ['qcol_uj', 'qcol_tgj']:
+    if heating_is_off(): return obj.zero()
     ni = obj.get_var('nr')             # [simu. units]
     mi = obj.get_mass(obj.mf_ispecies) # [amu]
     mj = obj.get_mass(obj.mf_jspecies) # [amu]
@@ -414,9 +429,11 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     return coeff * energy  # [simu energy density / time]
 
   elif var == 'qcolj':
+    if heating_is_off(): return obj.zero()
     return obj.get_var('qcol_uj') + obj.get_var('qcol_tgj')
 
   elif var in ['qcol_u', 'qcol_tg']:
+    if heating_is_off(): return obj.zero()
     varj   = var + 'j'   # qcol_uj or qcol_tgj
     output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
     for fluid in fl.Fluids(dd=obj):
@@ -425,6 +442,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     return output
 
   elif var == 'qcol':
+    if heating_is_off(): return obj.zero()
     return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
 
   # other terms
@@ -435,7 +453,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     # We must interpolate to align with energy density e, which is at center of grid cells.
     # uix is at (-0.5, 0, 0) while Ex is at (0, -0.5, -0.5)
     # --> we shift uix by xup, and Ex by yup zup
-    result = np.zeros(obj.r.shape)
+    result = obj.zero()
     qi = obj.get_charge(obj.ifluid, units='simu')    # [simu charge]
     if qi == 0:
       return result    # there is no contribution if qi is 0.
@@ -447,9 +465,6 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
       result += uix * efx
     # << at this point, result = ui dot ef
     return qi * ni * result
-
-
-
 
 
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
@@ -479,7 +494,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   if (var not in ELECTRON_QUANT):
     return None
 
-  output = np.zeros(obj.r.shape)
+  output = obj.zero()
 
   if var == 'nel': # number density of electrons [cm^-3]
     for fluid in fl.Fluids(dd=obj).ions():
@@ -504,7 +519,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
     ## ---> to align with ux, we shift r by xdn
     interp = x+'dn'
-    nqe    = np.zeros(obj.r.shape)  # charge density of electrons.
+    nqe    = obj.zero()  # charge density of electrons.
     for fluid in fl.Fluids(dd=obj).ions():
       nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
       ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
@@ -546,7 +561,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
     ## ---> to align with ux, we shift r by xdn
     interp = x+'dn'
-    nqe    = np.zeros(obj.r.shape)  # charge density of electrons.
+    nqe    = obj.zero()  # charge density of electrons.
     for fluid in fl.Fluids(dd=obj).ions():
       nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
       ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
@@ -678,18 +693,40 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
   # collision frequency between ifluid and jfluid
   if var in ['nu_ij', 'nu_sj']:
+    # TODO: also check mf_param_file tables to see if the collision is turned off.
+    if obj.match_aux():
+      # return constant if constant collision frequency is turned on.
+      i_elec, j_elec = (obj.mf_ispecies < 0, obj.mf_jspecies < 0)
+      if i_elec or j_elec:
+        const_nu_en = obj.get_param('ec_const_nu_en', default= -1.0)
+        const_nu_in = obj.get_param('ec_const_nu_in', default= -1.0)
+        if const_nu_en>=0 or const_nu_in>=0:  # at least one constant collision frequency is turned on.
+          non_elec_fluid   = getattr(obj, '{}fluid'.format('j' if i_elec else 'i'))
+          non_elec_neutral = obj.get_charge( non_elec_fluid ) == 0   # whether the non-electrons are neutral.
+          def nu_ij(const_nu):
+            result = obj.zero() + const_nu
+            if i_elec:
+              return result
+            else:
+              return result * obj.get_var('nu_ij_to_ji', ifluid=jfluid, jfluid=ifluid)
+          if non_elec_neutral and const_nu_en >= 0:
+            return nu_ij(const_nu_en)
+          elif (not non_elec_neutral) and const_nu_in >= 0:
+            return nu_ij(const_nu_in)
+    # << if we reach this line, constant colfreq is off for this i,j; so now calculate colfreq.
     coll_type = obj.get_coll_type()   # gets 'EL', 'MX', 'CL', or None
-    if coll_type is None:
+    if coll_type is not None:
+      if coll_type[0] == 'EE':     # electrons --> use "implied" coll type.
+        coll_type = coll_type[1]   # TODO: add coll_keys to mf_eparams.in??
+      nu_ij_varname = 'nu_ij_{}'.format(coll_type.lower())  # nu_ij_el, nu_ij_mx, or nu_ij_cl
+      return obj.get_var(nu_ij_varname)
+    else:
       errmsg = ("Found no valid coll_keys for ifluid={}, jfluid={}. "
         "looked for 'CL' for coulomb collisions, or 'EL' or 'MX' for other collisions. "
         "You can enter coll_keys in the COLL_KEYS section in mf_param_file='{}'.")
       mf_param_file = obj.get_param('mf_param_file', default='mf_params.in')
       raise ValueError(errmsg.format(obj.ifluid, obj.jfluid, mf_param_file))
-    else:
-      if coll_type[0] == 'EE':     # electrons --> use "implied" coll type.
-        coll_type = coll_type[1]   # TODO: add coll_keys to mf_eparams.in??
-      nu_ij_varname = 'nu_ij_{}'.format(coll_type.lower())  # nu_ij_el, nu_ij_mx, or nu_ij_cl
-      return obj.get_var(nu_ij_varname)
+      
 
   # collision frequency - elastic or coulomb
   if var in ['nu_ij_el', 'nu_ij_cl']:
@@ -720,7 +757,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       
     # elastic collisions:
     elif var.endswith('el'):
-      cross    = obj.get_var('cross')    # [cm^2]
+      cross    = obj.get_var('cross', match_type=MATCH_PHYSICS)    # [cm^2]
       tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
       return 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
 
@@ -744,7 +781,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   # momentum transfer terms
   elif var in ['rijx', 'rijy', 'rijz']:
     if obj.ifluid==obj.jfluid:      # when ifluid==jfluid, u_j = u_i, so rij = 0.
-      return np.zeros(obj.r.shape)   # save time by returning 0 without reading any data.
+      return obj.zero()   # save time by returning 0 without reading any data.
     x = var[-1]  # axis; x= 'x', 'y', or 'z'.
     # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
     nu_ij = obj.get_var('nu_ij')
@@ -756,7 +793,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   # sum of collision frequencies: sum_{i in ions} (nu_{ifluid, i})
   elif var == 'nu_si':
     ifluid = obj.ifluid
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     for fluid in fl.Fluids(dd=obj).ions():
       if fluid.SL != ifluid:
         result += obj.get_var('nu_ij', jfluid=fluid.SL)
@@ -765,7 +802,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   # sum of collision frequencies: sum_{n in neutrals} (nu_{ifluid, n})
   elif var == 'nu_sn':
     ifluid = obj.ifluid
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     for fluid in fl.Fluids(dd=obj).neutrals():
       if fluid.SL != ifluid:
         result += obj.get_var('nu_ij', jfluid=fluid.SL)
@@ -932,6 +969,12 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   if var not in CROSTAB_QUANT:
     return None
 
+  if obj.match_aux():
+    # return 0 if ifluid > jfluid. (comparing species, then level if species are equal)
+    # we do this because mm_cross gives 0 if jfluid > ifluid.
+    if obj.ifluid > obj.jfluid:
+      return obj.zero()
+
   # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
   with obj.MaintainFluids():
     m_i = obj.get_mass(obj.mf_ispecies)
@@ -1015,7 +1058,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     var = obj.get_var('mfe_p')  # is mfe_p pressure for ifluid, or sum of all fluid pressures? - SE Apr 19 2021
     if quant == 'hp':
       if getattr(obj, 'nx') < 5:
-        return np.zeros_like(var)
+        return obj.zero()
       else:
         return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
     elif quant == 'cs':
@@ -1028,7 +1071,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       return 2 * var / obj.get_var('b2')
 
   if quant == 'beta_ions':
-    p = np.zeros(obj.r.shape)
+    p = obj.zero()
     for fluid in fl.Fluids(dd=obj).ions():
       p += obj.get_var('p', ifluid=fluid)
     bp = obj.get_var('b2') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
@@ -1087,7 +1130,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   elif quant == 'ldebyei':
     Zi2 = obj.get_charge(obj.ifluid)**2
     if Zi2 == 0:
-      return np.zeros(obj.r.shape)
+      return obj.zero()
     const = obj.uni.permsi * obj.uni.ksi_b / obj.uni.qsi_electron**2
     tg = obj.get_var('tg')                     # [K]
     nr = obj.get_var('nr') * obj.uni.usi_nr    # [m^-3]
@@ -1134,7 +1177,7 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     xidx = dict(x=0, y=1, z=2)[x]  # axis; 0, 1, or 2.
     dx1d = getattr(obj, 'd'+x+'1d')  # 1D; needs dims to be added. add dims below.
     dx1d = np.expand_dims(dx1d, axis=tuple(set((0,1,2)) - set([xidx])))
-    return (2 * np.pi / dx1d) + np.zeros_like(obj.r)
+    return (2 * np.pi / dx1d) + obj.zero()
 
 
 def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
