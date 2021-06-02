@@ -2,23 +2,20 @@
 Set of programs to read and interact with output from Multifluid/multispecies
 
 TODO:
-    - add "physical"/"match_ebysus" option which does:
-        - physical: always returns physical values.
-            e.g. for nu_es always calculate and return the physical value.
-        - match_ebysus: always match ebysus values.
-            e.g. for nu_es if do_ohm_ecol=0, return 0.
+    - optionally cache the N most-recent expensive-to-calculate var results from get_var
+        - e.g., if efx is calculated, cache the result in case it needs to be calculated again soon.
+        - implement via:
+            - optional flag at initialization and attribute of EbysusData object
+            - "cache" function which should be specifically called in load_mf_quantities
+              for only the specific vars which developers think should be cached.
+            - cache-checking decorator for get_var which checks cache first.
+            - make sure cached values are associated with ifluid & jfluid as appropriate
+            - (optionally(?)) smash cache when changing snapshot.
 """
-
-DEBUG = False  # if True, change some things, to make debugging easier. (remove this in the long-term.)
-               # presently, debug mode is not working properly. - SE Apr 16 2021
-if DEBUG:
-    print('we have loaded ebysus.py in debug mode.')
 
 # import built-in modules
 import os
 import time
-if DEBUG:
-    import sys
 
 # import local modules
 from .bifrost import (
@@ -26,9 +23,9 @@ from .bifrost import (
     read_idl_ascii, subs2grph,
 )
 from . import cstagger
-from .load_mf_quantities import *
-from .load_quantities import *
-from .load_arithmetic_quantities import *
+from .load_mf_quantities         import load_mf_quantities
+from .load_quantities            import load_quantities
+from .load_arithmetic_quantities import load_arithmetic_quantities
 from . import document_vars
 from . import file_memory
 from . import fluid_tools
@@ -42,6 +39,15 @@ try:
 except ImportError:
     warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
 
+# set defaults:
+from .load_mf_quantities import (
+    MATCH_PHYSICS, MATCH_AUX
+)
+MATCH_TYPE_DEFAULT = MATCH_PHYSICS  # can change this one. Tells whether to match physics or aux.
+                               # match physics -> try to return physical value.
+                               # match aux     -> try to return value matching aux.
+
+
 class EbysusData(BifrostData):
 
     """
@@ -49,7 +55,7 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, **kwargs):
+    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, match_type=MATCH_TYPE_DEFAULT, **kwargs):
         ''' initialize EbysusData object.
 
         N_memmap: int (default 0)
@@ -75,11 +81,20 @@ class EbysusData(BifrostData):
                      via self.var, or self.variables[var], instead of self.get_var(var).
                      As long as you use get_var to get var values, you can safely use fast=True.
 
+        match_type: 0 (default) or 1
+            whether to try to match physical answer (0) or aux data (1).
+            Applicable to terms which can be turned on or off. e.g.:
+            if do_hall='false':
+                match_type=0 --> return result as if do_hall is turned on. (matches actual physics)
+                match_type=1 --> return result as if do_hall is off. (matches aux file data)
+            Only applies when explicitly implemented in load quantities files, e.g. load_mf_quantities.
+
         *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
+        self.match_type = match_type
 
         super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
@@ -395,9 +410,38 @@ class EbysusData(BifrostData):
         if np.any(x['snap'] != alt_metadata['snap']): return False
         return True
 
+    @fluid_tools.maintain_fluids
+    @file_memory.maintain_attrs('match_type')
+    def _load_quantity(self, var, panic=False):
+        '''helper function for get_var; actually calls load_quantities for var.
+        Also, restores self.ifluid and self.jfluid afterwards.
+        Also, restores self.match_type afterwards.
+        '''
+        __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
+        if self._metadata_equals(self.variables) and var in self.variables:
+            val = self.variables[var]
+        elif var in self.simple_vars:
+            val = self._get_simple_var(var, panic=panic)
+        elif var in self.auxxyvars:
+            val =  super(EbysusData, self)._get_simple_var_xy(var)
+        elif var in self.compvars:
+            val =  super(EbysusData, self)._get_composite_var(var)
+        else:
+            # Loading quantities
+            val = load_quantities(self,var,PLASMA_QUANT='',
+                        CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                        IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                        DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                        COULOMB_COL_QUANT='', AMB_QUANT='')
+            if val is None:
+                val = load_mf_quantities(self,var)
+            if val is None:
+                val = load_arithmetic_quantities(self,var)
+        return val
+
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                ifluid=None, jfluid=None,
+                ifluid=None, jfluid=None, match_type=None,
                 panic=False, *args, **kwargs):
         """
         Reads a given variable from the relevant files.
@@ -427,6 +471,9 @@ class EbysusData(BifrostData):
             if still None, use self.mf_ilevel
         ifluid - tuple of integers, or None (default)
             if not None: (mf_ispecies, mf_ilevel) = ifluid
+        match_type - None (default), 0, or 1.
+            whether to try to match physics (0) or aux (1) where applicable.
+            see self.__init__.doc for more help.
         **kwargs may contain the following:
             iSL    - alias for ifluid
             jSL    - alias for jfluid
@@ -440,6 +487,9 @@ class EbysusData(BifrostData):
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
+
+        if match_type is not None:
+            self.match_type = match_type
 
         # set fluids as appropriate to kwargs
         kw__fluids = dict(mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
@@ -482,27 +532,8 @@ class EbysusData(BifrostData):
             if not np.array_equal(snap, self.snap):
                 self.set_snap(snap)
 
-        # get value of variable; restore ifluid & jfluid afterwards.
-        with self.MaintainFluids():
-            if self._metadata_equals(self.variables) and var in self.variables:
-                return self.variables[var]
-            elif var in self.simple_vars:
-                val = self._get_simple_var(var, panic=panic)
-            elif var in self.auxxyvars:
-                val =  super(EbysusData, self)._get_simple_var_xy(var)
-            elif var in self.compvars:
-                val =  super(EbysusData, self)._get_composite_var(var)
-            else:
-                # Loading quantities
-                val = load_quantities(self,var,PLASMA_QUANT='',
-                            CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                            IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                            DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                            COULOMB_COL_QUANT='', AMB_QUANT='')
-                if val is None:
-                    val = load_mf_quantities(self,var)
-                if val is None:
-                    val = load_arithmetic_quantities(self,var)
+        # >>>>> actually get the value of var <<<<<
+        val = self._load_quantity(var, panic=panic)
 
         # handle documentation case
         if document_vars.creating_vardict(self):
@@ -518,15 +549,12 @@ class EbysusData(BifrostData):
 
         # handle "don't know how to get this var" case
         if val is None:
-            raise ValueError(('get_var: do not know (yet) how to '
-                          'calculate quantity %s. Note that simple_var '
-                          'available variables are: %s.\nIn addition, '
-                          'get_quantity can read others computed variables '
-                          "see e.g. help(self.get_var) or get_var('')) for guidance"
-                          '.' % (var, repr(self.simple_vars))))
-
-        if DEBUG:
-            self._check_mm_refs(val, 0)
+            errmsg = ('get_var: do not know (yet) how to calculate quantity {}. '
+                '(Got None while trying to calculate it.) '
+                'Note that simple_var available variables are: {}. '
+                '\nIn addition, get_quantity can read others computed variables; '
+                "see e.g. help(self.get_var) or get_var('')) for guidance.")
+            raise ValueError(errmsg.format(var, repr(self.simple_vars)))
 
         # reshape if necessary... (? I don't understand when it could be necessary -SE May 21 2021)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
@@ -786,25 +814,7 @@ class EbysusData(BifrostData):
             else:
                 kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
                 result = get_numpy_memmap(filename, **kw__get_mmap)
-        if DEBUG:
-            self._check_mm_refs(result, 0)
         return result
-
-    if DEBUG:
-        def _check_mm_refs(self, x, N_external, in_memory=None):
-            '''checks whether there are the correct number of refs to memmap x.
-            N_external is guess of how many references there are besides the x which is passed here.
-            in_memory: bool or None. None -> (getattr(self, file_memory.NMLIM_ATTR, 0)==0)
-            '''
-            # total number of refs should be 3 + N_external + (1 if x is in _memory_memmap else 0)
-            ## the 3 are: original x, local x in this function, local x in sys.getrefcount.
-            errstr = 'Too many references. Expected {} from memory plus {} from external, but got {} total. ' + self.quick_look()
-            if in_memory is None: in_memory = getattr(self, file_memory.NMLIM_ATTR, 0)==0
-            Nref = sys.getrefcount(x)
-            memref = (1 if in_memory else 0)
-            expected = 3 + N_external + memref
-            assert Nref == expected, errstr.format(memref, N_external, Nref-3)
-            return True
 
     def get_var_if_in_aux(self, var, *args__get_var, **kw__get_var):
         """ get_var but only if it appears in aux (i.e. self.params['aux'][self.snapInd])
@@ -851,7 +861,7 @@ class EbysusData(BifrostData):
             jSL    - alias for jfluid
             iS, iL - alias for ifluid[0], ifluid[1]
             jS, jL - alias for jfluid[0], jfluid[1]
-        extra **kwargs are passed to NOWHERE.
+        extra **kwargs are passed to get_var, then NOWHERE.
         extra *args are passed to NOWHERE.
         """
 
@@ -928,6 +938,28 @@ class EbysusData(BifrostData):
 
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
+
+    def _get_match_type(self):
+        if not hasattr(self, 'match_type'):
+            setattr(self, 'match_type', MATCH_TYPE_DEFAULT)
+        m = self.match_type
+        if m not in [0,1]:
+            raise ValueError('Expected self.match_type == 0 or 1 but got {}'.format(m))
+        else:
+            return m
+
+    def match_physics(self):
+        '''return whether self.match_type == MATCH_PHYSICS'''
+        return self._get_match_type() == MATCH_PHYSICS
+    def match_aux(self):
+        '''return whether self.match_type == MATCH_AUX'''
+        return self._get_match_type() == MATCH_AUX
+
+    def zero(self):
+        '''return np.zeros_like(self.r, subok=False).
+        (an array of zeros with same shape and dtype like self.r but which is not a memmap.)
+        '''
+        return np.zeros_like(self.r, subok=False)
 
     # include methods related to wavegrowth, for convenience
     def get_lmin(self):
