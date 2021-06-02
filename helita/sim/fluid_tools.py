@@ -16,6 +16,9 @@ try:
 except ImportError:
   warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.fluid_tools may crash')
 
+# set defaults
+HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
+
 ''' --------------------- setting fluids --------------------- '''
 
 def set_mf_fluid(obj, species=None, level=None, i='i'):
@@ -216,6 +219,7 @@ def maintain_fluids(f):
     '''decorator version of _MaintainFluids. first arg of f must be an EbysusData object.'''
     @functools.wraps(f)
     def f_but_maintain_fluids(obj, *args, **kwargs):
+        __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
         with _MaintainingFluids(obj):
             return f(obj, *args, **kwargs)
     return f_but_maintain_fluids
@@ -225,6 +229,7 @@ def use_fluids(**kw__fluids):
     def decorator(f):
         @functools.wraps(f)
         def f_but_use_fluids(obj, *args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             with _UsingFluids(obj, **kw__fluids):
                 return f(obj, *args, **kwargs)
         return f_but_use_fluids
