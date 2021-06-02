@@ -1,16 +1,5 @@
 """
 Set of programs to read and interact with output from Multifluid/multispecies
-
-TODO:
-    - optionally cache the N most-recent expensive-to-calculate var results from get_var
-        - e.g., if efx is calculated, cache the result in case it needs to be calculated again soon.
-        - implement via:
-            - optional flag at initialization and attribute of EbysusData object
-            - "cache" function which should be specifically called in load_mf_quantities
-              for only the specific vars which developers think should be cached.
-            - cache-checking decorator for get_var which checks cache first.
-            - make sure cached values are associated with ifluid & jfluid as appropriate
-            - (optionally(?)) smash cache when changing snapshot.
 """
 
 # import built-in modules
@@ -55,7 +44,9 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, match_type=MATCH_TYPE_DEFAULT, **kwargs):
+    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, match_type=MATCH_TYPE_DEFAULT,
+                 do_caching=True, cache_max_MB=10, cache_max_Narr=20,
+                 **kwargs):
         ''' initialize EbysusData object.
 
         N_memmap: int (default 0)
@@ -89,12 +80,24 @@ class EbysusData(BifrostData):
                 match_type=1 --> return result as if do_hall is off. (matches aux file data)
             Only applies when explicitly implemented in load quantities files, e.g. load_mf_quantities.
 
+        do_caching: True (default) or False
+            whether to allow any type of caching (maintaining a short list of recent results of get_var).
+            if False, the with_caching() function will skip caching and self.cache will be ignored.
+            can be enabled or disabled at any point; does not erase the current cache.
+        cache_max_MB: 10 (default) or number
+            maximum number of MB of data which cache is allowed to store at once.
+        cache_max_Narr: 20 (default) or number
+            maximum number of arrays which cache is allowed to store at once.
+
         *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
         self.match_type = match_type
+        self.do_caching = do_caching
+        self.cache      = file_memory.Cache(max_MB=cache_max_MB, max_Narr=cache_max_Narr)
+        self.caching    = lambda: self.do_caching and not self.cache.is_NoneCache()
 
         super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
@@ -412,6 +415,7 @@ class EbysusData(BifrostData):
 
     @fluid_tools.maintain_fluids
     @file_memory.maintain_attrs('match_type')
+    @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
     def _load_quantity(self, var, panic=False):
         '''helper function for get_var; actually calls load_quantities for var.
         Also, restores self.ifluid and self.jfluid afterwards.
@@ -441,8 +445,9 @@ class EbysusData(BifrostData):
 
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                ifluid=None, jfluid=None, match_type=None,
-                panic=False, *args, **kwargs):
+                ifluid=None, jfluid=None, panic=False, 
+                match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
+                *args, **kwargs):
         """
         Reads a given variable from the relevant files.
 
@@ -474,6 +479,15 @@ class EbysusData(BifrostData):
         match_type - None (default), 0, or 1.
             whether to try to match physics (0) or aux (1) where applicable.
             see self.__init__.doc for more help.
+        cache - False (default) or True
+            whether to cache (store in memory) the result.
+            (if result already in memory, bring to "front" of list.)
+        check_cache - True (default) or False
+            whether to check cache to see if the result already exists in memory.
+            When possible, return existing result instead of repeating calculation.
+        cache_with_nfluid - None (default), 0, 1, or 2
+            if not None, cache result and associate it with this many fluids.
+            0 -> neither; 1 -> just ifluid; 2 -> both ifluid and jfluid.
         **kwargs may contain the following:
             iSL    - alias for ifluid
             jSL    - alias for jfluid
@@ -532,8 +546,12 @@ class EbysusData(BifrostData):
             if not np.array_equal(snap, self.snap):
                 self.set_snap(snap)
 
+        # set caching kwargs appropriately (see file_memory.with_caching() for details.)
+        kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid,
+                           more_cache_params=dict(panic=panic))
+
         # >>>>> actually get the value of var <<<<<
-        val = self._load_quantity(var, panic=panic)
+        val = self._load_quantity(var, panic=panic, **kw__caching)
 
         # handle documentation case
         if document_vars.creating_vardict(self):
@@ -991,7 +1009,8 @@ class EbysusData(BifrostData):
 
 # include methods from fluid_tools in EbysusData object.
 for func in ['get_species_name', 'get_mass', 'get_charge',
-            'get_cross_tab', 'get_cross_sect', 'get_coll_type']:
+            'get_cross_tab', 'get_cross_sect', 'get_coll_type',
+            'i_j_same_fluid']:
     setattr(EbysusData, func, getattr(fluid_tools, func, None))
 
 del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)

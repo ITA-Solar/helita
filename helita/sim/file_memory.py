@@ -23,9 +23,18 @@ import resource
 import warnings
 import functools
 import os
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 import sys  # for debugging 'too many files' crash; will be removed in the future
+import time  # for time profiling for caching
 
+# import external public modules
+try:
+    import numpy as np
+except ImportError:
+    warnings.warn('failed to import numpy; some functions in helita.sim.file_memory may crash')
+
+# import internal modules
+from .fluid_tools import fluid_equals
 
 # set defaults
 ## apparently there is good efficiency improvement even if we only remember the last few memmaps.
@@ -262,8 +271,8 @@ def maintain_attrs(*attrs):
     def attr_restorer(f):
         @functools.wraps(f)
         def f_but_maintain_attrs(obj, *args, **kwargs):
-            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             '''f but attrs are maintained.'''
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             memory = dict()  # dict of attrs to maintain
             for attr in attrs:
                 if hasattr(obj, attr):
@@ -278,3 +287,229 @@ def maintain_attrs(*attrs):
     return attr_restorer
 
 
+''' --------------------- cache --------------------- '''
+
+CacheEntry = namedtuple('CacheEntry', ['value', 'cached_params', 'cached_fluids', 'id', 'nbytes', 'calctime'],
+                        defaults = [None, None, None, None, None, None])
+#        value: value.
+#cached_params: additional params which are associated with this value of var.
+#cached_fluids: fluids which are associated with this value of var.
+#           id: unique id associated to this var and cache_params for this cache.
+#       nbytes: number of bytes in value
+#     calctime: amount of time taken to calculate value.
+
+class Cache:
+    '''cache results of get_var.
+    can contain up to self.max_MB MB of data, and up to self.max_Narr entries.
+    Deletes oldest entries first when needing to free up space.
+
+    self.performance tells total number of times arrays have been recalled,
+    and total amount of time saved (estimate based on time it took to read the first time.)
+    '''
+    def __init__(self, max_MB=10, max_Narr=20):
+        '''initialize Cache.
+
+        max_MB: 10 (default) or number
+            maximum number of MB of data which cache is allowed to store at once.
+        max_Narr: 20 (default) or number
+            maximum number of arrays which cache is allowed to store at once.
+        '''
+        self.max_MB   = max_MB
+        self.max_Narr = max_Narr
+        self._content = dict()
+        self._next_cacheid = 0   # unique id associated to each cache entry (increases by 1 each time)
+        self._order   = []  # list of (var, id)
+        self._nbytes  = 0   # number of MB of data stored in self.
+        self.performance = dict(time_saved_estimate=0, N_recalled=0, N_recalled_unknown_time_savings=0)
+
+    def get(self, var, params=dict(), fluids=dict()):
+        '''return entry associated with var and cache_params in self, if it exists,
+        else empty CacheEntry.
+        '''
+        try:
+            var_cache_entries = self._content[var]
+        except KeyError:
+            return CacheEntry(None)   # var is not in self.
+        else:
+            for entry in var_cache_entries:
+                if _dict_equals(params, entry.cached_params):
+                    if _matches_cached_fluids_dict(fluids, entry.cached_fluids):
+                        self._update_performance_tracker(entry)
+                        return entry
+            return CacheEntry(None)
+
+    def cache(self, var, val, cache_params=dict(), cache_fluids=dict(), calctime=None):
+        '''add var with value val (and associated with cache_params) to self.'''
+        nbytes = np.array(val, copy=False).nbytes
+        self._nbytes += nbytes
+        entry  = CacheEntry(value=val, cached_params=cache_params, cached_fluids=cache_fluids,
+                            id=self._take_next_cacheid(), nbytes=nbytes,
+                            calctime=calctime)
+        if var in self._content.keys():
+            self._content[var] += [entry]
+        else:
+            self._content[var] = [entry]
+        self._order += [(var, entry.id)]
+        self._shrink_cache_as_needed()
+
+    def __repr__(self):
+        '''pretty print of self'''
+        s = '<{self:} totaling {MB:0.3f} MB, containing {N:} cached values from {k:} vars: {vars:}>'
+        vars = list(self._content.keys())
+        if len(vars) > 10:  # then we will show only the first 10.
+            svars = '[' + ', '.join(vars[:10]) + ', ...]'
+        else:
+            svars = '[' + ', '.join(vars) + ']'
+        return s.format(self=object.__repr__(self), MB=self._nMB(), N=len(self._order), k=len(vars), vars=svars)
+
+    def _update_performance_tracker(self, entry):
+        '''update self.performance as if we just got entry from cache once.'''
+        self.performance['N_recalled'] += 1
+        savedtime = entry.calctime
+        if savedtime is None:
+            self.performance['N_recalled_unknown_time_savings'] += 1
+        else:
+            self.performance['time_saved_estimate'] += savedtime
+
+    def _take_next_cacheid(self):
+        result = self._next_cacheid
+        self._next_cacheid += 1
+        return result
+
+    def _max_nbytes(self):
+        return self.max_MB * 1024 * 1024
+
+    def _nMB(self):
+        return self._nbytes / (1024 * 1024)
+
+    def remove_one_entry(self, id=None):
+        '''removes the oldest entry in self. returns id of entry removed.
+        if id is not None, instead removes the entry with id==id.
+        '''
+        if id is None:
+            oidx = 0
+            var, eid = self._order[oidx]
+        else:
+            try:
+                oidx, (var, eid) = next(  ( (i, x) for i, x in enumerate(self._order) if x[1]==id)  )
+            except StopIteration:
+                raise KeyError('id={} not found in cache {}'.format(id, self))
+        var_entries = self._content[var]
+        i = next((i for i, entry in enumerate(var_entries) if entry.id == eid))
+        self._nbytes -= var_entries[i].nbytes
+        del var_entries[i]
+        del self._order[oidx]
+        return eid
+
+    def _shrink_cache_as_needed(self):
+        '''shrink cache to stay within limits of number of entries and amount of data.'''
+        while len(self._order) > self.max_Narr:
+            self.remove_one_entry()
+        max_nbytes = self._max_nbytes()
+        while self._nbytes > max_nbytes:
+            self.remove_one_entry()
+
+    def is_NoneCache(self):
+        '''return if self.max_MB <= 0 or self.max_Narr <= 0'''
+        return (self.max_MB <= 0 or self.max_Narr <= 0)
+
+
+def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
+    '''decorate function so that it does caching things.
+
+    cache, check_cache, and nfluid values passed to with_caching()
+    will become the _default_ values of these kwargs for the function
+    which is being decorated (but other values for these kwargs
+    can still be passed to that function, later).
+
+    cache: whether to store result in obj.cache
+    check_cache: whether to try to get result from obj.cache if it exists there.
+    cache_with_nfluid - None (default), 0, 1, or 2
+        if not None, cache result and associate it with this many fluids.
+        0 -> neither; 1 -> just ifluid; 2 -> both ifluid and jfluid.
+    '''
+    def decorator(f):
+        @functools.wraps(f)
+        def f_but_caching(obj, var, *args_f,
+                          check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid,
+                          more_cache_params=dict(), **kwargs_f):
+            '''do f(obj, *args_f, **kwargs_f) but do caching things as appropriate,
+            i.e. check cache first (if check_cache) and store result (if cache).
+            '''
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            val = None
+            if (not getattr(obj, 'do_caching', True)) or (not hasattr(obj, 'cache')) or (obj.cache.is_NoneCache()):
+                cache = check_cache = False
+            elif cache_with_nfluid is not None:
+                cache = True
+            if (cache or check_cache):
+                # set cache_params
+                cache_params = dict(snap=obj.snap, iix=obj.iix, iiy=obj.iiy, iiz=obj.iiz,
+                                    match_type=obj.match_type)
+                cache_params.update(more_cache_params)
+                if cache_with_nfluid is not None:
+                    cache_fluids = dict(nfluid=cache_with_nfluid)
+                    if cache_with_nfluid >= 1:
+                        cache_fluids['ifluid'] = obj.ifluid
+                    if cache_with_nfluid >= 2:
+                        cache_fluids['jfluid'] = obj.jfluid
+                else: # (err on the side of caution: pretend var depends on both fluids)
+                    cache_fluids = dict(ifluid=obj.ifluid, jfluid=obj.jfluid)
+                # check cache for result (if check_cache==True)
+                if check_cache:
+                    entry = obj.cache.get(var, cache_params, cache_fluids)
+                    val = entry.value
+                    if cache and (val is not None):
+                        obj.cache.remove_one_entry(id=entry.id)
+                if cache:
+                    now = time.time()   # track timing, so we can estimate how much time cache is saving.
+            # calculate result (if necessary)
+            if val is None:
+                val = f(obj, var, *args_f, **kwargs_f)
+            # save result to obj.cache (if cache==True)
+            if cache:
+                obj.cache.cache(var, val, cache_params, cache_fluids, calctime=time.time()-now)
+            # return result
+            return val
+        return f_but_caching
+    return decorator
+
+def _dict_equals(A, B):
+    '''returns whether A == B for dicts A, B.
+    Necessary because default equality checking breaks when dict contains numpy arrays...
+    (And presumably any other object which overrides __equals__)
+    '''
+    keysA, keysB = A.keys(), B.keys()
+    if keysA != keysB:
+        return False
+    for key in keysA:
+        eq = (A[key] == B[key])
+        if isinstance(eq, np.ndarray):
+            if not np.all(eq):
+                return False  
+        elif eq == False:
+            return False
+        elif eq == True:
+            pass #continue on to next key.
+        else:
+            raise ValueError("Object equality was not boolean nor np.ndarray. Don't know what to do. " + \
+                             "Objects = {:}, {:}; (x == y) = {:}; type((x==y)) = {:}".format(            \
+                                     A[key], B[key],         eq,              type(eq)      )     )
+                
+        #else: #eq is True; move on to check the next key.
+    return True
+
+def _matches_cached_fluids_dict(x, cached_x):
+    '''returns whether dict of fluids (x) matches cached dict of fluids (cached_x).
+
+    If cached dict has key 'nfluid', then x only needs to match the appropriate fluids.
+    Otherwise, x needs to match all the fluids.
+    '''
+    nfluid = cached_x.get('nfluid', 2)
+    if nfluid >= 1:
+        if not fluid_equals(x['ifluid'], cached_x['ifluid']):
+            return False
+    if nfluid >= 2:
+        if not fluid_equals(x['jfluid'], cached_x['jfluid']):
+            return False
+    return True
