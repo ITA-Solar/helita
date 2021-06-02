@@ -50,6 +50,7 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 FLUX_QUANT=None, CURRENT_QUANT=None, COLCOU_QUANT=None,  
                 COLCOUMS_QUANT=None, COLFREMX_QUANT=None, EM_QUANT=None, **kwargs):
 #                HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
+  __tracebackhide__ = True  # hide this func from error traceback stack.
   quant = quant.lower()
 
   document_vars.set_meta_quant(obj, 'quantities', 'These are the single-fluid quantities')

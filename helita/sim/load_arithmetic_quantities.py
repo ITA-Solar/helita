@@ -55,6 +55,7 @@ def do_cstagger(arr, operation='xup', default_type=CSTAGGER_TYPES[0]):
 ''' --------------------- functions to load quantities --------------------- '''
 
 def load_arithmetic_quantities(obj,quant, *args, **kwargs):
+  __tracebackhide__ = True  # hide this func from error traceback stack.
   quant = quant.lower()
 
   document_vars.set_meta_quant(obj, 'arquantities', 'Computes arithmetic quantities')
