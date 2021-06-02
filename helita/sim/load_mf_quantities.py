@@ -504,7 +504,6 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     nu_ij = obj.get_var('nu_ij')
     ri  = obj.get_var('ri')
     uix = obj.get_var('ui'+x)
-    print('got uix at {}'.format(obj.quick_look()))
     ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
     return ri * nu_ij * (ujx - uix)
 
