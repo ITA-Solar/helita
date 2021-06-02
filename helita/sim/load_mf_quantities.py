@@ -18,13 +18,13 @@ MATCH_PHYSICS = 0  # don't change this value.  # this one is the default (see eb
 MATCH_AUX     = 1  # don't change this value.
 
 
-def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None, 
-                      CROSTAB_QUANT=None, LOGCUL_QUANT=None, 
-                      SPITZERTERM_QUANT=None, PLASMA_QUANT=None, DRIFT_QUANT=None, 
-                      ONEFLUID_QUANT=None, ELECTRON_QUANT=None, HEATING_QUANT=None,
-                      CFL_QUANT=None,
-                      WAVE_QUANT=None, FB_INSTAB_QUANT=None,
-                      **kwargs):
+def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
+                       ONEFLUID_QUANT=None, ELECTRON_QUANT=None, MOMENTUM_QUANT=None,
+                       HEATING_QUANT=None, SPITZERTERM_QUANT=None,
+                       COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
+                       DRIFT_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
+                       WAVE_QUANT=None, FB_INSTAB_QUANT=None,
+                       **kwargs):
   __tracebackhide__ = True  # hide this func from error traceback stack.
 
   quant = quant.lower()
@@ -39,21 +39,23 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, COLFRE_QUANT=None,
 
   val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
   if val is None:
-    val = get_electron_var(obj, quant, ELECTRON_QUANT=ELECTRON_QUANT)
-  if val is None:
     val = get_onefluid_var(obj, quant, ONEFLUID_QUANT=ONEFLUID_QUANT)
   if val is None:
+    val = get_electron_var(obj, quant, ELECTRON_QUANT=ELECTRON_QUANT)
+  if val is None:
+    val = get_momentum_quant(obj, quant, MOMENTUM_QUANT=MOMENTUM_QUANT)
+  if val is None:
     val = get_heating_quant(obj, quant, HEATING_QUANT=HEATING_QUANT)
+  if val is None:
+    val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT) 
   if val is None:
     val = get_mf_colf(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
   if val is None:
     val = get_mf_logcul(obj, quant, LOGCUL_QUANT=LOGCUL_QUANT)
   if val is None:
-    val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
-  if val is None:
     val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
   if val is None:
-    val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT)  
+    val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
   if val is None:
     val = get_cfl_quant(obj, quant, CFL_QUANT=CFL_QUANT)
   if val is None: 
@@ -361,112 +363,6 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
         return obj.get_var(f_var)
 
 
-def get_heating_quant(obj, var, HEATING_QUANT=None):
-  '''terms related to heating of fluids.
-
-  Note that the code in this section is written for maximum readability, not maximum efficiency.
-  For most vars in this section the code would run a bit faster if you write use-case specific code.
-
-  For example, qcolj gets qcol_uj + qcol_tgj, however each of those will separately calculate
-  number density (nr) and collision frequency (nu_ij); so the code will calculate the same value
-  of nr and nu_ij two separate times. It would be more efficient to calculate these only once.
-
-  As another example, qjoulei will re-calculate the electric field efx, efy, and efz
-  each time it is called; if you are doing a sum of multiple qjoulei terms it would be more
-  efficient to calculate each of these only once.
-
-  Thus, if you feel that code in this section is taking too long, you can speed it up by writing
-  your own code which reduces the number of times calculations are repeated.
-  (Note, if you had N_memmap = 0 or fast=False, first try using N_memmap >= 200, and fast=True.)
-  '''
-  if HEATING_QUANT is None:
-    HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcolj',
-                     'qcol_u', 'qcol_tg', 'qcol',
-                     'qjoulei']
-
-  if var=='':
-    docvar = document_vars.vars_documenter(obj, 'HEATING_QUANT', HEATING_QUANT, get_heating_quant.__doc__)
-    units = '[simu. energy density per time]'
-    heati = 'heating of ifluid '+units
-    docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2)
-    docvar('qcol_tgj', heati + ' due to jfluid, due to collisions and temperature differences.', nfluid=2)
-    docvar('qcolj',    'total '+heati+' due to jfluid.', nfluid=2)
-    docvar('qcol_u',   heati + ' due to collisions and velocity drifts.', nfluid=1)
-    docvar('qcol_tg',  heati + ' due to collisions and temperature differences.', nfluid=1)
-    docvar('qcol',     'total '+heati+'.', nfluid=1)
-    docvar('qjoulei',  heati + ' due to Ji dot E. (Ji = qi ni ui).', nfluid=1)
-    return None
-
-  if var not in HEATING_QUANT:
-    return None
-
-  def heating_is_off():
-    '''returns whether we should treat heating as if it is turned off.'''
-    if obj.match_physics():
-      return False
-    if obj.mf_ispecies < 0 or obj.mf_jspecies < 0:  # electrons
-      return (obj.get_param('do_ohm_ecol', True) and obj.get_param('do_qohm', True))
-    else: # not electrons
-      return (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
-
-  # qcol terms
-  
-  if var in ['qcol_uj', 'qcol_tgj']:
-    if heating_is_off(): return obj.zero()
-    ni = obj.get_var('nr')             # [simu. units]
-    mi = obj.get_mass(obj.mf_ispecies) # [amu]
-    mj = obj.get_mass(obj.mf_jspecies) # [amu]
-    nu_ij = obj.get_var('nu_ij')       # [simu. units]
-    coeff = (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
-    if var == 'qcol_uj':
-      mj_simu = obj.get_mass(obj.mf_jspecies, units='simu') # [simu mass]
-      energy = mj_simu * obj.get_var('uid2')                # [simu energy]
-    elif var == 'qcol_tgj':
-      simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
-      tgi = obj.get_var('tg')                       # [K]
-      tgj = obj.get_var('tg', ifluid=obj.jfluid)    # [K]
-      energy = (2 / (obj.uni.gamma - 1)) * simu_kB * (tgj - tgi)
-    return coeff * energy  # [simu energy density / time]
-
-  elif var == 'qcolj':
-    if heating_is_off(): return obj.zero()
-    return obj.get_var('qcol_uj') + obj.get_var('qcol_tgj')
-
-  elif var in ['qcol_u', 'qcol_tg']:
-    if heating_is_off(): return obj.zero()
-    varj   = var + 'j'   # qcol_uj or qcol_tgj
-    output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
-    for fluid in fl.Fluids(dd=obj):
-      if fluid.SL != obj.ifluid:        # exclude varj for j = i
-        output += obj.get_var(varj, jfluid=fluid)
-    return output
-
-  elif var == 'qcol':
-    if heating_is_off(): return obj.zero()
-    return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
-
-  # other terms
-
-  elif var == 'qjoulei':
-    # qjoulei = qi * ni * \vec{ui} dot \vec{E}
-    # ui is on grid cell faces while E is on grid cell edges.
-    # We must interpolate to align with energy density e, which is at center of grid cells.
-    # uix is at (-0.5, 0, 0) while Ex is at (0, -0.5, -0.5)
-    # --> we shift uix by xup, and Ex by yup zup
-    result = obj.zero()
-    qi = obj.get_charge(obj.ifluid, units='simu')    # [simu charge]
-    if qi == 0:
-      return result    # there is no contribution if qi is 0.
-    # else
-    ni = obj.get_var('nr')                           # [simu number density]
-    for x, y, z in [('x', 'y', 'z'), ('y', 'z', 'x'), ('z', 'x', 'y')]:
-      uix = obj.get_var('ui' + x + x+'up')           # [simu velocity]
-      efx = obj.get_var('ef' + x + y+'up' + z+'up')  # [simu electric field]
-      result += uix * efx
-    # << at this point, result = ui dot ef
-    return qi * ni * result
-
-
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
@@ -581,6 +477,153 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     return re * uex                 # [simu. momentum density units]
 
 
+def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
+  '''terms related to momentum equations of fluids.'''
+  if MOMENTUM_QUANT is None:
+    MOMENTUM_QUANT = ['rijx','rijy','rijz', 'rijsumx', 'rijsumy', 'rijsumz']
+
+  if var == '':
+    docvar = document_vars.vars_documenter(obj, 'MOMENTUM_QUANT', MOMENTUM_QUANT, get_momentum_quant.__doc__)
+    for x in ['x', 'y', 'z']:
+      docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
+                       '[simu. momentum density units / simu. time units]. ' +\
+                       'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2)
+    for x in ['x', 'y', 'z']:
+      docvar('rijsum'+x, x+'-component of momentum density change of ifluid ' +\
+                           'due to collisions with all other fluids. = sum_j rij'+x, nfluid=1)
+    return None
+
+  if var not in MOMENTUM_QUANT:
+    return None
+
+  if var in ['rijx', 'rijy', 'rijz']:
+    if obj.i_j_same_fluid():      # when ifluid==jfluid, u_j = u_i, so rij = 0.
+      return obj.zero()           # save time by returning 0 without reading any data.
+    x = var[-1]  # axis; x= 'x', 'y', or 'z'.
+    # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
+    nu_ij = obj.get_var('nu_ij')
+    ri  = obj.get_var('ri')
+    uix = obj.get_var('ui'+x)
+    print('got uix at {}'.format(obj.quick_look()))
+    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
+    return ri * nu_ij * (ujx - uix)
+
+  elif var in ['rijsumx', 'rijsumy', 'rijsumz']:
+    x = var[-1]
+    if obj.caching():
+      obj.get_var('ui'+x, cache_with_nfluid=1)  # cache uix to save computation time.
+    result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
+    for fluid in fl.Fluids(dd=obj):
+      result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
+    return result
+
+
+def get_heating_quant(obj, var, HEATING_QUANT=None):
+  '''terms related to heating of fluids.
+
+  Note that the code in this section is written for maximum readability, not maximum efficiency.
+  For most vars in this section the code would run a bit faster if you write use-case specific code.
+
+  For example, qcolj gets qcol_uj + qcol_tgj, however each of those will separately calculate
+  number density (nr) and collision frequency (nu_ij); so the code will calculate the same value
+  of nr and nu_ij two separate times. It would be more efficient to calculate these only once.
+
+  As another example, qjoulei will re-calculate the electric field efx, efy, and efz
+  each time it is called; if you are doing a sum of multiple qjoulei terms it would be more
+  efficient to calculate each of these only once.
+
+  Thus, if you feel that code in this section is taking too long, you can speed it up by writing
+  your own code which reduces the number of times calculations are repeated.
+  (Note, if you had N_memmap = 0 or fast=False, first try using N_memmap >= 200, and fast=True.)
+  '''
+  if HEATING_QUANT is None:
+    HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcolj',
+                     'qcol_u', 'qcol_tg', 'qcol',
+                     'qjoulei']
+
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'HEATING_QUANT', HEATING_QUANT, get_heating_quant.__doc__)
+    units = '[simu. energy density per time]'
+    heati = 'heating of ifluid '+units
+    docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2)
+    docvar('qcol_tgj', heati + ' due to jfluid, due to collisions and temperature differences.', nfluid=2)
+    docvar('qcolj',    'total '+heati+' due to jfluid.', nfluid=2)
+    docvar('qcol_u',   heati + ' due to collisions and velocity drifts.', nfluid=1)
+    docvar('qcol_tg',  heati + ' due to collisions and temperature differences.', nfluid=1)
+    docvar('qcol',     'total '+heati+'.', nfluid=1)
+    docvar('qjoulei',  heati + ' due to Ji dot E. (Ji = qi ni ui).', nfluid=1)
+    return None
+
+  if var not in HEATING_QUANT:
+    return None
+
+  def heating_is_off():
+    '''returns whether we should treat heating as if it is turned off.'''
+    if obj.match_physics():
+      return False
+    if obj.mf_ispecies < 0 or obj.mf_jspecies < 0:  # electrons
+      return (obj.get_param('do_ohm_ecol', True) and obj.get_param('do_qohm', True))
+    else: # not electrons
+      return (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
+
+  # qcol terms
+  
+  if var in ['qcol_uj', 'qcol_tgj']:
+    if heating_is_off(): return obj.zero()
+    ni = obj.get_var('nr')             # [simu. units]
+    mi = obj.get_mass(obj.mf_ispecies) # [amu]
+    mj = obj.get_mass(obj.mf_jspecies) # [amu]
+    nu_ij = obj.get_var('nu_ij')       # [simu. units]
+    coeff = (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
+    if var == 'qcol_uj':
+      mj_simu = obj.get_mass(obj.mf_jspecies, units='simu') # [simu mass]
+      energy = mj_simu * obj.get_var('uid2')                # [simu energy]
+    elif var == 'qcol_tgj':
+      simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
+      tgi = obj.get_var('tg')                       # [K]
+      tgj = obj.get_var('tg', ifluid=obj.jfluid)    # [K]
+      energy = (2 / (obj.uni.gamma - 1)) * simu_kB * (tgj - tgi)
+    return coeff * energy  # [simu energy density / time]
+
+  elif var == 'qcolj':
+    if heating_is_off(): return obj.zero()
+    return obj.get_var('qcol_uj') + obj.get_var('qcol_tgj')
+
+  elif var in ['qcol_u', 'qcol_tg']:
+    if heating_is_off(): return obj.zero()
+    varj   = var + 'j'   # qcol_uj or qcol_tgj
+    output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
+    for fluid in fl.Fluids(dd=obj):
+      if fluid.SL != obj.ifluid:        # exclude varj for j = i
+        output += obj.get_var(varj, jfluid=fluid)
+    return output
+
+  elif var == 'qcol':
+    if heating_is_off(): return obj.zero()
+    return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
+
+  # other terms
+
+  elif var == 'qjoulei':
+    # qjoulei = qi * ni * \vec{ui} dot \vec{E}
+    # ui is on grid cell faces while E is on grid cell edges.
+    # We must interpolate to align with energy density e, which is at center of grid cells.
+    # uix is at (-0.5, 0, 0) while Ex is at (0, -0.5, -0.5)
+    # --> we shift uix by xup, and Ex by yup zup
+    result = obj.zero()
+    qi = obj.get_charge(obj.ifluid, units='simu')    # [simu charge]
+    if qi == 0:
+      return result    # there is no contribution if qi is 0.
+    # else
+    ni = obj.get_var('nr')                           # [simu number density]
+    for x, y, z in [('x', 'y', 'z'), ('y', 'z', 'x'), ('z', 'x', 'y')]:
+      uix = obj.get_var('ui' + x + x+'up')           # [simu velocity]
+      efx = obj.get_var('ef' + x + y+'up' + z+'up')  # [simu electric field]
+      result += uix * efx
+    # << at this point, result = ui dot ef
+    return qi * ni * result
+
+
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   '''spitzer conductivies'''
   if SPITZERTERM_QUANT is None:
@@ -651,7 +694,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   '''
 
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['nu_ij','nu_sj','rijx','rijy','rijz',      # basics: frequencies & mom exchange
+    COLFRE_QUANT = ['nu_ij','nu_sj',                           # basics: frequencies
                     'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
                     'nu_ij_el', 'nu_ij_mx', 'nu_ij_cl',        # colfreq by type
                     'nu_ij_res', 'nu_se_spitzcoul', 'nu_ij_capcoul', # alternative colfreq formulae
@@ -663,10 +706,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     mtra = 'momentum transfer collision frequency [simu. frequency units] between ifluid & jfluid. '
     for nu_ij in ['nu_ij', 'nu_sj']:
       docvar(nu_ij, mtra + 'Use species<0 for electrons.', nfluid=2)
-    for x in ['x', 'y', 'z']:
-      docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
-                       '[simu. momentum density units / simu. time units]. ' +\
-                       'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2)
+    
     sstr = 'sum of momentum transfer collision frequencies [simu. frequency units] between {} & {}.'
     docvar('nu_si', sstr.format('ifluid', 'ion fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
@@ -777,18 +817,6 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     m_j = obj.get_mass(obj.mf_jspecies)  #mass [amu]
     #calculate & return nu_ij_test:
     return CONST_MULT * n_j * np.sqrt(CONST_RATIO * m_j / ( m_i * (m_i + m_j))) / obj.uni.usi_hz
-
-  # momentum transfer terms
-  elif var in ['rijx', 'rijy', 'rijz']:
-    if obj.ifluid==obj.jfluid:      # when ifluid==jfluid, u_j = u_i, so rij = 0.
-      return obj.zero()   # save time by returning 0 without reading any data.
-    x = var[-1]  # axis; x= 'x', 'y', or 'z'.
-    # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
-    nu_ij = obj.get_var('nu_ij')
-    ri  = obj.get_var('ri')
-    uix = obj.get_var('ui'+x)
-    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
-    return ri * nu_ij * (ujx - uix)
 
   # sum of collision frequencies: sum_{i in ions} (nu_{ifluid, i})
   elif var == 'nu_si':
@@ -925,6 +953,44 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
           0.5 * np.log(nel / 1e6)
 
 
+def get_mf_cross(obj, var, CROSTAB_QUANT=None):
+  '''cross section between species.'''
+  if CROSTAB_QUANT is None:
+    CROSTAB_QUANT = ['cross']
+
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
+    docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
+    return None
+
+  if var not in CROSTAB_QUANT:
+    return None
+
+  if obj.match_aux():
+    # return 0 if ifluid > jfluid. (comparing species, then level if species are equal)
+    # we do this because mm_cross gives 0 if ifluid > jfluid (and jfluid is not electrons))
+    if (obj.ifluid > obj.jfluid) and obj.mf_jspecies > 0:
+      return obj.zero()
+
+  # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
+  with obj.MaintainFluids():
+    m_i = obj.get_mass(obj.mf_ispecies)
+    m_j = obj.get_mass(obj.mf_jspecies)
+    tgi = obj.get_var('tg', ifluid = obj.ifluid)
+    tgj = obj.get_var('tg', ifluid = obj.jfluid)
+
+  # temperature, weighted by mass of species
+  tg = (tgi*m_j + tgj*m_i)/(m_i + m_j)
+
+  # look up cross table and get cross section
+  #crossunits = 2.8e-17  
+  crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
+  crossunits = crossobj.cross_tab[0]['crossunits']
+  cross = crossunits * crossobj.tab_interp(tg)
+
+  return cross
+
+
 def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
   '''var drift between fluids. I.e. var_ifluid - var_jfluid'''
   if DRIFT_QUANT is None:
@@ -954,44 +1020,6 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
             obj.get_var(var[:-1], mf_ispecies=obj.mf_jspecies, mf_ilevel=obj.mf_jlevel))
   else:
     return None
-
-
-def get_mf_cross(obj, var, CROSTAB_QUANT=None):
-  '''cross section between species.'''
-  if CROSTAB_QUANT is None:
-    CROSTAB_QUANT = ['cross']
-
-  if var=='':
-    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
-    docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
-    return None
-
-  if var not in CROSTAB_QUANT:
-    return None
-
-  if obj.match_aux():
-    # return 0 if ifluid > jfluid. (comparing species, then level if species are equal)
-    # we do this because mm_cross gives 0 if jfluid > ifluid.
-    if obj.ifluid > obj.jfluid:
-      return obj.zero()
-
-  # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
-  with obj.MaintainFluids():
-    m_i = obj.get_mass(obj.mf_ispecies)
-    m_j = obj.get_mass(obj.mf_jspecies)
-    tgi = obj.get_var('tg', ifluid = obj.ifluid)
-    tgj = obj.get_var('tg', ifluid = obj.jfluid)
-
-  # temperature, weighted by mass of species
-  tg = (tgi*m_j + tgj*m_i)/(m_i + m_j)
-
-  # look up cross table and get cross section
-  #crossunits = 2.8e-17  
-  crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
-  crossunits = crossobj.cross_tab[0]['crossunits']
-  cross = crossunits * crossobj.tab_interp(tg)
-
-  return cross
 
 
 def get_cfl_quant(obj, quant, CFL_QUANT=None):
