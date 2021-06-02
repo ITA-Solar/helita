@@ -41,6 +41,8 @@ MAX_SOFT      = int(min(1e6, 0.1 * HARD))  # we will never set the soft limit to
 SOFT_WARNING  = 8192    # if soft limit exceeds this value we will warn user every time we increase it.
 SOFT_PER_OBJ  = 0.1     # limit number of open memmaps in one object to SOFT_PER_OBJ * soft limit.
 
+HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
+
 
 ''' --------------------- remember_and_recall() --------------------- '''
 
@@ -63,6 +65,7 @@ def remember_and_recall(MEMORYATTR, ORDERED=False, kw_mem=[]):
             kw_mem: list of strs (default [])
                 for key in kw_mem, associate key kwargs[key] with uniqueness of result.
             '''
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             if obj is not None:
                 if not hasattr(obj, '_recalled'):
                     obj._recalled = dict()
@@ -195,6 +198,7 @@ def manage_memmaps(MEMORYATTR, kw_mem=['dtype', 'order', 'offset', 'shape']):
             Then return f(*args, **kwargs).
             '''
             # check if we need to forget a memmap; forget one if needd.
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             try:
                 obj = kwargs['obj']
             except KeyError:
@@ -245,3 +249,32 @@ def namestr(obj, namespace):
 # for debugging 'too many files' crash; will be removed in the future:
 def referrers(obj):
     return [namestr(refe, globals()) for refe in gc.get_referrers(obj)]
+
+
+''' --------------------- restore attrs --------------------- '''
+
+# this helper function probably should go in another file, but this is the best place for it for now.
+
+def maintain_attrs(*attrs):
+    '''return decorator which restores attrs of obj after running function.
+    It is assumed that obj is the first arg of function.
+    '''
+    def attr_restorer(f):
+        @functools.wraps(f)
+        def f_but_maintain_attrs(obj, *args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            '''f but attrs are maintained.'''
+            memory = dict()  # dict of attrs to maintain
+            for attr in attrs:
+                if hasattr(obj, attr):
+                    memory[attr] = getattr(obj, attr)
+            try:
+                return f(obj, *args, **kwargs)
+            finally:
+                # restore attrs
+                for attr, val in memory.items(): 
+                    setattr(obj, attr, val)
+        return f_but_maintain_attrs
+    return attr_restorer
+
+
