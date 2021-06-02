@@ -262,6 +262,19 @@ def fluid_pairs(fluids, ordered=False, allow_same=False):
     elif not ordered and     allow_same: return itertools.product(fluids, repeat=2)
     assert False #we should never reach this line...
 
+''' --------------------- compare fluids --------------------- '''
+
+def i_j_same_fluid(obj):
+    '''returns whether obj.ifluid and obj.jfluid represent the same fluid.'''
+    return fluid_equals(obj.ifluid, obj.jfluid)
+
+def fluid_equals(iSL, jSL):
+    '''returns whether iSL and jSL represent the same fluid.'''
+    if iSL[0] < 0 and jSL[0] < 0:
+        return True
+    else:
+        return (iSL == jSL)
+
 ''' --------------------- small helper functions --------------------- '''
 # for each of these functions, obj should be an EbysusData object.
 
