@@ -3,7 +3,9 @@ import warnings
 
 # import internal modules
 from . import document_vars
-from .file_memory import Caching
+from .file_memory import Caching   # never alters results, but caches them for better efficiency.
+                                   # use sparingly on "short" calculations; apply liberally to "long" calculations.
+                                   # see also cache_with_nfluid and cache kwargs of get_var.
 
 # import external public modules
 import numpy as np
@@ -213,7 +215,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 
   elif var in ['jx', 'jy', 'jz']:
     # J = curl (B) / mu_0
-    warnings.warn('j does not (yet) add contribution from imposed current if it exists.')
     x = var[-1]
     # imposed current (imposed "additional" current, added artificially to system)
     if obj.get_param('do_imposed_current', 0) > 0:
@@ -261,15 +262,15 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       if obj.get_param('do_recion', default=False):
         warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
       # ----- calculate collisional effects (only if do_ohm_ecol) ----- #
-      sum_rejx = 0.
       if obj.params['do_ohm_ecol'][obj.snapInd]:
         # efx is at (0, -1/2, -1/2)
         ## rijx is at (-1/2, 0, 0)    (same as ux)
         ## --> to align with efx, we shift rijx by xup ydn zdn
         interp = x+'up'+y+'dn'+z+'dn'
-        for fluid in fl.Fluids(dd=obj):
-          sum_rejx += obj.get_var('rij'+x + interp, mf_ispecies=-1, jfluid=fluid.SL)
+        sum_rejx = obj.get_var('rijsum'+x + interp, iS=-1)
         ## sum_rejx has units [simu. momentum density units / simu. time units]
+      else:
+        sum_rejx = obj.zero()
       # ----- calculate ne qe ----- #
       ## efx is at (0, -1/2, -1/2)
       ## ne is at (0, 0, 0)
@@ -491,9 +492,13 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
 
 def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
-  '''terms related to momentum equations of fluids.'''
+  '''terms related to momentum equations of fluids.
+  The units for these quantities are [simu. momentum density units / simu. time units].
+  '''
   if MOMENTUM_QUANT is None:
-    MOMENTUM_QUANT = ['rijx','rijy','rijz', 'rijsumx', 'rijsumy', 'rijsumz']
+    MOMENTUM_QUANT = []
+    MQVECS = ['rij', 'rijsum', 'momflorentz', 'gradp', 'momrate']
+    MOMENTUM_QUANT += [v + x for v in MQVECS for x in ['x', 'y', 'z']]
 
   if var == '':
     docvar = document_vars.vars_documenter(obj, 'MOMENTUM_QUANT', MOMENTUM_QUANT, get_momentum_quant.__doc__)
@@ -504,6 +509,14 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     for x in ['x', 'y', 'z']:
       docvar('rijsum'+x, x+'-component of momentum density change of ifluid ' +\
                            'due to collisions with all other fluids. = sum_j rij'+x, nfluid=1)
+    for x in ['x', 'y', 'z']:
+      docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force.' +\
+                           '[simu. momentum density units / simu. time units]. = ni qi (E + ui x B).', nfluid=1)
+    for x in ['x', 'y', 'z']:
+      docvar('gradp'+x, x+'-component of grad(Pi), face-centered (interp. loc. aligns with momentum).', nfluid=1)
+    for x in ['x', 'y', 'z']:
+      docvar('momrate'+x, x+'-component of rate of change of momentum. ' +\
+                          '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1)
     return None
 
   if var not in MOMENTUM_QUANT:
@@ -528,6 +541,39 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     for fluid in fl.Fluids(dd=obj):
       result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
     return result
+
+  elif var in ['momflorentz'+x for x in ['x', 'y', 'z']]:
+    # momflorentz = ni qi (E + ui x B)
+    qi = obj.get_charge(obj.ifluid, units='simu')
+    if qi == 0:
+      return obj.zero()    # no lorentz force for neutrals - save time by just returning 0 here :)
+    ni = obj.get_var('nr')
+    # make sure we get the interpolation correct:
+    ## B and ui are face-centered vectors, and we want a face-centered result to align with p.
+    ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
+    ## Meanwhile, E is edge-centered, so we must shift all three coords.
+    ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
+    x = var[-1] # axis; x= 'x', 'y', or 'z'.
+    y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    Ex = obj.get_var('efx' + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
+    uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
+    return ni * qi * (Ex + uxB__x)
+
+  elif var in ['gradpx', 'gradpy', 'gradpz']:
+    x = var[-1]
+    # px is at (-0.5, 0, 0); pressure is at (0, 0, 0), so we do dpdxdn
+    return obj.get_var('dpd'+x+'dn')
+
+  elif var in ['momratex', 'momratey', 'momratez']:
+    x = var[-1]
+    if obj.get_param('do_recion', default=False):
+      warnings.warn('momentum contribution from ionization & recombination have not yet been added.')
+    gradpx    = obj.get_var('gradp'+x)
+    florentzx = obj.get_var('momflorentz'+x)
+    rijsumx   = obj.get_var('rijsum'+x)
+    return florentzx - gradpx + rijsumx
+
+
 
 
 def get_heating_quant(obj, var, HEATING_QUANT=None):
