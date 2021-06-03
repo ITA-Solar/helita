@@ -113,6 +113,7 @@ class EbysusData(BifrostData):
 
         self._init_vars_get(firstime=True)
         self._init_coll_keys()
+        self.panic=False
 
     def _init_coll_keys(self):
         '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
@@ -545,10 +546,10 @@ class EbysusData(BifrostData):
         if snap is not None:
             if not np.array_equal(snap, self.snap):
                 self.set_snap(snap)
+        self.panic=panic
 
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
-        kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid,
-                           more_cache_params=dict(panic=panic))
+        kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid)
 
         # >>>>> actually get the value of var <<<<<
         val = self._load_quantity(var, panic=panic, **kw__caching)
