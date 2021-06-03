@@ -395,7 +395,8 @@ class EbysusData(BifrostData):
 
     def _metadata(self, none=None):
         '''returns dict of snap, ifluid, jfluid for self.'''
-        result = {attr: getattr(self, attr, none) for attr in ['snap', 'ifluid', 'jfluid']}
+        METADATA_ATTRS = ['snap', 'ifluid', 'jfluid', 'iix', 'iiy', 'iiz', 'match_type', 'panic']
+        result = {attr: getattr(self, attr, none) for attr in METADATA_ATTRS}
         if result['snap'] is not none:
             if np.size(result['snap'])>1: result['snap'] = self.snap[self.snapInd]
         return result

@@ -291,12 +291,23 @@ def maintain_attrs(*attrs):
 
 CacheEntry = namedtuple('CacheEntry', ['value', 'cached_params', 'cached_fluids', 'id', 'nbytes', 'calctime'],
                         defaults = [None, None, None, None, None, None])
+CacheEntryView = namedtuple('CacheEntryView', ['snap', 'ifluid', 'jfluid', 'nbytes', 'calctime'],
+                            defaults = [None, None, None, None, None])
 #        value: value.
 #cached_params: additional params which are associated with this value of var.
 #cached_fluids: fluids which are associated with this value of var.
 #           id: unique id associated to this var and cache_params for this cache.
 #       nbytes: number of bytes in value
 #     calctime: amount of time taken to calculate value.
+
+def view_from_cache_entry(x):
+    '''convert x (a CacheEntry) into a CacheEntryView.'''
+    snap   = x.cached_params.get('snap', None)
+    ifluid = x.cached_fluids.get('ifluid', None)
+    jfluid = x.cached_fluids.get('jfluid', None)
+    nbytes = x.nbytes
+    calctime = x.calctime
+    return CacheEntryView(snap=snap, ifluid=ifluid, jfluid=jfluid, nbytes=nbytes, calctime=calctime)
 
 class Cache:
     '''cache results of get_var.
@@ -305,6 +316,9 @@ class Cache:
 
     self.performance tells total number of times arrays have been recalled,
     and total amount of time saved (estimate based on time it took to read the first time.)
+    (Note the time saved is usually an overestimate unless you have N_memmap=0.)
+
+    self.contents() shows a human-readable view of cache contents.
     '''
     def __init__(self, max_MB=10, max_Narr=20):
         '''initialize Cache.
@@ -359,15 +373,43 @@ class Cache:
         self._order += [(var, entry.id)]
         self._shrink_cache_as_needed()
 
+    def remove_one_entry(self, id=None):
+        '''removes the oldest entry in self. returns id of entry removed.
+        if id is not None, instead removes the entry with id==id.
+        '''
+        if id is None:
+            oidx = 0
+            var, eid = self._order[oidx]
+        else:
+            try:
+                oidx, (var, eid) = next(  ( (i, x) for i, x in enumerate(self._order) if x[1]==id)  )
+            except StopIteration:
+                raise KeyError('id={} not found in cache {}'.format(id, self))
+        var_entries = self._content[var]
+        i = next((i for i, entry in enumerate(var_entries) if entry.id == eid))
+        self._nbytes -= var_entries[i].nbytes
+        del var_entries[i]
+        del self._order[oidx]
+        return eid
+
     def __repr__(self):
         '''pretty print of self'''
         s = '<{self:} totaling {MB:0.3f} MB, containing {N:} cached values from {k:} vars: {vars:}>'
         vars = list(self._content.keys())
-        if len(vars) > 10:  # then we will show only the first 10.
-            svars = '[' + ', '.join(vars[:10]) + ', ...]'
+        if len(vars) > 20:  # then we will show only the first 20.
+            svars = '[' + ', '.join(vars[:20]) + ', ...]'
         else:
             svars = '[' + ', '.join(vars) + ']'
         return s.format(self=object.__repr__(self), MB=self._nMB(), N=len(self._order), k=len(vars), vars=svars)
+
+    def contents(self):
+        '''pretty display of contents (as CacheEntryView tuples)'''
+        result = dict()
+        for var, content in self._content.items():
+            result[var] = []
+            for entry in content:
+                result[var] += [view_from_cache_entry(entry)]
+        return result
 
     def _update_performance_tracker(self, entry):
         '''update self.performance as if we just got entry from cache once.'''
@@ -389,25 +431,6 @@ class Cache:
     def _nMB(self):
         return self._nbytes / (1024 * 1024)
 
-    def remove_one_entry(self, id=None):
-        '''removes the oldest entry in self. returns id of entry removed.
-        if id is not None, instead removes the entry with id==id.
-        '''
-        if id is None:
-            oidx = 0
-            var, eid = self._order[oidx]
-        else:
-            try:
-                oidx, (var, eid) = next(  ( (i, x) for i, x in enumerate(self._order) if x[1]==id)  )
-            except StopIteration:
-                raise KeyError('id={} not found in cache {}'.format(id, self))
-        var_entries = self._content[var]
-        i = next((i for i, entry in enumerate(var_entries) if entry.id == eid))
-        self._nbytes -= var_entries[i].nbytes
-        del var_entries[i]
-        del self._order[oidx]
-        return eid
-
     def _shrink_cache_as_needed(self):
         '''shrink cache to stay within limits of number of entries and amount of data.'''
         while len(self._order) > self.max_Narr:
@@ -423,15 +446,17 @@ class Cache:
 
 def _cache_details_from_obj(obj, with_nfluid=None):
     '''return cache details, i.e. (params, fluids) (as dicts) based on obj.'''
-    cache_params = dict(snap=obj.snap, iix=obj.iix, iiy=obj.iiy, iiz=obj.iiz, match_type=obj.match_type, panic=obj.panic)
+    cache_params = obj._metadata()
+    ifluid = cache_params.pop('ifluid')
+    jfluid = cache_params.pop('jfluid')
     if with_nfluid is not None:
         cache_fluids = dict(nfluid=with_nfluid)
         if with_nfluid >= 1:
-            cache_fluids['ifluid'] = obj.ifluid
+            cache_fluids['ifluid'] = ifluid
         if with_nfluid >= 2:
-            cache_fluids['jfluid'] = obj.jfluid
+            cache_fluids['jfluid'] = jfluid
     else: # (err on the side of caution: pretend var depends on both fluids)
-        cache_fluids = dict(ifluid=obj.ifluid, jfluid=obj.jfluid)
+        cache_fluids = dict(ifluid=ifluid, jfluid=jfluid)
     return (cache_params, cache_fluids)
 
 def _cache_details(params=None, fluids=None, obj=None, with_nfluid=None):
