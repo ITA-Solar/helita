@@ -3,6 +3,7 @@ import warnings
 
 # import internal modules
 from . import document_vars
+from .file_memory import Caching
 
 # import external public modules
 import numpy as np
@@ -160,10 +161,12 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     return (0.5 * mu0 * units) * b2
 
   elif var == 'total_energy':
-    output  = obj.get_var('tot_e')
-    output += obj.get_var('tot_ke')
-    output += obj.get_var('e_ef')
-    output += obj.get_var('e_b')
+    with Caching(obj, nfluid=0) as cache:
+      output  = obj.get_var('tot_e')
+      output += obj.get_var('tot_ke')
+      output += obj.get_var('e_ef')
+      output += obj.get_var('e_b')
+      cache(var, output)
   
   elif var.startswith('tot_p'):  # note: must be tot_px, tot_py, or tot_pz.
     axis = var[-1]

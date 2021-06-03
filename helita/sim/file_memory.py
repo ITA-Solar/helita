@@ -322,15 +322,22 @@ class Cache:
         self._nbytes  = 0   # number of MB of data stored in self.
         self.performance = dict(time_saved_estimate=0, N_recalled=0, N_recalled_unknown_time_savings=0)
 
-    def get(self, var, params=dict(), fluids=dict()):
-        '''return entry associated with var and cache_params in self, if it exists,
+    def get(self, var, params=None, fluids=None, obj=None):
+        '''return entry associated with var, params, and fluids in self, if it exists,
         else empty CacheEntry.
+
+        var: string
+        params, fluids: None (default) or dicts
+            check that these agree with cached params and fluids before returning result.
+        obj: None (default) or EbysusData object
+            if not None, use obj to determine params and fluids.
         '''
         try:
             var_cache_entries = self._content[var]
         except KeyError:
             return CacheEntry(None)   # var is not in self.
         else:
+            params, fluids = _cache_details(params, fluids, obj)
             for entry in var_cache_entries:
                 if _dict_equals(params, entry.cached_params):
                     if _matches_cached_fluids_dict(fluids, entry.cached_fluids):
@@ -338,13 +345,13 @@ class Cache:
                         return entry
             return CacheEntry(None)
 
-    def cache(self, var, val, cache_params=dict(), cache_fluids=dict(), calctime=None):
+    def cache(self, var, val, params=None, fluids=None, obj=None, with_nfluid=None, calctime=None):
         '''add var with value val (and associated with cache_params) to self.'''
         nbytes = np.array(val, copy=False).nbytes
         self._nbytes += nbytes
-        entry  = CacheEntry(value=val, cached_params=cache_params, cached_fluids=cache_fluids,
-                            id=self._take_next_cacheid(), nbytes=nbytes,
-                            calctime=calctime)
+        params, fluids = _cache_details(params, fluids, obj, with_nfluid=with_nfluid)
+        entry  = CacheEntry(value=val, cached_params=params, cached_fluids=fluids,
+                            id=self._take_next_cacheid(), nbytes=nbytes, calctime=calctime)
         if var in self._content.keys():
             self._content[var] += [entry]
         else:
@@ -414,6 +421,28 @@ class Cache:
         return (self.max_MB <= 0 or self.max_Narr <= 0)
 
 
+def _cache_details_from_obj(obj, with_nfluid=None):
+    '''return cache details, i.e. (params, fluids) (as dicts) based on obj.'''
+    cache_params = dict(snap=obj.snap, iix=obj.iix, iiy=obj.iiy, iiz=obj.iiz, match_type=obj.match_type, panic=obj.panic)
+    if with_nfluid is not None:
+        cache_fluids = dict(nfluid=with_nfluid)
+        if with_nfluid >= 1:
+            cache_fluids['ifluid'] = obj.ifluid
+        if with_nfluid >= 2:
+            cache_fluids['jfluid'] = obj.jfluid
+    else: # (err on the side of caution: pretend var depends on both fluids)
+        cache_fluids = dict(ifluid=obj.ifluid, jfluid=obj.jfluid)
+    return (cache_params, cache_fluids)
+
+def _cache_details(params=None, fluids=None, obj=None, with_nfluid=None):
+    '''return cache details.'''
+    if obj is not None:
+        params, fluids = _cache_details_from_obj(obj, with_nfluid=with_nfluid)
+    elif params is None or fluids is None:
+        raise ValueError('expected non-None (params and fluids) OR (obj) but got all None.')
+    return (params, fluids)
+
+
 def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
     '''decorate function so that it does caching things.
 
@@ -432,7 +461,7 @@ def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
         @functools.wraps(f)
         def f_but_caching(obj, var, *args_f,
                           check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid,
-                          more_cache_params=dict(), **kwargs_f):
+                          **kwargs_f):
             '''do f(obj, *args_f, **kwargs_f) but do caching things as appropriate,
             i.e. check cache first (if check_cache) and store result (if cache).
             '''
@@ -443,21 +472,11 @@ def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
             elif cache_with_nfluid is not None:
                 cache = True
             if (cache or check_cache):
-                # set cache_params
-                cache_params = dict(snap=obj.snap, iix=obj.iix, iiy=obj.iiy, iiz=obj.iiz,
-                                    match_type=obj.match_type)
-                cache_params.update(more_cache_params)
-                if cache_with_nfluid is not None:
-                    cache_fluids = dict(nfluid=cache_with_nfluid)
-                    if cache_with_nfluid >= 1:
-                        cache_fluids['ifluid'] = obj.ifluid
-                    if cache_with_nfluid >= 2:
-                        cache_fluids['jfluid'] = obj.jfluid
-                else: # (err on the side of caution: pretend var depends on both fluids)
-                    cache_fluids = dict(ifluid=obj.ifluid, jfluid=obj.jfluid)
+                # set cache_params and fluids
+                params, fluids = _cache_details_from_obj(obj, cache_with_nfluid)
                 # check cache for result (if check_cache==True)
                 if check_cache:
-                    entry = obj.cache.get(var, cache_params, cache_fluids)
+                    entry = obj.cache.get(var, params, fluids)
                     val = entry.value
                     if cache and (val is not None):
                         obj.cache.remove_one_entry(id=entry.id)
@@ -468,11 +487,43 @@ def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
                 val = f(obj, var, *args_f, **kwargs_f)
             # save result to obj.cache (if cache==True)
             if cache:
-                obj.cache.cache(var, val, cache_params, cache_fluids, calctime=time.time()-now)
+                obj.cache.cache(var, val, params, fluids, calctime=time.time()-now)
             # return result
             return val
         return f_but_caching
     return decorator
+
+
+class Caching():
+    '''context manager which lets you do caching by setting self.result to a value.'''
+    def __init__(self, obj, nfluid=None):
+        self.obj    = obj
+        self.nfluid = nfluid
+        self.var    = None     # you should set self.var
+        self.result = None     # you should set self.result
+
+    def __enter__(self):
+        self.caching = (getattr(self.obj, 'do_caching', True)) \
+                        and (hasattr(self.obj, 'cache'))       \
+                        and (not self.obj.cache.is_NoneCache())
+        if self.caching:
+            self.start = time.time()
+            self.params, self.fluids = _cache_details_from_obj(self.obj, self.nfluid)
+
+        def _set_cacheable(var, value):
+            '''use this function to pass the name for var and result to the Caching object.
+            This must be done before leaving the context or we will not cache.
+            '''
+            self.var    = var     # sets Caching.var
+            self.result = value   # sets Caching.value
+
+        return _set_cacheable
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.caching:
+            calctime = time.time() - self.start
+            self.obj.cache.cache(self.var, self.result, self.params, self.fluids, calctime=calctime)
+
 
 def _dict_equals(A, B):
     '''returns whether A == B for dicts A, B.
