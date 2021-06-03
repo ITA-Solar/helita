@@ -587,15 +587,20 @@ def get_vector_product(obj,quant):
   call via <v1><times><v2><x>.
   Example, for the x component of b cross u, you should call get_var('b_facecross_ux').
   '''
-  VECO_QUANT = ['times', '_facecross_', '_edgecross_']
+  VECO_QUANT = ['times', '_facecross_', '_edgecross_', '_facecrosstocenter_', '_facecrosstoface_']
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
     docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
     docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u. '
-                           'result is edge-centered. E.g. result_x --> ( 0  , -0.5, -0.5).'))
+                           'result is edge-centered. E.g. result_x is at ( 0  , -0.5, -0.5).'))
     docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I. '
-                           'result is face-centered. E.g. result_x --> (-0.5,  0  ,  0  ).'))
+                           'result is face-centered. E.g. result_x is at (-0.5,  0  ,  0  ).'))
+    docvar('_facecrosstocenter_', ('cross product for two face-centered vectors such as B, u. '
+                           'result is fully centered. E.g. result_x is at ( 0  ,  0  ,  0  ).'
+                           'for most cases, it is better to use _facecrosstoface_'))
+    docvar('_facecrosstoface_', ('cross product for two face-centered vectors such as B, u. '
+                           'result is face-centered E.g. result_x is at ( 0  , -0.5,  0  ).'))
     return None
 
   cross = ''
@@ -608,6 +613,8 @@ def get_vector_product(obj,quant):
 
   if cross == '':
     return None
+
+  # at this point, we know quant looked like <A><times><B><x>
 
   elif cross == 'times':
     return (obj.get_var(A + y) * obj.get_var(B + z) -
@@ -638,6 +645,24 @@ def get_vector_product(obj,quant):
     Bz = obj.get_var(B+z + yup)
     AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
     return AxB__x
+
+  elif cross == '_facecrosstocenter_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (0, 0, 0)
+    ## Ay, By are at (0, -0.5,  0  ).  we must shift by yup to align with result.
+    ## Az, Bz are at (0,  0  , -0.5).  we must shift by zup to align with result.
+    yup, zup = y+'up', z+'up'
+    Ay = obj.get_var(A+y + yup)
+    By = obj.get_var(B+y + yup)
+    Az = obj.get_var(A+z + zup)
+    Bz = obj.get_var(B+z + zup)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
+  elif cross == '_facecrosstoface_':
+    # resultx will be at (-0.5, 0, 0).
+    ## '_facecrosstocenter_' gives result at (0, 0, 0) so we shift by xdn to align.
+    return obj.get_var(A+'_facecrosstocenter_'+B+x + x+'dn')
 
 
 
