@@ -92,7 +92,7 @@ def _can_interp(obj, axis, warn=True):
   if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
     return False       # intentionally turned off interpolation. So we don't make warning.
   if not getattr(obj, 'cstagger_exists', False):
-    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(obj) +\
+    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
               'We will skip the interpolation, and instead return the original value.'
     warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
     return False
