@@ -394,17 +394,29 @@ class EbysusData(BifrostData):
     del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
 
     def _metadata(self, none=None):
-        '''returns dict of snap, ifluid, jfluid for self.'''
+        '''returns dict of metadata for self. Including snap, ifluid, jfluid, and more.
+        if snap is an array, set snap to '''
         METADATA_ATTRS = ['snap', 'ifluid', 'jfluid', 'iix', 'iiy', 'iiz', 'match_type', 'panic']
         result = {attr: getattr(self, attr, none) for attr in METADATA_ATTRS}
         if result['snap'] is not none:
-            if np.size(result['snap'])>1: result['snap'] = self.snap[self.snapInd]
+            if len(np.shape(result['snap'])) > 0:
+                result['snaps'] = result['snap']              # snaps is the array of snaps
+                result['snap'] = result['snap'][self.snapInd] # snap is the single snap
         return result
 
     def quick_look(self):
         '''returns string with snap, ifluid, and jfluid.'''
         x = self._metadata(none='(not set)')
-        return 'snap={}, ifluid={}, jfluid={}'.format(x['snap'], x['ifluid'], x['jfluid'])
+        result = 'ifluid={}, jfluid={}, snap={}'.format(x['ifluid'], x['jfluid'], x['snap'])
+        snaps = x.get('snaps', None)
+        if snaps is not None:
+            result += ', snaps={}'.format('<list of {} items from min={} to max={}>'.format(
+                                        np.size(snaps), np.min(snaps), np.max(snaps)))
+        return result
+
+    def __repr__(self):
+        '''makes prettier repr of self'''
+        return '<{} with {}>'.format(object.__repr__(self), self.quick_look())
 
     def _metadata_equals(self, alt_metadata, none=None):
         '''return whether self._metadata(none) equals to self.alt_metadata.'''
