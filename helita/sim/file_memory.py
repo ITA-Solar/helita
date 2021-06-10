@@ -16,6 +16,16 @@ TODO:
             count how many times we read each file;
             keep in memory the memmaps for the files we are reading more often.
         - some combination of the above ideas.
+
+    implement cache metadata checking as functions of object, instead of in this module.
+    E.g. _cache_details_from_obj and _matches_cached_fluids_dict should be attached to obj.
+    E.g.:
+        - Make methods of obj which:
+            - get fluid metadata and nonfluid metadata.
+            - create fluid dict using fluid metadata and nfluid.
+            - compare fluid dicts to see if they match.
+        - Then alter the functions in this file to call those methods when checking for matches.
+
 """
 
 # import builtins
@@ -34,7 +44,10 @@ except ImportError:
     warnings.warn('failed to import numpy; some functions in helita.sim.file_memory may crash')
 
 # import internal modules
-from .fluid_tools import fluid_equals
+# from .fluid_tools import fluid_equals   # can't import this here, due to dependency loop:
+                                        # bifrost imports file_memory
+                                        # fluid_tools imports at_tools
+                                        # at_tools import Bifrost_units from bifrost
 
 # set defaults
 ## apparently there is good efficiency improvement even if we only remember the last few memmaps.
@@ -589,3 +602,10 @@ def _matches_cached_fluids_dict(x, cached_x):
         if not fluid_equals(x['jfluid'], cached_x['jfluid']):
             return False
     return True
+
+def fluid_equals(iSL, jSL):
+    '''returns whether iSL and jSL represent the same fluid.'''
+    if iSL[0] < 0 and jSL[0] < 0:
+        return True
+    else:
+        return (iSL == jSL)
