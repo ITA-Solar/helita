@@ -393,11 +393,24 @@ class EbysusData(BifrostData):
 
     del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
 
-    def _metadata(self, none=None):
+    def _metadata(self, none=None, with_nfluid=2):
         '''returns dict of metadata for self. Including snap, ifluid, jfluid, and more.
-        if snap is an array, set snap to '''
-        METADATA_ATTRS = ['snap', 'ifluid', 'jfluid', 'iix', 'iiy', 'iiz', 'match_type', 'panic']
+        if self.snap is an array, set result['snaps']=snap and result['snap']=snaps[self.snapInd].
+
+        none: any value (default None)
+            metadata attrs which are not yet set will be set to this value.
+        with_nfluid: 2 (default), 1, or 0.
+            tells which fluids to include in the result.
+            2 -> ifluid and jfluid. 1 -> just ifluid. 0 -> no fluids.
+        '''
+        METADATA_ATTRS = ['ifluid', 'jfluid', 'snap', 'iix', 'iiy', 'iiz', 'match_type', 'panic']
+        if with_nfluid < 2:
+            del METADATA_ATTRS[1]  # jfluid
+        if with_nfluid < 1:
+            del METADATA_ATTRS[0]  # ifluid
+        # get attrs
         result = {attr: getattr(self, attr, none) for attr in METADATA_ATTRS}
+        # if snap is array, set snaps=snap, and snap=snaps[self.snapInd]
         if result['snap'] is not none:
             if len(np.shape(result['snap'])) > 0:
                 result['snaps'] = result['snap']              # snaps is the array of snaps
@@ -418,14 +431,22 @@ class EbysusData(BifrostData):
         '''makes prettier repr of self'''
         return '<{} with {}>'.format(object.__repr__(self), self.quick_look())
 
-    def _metadata_equals(self, alt_metadata, none=None):
-        '''return whether self._metadata(none) equals to self.alt_metadata.'''
-        x = self._metadata(none=none)
-        if set(x.keys()) != set(alt_metadata.keys()): return False
-        if x['ifluid'] != alt_metadata['ifluid']: return False
-        if x['jfluid'] != alt_metadata['jfluid']: return False
-        if np.any(x['snap'] != alt_metadata['snap']): return False
-        return True
+    def _metadata_is_consistent(self, alt_metadata, none=None):
+        '''return whether alt_metadata is consistent with self._metadata().
+        They "are consistent" if alt_metadata is a subset of self._metadata().
+        i.e. if for all keys in alt_metadata, alt_metadata[key]==self._metadata[key].
+        (Even works if contents are numpy arrays. See _dict_is_subset function for details.)
+        '''
+        return _dict_is_subset(alt_metadata, self._metadata(none=none))
+
+    def _metadata_matches(self, alt_metadata, none=None):
+        '''return whether alt_metadata matches self._metadata().
+        They "match" if:
+            for fluid (either ifluid or jfluid) which exists in alt_metadata,
+                self._metadata()[fluid] must have the same value.
+            all other keys in each dict are the same and have the same value.
+        '''
+        return _dict_equals(alt_metadata, self._metadata(none=none), missing_keys_ok=['ifluid', 'jfluid'])
 
     @fluid_tools.maintain_fluids
     @file_memory.maintain_attrs('match_type')
@@ -436,7 +457,7 @@ class EbysusData(BifrostData):
         Also, restores self.match_type afterwards.
         '''
         __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
-        if self._metadata_equals(self.variables) and var in self.variables:
+        if self._metadata_matches(self.variables.get('metadata', dict())) and var in self.variables:
             val = self.variables[var]
         elif var in self.simple_vars:
             val = self._get_simple_var(var, panic=panic)
@@ -1028,6 +1049,59 @@ for func in ['get_species_name', 'get_mass', 'get_charge',
     setattr(EbysusData, func, getattr(fluid_tools, func, None))
 
 del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
+
+
+###########################
+#  Small helper functions #
+###########################
+
+def _dict_matches(A, B, subset_ok=True, missing_keys_ok=[], required_keys=[]):
+    '''returns whether A matches B for dicts A, B.
+
+    A "matches" B if for all keys in A, A[key] == B[key].
+    If subset_ok=False:
+        additionally it is required that, for key in A:
+            key in B.keys() or key in missing_keys_ok
+    If required_keys is not an empty list:
+        additionally, it is required that for key in required_keys: key is in A.keys(), also.
+
+    This function is especially useful when checking dicts which may contain numpy arrays,
+    because numpy arrays override __equals__ to return an array instead of True or False.
+    '''
+    keysA= A.keys()
+    if not subset_ok:
+        for key in B.keys():
+            if not (key in keysA or key in missing_keys_ok):
+                return False
+    for key in required_keys:
+        if key not in keysA:
+            return False
+    for key in keysA:
+        eq = (A[key] == B[key])
+        if isinstance(eq, np.ndarray):
+            if not np.all(eq):
+                return False  
+        elif eq == False:
+            return False
+        elif eq == True:
+            pass #continue on to next key.
+        else:
+            raise ValueError("Object equality was not boolean nor np.ndarray. Don't know what to do. " + \
+                             "Objects = {:}, {:}; (x == y) = {:}; type((x==y)) = {:}".format(            \
+                                     A[key], B[key],         eq,              type(eq)      )     )
+    return True
+
+def _dict_equals(A, B, **kw__dict_matches):
+    '''returns whether A==B for dicts A, B.
+    Even works if some contents are numpy arrays.
+    '''
+    return _dict_matches(A, B, subset_ok=False, **kw__dict_matches)
+
+def _dict_is_subset(A, B, **kw__dict_matches):
+    '''returns whether A is a subset of B, i.e. whether for all keys in A, A[key]==B[key].
+    Even works if some contents are numpy arrays.
+    '''
+    return _dict_matches(A, B, subset_ok=True, **kw__dict_matches)
 
 
 ###########
