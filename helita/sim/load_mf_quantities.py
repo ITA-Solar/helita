@@ -535,8 +535,6 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
 
   elif var in ['rijsumx', 'rijsumy', 'rijsumz']:
     x = var[-1]
-    if obj.caching():
-      obj.get_var('ui'+x, cache_with_nfluid=1)  # cache uix to save computation time.
     result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
     for fluid in fl.Fluids(dd=obj):
       result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
