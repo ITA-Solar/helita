@@ -36,6 +36,7 @@ import os
 from collections import OrderedDict, namedtuple
 import sys  # for debugging 'too many files' crash; will be removed in the future
 import time  # for time profiling for caching
+import weakref  # for refering to parent in cache without making circular reference.
 
 # import external public modules
 try:
@@ -66,6 +67,15 @@ SOFT_PER_OBJ  = 0.1     # limit number of open memmaps in one object to SOFT_PER
 HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
 
 
+DEBUG_MEMORY_LEAK = False  # whether to turn on debug messages to tell when Cache and/or EbysusData are deleted.
+                           # There is currently a memory leak which seems unrelated to file_memory.py,
+                           # because even with _force_disable_memory=True, the EbysusData objects
+                           # are not actually being deleted when del is called.  - SE June 10, 2021
+                           # E.g. dd = eb.EbysusData(...); del dd    --> dd.__del__() is not being called.
+                           # This could be caused by some attribute of dd containing a pointer to dd.
+                           # Those pointers should be replaced by weakrefs; see e.g. Cache class in this file.
+
+
 ''' --------------------- remember_and_recall() --------------------- '''
 
 def remember_and_recall(MEMORYATTR, ORDERED=False, kw_mem=[]):
@@ -88,6 +98,8 @@ def remember_and_recall(MEMORYATTR, ORDERED=False, kw_mem=[]):
                 for key in kw_mem, associate key kwargs[key] with uniqueness of result.
             '''
             __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            if getattr(obj, '_force_disable_memory', False):
+                obj = None
             if obj is not None:
                 if not hasattr(obj, '_recalled'):
                     obj._recalled = dict()
@@ -225,6 +237,8 @@ def manage_memmaps(MEMORYATTR, kw_mem=['dtype', 'order', 'offset', 'shape']):
                 obj = kwargs['obj']
             except KeyError:
                 obj = None
+            if getattr(obj, '_force_disable_memory', False):
+                obj = None
             if obj is not None:
                 memory = getattr(obj, MEMORYATTR, None)
                 if memory is not None:
@@ -302,22 +316,21 @@ def maintain_attrs(*attrs):
 
 ''' --------------------- cache --------------------- '''
 
-CacheEntry = namedtuple('CacheEntry', ['value', 'cached_params', 'cached_fluids', 'id', 'nbytes', 'calctime'],
-                        defaults = [None, None, None, None, None, None])
+CacheEntry = namedtuple('CacheEntry', ['value', 'metadata', 'id', 'nbytes', 'calctime'],
+                        defaults = [None, None, None, None, None])
 CacheEntryView = namedtuple('CacheEntryView', ['snap', 'ifluid', 'jfluid', 'nbytes', 'calctime'],
                             defaults = [None, None, None, None, None])
 #        value: value.
-#cached_params: additional params which are associated with this value of var.
-#cached_fluids: fluids which are associated with this value of var.
+#     metadata: additional params which are associated with this value of var.
 #           id: unique id associated to this var and cache_params for this cache.
 #       nbytes: number of bytes in value
 #     calctime: amount of time taken to calculate value.
 
 def view_from_cache_entry(x):
     '''convert x (a CacheEntry) into a CacheEntryView.'''
-    snap   = x.cached_params.get('snap', None)
-    ifluid = x.cached_fluids.get('ifluid', None)
-    jfluid = x.cached_fluids.get('jfluid', None)
+    snap   = x.metadata.get('snap', None)
+    ifluid = x.metadata.get('ifluid', None)
+    jfluid = x.metadata.get('jfluid', None)
     nbytes = x.nbytes
     calctime = x.calctime
     return CacheEntryView(snap=snap, ifluid=ifluid, jfluid=jfluid, nbytes=nbytes, calctime=calctime)
@@ -333,51 +346,114 @@ class Cache:
 
     self.contents() shows a human-readable view of cache contents.
     '''
-    def __init__(self, max_MB=10, max_Narr=20):
+    def __init__(self, obj=None, max_MB=10, max_Narr=20):
         '''initialize Cache.
 
+        obj: None or object with _metadata() and _metadata_matches() methods.
+            Cache remembers this obj and uses these methods, if possible.
+            obj._metadata() must accept kwarg with_nfluid, and must return a dict.
+            obj._metadata_matches() must take a single dict as input, and must return a bool.
         max_MB: 10 (default) or number
             maximum number of MB of data which cache is allowed to store at once.
         max_Narr: 20 (default) or number
             maximum number of arrays which cache is allowed to store at once.
         '''
+        # set attrs which dictate max size of cache
         self.max_MB   = max_MB
         self.max_Narr = max_Narr
+        # set parent, using weakref, to ensure we don't keep parent alive just because Cache points to it.
+        self.parent   = (lambda: None) if (obj is None) else weakref.ref(obj)
+        # initialize self.performance, which will track the performance of Cache.
+        self.performance = dict(time_saved_estimate=0, N_recalled=0, N_recalled_unknown_time_savings=0)
+        # initialize attrs for internal use.
         self._content = dict()
         self._next_cacheid = 0   # unique id associated to each cache entry (increases by 1 each time)
         self._order   = []  # list of (var, id)
-        self._nbytes  = 0   # number of MB of data stored in self.
-        self.performance = dict(time_saved_estimate=0, N_recalled=0, N_recalled_unknown_time_savings=0)
+        self._nbytes  = 0   # number of bytes of data stored in self.
 
-    def get(self, var, params=None, fluids=None, obj=None):
-        '''return entry associated with var, params, and fluids in self, if it exists,
-        else empty CacheEntry.
+    def get_parent_attr(self, attr, default=None):
+        '''return getattr(self.parent(), attr, default)
+        Caution: to ensure weakref is useful and no circular reference is created,
+            make sure to not save the result of get_parent_attr as an attribute of self.
+        '''
+        return getattr(self.parent(), attr, None)
 
+    def _metadata(self, *args__parent_metadata, **kw__parent_metadata):
+        '''returns self.parent()._metadata() if it exists; else None.'''
+        get_metadata_func = self.get_parent_attr('_metadata')
+        if get_metadata_func is not None:
+            return get_metadata_func(*args__parent_metadata, **kw__parent_metadata)
+        else:
+            return None
+
+    def get_metadata(self, metadata=None, obj=None, with_nfluid=2):
+        '''returns metadata, given args.
+
+        metadata: None or dict
+            if not None, return this value immediately.
+        obj: None or object with _metadata() method which returns dict
+            if not None, return obj._metadata(with_nfluid=with_nfluid)
+        with_nfluid: 2, 1, or 0
+            if obj is not None, with_nfluid is passed to obj._metadata.
+            else, with_nfluid is passed to self.parent_get_metadata.
+
+        This method's default behavior (i.e. behavior when called with no arguments)
+        is to return self.parent_get_metadata(with_nfluid=2).
+        '''
+        if metadata is not None:
+            return metadata
+        if obj is not None:
+            return obj._metadata(with_nfluid=with_nfluid)
+        parent_metadata = self._metadata(with_nfluid=with_nfluid)
+        if parent_metadata is not None:
+            return parent_metadata
+        raise ValueError('Expected non-None metadata, obj, or self.parent_get_metadata, but all were None.')
+
+    def _metadata_matches(self, cached_metadata, metadata=None, obj=None):
+        '''return whether metadata matches cached_metadata.
+        
+        if self has parent and self.parent() has _metadata_matches method:
+            return self.parent()._metadata_matches(cached_metadata)
+        else:
+            return _dict_equals(cached_metadata, self.get_metadata(metadata, obj))
+        '''
+        metadata_matches_func = self.get_parent_attr('_metadata_matches')
+        if metadata_matches_func is not None:
+            return metadata_matches_func(cached_metadata)
+        else:
+            return _dict_equals(cached_metadata, self.get_metadata(metadata=metadata, obj=obj))
+
+    def get(self, var, metadata=None, obj=None):
+        '''return entry associated with var and metadata in self,
+        if such an entry exists. Else, return empty CacheEntry.
+
+        if Cache was initialized with obj, use obj._metadata() to 
         var: string
-        params, fluids: None (default) or dicts
-            check that these agree with cached params and fluids before returning result.
+        metadata: None (default) or dict
+            check that this agrees with cached metadata before returning result.
         obj: None (default) or EbysusData object
             if not None, use obj to determine params and fluids.
+
+        if metadata and obj are None, tries to use metadata from self.parent().
         '''
         try:
             var_cache_entries = self._content[var]
         except KeyError:
             return CacheEntry(None)   # var is not in self.
-        else:
-            params, fluids = _cache_details(params, fluids, obj)
-            for entry in var_cache_entries:
-                if _dict_equals(params, entry.cached_params):
-                    if _matches_cached_fluids_dict(fluids, entry.cached_fluids):
-                        self._update_performance_tracker(entry)
-                        return entry
-            return CacheEntry(None)
+        # else (var is in self):
+        for entry in var_cache_entries:
+            if self._metadata_matches(entry.metadata, metadata=metadata, obj=obj):
+                self._update_performance_tracker(entry)
+                return entry
+        # else (var is in self but not associated with this metadata):
+        return CacheEntry(None)
 
-    def cache(self, var, val, params=None, fluids=None, obj=None, with_nfluid=None, calctime=None):
+    def cache(self, var, val, metadata=None, obj=None, with_nfluid=2, calctime=None):
         '''add var with value val (and associated with cache_params) to self.'''
         nbytes = np.array(val, copy=False).nbytes
         self._nbytes += nbytes
-        params, fluids = _cache_details(params, fluids, obj, with_nfluid=with_nfluid)
-        entry  = CacheEntry(value=val, cached_params=params, cached_fluids=fluids,
+        metadata = self.get_metadata(metadata=metadata, obj=obj, with_nfluid=with_nfluid)
+        entry  = CacheEntry(value=val, metadata=metadata,
                             id=self._take_next_cacheid(), nbytes=nbytes, calctime=calctime)
         if var in self._content.keys():
             self._content[var] += [entry]
@@ -456,29 +532,9 @@ class Cache:
         '''return if self.max_MB <= 0 or self.max_Narr <= 0'''
         return (self.max_MB <= 0 or self.max_Narr <= 0)
 
-
-def _cache_details_from_obj(obj, with_nfluid=None):
-    '''return cache details, i.e. (params, fluids) (as dicts) based on obj.'''
-    cache_params = obj._metadata()
-    ifluid = cache_params.pop('ifluid')
-    jfluid = cache_params.pop('jfluid')
-    if with_nfluid is not None:
-        cache_fluids = dict(nfluid=with_nfluid)
-        if with_nfluid >= 1:
-            cache_fluids['ifluid'] = ifluid
-        if with_nfluid >= 2:
-            cache_fluids['jfluid'] = jfluid
-    else: # (err on the side of caution: pretend var depends on both fluids)
-        cache_fluids = dict(ifluid=ifluid, jfluid=jfluid)
-    return (cache_params, cache_fluids)
-
-def _cache_details(params=None, fluids=None, obj=None, with_nfluid=None):
-    '''return cache details.'''
-    if obj is not None:
-        params, fluids = _cache_details_from_obj(obj, with_nfluid=with_nfluid)
-    elif params is None or fluids is None:
-        raise ValueError('expected non-None (params and fluids) OR (obj) but got all None.')
-    return (params, fluids)
+    if DEBUG_MEMORY_LEAK:
+        def __del__(self):
+            print('cache deleted')
 
 
 def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
@@ -504,28 +560,36 @@ def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
             i.e. check cache first (if check_cache) and store result (if cache).
             '''
             __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            if getattr(obj, '_force_disable_memory', False):
+                cache = check_cache = False
+
             val = None
             if (not getattr(obj, 'do_caching', True)) or (not hasattr(obj, 'cache')) or (obj.cache.is_NoneCache()):
                 cache = check_cache = False
             elif cache_with_nfluid is not None:
                 cache = True
             if (cache or check_cache):
-                # set cache_params and fluids
-                params, fluids = _cache_details_from_obj(obj, cache_with_nfluid)
+                track_timing = True
                 # check cache for result (if check_cache==True)
                 if check_cache:
-                    entry = obj.cache.get(var, params, fluids)
+                    entry = obj.cache.get(var)
                     val = entry.value
                     if cache and (val is not None):
+                        # remove entry from cache to prevent duplicates (because we will re-add entry soon)
                         obj.cache.remove_one_entry(id=entry.id)
-                if cache:
+                        # use timing from original entry
+                        track_timing = False
+                        calctime = entry.calctime
+                if cache and track_timing:
                     now = time.time()   # track timing, so we can estimate how much time cache is saving.
             # calculate result (if necessary)
             if val is None:
                 val = f(obj, var, *args_f, **kwargs_f)
             # save result to obj.cache (if cache==True)
             if cache:
-                obj.cache.cache(var, val, params, fluids, calctime=time.time()-now)
+                if track_timing:
+                    calctime = time.time() - now
+                obj.cache.cache(var, val, with_nfluid=cache_with_nfluid, calctime=calctime)
             # return result
             return val
         return f_but_caching
@@ -537,8 +601,6 @@ class Caching():
     def __init__(self, obj, nfluid=None):
         self.obj    = obj
         self.nfluid = nfluid
-        self.var    = None     # you should set self.var
-        self.result = None     # you should set self.result
 
     def __enter__(self):
         self.caching = (getattr(self.obj, 'do_caching', True)) \
@@ -546,31 +608,43 @@ class Caching():
                         and (not self.obj.cache.is_NoneCache())
         if self.caching:
             self.start = time.time()
-            self.params, self.fluids = _cache_details_from_obj(self.obj, self.nfluid)
+            self.metadata = self.obj._metadata(with_nfluid=self.nfluid)
 
-        def _set_cacheable(var, value):
-            '''use this function to pass the name for var and result to the Caching object.
-            This must be done before leaving the context or we will not cache.
-            '''
-            self.var    = var     # sets Caching.var
-            self.result = value   # sets Caching.value
+        def _cache_it(var, value, restart_timer=True):
+            '''save this result to cache.'''
+            if not self.caching:
+                return
+            #else
+            calctime = time.time() - self.start
+            self.obj.cache.cache(var, value, metadata=self.metadata, calctime=calctime)
+            if restart_timer:
+                self.start = time.time() # restart the clock.
 
-        return _set_cacheable
+        return _cache_it
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.caching:
-            calctime = time.time() - self.start
-            self.obj.cache.cache(self.var, self.result, self.params, self.fluids, calctime=calctime)
+        pass
 
 
-def _dict_equals(A, B):
-    '''returns whether A == B for dicts A, B.
-    Necessary because default equality checking breaks when dict contains numpy arrays...
-    (And presumably any other object which overrides __equals__)
+def _dict_matches(A, B, subset_ok=True, ignore_keys=[]):
+    '''returns whether A matches B for dicts A, B.
+
+    A "matches" B if for all keys in A, A[key] == B[key].
+
+    subset_ok: True (default) or False
+        if False, additionally "A matches B" requires A.keys() == B.keys()
+    ignore_keys: list (default [])
+        these keys are never checked; A[key] need not equal B[key] for key in ignore_keys.
+
+    This function is especially useful when checking dicts which may contain numpy arrays,
+    because numpy arrays override __equals__ to return an array instead of True or False.
     '''
-    keysA, keysB = A.keys(), B.keys()
-    if keysA != keysB:
-        return False
+    ignore_keys = set(ignore_keys)
+    keysA = set(A.keys()) - ignore_keys
+    keysB = set(B.keys()) - ignore_keys
+    if not subset_ok:
+        if not keysA == keysB:
+            return False
     for key in keysA:
         eq = (A[key] == B[key])
         if isinstance(eq, np.ndarray):
@@ -584,28 +658,16 @@ def _dict_equals(A, B):
             raise ValueError("Object equality was not boolean nor np.ndarray. Don't know what to do. " + \
                              "Objects = {:}, {:}; (x == y) = {:}; type((x==y)) = {:}".format(            \
                                      A[key], B[key],         eq,              type(eq)      )     )
-                
-        #else: #eq is True; move on to check the next key.
     return True
 
-def _matches_cached_fluids_dict(x, cached_x):
-    '''returns whether dict of fluids (x) matches cached dict of fluids (cached_x).
-
-    If cached dict has key 'nfluid', then x only needs to match the appropriate fluids.
-    Otherwise, x needs to match all the fluids.
+def _dict_equals(A, B, ignore_keys=[]):
+    '''returns whether A==B for dicts A, B.
+    Even works if some contents are numpy arrays.
     '''
-    nfluid = cached_x.get('nfluid', 2)
-    if nfluid >= 1:
-        if not fluid_equals(x['ifluid'], cached_x['ifluid']):
-            return False
-    if nfluid >= 2:
-        if not fluid_equals(x['jfluid'], cached_x['jfluid']):
-            return False
-    return True
+    return _dict_matches(A, B, subset_ok=False, ignore_keys=ignore_keys)
 
-def fluid_equals(iSL, jSL):
-    '''returns whether iSL and jSL represent the same fluid.'''
-    if iSL[0] < 0 and jSL[0] < 0:
-        return True
-    else:
-        return (iSL == jSL)
+def _dict_is_subset(A, B, ignore_keys=[]):
+    '''returns whether A is a subset of B, i.e. whether for all keys in A, A[key]==B[key].
+    Even works if some contents are numpy arrays.
+    '''
+    return _dict_matches(A, B, subset_ok=True, ignore_keys=ignore_keys)
