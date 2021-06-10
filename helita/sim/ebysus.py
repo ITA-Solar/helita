@@ -1,5 +1,25 @@
 """
 Set of programs to read and interact with output from Multifluid/multispecies
+
+
+TODO:
+    Fix the memory leak...
+        The following code:
+            dd = eb.EbysusData(...)
+            del dd
+        does not actually free the dd object. It does not run dd.__del__().
+        This can be proven by defining EbysusData.__del__() to print something
+        (which is what happens if you edit file_memory.py to set DEBUG_MEMORY_LEAK=True).
+        You can also turn off all the file_memory.py caches and memory by
+        setting a flag when initializing dd: dd = eb.EbysusData(..., _force_disable_memory=True).
+
+        This leak could be caused by an attribute of dd pointing to dd without using weakref.
+
+        A short-term solution is to hope python's default garbage collection routines
+        will collect the garbage often enough, or to do import gc; and gc.collect() sometimes.
+
+        In the long-term, we should find which attribute of dd points to dd, and fix it.
+
 """
 
 # import built-in modules
@@ -46,6 +66,7 @@ class EbysusData(BifrostData):
 
     def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, match_type=MATCH_TYPE_DEFAULT,
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
+                 _force_disable_memory=False,
                  **kwargs):
         ''' initialize EbysusData object.
 
@@ -89,18 +110,27 @@ class EbysusData(BifrostData):
         cache_max_Narr: 20 (default) or number
             maximum number of arrays which cache is allowed to store at once.
 
+        _force_disable_memory: False (default) or True
+            if True, disable ALL code from file_memory.py.
+            Very inefficient; however, it is useful for debugging file_memory.py.
+
         *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
-
+        # set values of some attrs (e.g. from args & kwargs passed to __init__)
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
         self.match_type = match_type
-        self.do_caching = do_caching
-        self.cache      = file_memory.Cache(max_MB=cache_max_MB, max_Narr=cache_max_Narr)
-        self.caching    = lambda: self.do_caching and not self.cache.is_NoneCache()
+        self.do_caching = do_caching and not _force_disable_memory
+        self._force_disable_memory = _force_disable_memory
+        if not _force_disable_memory:
+            self.cache  = file_memory.Cache(obj=self, max_MB=cache_max_MB, max_Narr=cache_max_Narr)
+        self.caching    = lambda: self.do_caching and not self.cache.is_NoneCache()  # (used by load_mf_quantities)
+        self.panic=False
 
+        # call BifrostData.__init__
         super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
+        # set up self.att
         self.att = {}
         tab_species = self.mf_tabparam['SPECIES']
         self.mf_nspecies = len(tab_species)
@@ -111,9 +141,9 @@ class EbysusData(BifrostData):
             self.att[mf_ispecies] = at.Atom_tools(atom_file=row[2], fdir=self.fdir)
             self.mf_total_nlevel += self.att[mf_ispecies].params.nlevel
 
+        # read minimal amounts of data, to finish initializing.
         self._init_vars_get(firstime=True)
         self._init_coll_keys()
-        self.panic=False
 
     def _init_coll_keys(self):
         '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
@@ -437,7 +467,7 @@ class EbysusData(BifrostData):
         i.e. if for all keys in alt_metadata, alt_metadata[key]==self._metadata[key].
         (Even works if contents are numpy arrays. See _dict_is_subset function for details.)
         '''
-        return _dict_is_subset(alt_metadata, self._metadata(none=none))
+        return file_memory._dict_is_subset(alt_metadata, self._metadata(none=none))
 
     def _metadata_matches(self, alt_metadata, none=None):
         '''return whether alt_metadata matches self._metadata().
@@ -446,7 +476,15 @@ class EbysusData(BifrostData):
                 self._metadata()[fluid] must have the same value.
             all other keys in each dict are the same and have the same value.
         '''
-        return _dict_equals(alt_metadata, self._metadata(none=none), missing_keys_ok=['ifluid', 'jfluid'])
+        self_metadata = self._metadata(none=none)
+        for ifluid in ['ifluid', 'jfluid']:
+            SL = alt_metadata.get(ifluid, None)
+            if SL is not None:
+                if not fluid_tools.fluid_equals(SL, self_metadata[ifluid]):
+                    return False
+            #else: ifluid is not in alt_metadata, so it doesn't need to be in self_metadata.
+        # << if we reached this line, then we know ifluid and jfluid "match" between alt and self.
+        return file_memory._dict_equals(alt_metadata, self_metadata, ignore_keys=['ifluid', 'jfluid'])
 
     @fluid_tools.maintain_fluids
     @file_memory.maintain_attrs('match_type')
@@ -1028,6 +1066,10 @@ class EbysusData(BifrostData):
         '''
         return 2 * np.pi / self.get_lmin()
 
+    if file_memory.DEBUG_MEMORY_LEAK:
+        def __del__(self):
+            print('ebysusdata deleted')
+
 
     # include methods from fluid_tools.
     def MaintainingFluids(self):
@@ -1049,59 +1091,6 @@ for func in ['get_species_name', 'get_mass', 'get_charge',
     setattr(EbysusData, func, getattr(fluid_tools, func, None))
 
 del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
-
-
-###########################
-#  Small helper functions #
-###########################
-
-def _dict_matches(A, B, subset_ok=True, missing_keys_ok=[], required_keys=[]):
-    '''returns whether A matches B for dicts A, B.
-
-    A "matches" B if for all keys in A, A[key] == B[key].
-    If subset_ok=False:
-        additionally it is required that, for key in A:
-            key in B.keys() or key in missing_keys_ok
-    If required_keys is not an empty list:
-        additionally, it is required that for key in required_keys: key is in A.keys(), also.
-
-    This function is especially useful when checking dicts which may contain numpy arrays,
-    because numpy arrays override __equals__ to return an array instead of True or False.
-    '''
-    keysA= A.keys()
-    if not subset_ok:
-        for key in B.keys():
-            if not (key in keysA or key in missing_keys_ok):
-                return False
-    for key in required_keys:
-        if key not in keysA:
-            return False
-    for key in keysA:
-        eq = (A[key] == B[key])
-        if isinstance(eq, np.ndarray):
-            if not np.all(eq):
-                return False  
-        elif eq == False:
-            return False
-        elif eq == True:
-            pass #continue on to next key.
-        else:
-            raise ValueError("Object equality was not boolean nor np.ndarray. Don't know what to do. " + \
-                             "Objects = {:}, {:}; (x == y) = {:}; type((x==y)) = {:}".format(            \
-                                     A[key], B[key],         eq,              type(eq)      )     )
-    return True
-
-def _dict_equals(A, B, **kw__dict_matches):
-    '''returns whether A==B for dicts A, B.
-    Even works if some contents are numpy arrays.
-    '''
-    return _dict_matches(A, B, subset_ok=False, **kw__dict_matches)
-
-def _dict_is_subset(A, B, **kw__dict_matches):
-    '''returns whether A is a subset of B, i.e. whether for all keys in A, A[key]==B[key].
-    Even works if some contents are numpy arrays.
-    '''
-    return _dict_matches(A, B, subset_ok=True, **kw__dict_matches)
 
 
 ###########
