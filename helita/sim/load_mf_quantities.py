@@ -1375,12 +1375,15 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
   Quantities which depend on two fluids expect ifluid to be ion or electron, and jfluid to be neutral.
   '''
   if THERMAL_INSTAB_QUANT is None:
-    THERMAL_INSTAB_QUANT = ['thermal_growth_rate', 'thermal_growth_rate_max',
-                            'thermal_growth_rate_fb', 'thermal_growth_rate_thermal', 'thermal_growth_rate_damping',
+    THERMAL_INSTAB_QUANT = ['thermal_growth_rate',
                             'thermal_freq', 'thermal_tan2xopt',
                             'thermal_xopt', 'thermal_xopt_rad', 'thermal_xopt_deg']
     vecs = ['thermal_u0', 'thermal_v0']
     THERMAL_INSTAB_QUANT += [v+x for v in vecs for x in ['x', 'y', 'z']]
+    # add thermal_growth_rate with combinations of terms.
+    THERMAL_GROWRATE_QUANTS = ['thermal_growth_rate' + x for x in ['', '_fb', '_thermal', '_damping']]
+    THERMAL_GROWRATE_QUANTS += [quant+'_max' for quant in THERMAL_GROWRATE_QUANTS]
+    THERMAL_INSTAB_QUANT += THERMAL_GROWRATE_QUANTS
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, 'THERMAL_INSTAB_QUANT', THERMAL_INSTAB_QUANT,
@@ -1413,7 +1416,7 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
       if icharge == 0:
         raise ValueError('Expected ion or electron ifluid for Thermal Instability quants, but got neutral ifluid.')
       elif icharge < 0:
-        raise NotImplementedError('Electron Thermal Instability quantities not yet implemented')
+        raise ValueError('Electron Thermal Instability quantities not yet implemented. ispecies<0 not allowed.')
     if nfluid >=2:
       if obj.get_charge(obj.jfluid) != 0:
         raise ValueError('Expected neutral jfluid but got non-neutral jfluid.')
