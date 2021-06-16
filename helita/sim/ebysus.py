@@ -1056,8 +1056,16 @@ class EbysusData(BifrostData):
     def get_lmin(self):
         '''return smallest length resolvable for each direction ['x', 'y', 'z'].
         result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
+
+        return 1 (instead of 0) for any direction with number of points < 2.
         '''
-        return np.array([getattr(self, 'd'+x+'1d').min() for x in ['x', 'y', 'z']])
+        def _dxmin(x):
+            dx1d = getattr(self, 'd'+x+'1d')
+            if len(dx1d)==1:
+                return 1
+            else:
+                return dx1d.min()
+        return np.array([_dxmin(x) for x in ['x', 'y', 'z']])
 
     def get_kmax(self):
         '''return largest value of each component of wavevector resolvable by self.
@@ -1065,6 +1073,17 @@ class EbysusData(BifrostData):
         result is in [1/ simu. length units]. Divide by self.uni.usi_l to convert to SI.
         '''
         return 2 * np.pi / self.get_lmin()
+
+    def get_unit_vector(self, var, mean=False, **kw__get_var):
+        '''return unit vector of var. [varx, vary, varz]/|var|.'''
+        varx = self.get_var(var+'x', **kw__get_var)
+        vary = self.get_var(var+'y', **kw__get_var)
+        varz = self.get_var(var+'z', **kw__get_var)
+        varmag = self.get_var('mod'+var, **kw__get_var)
+        if mean:
+            varx, vary, varz, varmag = varx.mean(), vary.mean(), varz.mean(), varmag.mean()
+        return np.array([varx, vary, varz]) / varmag
+
 
     if file_memory.DEBUG_MEMORY_LEAK:
         def __del__(self):
