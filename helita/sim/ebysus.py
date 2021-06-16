@@ -1268,6 +1268,131 @@ def write_mf_e(rootname,inputdata):
     data[...,0] = inputdata
     data.flush()
 
+def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
+    '''calculates the fundamental variables, in ebysus units, ready to be written to snapshot.
+
+    Fluid-dependent results are saved to fluids; others are returned as dict.
+    Electrons are not included in fluids; they are treated separately.
+
+        Inputs
+        ------
+        fluids: an at_tools.fluids.Fluids object
+            fluid-dependent results will be saved to attributes of this object.
+            Also, the information in it is necessary to do the calculations.
+        B : magnetic field [Gauss].
+            a list of [Bx, By, Bz]; Bx, By, Bz can be constants, or arrays.
+            result['B'] = B
+        nr: number densities [per meter^3] of fluids
+            a list of values ---> fluids[i].nr = nr[i] for i in range(len(fluids))
+            a single value   ---> fluid.nr     = nr    for fluid in fluids
+        v: velocities [meter per second] of fluids
+            a list of vectors --> fluids[i].v  = v[i]  for i in range(len(fluids))
+            a single vector   --> fluid.v      = v     for fluid in fluids
+        tg: temperature [Kelvin] of fluids
+            a list of values ---> fluids[i].tg = tg[i] for i in range(len(fluids))
+            a single value   ---> fluid.tg     = tg    for fluid in fluids
+        tge: temperature [Kelvin] of electrons
+        uni: bifrost.Bifrost_units object
+            this object is used to convert all results to ebysus units, before saving.
+            (e.g., for v, really it will be fluids[i].v = v[i] / uni.usi_u)
+
+        Outputs
+        -------
+        Edits fluids attributes, and returns result (a dict).
+        All outputs (in result, and in fluid attributes) are in [ebysus units].
+        Keys of result are:
+            result['B']   = magnetic field. B[0] = Bx, B[1] = By, B[2] = Bz.
+            result['ee']  = electron energy density
+        Attributes of fluids containing fundamental calculated values are:
+            fluids.rho    = mass densities of fluids.
+            fluids.p      = momentum densities of fluids. fluids.p[i][x] is for fluid i, axis x.
+            fluids.energy = energy densities of fluids.
+
+        Side Effects
+        ------------
+        Additional attributes of fluids which are affected by this function are:
+            fluids.nr     = number densities [cm^-3] of fluids.
+            fluids.tg     = temperatures [K] of fluids.
+            fluids.v      = velocities of fluids. fluids.v[i][x] is for fluid i, axis x.
+            fluids.px     = fluids.p[:, 0, ...]. x-component of momentum densities of fluids.
+            fluids.py     = fluids.p[:, 1, ...]. y-component of momentum densities of fluids.
+            fluids.pz     = fluids.p[:, 2, ...]. z-component of momentum densities of fluids.
+
+        Units for Outputs and Side Effects are [ebysus units] unless otherwise specified.
+    '''
+    # global quantities
+    B                = np.array(B)/uni.u_b                   # [ebysus units] magnetic field
+    # fluid (and global) quantities
+    fluids.assign_scalars('nr', (np.array(nr) / 1e6) )       # [cm^-3] number density of fluids
+    nre              = np.sum(fluids.nr * fluids.ionization) # [cm^-3] number density of electrons
+    fluids.assign_scalars('tg', tg)                          # [K] temperature of fluids
+    tge              = tge                                   # [K] temperature of electrons
+    def _energy(ndens, tg): #returns energy density [ebysus units]
+        return (ndens * tg * uni.k_b / (uni.gamma-1)) / uni.u_e   
+    fluids.energy    = _energy(fluids.nr, fluids.tg)         # [ebysus units] energy density of fluids
+    energy_electrons = _energy(nre, tge)                     # [ebysus units] energy density of electrons
+    # fluid quantities
+    fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
+    fluids.assign_vectors('v', (np.array(v, copy=False) / uni.usi_u))          # [ebysus units] velocity
+    fluids.p         = fluids.v * fluids.rho[:, np.newaxis]                    # [ebysus units] momentum density
+    for x in ('x', 'y', 'z'):
+        setattr(fluids, 'p'+x, fluids.p[:, dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
+    return dict(B=B, ee=energy_electrons)
+
+def write_fundamentals(rootname, fluids, B, ee, zero=0):
+    '''writes fundamental quantities using write funcs (write_mfr, write_mfp, etc).
+    Fundamental quantities are:
+        magnetic field, electron energy,
+        fluids energy densities, fluids mass densities, fluids momentum densities.
+
+    Inputs
+    ------
+    rootname: string
+        rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
+    fluids: an at_tools.fluids.Fluids object
+        The following attributes of fluids will be written. They should be in [ebysus units]:
+            fluids.rho    = mass densities of fluids.
+            fluids.p      = momentum densities of fluids. fluids[i].p[x] is for fluid i, axis x.
+            fluids.energy = energy densities of fluids.
+    B   : magnetic field
+    ee  : electron energy density
+    zero: a number or array
+        zero will be added to all data before it is written.
+        Suggestion: use zero = np.zeros((nx, ny, nz)).
+        This ensure all data will be the correct shape, and will be reshaped if it is a constant.
+
+    Example Usage:
+    --------------
+    # This is an example which performs the same task as a simple make_mf_snap.py file.
+    import at_tools.fluids as fl
+    import helita.sim.ebysus as eb
+    uni           = eb.Bifrost_units('mhd.in')   # get units
+    # put code here which sets the values for:
+    #   nx, ny, nz, mf_param_file, snapname   # << these are all from 'mhd.in'; suggestion: read via RunTools.loadfiles.
+    #   B, nr, velocities, tg, tge            # << these are physical values; you can choose here what they should be.
+    # once those values are set, we can run the following:
+    fluids        = fl.Fluids(mf_param_file=mf_param_file)  # get fluids
+    # calculate the values of the fundamental quantities, in [ebysus units]:
+    global_quants = eb.calculate_fundamental_writeables(fluids, B, nr, velocities, tg, tge, uni)
+    zero          = np.zeros((nx,ny,nz))
+    # write the values (thus, completing the process of making the initial snapshot):
+    eb.write_fundamentals(rootname, fluids, **global_quants, zero=zero)
+    '''
+    ## Fluid Densities ##
+    for fluid in fluids:
+        write_mfr(rootname, zero+fluid.rho, ifluid=fluid.SL)
+    ## Fluid Momenta ##
+    for fluid in fluids:
+        write_mfp(rootname, zero+fluid.p[0], zero+fluid.p[1], zero+fluid.p[2], ifluid=fluid.SL)
+    ## Fluid Energies ##
+    for fluid in fluids:
+        write_mfe(rootname, zero+fluid.energy, ifluid=fluid.SL)
+    ## Electron Energy ##
+    write_mf_e(rootname, zero+ee)
+    ## Magnetic Field ##
+    write_mf_common(rootname, zero+B[0], zero+B[1], zero+B[2])
+
+
 def printi(fdir='./',rootname='',it=1):
     '''?? print data about snapshot i ?? (seems to not work though; SE checked on Mar 2, 2021).'''
     dd=EbysusData(rootname,fdir=fdir,verbose=False)
