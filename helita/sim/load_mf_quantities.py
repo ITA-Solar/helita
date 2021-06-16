@@ -1367,6 +1367,7 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
 
 def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
   '''very specific quantities which are related to the ion thermal and/or electron thermal instabilities.
+  For source of formulae, see paper by Dimant & Oppenheim, 2004.
 
   In general, ion ifluid --> calculate for ion thermal instability; electron fluid --> for electron thermal.
   Electron thermal is not yet implemented.
