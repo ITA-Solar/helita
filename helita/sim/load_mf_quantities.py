@@ -574,8 +574,6 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     return florentzx - gradpx + rijsumx
 
 
-
-
 def get_heating_quant(obj, var, HEATING_QUANT=None):
   '''terms related to heating of fluids.
 
@@ -594,10 +592,12 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
   your own code which reduces the number of times calculations are repeated.
   (Note, if you had N_memmap = 0 or fast=False, first try using N_memmap >= 200, and fast=True.)
   '''
+  _TGQCOL_EQUIL = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
   if HEATING_QUANT is None:
-    HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcolj',
+    HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj',
                      'qcol_u', 'qcol_tg', 'qcol',
                      'qjoulei']
+    HEATING_QUANT += _TGQCOL_EQUIL
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, 'HEATING_QUANT', HEATING_QUANT, get_heating_quant.__doc__)
@@ -605,10 +605,26 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     heati = 'heating of ifluid '+units
     docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2)
     docvar('qcol_tgj', heati + ' due to jfluid, due to collisions and temperature differences.', nfluid=2)
+    docvar('qcol_coeffj', 'coefficient common to qcol_uj and qcol_tj terms.' +\
+                          ' == (mi / (gamma - 1) (mi + mj)) * ni * nu_ij. [simu units: length^-3 time^-1]', nfluid=2)
     docvar('qcolj',    'total '+heati+' due to jfluid.', nfluid=2)
     docvar('qcol_u',   heati + ' due to collisions and velocity drifts.', nfluid=1)
     docvar('qcol_tg',  heati + ' due to collisions and temperature differences.', nfluid=1)
     docvar('qcol',     'total '+heati+'.', nfluid=1)
+    # "simple equilibrium" vars
+    equili = '"simple equilibrium" temperature [K] of ifluid (setting sum_j Qcol_ij=0 and solving for Ti)'
+    ## note: these all involve setting sum_j Qcol_ij = 0 and solving for Ti.
+    ## Let Cij = qcol_coeffj; Uij = qcol_uj, Tj = temperature of j. Then:
+    ### Ti == ( sum_{s!=i}(Cis Uis + Cis * 2 kB Ts) ) / ( 2 kB sum_{s!=i}(Cis) )
+    ## so for the "components" terms, we pick out only one term in this sum (in the numerator), e.g.:
+    ### tgqcol_equil_uj == Cij Uij / ( 2 kB sum_{s!=i}(Cis) )
+    docvar('tgqcol_equil_uj', equili + ', due only to contribution from velocity drift with jfluid.', nfluid=2)
+    docvar('tgqcol_equil_tgj', equili + ', due only to contribution from temperature of jfluid.', nfluid=2)
+    docvar('tgqcol_equil_j', equili + ', due only to contribution from jfluid.', nfluid=2)
+    docvar('tgqcol_equil_u', equili + ', due only to contribution from velocity drifts with fluids.', nfluid=1)
+    docvar('tgqcol_equil_tg', equili + ', due only to contribution from temperature of fluids.', nfluid=1)
+    docvar('tgqcol_equil', equili + '.', nfluid=1)
+    # "ohmic heating" (obsolete (?) - nonphysical to include this qjoule and the qcol_u term as it appears here.)
     docvar('qjoulei',  heati + ' due to Ji dot E. (Ji = qi ni ui).', nfluid=1)
     return None
 
@@ -626,21 +642,28 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
 
   # qcol terms
   
-  if var in ['qcol_uj', 'qcol_tgj']:
-    if heating_is_off(): return obj.zero()
-    ni = obj.get_var('nr', cache_with_nfluid=1)             # [simu. units]
+  if var == 'qcol_coeffj':
+    if heating_is_off() or obj.i_j_same_fluid():
+      return obj.zero()
+    ni = obj.get_var('nr')             # [simu. units]
     mi = obj.get_mass(obj.mf_ispecies) # [amu]
     mj = obj.get_mass(obj.mf_jspecies) # [amu]
-    nu_ij = obj.get_var('nu_ij', cache_with_nfluid=2)       # [simu. units]
-    coeff = (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
+    nu_ij = obj.get_var('nu_ij')       # [simu. units]
+    coeff = (1 / obj.uni.gamma - 1) * (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
+    return coeff
+
+  if var in ['qcol_uj', 'qcol_tgj']:
+    if heating_is_off() or obj.i_j_same_fluid():
+      return obj.zero()
+    coeff = obj.get_var('qcol_coeffj')
     if var == 'qcol_uj':
       mj_simu = obj.get_mass(obj.mf_jspecies, units='simu') # [simu mass]
-      energy = mj_simu * obj.get_var('uid2')                # [simu energy]
+      energy = (3/2) * mj_simu * obj.get_var('uid2')        # [simu energy]
     elif var == 'qcol_tgj':
       simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
       tgi = obj.get_var('tg')                       # [K]
       tgj = obj.get_var('tg', ifluid=obj.jfluid)    # [K]
-      energy = (2 / (obj.uni.gamma - 1)) * simu_kB * (tgj - tgi)
+      energy = 2 * simu_kB * (tgj - tgi)
     return coeff * energy  # [simu energy density / time]
 
   elif var == 'qcolj':
@@ -652,7 +675,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     varj   = var + 'j'   # qcol_uj or qcol_tgj
     output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
     for fluid in fl.Fluids(dd=obj):
-      if fluid.SL != obj.ifluid:        # exclude varj for j = i
+      if fluid.SL != obj.ifluid:        # exclude varj for j = i  # not necessary but doesn't hurt.
         output += obj.get_var(varj, jfluid=fluid)
     return output
 
@@ -661,6 +684,40 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
 
   # other terms
+
+  elif var in _TGQCOL_EQUIL:
+    suffix  = var.split('_')[-1]  # uj, tgj, j, u, tg, or equil
+    ## Let Cij = qcol_coeffj; Uij = qcol_uj, Tj = temperature of j. Then:
+    ### Ti == ( sum_{s!=i}(Cis Uis + Cis * 2 kB Ts) ) / ( 2 kB sum_{s!=i}(Cis) )
+    ## so for the "components" terms, we pick out only one term in this sum (in the numerator), e.g.:
+    ### tgqcol_equil_uj == Cij Uij / ( 2 kB sum_{s!=i}(Cis) )
+    if suffix == 'j':            # total contribution (u + tg) from j
+      return obj.get_var('tgqcol_equil_uj') + obj.get_var('tgqcol_equil_tgj')
+    elif suffix in ['u', 'tg']:  # total contribution (sum over j); total from u or total from tg
+      result = obj.get_var('tgqcol_equil_'+suffix+'j', jfluid=(-1,0))
+      for fluid in fl.Fluids(dd=obj):
+        result += obj.get_var('tgqcol_equil_'+suffix+'j', jfluid=fluid)
+      return result
+    elif suffix == 'equil':      # total contribution u + tg, summed over all j.
+      return obj.get_var('tgqcol_equil_u') + obj.get_var('tgqcol_equil_tg')
+    else:
+      # suffix == 'uj' or 'tgj'
+      with obj.MaintainFluids():
+        # denom = sum_{s!=i}(Cis).     [(simu length)^-3 (simu time)^-1]
+        denom = obj.get_var('qcol_coeffj', jS=-1, cache_with_nfluid=2)  # coeff for j = electrons
+        for fluid in fl.Fluids(dd=obj):
+          denom += obj.get_var('qcol_coeffj', jfluid=fluid, cache_with_nfluid=2)
+      # Based on suffix, return appropriate term.
+      if suffix == 'uj':
+        simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
+        qcol_uj = obj.get_var('qcol_uj')
+        temperature_contribution = qcol_uj / (2 * simu_kB)  # [K (simu length)^-3 (simu time)^-1]
+      elif suffix == 'tgj':
+        tgj     = obj.get_var('tg')
+        coeffj  = obj.get_var('qcol_coeffj')
+        temperature_contribution = coeffj * tgj             # [K (simu length)^-3 (simu time)^-1]
+      return temperature_contribution / denom       # [K]
+
 
   elif var == 'qjoulei':
     # qjoulei = qi * ni * \vec{ui} dot \vec{E}
