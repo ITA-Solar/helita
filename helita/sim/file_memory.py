@@ -318,22 +318,52 @@ def maintain_attrs(*attrs):
 
 CacheEntry = namedtuple('CacheEntry', ['value', 'metadata', 'id', 'nbytes', 'calctime'],
                         defaults = [None, None, None, None, None])
-CacheEntryView = namedtuple('CacheEntryView', ['snap', 'ifluid', 'jfluid', 'nbytes', 'calctime'],
-                            defaults = [None, None, None, None, None])
 #        value: value.
 #     metadata: additional params which are associated with this value of var.
 #           id: unique id associated to this var and cache_params for this cache.
 #       nbytes: number of bytes in value
 #     calctime: amount of time taken to calculate value.
 
-def view_from_cache_entry(x):
-    '''convert x (a CacheEntry) into a CacheEntryView.'''
-    snap   = x.metadata.get('snap', None)
-    ifluid = x.metadata.get('ifluid', None)
-    jfluid = x.metadata.get('jfluid', None)
-    nbytes = x.nbytes
-    calctime = x.calctime
-    return CacheEntryView(snap=snap, ifluid=ifluid, jfluid=jfluid, nbytes=nbytes, calctime=calctime)
+def _fmt_SL(SL, sizing=2):
+    '''pretty formatting for species,level'''
+    if SL is None:
+        totlen = len('(') + sizing + len(', ') + sizing + len(')')
+        totlen = str(totlen)
+        fmtstr = '{:^'+totlen+'s}'  #e.g. '{:8s}'
+        return fmtstr.format(str(None))
+    else:
+        sizing = str(sizing)
+        fmtnum = '{:'+sizing+'d}'  # e.g. '{:2d}'
+        fmtstr = '('+fmtnum+', '+fmtnum+')'
+        return fmtstr.format(SL[0], SL[1])
+
+def _new_cache_entry_str_(x):
+    '''new __str__ method for CacheEntry, which shows a much more readable format.
+    To get the original (namedtuple-style) representation of CacheEntry object x, use repr(x).
+    '''
+    FMT_SNAP = '{:3d}'
+    FMT_DATA = '{: .3e}'
+    FMT_META = '{: .2e}'
+    snap     = FMT_SNAP.format(x.metadata.get('snap', None))
+    ifluid   = _fmt_SL(x.metadata.get('ifluid', None))
+    jfluid   = _fmt_SL(x.metadata.get('jfluid', None))
+    value = x.value
+    valmin   = None if value is None else FMT_DATA.format(np.min(value))
+    valmean  = None if value is None else FMT_DATA.format(np.mean(value))
+    valmax   = None if value is None else FMT_DATA.format(np.max(value))
+    nbytes   = FMT_META.format(x.nbytes)
+    calctime = FMT_META.format(x.calctime)
+    result = ('CacheEntryView(snap={snap:}, ifluid={ifluid:}, jfluid={jfluid:}, '
+              'valmin={valmin:}, valmean={valmean:}, valmax={valmax:}, '
+              'nbytes={nbytes:}, calctime={calctime:})'
+             )
+    result = result.format(
+              snap=snap, ifluid=ifluid, jfluid=jfluid,
+              valmin=valmin, valmean=valmean, valmax=valmax,
+              nbytes=nbytes, calctime=calctime)
+    return result
+# actually overwrite the __str__ method for CacheEntry:
+CacheEntry.__str__ = _new_cache_entry_str_
 
 class Cache:
     '''cache results of get_var.
@@ -370,6 +400,7 @@ class Cache:
         self._next_cacheid = 0   # unique id associated to each cache entry (increases by 1 each time)
         self._order   = []  # list of (var, id)
         self._nbytes  = 0   # number of bytes of data stored in self.
+        self.debugging = False   # if true, print some helpful debugging statements.
 
     def get_parent_attr(self, attr, default=None):
         '''return getattr(self.parent(), attr, default)
@@ -439,22 +470,29 @@ class Cache:
         try:
             var_cache_entries = self._content[var]
         except KeyError:
+            if self.debugging >= 2: print(' > Getting {:15s}; var not found in cache.'.format(var))
             return CacheEntry(None)   # var is not in self.
         # else (var is in self):
         for entry in var_cache_entries:
             if self._metadata_matches(entry.metadata, metadata=metadata, obj=obj):
+                if self.debugging >= 1:
+                    print(' -> Loaded   {:^15s} -> {}'.format(var, entry))
                 self._update_performance_tracker(entry)
                 return entry
         # else (var is in self but not associated with this metadata):
+        if self.debugging >= 2: print(' > Getting {:15s}, var in cache but not with this metadata.'.format(var))
         return CacheEntry(None)
 
     def cache(self, var, val, metadata=None, obj=None, with_nfluid=2, calctime=None):
         '''add var with value val (and associated with cache_params) to self.'''
-        nbytes = np.array(val, copy=False).nbytes
+        if self.debugging >= 2: print(' < Caching {:15s}; with_nfluid={}'.format(var, with_nfluid))
+        val = np.array(val, copy=True)  # copy ensures value in cache isn't altered even if val array changes.
+        nbytes = val.nbytes
         self._nbytes += nbytes
         metadata = self.get_metadata(metadata=metadata, obj=obj, with_nfluid=with_nfluid)
         entry  = CacheEntry(value=val, metadata=metadata,
                             id=self._take_next_cacheid(), nbytes=nbytes, calctime=calctime)
+        if self.debugging >= 1: print(' <- Caching {:^15s} <- {}'.format(var, entry))
         if var in self._content.keys():
             self._content[var] += [entry]
         else:
@@ -492,12 +530,14 @@ class Cache:
         return s.format(self=object.__repr__(self), MB=self._nMB(), N=len(self._order), k=len(vars), vars=svars)
 
     def contents(self):
-        '''pretty display of contents (as CacheEntryView tuples)'''
+        '''pretty display of contents (as CacheEntryView tuples).
+        To access the content data directly, use self._content.
+        '''
         result = dict()
         for var, content in self._content.items():
             result[var] = []
             for entry in content:
-                result[var] += [view_from_cache_entry(entry)]
+                result[var] += [str(entry)]
         return result
 
     def _update_performance_tracker(self, entry):
