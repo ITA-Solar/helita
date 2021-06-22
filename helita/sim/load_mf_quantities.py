@@ -713,8 +713,8 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
         qcol_uj = obj.get_var('qcol_uj')
         temperature_contribution = qcol_uj / (2 * simu_kB)  # [K (simu length)^-3 (simu time)^-1]
       elif suffix == 'tgj':
-        tgj     = obj.get_var('tg')
         coeffj  = obj.get_var('qcol_coeffj')
+        tgj     = obj.get_var('tg', ifluid=obj.jfluid)
         temperature_contribution = coeffj * tgj             # [K (simu length)^-3 (simu time)^-1]
       return temperature_contribution / denom       # [K]
 
