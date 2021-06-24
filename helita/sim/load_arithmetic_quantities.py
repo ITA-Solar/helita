@@ -85,6 +85,8 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
     val = get_projections(obj,quant)
   if val is None:
     val = get_vector_product(obj,quant)
+  if val is None:
+    val = get_angle(obj, quant)
   return val
 
 def _can_interp(obj, axis, warn=True):
@@ -223,6 +225,7 @@ def get_center(obj,quant, *args, **kwargs):
       if _can_interp(obj, interp[0]):
         var = do_cstagger(var, interp)
   return var
+
 
 def get_interp(obj, quant):
   '''simple interpolation. var must end in interpolation instructions.
@@ -535,7 +538,6 @@ def get_ratios(obj,quant):
   return result / (obj.get_var(q) + 1e-19)
 
 
-
 def get_projections(obj,quant):
   '''Projected vectors'''
   PROJ_QUANT = ['par', 'per']
@@ -664,6 +666,44 @@ def get_vector_product(obj,quant):
     ## '_facecrosstocenter_' gives result at (0, 0, 0) so we shift by xdn to align.
     return obj.get_var(A+'_facecrosstocenter_'+B+x + x+'dn')
 
+
+AXES = ('x', 'y', 'z')
+_HATS = ['_hat'+x for x in AXES]
+_ANGLES_XXY = ['_angle'+ xxy for xxy in ['xxy', 'yyz', 'zzx']]  # <<< TODO
+ANGLE_QUANT = _HATS + _ANGLES_XXY
+def get_angle(obj,quant):
+  '''angles. includes unit vector, and angle off an axis in a plane (xy, yz, or zx).
+
+  Presently not very efficient, due to only being able to return one unit vector component at a time.
+
+  call via <var><anglequant>.
+  Example: b_angleyyz --> angle off of the positive y axis in the yz plane, for b (magnetic field).
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, 'ANGLE_QUANT', ANGLE_QUANT, get_angle.__doc__)
+    for x in AXES:
+      docvar('_hat'+x, x+'-component of unit vector. Example: b_hat'+x+' is '+x+'-component of unit vector for b.')
+    for _angle_xxy in _ANGLES_XXY:
+      x, y = _angle_xxy[-2], _angle_xxy[-1]   # _angle_xxy[-3] == _angle_xxy[-1]
+      docvar(_angle_xxy, 'angle off of the positive '+x+'-axis in the '+x+y+'plane. Result in range [-pi, pi].')
+    return None
+
+  var, _, command = quant.rpartition('_')
+  command = '_' + command
+
+  if command not in ANGLE_QUANT:
+    return None
+
+  if command in _HATS:
+    x = command[-1]  # axis; 'x', 'y', or 'z'
+    varhatx = obj.get_var(var+x) / obj.get_var('mod'+var)
+    return varhatx
+
+  if command in _ANGLES_XXY:
+    x, y = command[-2], command[-1] # _angle_xxy[-3] == _angle_xxy[-1]
+    varx = obj.get_var(var + x)
+    vary = obj.get_var(var + y)
+    return np.arctan2(vary, varx)
 
 
 def threadQuantity(task, numThreads, *args):
