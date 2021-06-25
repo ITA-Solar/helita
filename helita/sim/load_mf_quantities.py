@@ -1484,7 +1484,7 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
     check_fluids_ok(nfluid=1)
     if '_max' in quant:
       quant = quant.replace('_max', '')
-      k2 = max(obj.get_kmax())**2
+      k2 = max(obj.get_kmax())**2      # units [simu. length^-2]. (cancels with the [simu. length^2] from non-"_max" quant.
     else:
       k2 = 1
     if quant=='thermal_growth_rate':
