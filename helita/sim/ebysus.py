@@ -119,6 +119,7 @@ class EbysusData(BifrostData):
         # set values of some attrs (e.g. from args & kwargs passed to __init__)
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
+
         self.match_type = match_type
         self.do_caching = do_caching and not _force_disable_memory
         self._force_disable_memory = _force_disable_memory
@@ -162,15 +163,16 @@ class EbysusData(BifrostData):
 
         # begin processing:
         result = dict()
-        x = self.mf_tabparam['COLL_KEYS']
-        for tokenline in x:      # example tokenline: ['01', '02', 'EL']
-            ispec, jspec, collkey = tokenline
-            ispec, jspec = int(ispec), int(jspec)
-            key = (ispec, jspec)
-            try:
-                result[key] += [collkey]
-            except KeyError:
-                result[key] = [collkey]
+        if hasattr(self.mf_tabparam,'COLL_KEYS'): 
+            x = self.mf_tabparam['COLL_KEYS']
+            for tokenline in x:      # example tokenline: ['01', '02', 'EL']
+                ispec, jspec, collkey = tokenline
+                ispec, jspec = int(ispec), int(jspec)
+                key = (ispec, jspec)
+                try:
+                    result[key] += [collkey]
+                except KeyError:
+                    result[key] = [collkey]
         if _enforce_symmetry_in_collisions:
             for key in list(result.keys()): #list() because changing size of result
                 rkey = (key[1], key[0])  # reversed
