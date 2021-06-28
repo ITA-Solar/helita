@@ -19,6 +19,11 @@ except ImportError:
 # set constants
 MATCH_PHYSICS = 0  # don't change this value.  # this one is the default (see ebysus.py)
 MATCH_AUX     = 1  # don't change this value.
+AXES          = ('x', 'y', 'z')   # the axes names.
+YZ_FROM_X     = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))  # right-handed coord system x,y,z given x.
+
+# TODO:
+#  adapt maxwell collisions from load_quantities.py file, to improve maxwell collisions in this file.
 
 
 def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
@@ -71,34 +76,25 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
     val = get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=THERMAL_INSTAB_QUANT)
   return val
 
-  '''
-  ADD HERE Stuff from quantity that needs to be modified since it is MFMS:
-  PLASMA_QUANT = ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
-                  'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky',
-                  'kz']
-  CYCL_RES = ['n6nhe2', 'n6nhe3', 'nhe2nhe3']
-  COLFRE_QUANT = ['nu' + clist for clist in CROSTAB_QUANT]
-  COLFRI_QUANT = ['nu_ni', 'nu_en', 'nu_ei']
-  COLFRI_QUANT = COLFRI_QUANT + \
-      ['nu' + clist + '_i' for clist in elemlist]
-  COLFRI_QUANT = COLFRI_QUANT + \
-      ['nu' + clist + '_n' for clist in elemlist]
 
-  '''
-
-
+# default
+_GLOBAL_QUANT = ('GLOBAL_QUANT',
+                 ['totr', 'rc', 'rions', 'rneu',
+                  'tot_e', 'tot_ke', 'e_ef', 'e_b', 'total_energy',
+                  'tot_px', 'tot_py', 'tot_pz',
+                  'grph', 'tot_part', 'mu',
+                  'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
+                  ]
+                )
+# get value
+@document_vars.quant_tracking_simple(_GLOBAL_QUANT[0])
 def get_global_var(obj, var, GLOBAL_QUANT=None):
   '''Variables which are calculated by looping through species or levels.'''
   if GLOBAL_QUANT is None:
-      GLOBAL_QUANT = ['totr', 'rc', 'rions', 'rneu',
-                      'tot_e', 'tot_ke', 'e_ef', 'e_b', 'total_energy',
-                      'tot_px', 'tot_py', 'tot_pz',
-                      'grph', 'tot_part', 'mu',
-                      'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
-                      ]
+      GLOBAL_QUANT = _GLOBAL_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'GLOBAL_QUANT', GLOBAL_QUANT, get_global_var.__doc__, nfluid=0)
+    docvar = document_vars.vars_documenter(obj, _GLOBAL_QUANT[0], GLOBAL_QUANT, get_global_var.__doc__, nfluid=0)
     docvar('totr', 'sum of mass densities of all fluids [simu. mass density units]')
     for rc in ['rc', 'rions']:
       docvar(rc,   'sum of mass densities of all ionized fluids [simu. mass density units]')
@@ -108,15 +104,15 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('e_ef', 'energy density in electric field [simu. energy density units]')
     docvar('e_b', 'energy density in magnetic field [simu. energy density units]')
     docvar('total_energy', 'total energy density. tot_e + tot_ke + e_ef + e_b [simu units].')
-    for axis in ['x', 'y', 'z']:
+    for axis in AXES:
       docvar('tot_p'+axis, 'sum of '+axis+'-momentum densities of all fluids [simu. mom. dens. units] ' +\
                            'NOTE: does not include "electron momentum" which is assumed to be ~= 0.')
     docvar('grph',  'grams per hydrogen atom')
     docvar('tot_part', 'total number of particles, including free electrons [cm^-3]')
     docvar('mu', 'ratio of total number of particles without free electrong / tot_part')
-    for axis in ['x', 'y', 'z']:
+    for axis in AXES:
       docvar('j'+axis, 'sum of '+axis+'-component of current per unit area [simu. current per area units]')
-    for axis in ['x', 'y', 'z']:
+    for axis in AXES:
       docvar('ef'+axis, axis+'-component of electric field [simu. E-field units] ' +\
                           '== [simu. B-field units * simu. velocity units]')
     return None
@@ -248,7 +244,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       # we will need to do a cross product, with extra care to interpolate correctly.
       ## we name the axes variables x,y,z to make it easier to understand the code.
       x    = var[-1]  # axis; 'x', 'y', or 'z'
-      y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+      y, z = YZ_FROM_X[x]
       # make sure we get the interpolation correct:
       ## B and ue are face-centered vectors.
       ## Thus we use _facecross_ from load_arithmetic_quantities.
@@ -289,6 +285,13 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   return output
 
 
+# default
+_ONEFLUID_QUANT = ('ONEFLUID_QUANT',
+                   ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 'vtherm',
+                    'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
+                  )
+# get value
+@document_vars.quant_tracking_simple(_ONEFLUID_QUANT[0])
 def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   '''variables related to information about a single fluid.
   Use mf_ispecies= -1 to refer to electrons.
@@ -302,11 +305,10 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     obj.get_var('ux') otherwise.
   '''
   if ONEFLUID_QUANT is None:
-    ONEFLUID_QUANT = ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 'vtherm',
-                      'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
+    ONEFLUID_QUANT = _ONEFLUID_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'ONEFLUID_QUANT', ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
+    docvar = document_vars.vars_documenter(obj, _ONEFLUID_QUANT[0], ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
     docvar('nr', 'number density of ifluid [simu. number density units]')
     docvar('nq', 'charge density of ifluid [simu. charge density units]')
     for tg in ['tg', 'temperature']:
@@ -370,21 +372,25 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
         return obj.get_var(f_var)
 
 
+# default
+_ELECTRON_QUANT = ['nel', 'nre', 're', 'eke', 'pe']
+_ELECTRON_QUANT += [ue + x for ue in ['ue', 'pe', 'uej', 'uep'] for x in AXES]
+_ELECTRON_QUANT = ('ELECTRON_QUANT', _ELECTRON_QUANT)
+# get value
+@document_vars.quant_tracking_simple(_ELECTRON_QUANT[0])
 def get_electron_var(obj, var, ELECTRON_QUANT=None):
   '''variables related to electrons (requires looping over ions to calculate).'''
 
   if ELECTRON_QUANT is None:
-    ELECTRON_QUANT = ['nel', 'nre', 're', 'eke', 'pe']
-    ELECTRON_QUANT += [ue + x for ue in ['ue', 'pe', 'uej', 'uep'] for x in ['x', 'y', 'z']]
+    ELECTRON_QUANT = _ELECTRON_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'ELECTRON_QUANT', ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
+    docvar = document_vars.vars_documenter(obj, _ELECTRON_QUANT[0], ELECTRON_QUANT, get_electron_var.__doc__, nfluid=0)
     docvar('nel',  'electron number density [cm^-3]')
     docvar('nre',  'electron number density [simu. number density units]')
     docvar('re',   'mass density of electrons [simu. mass density units]')
     docvar('eke',  'electron kinetic energy density [simu. energy density units]')
     docvar('pe',   'electron pressure [simu. pressure units]')
-    AXES = ['x', 'y', 'z']
     for x in AXES:
       docvar('ue'+x, '{}-component of electron velocity [simu. velocity units]'.format(x))
     for x in AXES:
@@ -444,7 +450,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## i is on edges of cells, while u is on faces, so we need to interpolate.
     ## ix is at (0, -0.5, -0.5); ux is at (-0.5, 0, 0)
     ## ---> to align with ux, we shift ix by xdn yup zup
-    y, z    = tuple(set(('x', 'y', 'z')) - set((x)))
+    y, z    = tuple(set(AXES) - set((x)))
     interpj = x+'dn' + y+'up' + z+'up'
     jx      = obj.get_var('j'+x + interpj)   # [simu current per area units]
     ## r (nq) is in center of cells, while u is on faces, so we need to interpolate.
@@ -463,7 +469,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
       ## i is on edges of cells, while u is on faces, so we need to interpolate.
       ## ix is at (0, -0.5, -0.5); ux is at (-0.5, 0, 0)
       ## ---> to align with ux, we shift ix by xdn yup zup
-      y, z   = tuple(set(('x', 'y', 'z')) - set((x)))
+      y, z   = tuple(set(AXES) - set((x)))
       interp = x+'dn' + y+'up' + z+'up'
       output = obj.get_var('j'+x + interp)   # [simu current per area units]
       # get component due to velocities:
@@ -493,30 +499,35 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     return re * uex                 # [simu. momentum density units]
 
 
+# default
+_MOMENTUM_QUANT = []
+_MQVECS = ['rij', 'rijsum', 'momflorentz', 'gradp', 'momrate']
+_MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
+_MOMENTUM_QUANT = ('MOMENTUM_QUANT', _MOMENTUM_QUANT)
+# get value
+@document_vars.quant_tracking_simple(_MOMENTUM_QUANT[0])
 def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
   '''terms related to momentum equations of fluids.
   The units for these quantities are [simu. momentum density units / simu. time units].
   '''
   if MOMENTUM_QUANT is None:
-    MOMENTUM_QUANT = []
-    MQVECS = ['rij', 'rijsum', 'momflorentz', 'gradp', 'momrate']
-    MOMENTUM_QUANT += [v + x for v in MQVECS for x in ['x', 'y', 'z']]
+    MOMENTUM_QUANT = _MOMENTUM_QUANT[1]
 
   if var == '':
-    docvar = document_vars.vars_documenter(obj, 'MOMENTUM_QUANT', MOMENTUM_QUANT, get_momentum_quant.__doc__)
-    for x in ['x', 'y', 'z']:
+    docvar = document_vars.vars_documenter(obj, _MOMENTUM_QUANT[0], MOMENTUM_QUANT, get_momentum_quant.__doc__)
+    for x in AXES:
       docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
                        '[simu. momentum density units / simu. time units]. ' +\
                        'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('rijsum'+x, x+'-component of momentum density change of ifluid ' +\
                            'due to collisions with all other fluids. = sum_j rij'+x, nfluid=1)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force.' +\
                            '[simu. momentum density units / simu. time units]. = ni qi (E + ui x B).', nfluid=1)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('gradp'+x, x+'-component of grad(Pi), face-centered (interp. loc. aligns with momentum).', nfluid=1)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('momrate'+x, x+'-component of rate of change of momentum. ' +\
                           '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1)
     return None
@@ -542,7 +553,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
       result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
     return result
 
-  elif var in ['momflorentz'+x for x in ['x', 'y', 'z']]:
+  elif var in ['momflorentz'+x for x in AXES]:
     # momflorentz = ni qi (E + ui x B)
     qi = obj.get_charge(obj.ifluid, units='simu')
     if qi == 0:
@@ -554,7 +565,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ## Meanwhile, E is edge-centered, so we must shift all three coords.
     ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
     x = var[-1] # axis; x= 'x', 'y', or 'z'.
-    y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+    y, z = YZ_FROM_X[x]
     Ex = obj.get_var('efx' + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
     uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
     return ni * qi * (Ex + uxB__x)
@@ -574,6 +585,15 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     return florentzx - gradpx + rijsumx
 
 
+# default
+_HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
+                 'qcol_u', 'qcol_tg', 'qcol',
+                 'qjoulei']
+_TGQCOL_EQUIL  = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
+_HEATING_QUANT += _TGQCOL_EQUIL
+_HEATING_QUANT = ('HEATING_QUANT', _HEATING_QUANT)
+# get value
+@document_vars.quant_tracking_simple(_HEATING_QUANT[0])
 def get_heating_quant(obj, var, HEATING_QUANT=None):
   '''terms related to heating of fluids.
 
@@ -592,15 +612,11 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
   your own code which reduces the number of times calculations are repeated.
   (Note, if you had N_memmap = 0 or fast=False, first try using N_memmap >= 200, and fast=True.)
   '''
-  _TGQCOL_EQUIL = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
   if HEATING_QUANT is None:
-    HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
-                     'qcol_u', 'qcol_tg', 'qcol',
-                     'qjoulei']
-    HEATING_QUANT += _TGQCOL_EQUIL
+    HEATING_QUANT = _HEATING_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'HEATING_QUANT', HEATING_QUANT, get_heating_quant.__doc__)
+    docvar = document_vars.vars_documenter(obj, _HEATING_QUANT[0], HEATING_QUANT, get_heating_quant.__doc__)
     units = '[simu. energy density per time]'
     heati = 'heating of ifluid '+units
     docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2)
@@ -740,13 +756,17 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     return qi * ni * result
 
 
+# default
+_SPITZTERM_QUANT = ('SPITZTERM_QUANT', ['kappaq','dxTe','dyTe','dzTe','rhs'])
+# get value
+@document_vars.quant_tracking_simple(_SPITZTERM_QUANT[0])
 def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   '''spitzer conductivies'''
   if SPITZERTERM_QUANT is None:
-    SPITZERTERM_QUANT = ['kappaq','dxTe','dyTe','dzTe','rhs']
+    SPITZERTERM_QUANT = _SPITZTERM_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'SPITZTERM_QUANT', SPITZERTERM_QUANT, get_spitzerterm.__doc__, nfluid='???')
+    docvar = document_vars.vars_documenter(obj, _SPITZTERM_QUANT[0], SPITZERTERM_QUANT, get_spitzerterm.__doc__, nfluid='???')
     docvar('kappaq', 'Electron thermal diffusivity coefficient [Ebysus units], in SI: W.m-1.K-1')
     docvar('dxTe',   'Gradient of electron temperature in the x direction [simu.u_te/simu.u_l] in SI: K.m-1')
     docvar('dyTe',   'Gradient of electron temperature in the y direction [simu.u_te/simu.u_l] in SI: K.m-1')
@@ -801,6 +821,18 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
   return result
 
 
+# default
+_COLFRE_QUANT = ('COLFRE_QUANT',
+                 ['nu_ij','nu_sj',                                 # basics: frequencies
+                  'nu_si','nu_sn','nu_ei','nu_en',                 # sum of frequencies
+                  'nu_ij_el', 'nu_ij_mx', 'nu_ij_cl',              # colfreq by type
+                  'nu_ij_res', 'nu_se_spitzcoul', 'nu_ij_capcoul', # alternative colfreq formulae
+                  'nu_ij_to_ji', 'nu_sj_to_js',                    # conversion factor nu_ij --> nu_ji
+                  'c_tot_per_vol', '1dcolslope',                   # misc.
+                 ]           
+                )
+# get value
+@document_vars.quant_tracking_simple(_COLFRE_QUANT[0])
 def get_mf_colf(obj, var, COLFRE_QUANT=None):
   '''quantities related to collision frequency.
 
@@ -810,15 +842,10 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   '''
 
   if COLFRE_QUANT is None:
-    COLFRE_QUANT = ['nu_ij','nu_sj',                           # basics: frequencies
-                    'nu_si','nu_sn','nu_ei','nu_en',           # sum of frequencies
-                    'nu_ij_el', 'nu_ij_mx', 'nu_ij_cl',        # colfreq by type
-                    'nu_ij_res', 'nu_se_spitzcoul', 'nu_ij_capcoul', # alternative colfreq formulae
-                    'nu_ij_to_ji', 'nu_sj_to_js',              # conversion factor nu_ij --> nu_ji
-                    'c_tot_per_vol', '1dcolslope',]            # misc.
+    COLFRE_QUANT = _COLFRE_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'COLFRE_QUANT', COLFRE_QUANT, get_mf_colf.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLFRE_QUANT[0], COLFRE_QUANT, get_mf_colf.__doc__)
     mtra = 'momentum transfer collision frequency [simu. frequency units] between ifluid & jfluid. '
     for nu_ij in ['nu_ij', 'nu_sj']:
       docvar(nu_ij, mtra + 'Use species<0 for electrons.', nfluid=2)
@@ -1055,13 +1082,17 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     return -1 * obj.get_var("nu_ij") * (1 + obj.get_var('nu_ij_to_ji'))
 
 
+# default
+_LOGCUL_QUANT = ('LOGCUL_QUANT', ['logcul'])
+# get value
+@document_vars.quant_tracking_simple(_LOGCUL_QUANT[0])
 def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
   '''coulomb logarithm'''
   if LOGCUL_QUANT is None:
-    LOGCUL_QUANT = ['logcul']  
+    LOGCUL_QUANT = _LOGCUL_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'LOGCUL_QUANT', LOGCUL_QUANT, get_mf_logcul.__doc__)
+    docvar = document_vars.vars_documenter(obj, _LOGCUL_QUANT[0], LOGCUL_QUANT, get_mf_logcul.__doc__)
     docvar('logcul', 'Coulomb Logarithmic used for Coulomb collisions.', nfluid=0)
     return None
 
@@ -1075,13 +1106,17 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
           0.5 * np.log(nel / 1e6)
 
 
+# default
+_CROSTAB_QUANT = ('CROSTAB_QUANT', ['cross'])
+# get value
+@document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
 def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   '''cross section between species.'''
   if CROSTAB_QUANT is None:
-    CROSTAB_QUANT = ['cross']
+    CROSTAB_QUANT = _CROSTAB_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'CROSTAB_QUANT', CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
+    docvar = document_vars.vars_documenter(obj, _CROSTAB_QUANT[0], CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
     docvar('cross', 'cross section between ifluid and jfluid [cgs]. Use species < 0 for electrons.')
     return None
 
@@ -1113,13 +1148,17 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
   return cross
 
 
+# default
+_DRIFT_QUANT = ('DRIFT_QUANT', ['ud', 'pd', 'ed', 'rd', 'tgd', 'uid'])
+# get value
+@document_vars.quant_tracking_simple(_DRIFT_QUANT[0])
 def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
-  '''var drift between fluids. I.e. var_ifluid - var_jfluid'''
+  '''var drift between fluids. I.e. var_ifluid - var_jfluid.'''
   if DRIFT_QUANT is None:
-    DRIFT_QUANT = ['ud', 'pd', 'ed', 'rd', 'tgd', 'uid']
+    DRIFT_QUANT = _DRIFT_QUANT[1]
 
   if var=='':
-    docvar = document_vars.vars_documenter(obj, 'DRIFT_QUANT', DRIFT_QUANT, get_mf_driftvar.__doc__, nfluid=2)
+    docvar = document_vars.vars_documenter(obj, _DRIFT_QUANT[0], DRIFT_QUANT, get_mf_driftvar.__doc__, nfluid=2)
     def doc_start(var):
       return '"drift" for quantity ("{var}"). I.e. ({va_} for ifluid) - ({va_} for jfluid). '.format(var=var, va_=var[:-1])
     def doc_axis(var):
@@ -1144,14 +1183,19 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
     return None
 
 
+# default
+_CFL_QUANTS = ['ohm']
+_CFL_QUANT = ['cfl_' + q for q in _CFL_QUANTS]
+_CFL_QUANT = ('CFL_QUANT', _CFL_QUANT)
+# get value
+@document_vars.quant_tracking_simple(_CFL_QUANT[0])
 def get_cfl_quant(obj, quant, CFL_QUANT=None):
   '''CFL quantities. All are in simu. frequency units.'''
   if CFL_QUANT is None:
-    CFL_QUANTS = ['ohm']
-    CFL_QUANT = ['cfl_' + q for q in CFL_QUANTS]
+    CFL_QUANT = _CFL_QUANT[1]
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, 'CFL_QUANT', CFL_QUANT, get_cfl_quant.__doc__)
+    docvar = document_vars.vars_documenter(obj, _CFL_QUANT[0], CFL_QUANT, get_cfl_quant.__doc__)
     docvar('cfl_ohm', 'cfl condition for ohmic module. (me / ms) ((qs / qe) + (ne / ns)) nu_es', nfluid=1)
     return None
 
@@ -1168,14 +1212,22 @@ def get_cfl_quant(obj, quant, CFL_QUANT=None):
     return mrat * (qrat + nrat) * nu_es
 
 
+# default
+_PLASMA_QUANT = ('PLASMA_QUANT',
+                 ['beta', 'beta_ions', 'va', 'va_ions', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+                  'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
+                  'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei',
+                 ]
+                )
+# get value
+@document_vars.quant_tracking_simple(_PLASMA_QUANT[0])
 def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   '''plasma parameters, e.g. plasma beta, sound speed, pressure scale height'''
   if PLASMA_QUANT is None:
-    PLASMA_QUANT = ['beta', 'beta_ions', 'va', 'va_ions', 'cs', 's', 'ke', 'mn', 'man', 'hp',
-                'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
-                'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei']
+    PLASMA_QUANT = _PLASMA_QUANT[1]
+
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, 'PLASMA_QUANT', PLASMA_QUANT, get_mf_plasmaparam.__doc__)
+    docvar = document_vars.vars_documenter(obj, _PLASMA_QUANT[0], PLASMA_QUANT, get_mf_plasmaparam.__doc__)
     docvar('beta', "plasma beta", nfluid='???') #nfluid= 1 if mfe_p is pressure for ifluid; 0 if it is sum of pressures.
     docvar('beta_ions', "plasma beta using sum of ion pressures. P / (B^2 / (2 mu0)).", nfluid=0)
     docvar('va', "alfven speed [simu. units]", nfluid=0)
@@ -1185,11 +1237,11 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     docvar('mn', "mach number (using sound speed)", nfluid=1)
     docvar('man', "mach number (using alfven speed)", nfluid=1)
     docvar('hp', "Pressure scale height", nfluid='???')
-    for vax in ['vax', 'vay', 'vaz']:
-      docvar(vax, "{axis} component of alfven velocity [simu. units]".format(axis=vax[-1]), nfluid=0)
-    for kx in ['kx', 'ky', 'kz']:
-      docvar(kx, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
-                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=kx[-1]), nfluid=1)
+    for x in AXES:
+      docvar('va'+x, x+"-component of alfven velocity [simu. units]", nfluid=0)
+    for x in AXES:
+      docvar('k'+x, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
+                  "(0.5 * rho * (get_var(u{axis})**2)").format(axis=x), nfluid=1)
     docvar('sgyrof', "signed gryofrequency for ifluid. I.e. qi * |B| / mi. [1 / (simu. time units)]", nfluid=1)
     docvar('gyrof', "gryofrequency for ifluid. I.e. abs(qi * |B| / mi). [1 / (simu. time units)]", nfluid=1)
     kappanote = ' "Highly magnetized" when kappa^2 >> 1.'
@@ -1295,15 +1347,21 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     return 1/ldeb_inv_sum
 
 
+# default
+_WAVE_QUANT = ('WAVE_QUANT',
+               ['ci', 'kmaxx', 'kmaxy', 'kmaxz']
+              )
+# get value
+@document_vars.quant_tracking_simple(_WAVE_QUANT[0])
 def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
   '''quantities related most directly to waves in plasmas.'''
   if WAVE_QUANT is None:
-    WAVE_QUANT = ['ci', 'kmaxx', 'kmaxy', 'kmaxz']
+    WAVE_QUANT = _WAVE_QUANT[1]
 
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, 'WAVE_QUANT', WAVE_QUANT, get_mf_wavequant.__doc__)
+    docvar = document_vars.vars_documenter(obj, _WAVE_QUANT[0], WAVE_QUANT, get_mf_wavequant.__doc__)
     docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]", nfluid=1)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('kmax'+x, "maximum resolvable wavevector in "+x+" direction. Determined via 2*pi/obj.d"+x+"1d", nfluid=0)
     return None
 
@@ -1330,16 +1388,21 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     return (2 * np.pi / dx1d) + obj.zero()
 
 
+# default
+_FB_INSTAB_QUANT = ['psi0', 'psii', 'vde', 'fb_ssi_vdtrigger', 'fb_ssi_possible',
+                    'fb_ssi_freq', 'fb_ssi_growth_rate']
+_FB_INSTAB_VECS  = ['fb_ssi_freq_max', 'fb_ssi_growth_rate_max', 'fb_ssi_growth_time_min']
+_FB_INSTAB_QUANT += [v+x for v in _FB_INSTAB_VECS for x in AXES]
+_FB_INSTAB_QUANT = ('FB_INSTAB_QUANT', _FB_INSTAB_QUANT)
+# get value
+@document_vars.quant_tracking_simple(_FB_INSTAB_QUANT[0])
 def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
   '''very specific quantities which are related to the Farley-Buneman instability.'''
   if FB_INSTAB_QUANT is None:
-    FB_INSTAB_QUANT = ['psi0', 'psii', 'vde', 'fb_ssi_vdtrigger', 'fb_ssi_possible',
-                       'fb_ssi_freq', 'fb_ssi_growth_rate']
-    vecs = ['fb_ssi_freq_max', 'fb_ssi_growth_rate_max', 'fb_ssi_growth_time_min']
-    FB_INSTAB_QUANT += [v+x for v in vecs for x in ['x', 'y', 'z']]
+    FB_INSTAB_QUANT = _FB_INSTAB_QUANT[1]
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, 'FB_INSTAB_QUANT', FB_INSTAB_QUANT, get_fb_instab_quant.__doc__)
+    docvar = document_vars.vars_documenter(obj, _FB_INSTAB_QUANT[0], FB_INSTAB_QUANT, get_fb_instab_quant.__doc__)
     for psi in ['psi0', 'psii']:
       docvar(psi, 'psi_i when k_parallel==0. equals to: (kappa_e * kappa_i)^-1.', nfluid=1)
     docvar('vde', 'electron drift velocity. equals to: |E|/|B|. [simu. velocity units]', nfluid=0)
@@ -1353,13 +1416,13 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
     docvar('fb_ssi_growth_rate', 'SSI FB instability growth rate divided by wavenumber (k) squared. ' +\
              'assumes wavevector in E x B direction. == (Vd^2/(1+psi0)^2 - Ci^2)/(nu_in*(1+1/psi0)). ' +\
              'result is in units of [simu. frequency * simu. length^2].', nfluid=2)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('fb_ssi_freq_max'+x, 'SSI FB instability max frequency in '+x+' direction ' +\
                '[simu. frequency units]. calculated using fb_ssi_freq * kmax'+x, nfluid=2)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('fb_ssi_growth_rate_max'+x, 'SSI FB instability max growth rate in '+x+' direction ' +\
                '[simu. frequency units]. calculated using fb_ssi_growth_rate * kmax'+x, nfluid=2)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('fb_ssi_growth_time_min'+x, 'SSI FB instability min growth time in '+x+' direction ' +\
                '[simu. time units]. This is the amount of time it takes for the wave amplitude for the wave ' +\
                'with the largest wave vector to grow by a factor of e. == 1/fb_ssi_growth_rate_max'+x, nfluid=2)
@@ -1407,22 +1470,36 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
     nu_in = obj.get_var('nu_ij')
     return (w_r_k**2 - Ci**2) / (nu_in * (1 + 1/psi0))
 
-  elif quant in ['fb_ssi_freq_max'+x for x in ['x', 'y', 'z']]:
+  elif quant in ['fb_ssi_freq_max'+x for x in AXES]:
     x = quant[-1]
     freq        = obj.get_var('fb_ssi_freq')
     kmaxx       = obj.get_var('kmax'+x)
     return kmaxx**2 * freq
 
-  elif quant in ['fb_ssi_growth_rate_max'+x for x in ['x', 'y', 'z']]:
+  elif quant in ['fb_ssi_growth_rate_max'+x for x in AXES]:
     x = quant[-1]
     growth_rate = obj.get_var('fb_ssi_growth_rate')
     kmaxx       = obj.get_var('kmax'+x)
     return kmaxx**2 * growth_rate
 
-  elif quant in ['fb_ssi_growth_time_min'+x for x in ['x', 'y', 'z']]:
+  elif quant in ['fb_ssi_growth_time_min'+x for x in AXES]:
     x = quant[-1]
     return 1/obj.get_var('fb_ssi_growth_rate_max'+x)
 
+
+# default
+_THERMAL_INSTAB_QUANT  = ['thermal_growth_rate',
+                          'thermal_freq', 'thermal_tan2xopt',
+                          'thermal_xopt', 'thermal_xopt_rad', 'thermal_xopt_deg']
+_THERMAL_INSTAB_VECS   = ['thermal_u0', 'thermal_v0']
+_THERMAL_INSTAB_QUANT += [v+x for v in _THERMAL_INSTAB_VECS for x in AXES]
+## add thermal_growth_rate with combinations of terms.
+_THERMAL_GROWRATE_QUANTS  = ['thermal_growth_rate' + x for x in ['', '_fb', '_thermal', '_damping']]
+_THERMAL_GROWRATE_QUANTS += [quant+'_max' for quant in _THERMAL_GROWRATE_QUANTS]
+_THERMAL_INSTAB_QUANT += _THERMAL_GROWRATE_QUANTS
+_THERMAL_INSTAB_QUANT = ('THERMAL_INSTAB_QUANT', _THERMAL_INSTAB_QUANT)
+# get_value
+@document_vars.quant_tracking_simple(_THERMAL_INSTAB_QUANT[0])
 def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
   '''very specific quantities which are related to the ion thermal and/or electron thermal instabilities.
   For source of formulae, see paper by Dimant & Oppenheim, 2004.
@@ -1433,18 +1510,10 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
   Quantities which depend on two fluids expect ifluid to be ion or electron, and jfluid to be neutral.
   '''
   if THERMAL_INSTAB_QUANT is None:
-    THERMAL_INSTAB_QUANT = ['thermal_growth_rate',
-                            'thermal_freq', 'thermal_tan2xopt',
-                            'thermal_xopt', 'thermal_xopt_rad', 'thermal_xopt_deg']
-    vecs = ['thermal_u0', 'thermal_v0']
-    THERMAL_INSTAB_QUANT += [v+x for v in vecs for x in ['x', 'y', 'z']]
-    # add thermal_growth_rate with combinations of terms.
-    THERMAL_GROWRATE_QUANTS = ['thermal_growth_rate' + x for x in ['', '_fb', '_thermal', '_damping']]
-    THERMAL_GROWRATE_QUANTS += [quant+'_max' for quant in THERMAL_GROWRATE_QUANTS]
-    THERMAL_INSTAB_QUANT += THERMAL_GROWRATE_QUANTS
+    THERMAL_INSTAB_QUANT = _THERMAL_INSTAB_QUANT[1]
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, 'THERMAL_INSTAB_QUANT', THERMAL_INSTAB_QUANT,
+    docvar = document_vars.vars_documenter(obj, _THERMAL_INSTAB_QUANT[0], THERMAL_INSTAB_QUANT,
                                            get_thermal_instab_quant.__doc__, nfluid=1)
     docvar('thermal_growth_rate', 'thermal instability optimal growth rate divided by wavenumber (k) squared. ' +\
              'result is in units of [simu. frequency * simu. length^2].', nfluid=1)
@@ -1458,9 +1527,9 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
     docvar('thermal_xopt_deg', 'thermal instability optimal angle between k and (Ve - Vi) to maximize growth.' +\
                 'result will be in degrees. Result will be between -45 and 45.', nfluid=1)
     docvar('thermal_tan2xopt', 'tangent of 2 times thermal_xopt', nfluid=1)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('thermal_u0'+x, x+'-component of (Ve - Vi). Warning: proper interpolation not yet implemented.', nfluid=1)
-    for x in ['x', 'y', 'z']:
+    for x in AXES:
       docvar('thermal_v0'+x, x+'-component of E x B / B^2. Warning: proper interpolation not yet implemented.', nfluid=0)
     return None
 
@@ -1518,7 +1587,7 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
     result *= k2
     return result
 
-  elif quant in ['thermal_u0'+x for x in ['x', 'y', 'z']]:
+  elif quant in ['thermal_u0'+x for x in AXES]:
     check_fluids_ok(nfluid=1)
     # TODO: handle interpolation properly.
     x = quant[-1]
@@ -1531,7 +1600,7 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
     ki2   = obj.get_var('kappa')**2
     return (V0x - Vix) / (1 + ki2)
 
-  elif quant in ['thermal_v0'+x for x in ['x', 'y', 'z']]:
+  elif quant in ['thermal_v0'+x for x in AXES]:
     # TODO: handle interpolation properly.
     x = quant[-1]
     ExB__x = obj.get_var('eftimesb'+x)

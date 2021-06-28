@@ -23,6 +23,12 @@ Interpolation guide:
     Ey at ( -0.5,  0  , -0.5 )
     Ez at ( -0.5, -0.5,  0   )
     E = electric field; i = current per unit area.
+
+
+TODO:
+  - cleanup code in get_center using quants from get_interp.
+  - be more sophisticated in learning if quant is edge-centered or face-centered;
+    - e.g. get_center now just checks if quant is i, e, j, or ef.
 """
 
 
@@ -37,6 +43,12 @@ from . import document_vars
 # import external public modules
 import numpy as np
 
+# set constants
+AXES      = ('x', 'y', 'z')
+YZ_FROM_X = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))  # right-handed coord system x,y,z given x.
+EPSILON   = 1.0e-20   # small number which is added in denominators of some operations.
+
+
 # we need to convert to float32 before doing cstagger.do.
 ## not sure why this conversion isnt done in the cstagger method, but it is a bit 
 ## painful to change the method itself (required re-installing helita for me) so we will
@@ -50,6 +62,22 @@ def do_cstagger(arr, operation='xup', default_type=CSTAGGER_TYPES[0]):
   if arr.dtype not in CSTAGGER_TYPES: # if necessary,
     arr = arr.astype(default_type)      # convert type
   return cstagger.do(arr, operation)  # call the original cstagger function
+
+def _can_interp(obj, axis, warn=True):
+  '''return whether we can interpolate. Make warning if we can't.'''
+  if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
+    return False       # intentionally turned off interpolation. So we don't make warning.
+  if not getattr(obj, 'cstagger_exists', False):
+    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
+              'We will skip the interpolation, and instead return the original value.'
+    warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
+    return False
+  if not getattr(obj, 'n'+axis, 0) >=5:
+    warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\
+              'We will skip this interpolation, and instead return the original value.'
+    warnings.warn(warnmsg) # warn user we will not be interpolating! (dimension is too small)
+    return False
+  return True
 
 
 ''' --------------------- functions to load quantities --------------------- '''
@@ -89,47 +117,41 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
     val = get_angle(obj, quant)
   return val
 
-def _can_interp(obj, axis, warn=True):
-  '''return whether we can interpolate. Make warning if we can't.'''
-  if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
-    return False       # intentionally turned off interpolation. So we don't make warning.
-  if not getattr(obj, 'cstagger_exists', False):
-    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
-              'We will skip the interpolation, and instead return the original value.'
-    warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
-    return False
-  if not getattr(obj, 'n'+axis, 0) >=5:
-    warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\
-              'We will skip this interpolation, and instead return the original value.'
-    warnings.warn(warnmsg) # warn user we will not be interpolating! (dimension is too small)
-    return False
-  return True
-  
 
+# default
+_DERIV_QUANT = ('DERIV_QUANT', ['d'+x+up for up in ('up', 'dn') for x in AXES])
+# get value
 def get_deriv(obj,quant):
   '''
   Computes derivative of quantity.
   Example: 'drdxup' does dxup for var 'r'.
   '''
-  quant = quant.lower()
-
-  DERIV_QUANT = ['dxup', 'dyup', 'dzup', 'dxdn', 'dydn', 'dzdn']
-
-  docvar = document_vars.vars_documenter(obj, 'DERIV_QUANT', DERIV_QUANT, get_deriv.__doc__)
-  docvar('dxup',  'spatial derivative in the x axis with half grid up [simu units]')
-  docvar('dyup',  'spatial derivative in the y axis with half grid up [simu units]')
-  docvar('dzup',  'spatial derivative in the z axis with half grid up [simu units]')
-  docvar('dxdn',  'spatial derivative in the x axis with half grid down [simu units]')
-  docvar('dydn',  'spatial derivative in the y axis with half grid down [simu units]')
-  docvar('dzdn',  'spatial derivative in the z axis with half grid down [simu units]')
-
-  if (quant == '') or not (quant[0] == 'd' and quant[-4:] in DERIV_QUANT):
+  # quant = quant.lower()    # if we want to use lower, it should be elsewhere in the code.
+                             # (in get_var, or load_arithmetic_quantities(), perhaps.) -SE June 28, 2021.
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_DERIV_QUANT, get_deriv.__doc__)
+    docvar('dxup',  'spatial derivative in the x axis with half grid up [simu units]')
+    docvar('dyup',  'spatial derivative in the y axis with half grid up [simu units]')
+    docvar('dzup',  'spatial derivative in the z axis with half grid up [simu units]')
+    docvar('dxdn',  'spatial derivative in the x axis with half grid down [simu units]')
+    docvar('dydn',  'spatial derivative in the y axis with half grid down [simu units]')
+    docvar('dzdn',  'spatial derivative in the z axis with half grid down [simu units]')
     return None
 
-  axis = quant[-3]
-  q = quant[1:-4]  # base variable 
-  var = obj.get_var(q)
+  getq = quant[-4:]   # the quant we are "getting" by this function. (here: dxup, dyup, ..., or dzdn)
 
+  if not (quant[0] == 'd' and getq in _DERIV_QUANT[1]):
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _DERIV_QUANT[0])
+
+  # interpret quant string
+  axis = quant[-3]
+  q    = quant[1:-4]  # base variable 
+  var  = obj.get_var(q)
+
+  # handle "cant interpolate" case
   if not _can_interp(obj, axis):
     warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
     xidx = dict(x=0, y=1, z=2)[axis]  # axis; 0, 1, or 2.
@@ -141,57 +163,60 @@ def get_deriv(obj,quant):
     dvardx = dvar / dx
     return dvardx
 
-  def deriv_loop(var, quant):
-    return do_cstagger(var, 'd' + quant[0])
-
-  if getattr(obj, 'n' + axis) < 5:  # 2D or close
-    print('(WWW) get_quantity: DERIV_QUANT: '
-          'n%s < 5, derivative set to 0.0' % axis)
-    return np.zeros_like(var)
-  else:
-    if obj.numThreads > 1:
-      if obj.verbose:
-        print('Threading', whsp*8, end="\r", flush=True)
-      quantlist = [quant[-4:] for numb in range(obj.numThreads)]
-      if axis != 'z':
-        return threadQuantity_z(deriv_loop, obj.numThreads, var, quantlist)
-      else:
-        return threadQuantity_y(deriv_loop, obj.numThreads, var, quantlist)
+  # calculate derivative with interpolations
+  if obj.numThreads > 1:
+    if obj.verbose:
+      print('Threading', whsp*8, end="\r", flush=True)
+    quantlist = [quant[-4:] for numb in range(obj.numThreads)]
+    def deriv_loop(var, quant):
+      return do_cstagger(var, 'd' + quant[0])
+    if axis != 'z':
+      return threadQuantity_z(deriv_loop, obj.numThreads, var, quantlist)
     else:
-      if obj.lowbus:
-        output = np.zeros_like(var)
-        if axis != 'z':
-          for iiz in range(obj.nz):
-            slicer = np.s_[:, :, iiz:iiz+1]
-            staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
-            output[slicer] = staggered
-        else:
-          for iiy in range(obj.ny):
-            slicer = np.s_[:, iiy:iiy+1, :]
-            staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
-            output[slicer] = staggered
-
-        return output
+      return threadQuantity_y(deriv_loop, obj.numThreads, var, quantlist)
+  else:
+    if obj.lowbus:
+      output = np.zeros_like(var)
+      if axis != 'z':
+        for iiz in range(obj.nz):
+          slicer = np.s_[:, :, iiz:iiz+1]
+          staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+          output[slicer] = staggered
       else:
-        return do_cstagger(var, 'd' + quant[-4:])
+        for iiy in range(obj.ny):
+          slicer = np.s_[:, iiy:iiy+1, :]
+          staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+          output[slicer] = staggered
+
+      return output
+    else:
+      return do_cstagger(var, 'd' + quant[-4:])
 
 
+# default
+_CENTER_QUANT = ('CENTER_QUANT', [x+'c' for x in AXES])
+# get value
 def get_center(obj,quant, *args, **kwargs):
   '''
   Center the variable in the midle of the grid cells
   '''
-  CENTER_QUANT = ['xc', 'yc', 'zc']
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_CENTER_QUANT, get_center.__doc__)
+    return None
 
-  docvar = document_vars.vars_documenter(obj, 'CENTER_QUANT', CENTER_QUANT, get_center.__doc__)
+  getq = quant[-2:]  # the quant we are "getting" by this function.
 
-  if (quant == '') or not quant[-2:] in CENTER_QUANT:
+  if not getq in _CENTER_QUANT[1]:
       return None
 
-  # This brings a given vector quantity to cell centres
-  axis = quant[-2]
-  q = quant[:-1]  # base variable
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _CENTER_QUANT[0])
 
-  if q[:-1] == 'i' or q == 'e':
+  # interpret quant string
+  axis = quant[-2]
+  q    = quant[:-1]  # base variable
+
+  if q in ['i', 'e', 'j', 'ef']:     # edge-centered variable. efx is at (0, -0.5, -0.5)
     AXIS_TRANSFORM = {'x': ['yup', 'zup'],
                       'y': ['xup', 'zup'],
                       'z': ['xup', 'yup']}
@@ -227,73 +252,91 @@ def get_center(obj,quant, *args, **kwargs):
   return var
 
 
+# default
+_INTERP_QUANT = ('INTERP_QUANT', [x+up for up in ('up', 'dn') for x in AXES])
+# get value
 def get_interp(obj, quant):
   '''simple interpolation. var must end in interpolation instructions.
   e.g. get_var('rxup') --> do_cstagger(get_var('r'), 'xup')
   '''
-  INTERP_QUANT = ['xup', 'yup', 'zup',
-                  'xdn', 'ydn', 'zdn']
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, 'INTERP_QUANT', INTERP_QUANT, get_interp.__doc__)
-    for xup in INTERP_QUANT:
+    docvar = document_vars.vars_documenter(obj, *_INTERP_QUANT, get_interp.__doc__)
+    for xup in _INTERP_QUANT[1]:
       docvar(xup, 'move half grid {up:} in the {x:} axis'.format(up=xup[1:], x=xup[0]))
     return None
 
+  # interpret quant string
   varname, interp = quant[:-3], quant[-3:]
-  if not interp in INTERP_QUANT:
+
+  if not interp in _INTERP_QUANT[1]:
     return None
-  else:
-    val = obj.get_var(varname)      # un-interpolated value
-    if _can_interp(obj, interp[0]):
-      val = do_cstagger(val, interp) # interpolated value
-    return val
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, interp, _INTERP_QUANT[0])
+
+  val = obj.get_var(varname)      # un-interpolated value
+  if _can_interp(obj, interp[0]):
+    val = do_cstagger(val, interp) # interpolated value
+  return val
 
 
+# default
+_MODULE_QUANT = ('MODULE_QUANT', ['mod', 'h'])
+# get value
 def get_module(obj,quant):
   '''
   Module or horizontal component of vectors
   '''
-  MODULE_QUANT = ['mod', 'h']  # This one must be called the last
-
-  docvar = document_vars.vars_documenter(obj, 'MODULE_QUANT', MODULE_QUANT, get_module.__doc__)
-  docvar('mod',  'starting with mod computes the module of the vector [simu units]')
-  docvar('h',  'ending with h computes the horizontal component of the vector [simu units]')
-
-  if (quant == '') or not ((quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT)):
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_MODULE_QUANT, get_module.__doc__)
+    docvar('mod',  'starting with mod computes the module of the vector [simu units]. sqrt(vx^2 + vy^2 + vz^2).')
+    docvar('h',  'ending with h computes the horizontal component of the vector [simu units]. sqrt(vx^2 + vy^2).')
     return None
 
-  # Calculate module of vector quantity
-  if (quant[:3] in MODULE_QUANT):
-    q = quant[3:]
+  # interpret quant string
+  if quant.startswith('mod'):
+    getq = 'mod'
+    q    = quant[len('mod') : ]
+  elif quant.endswith('h'):
+    getq = 'h'
+    q    = quant[ : -len('h')]
   else:
-    q = quant[:-1]
-  if q == 'b':
-    if not obj.do_mhd:
-      raise ValueError("No magnetic field available.")
+    return None
 
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _MODULE_QUANT[0])
+
+  # actually get the quant:
   result = obj.get_var(q + 'xc') ** 2
   result += obj.get_var(q + 'yc') ** 2
-  if not(quant[-1] in MODULE_QUANT):
+  if getq == 'mod':
     result += obj.get_var(q + 'zc') ** 2
 
-  if (quant[:3] in MODULE_QUANT) or (quant[-1] in MODULE_QUANT):
-    return np.sqrt(result)
+  return np.sqrt(result)
 
 
+# default
+_HORVAR_QUANT = ('HORVAR_QUANT', ['horvar'])
+# get value
 def get_horizontal_average(obj,quant):
   '''
   Computes horizontal average
   '''
-  HORVAR_QUANT = ['horvar']
+  
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_HORVAR_QUANT, get_horizontal_average.__doc__)
+    docvar('horvar',  'starting with horvar computes the horizontal average of a variable [simu units]')
 
-  docvar = document_vars.vars_documenter(obj, 'HORVAR_QUANT', HORVAR_QUANT, get_horizontal_average.__doc__)
-  docvar('horvar',  'starting with horvar computes the horizontal average of a variable [simu units]')
-
-  if (quant == '') or not quant[:6] in HORVAR_QUANT:
+  # interpret quant string
+  getq = quant[:6]
+  if not getq in _HORVAR_QUANT[1]:
     return None
 
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _HORVAR_QUANT[0])
+
   # Compares the variable with the horizontal mean
-  if quant[:6] == 'horvar':
+  if getq == 'horvar':
     result = np.zeros_like(obj.r)
     result += obj.get_var(quant[6:])  # base variable
     horv = np.mean(np.mean(result, 0), 0)
@@ -303,6 +346,13 @@ def get_horizontal_average(obj,quant):
   return result
 
 
+# default
+_GRADVECT_QUANT = ('GRADVECT_QUANT',
+                   ['div', 'divup', 'divdn',
+                   'rot', 'she', 'curlcc', 'curvec',
+                   'chkdiv', 'chbdiv', 'chhdiv']
+                  )
+# get value
 def get_gradients_vect(obj,quant):
   '''
   Vectorial derivative opeartions
@@ -310,10 +360,10 @@ def get_gradients_vect(obj,quant):
   for rot, she, curlcc, curvec, ensure that quant ends with axis.
   e.g. curvecbx gets the x component of curl of b.
   '''
-  GRADVECT_QUANT = ['div', 'divup', 'divdn', 'rot', 'she', 'curlcc', 'curvec', 'chkdiv', 'chbdiv', 'chhdiv']
+  
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, 'GRADVECT_QUANT', GRADVECT_QUANT, get_gradients_vect.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_GRADVECT_QUANT, get_gradients_vect.__doc__)
     for div in ['div', 'divup']:
       docvar(div,     'starting with, divergence [simu units], shifting up (e.g. dVARdxup) for derivatives')
     docvar('divdn',   'starting with, divergence [simu units], shifting down (e.g. dVARdxdn) for derivatives')
@@ -326,11 +376,20 @@ def get_gradients_vect(obj,quant):
     docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
     return None
 
-  if not any(quant.startswith(GVQ) for GVQ in GRADVECT_QUANT):
-      return None
+  # interpret quant string
+  for GVQ in _GRADVECT_QUANT[1]:
+    if quant.startswith(GVQ):
+      getq = GVQ                   # the quant we are "getting" via this function. (e.g. 'rot' or 'div')
+      q    = quant[len(GVQ) : ]    # the "base" quant, i.e. whatever is left after pulling getq.
+      break
+  else:  # if we did not break, we did not match any GVQ to quant, so we return None.
+    return None
 
-  if quant[:3] == 'chk':
-    q = quant[6:]  # base variable
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _GRADVECT_QUANT[0])
+
+  # do calculations and return result
+  if getq == 'chkdiv':
     if getattr(obj, 'nx') < 5:  # 2D or close
       varx = np.zeros_like(obj.r)
     else:
@@ -346,10 +405,9 @@ def get_gradients_vect(obj,quant):
     else:
       varz = np.zeros_like(varx)
     return np.abs(varx + vary + varx) / (np.maximum(
-        np.abs(varx), np.abs(vary), np.abs(varz)) + 1.0e-20)
+        np.abs(varx), np.abs(vary), np.abs(varz)) + EPSILON)
 
-  elif quant[:3] == 'chb':
-    q = quant[6:]  # base variable
+  elif getq == 'chbdiv':
     varx = obj.get_var(q + 'x')
     vary = obj.get_var(q + 'y')
     varz = obj.get_var(q + 'z')
@@ -365,10 +423,9 @@ def get_gradients_vect(obj,quant):
       result += obj.get_var('d' + q + 'zdzup')
 
     return np.abs(result / (np.sqrt(
-        varx * varx + vary * vary + varz * varz) + 1.0e-20))
+        varx * varx + vary * vary + varz * varz) + EPSILON))
 
-  elif quant[:3] == 'chh':
-    q = quant[6:]  # base variable
+  elif getq == 'chhdiv':
     varx = obj.get_var(q + 'x')
     vary = obj.get_var(q + 'y')
     varz = obj.get_var(q + 'z')
@@ -389,38 +446,34 @@ def get_gradients_vect(obj,quant):
                     varz[:, :, iiz]**2)))
     return result
 
-  elif any(quant.startswith(div) for div in ['div', 'divup', 'divdn']):  # divergence of vector quantity
-    q = quant[len('div'):]
-    if q.startswith('up') or q.startswith('dn'):
-      up, q = q[ :2], q[2: ]
-    else:
-      up = 'up'  # use 'up' for case 'div'
+  elif getq in ['div', 'divup', 'divdn']:  # divergence of vector quantity
+    up = 'dn' if (getq == 'divdn') else 'up'
     result = 0
     for xdx in ['xdx', 'ydy', 'zdz']:
       result += obj.get_var('d' + q + xdx + up)
     return result
 
-  elif quant[:6] == 'curlcc': # re-aligned curl
-    q = quant[6:-1]
-    x = quant[-1]  # axis, 'x', 'y', 'z'
-    y,z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+  elif getq == 'curlcc': # re-aligned curl
+    x = q[-1]  # axis, 'x', 'y', 'z'
+    q = q[:-1] # q without axis
+    y,z = YZ_FROM_X[x]
     dqz_dy = obj.get_var('d' + q + z + 'd' + y + 'dn' + y + 'up')
     dqy_dz = obj.get_var('d' + q + y + 'd' + z + 'dn' + z + 'up')
-    result = dqz_dy - dqy_dz
+    return dqz_dy - dqy_dz
 
-  elif quant[:6] == 'curvec': # curl of vector which is originally on face of cell
-    q = quant[6:-1]
-    x = quant[-1]  # axis, 'x', 'y', 'z'
-    y,z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+  elif getq == 'curvec': # curl of vector which is originally on face of cell
+    x = q[-1]  # axis, 'x', 'y', 'z'
+    q = q[:-1] # q without axis
+    y,z = YZ_FROM_X[x]
     # interpolation notes:
     ## qz is at (0, 0, -0.5); dqzdydn is at (0, -0.5, -0.5)
     ## qy is at (0, -0.5, 0); dqydzdn is at (0, -0.5, -0.5)
     dqz_dydn = obj.get_var('d' + q + z + 'd' + y + 'dn')
     dqy_dzdn = obj.get_var('d' + q + y + 'd' + z + 'dn')
-    result = dqz_dydn - dqy_dzdn
+    return dqz_dydn - dqy_dzdn
 
-  elif quant[:3] == 'rot' or quant[:3] == 'she':
-    q = quant[3:-1]  # base variable
+  elif getq in ['rot', 'she']:
+    q = q[:-1]  # base variable
     qaxis = quant[-1]
     if qaxis == 'x':
       if getattr(obj, 'ny') < 5:  # 2D or close
@@ -452,127 +505,169 @@ def get_gradients_vect(obj,quant):
           result -= obj.get_var('d' + q + 'xdyup')
         else:  # shear
           result += obj.get_var('d' + q + 'xdyup')
-  return result
+    return result
 
 
+# default
+_GRADSCAL_QUANT = ('GRADSCAL_QUANT', ['gra'])
+# get value
 def get_gradients_scalar(obj,quant):
   '''
   Gradient of a scalar
   '''
-  GRADSCAL_QUANT = ['gra']
-
-  docvar = document_vars.vars_documenter(obj, 'GRADSCAL_QUANT', GRADSCAL_QUANT, get_gradients_scalar.__doc__)
-  docvar('gra',  'starting with, Gradient of a scalar [simu units]')
-
-  if (quant == '') or not quant[:3] in GRADSCAL_QUANT:
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_GRADSCAL_QUANT, get_gradients_scalar.__doc__)
+    docvar('gra',  'starting with, Gradient of a scalar [simu units]. dqdx + dqdy + dqdz.' +\
+                   ' Shifting up for derivatives.')
     return None
+
+  getq = quant[:3]
+
+  if not getq in _GRADSCAL_QUANT[1]:
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _GRADSCAL_QUANT[0])
   
-  if quant[:3] == 'gra':
+  # do calculations and return result
+  if getq == 'gra':
     q = quant[3:]  # base variable
-    if getattr(obj, 'nx') < 5:  # 2D or close
-      result = np.zeros_like(obj.r)
-    else:
-      result = obj.get_var('d' + q + 'dxup')
-    if getattr(obj, 'ny') > 5:
-      result += obj.get_var('d' + q + 'dyup')
-    if getattr(obj, 'nz') > 5:
-      result += obj.get_var('d' + q + 'dzup')
+    result = obj.get_var('d' + q + 'dxup')
+    result += obj.get_var('d' + q + 'dyup')
+    result += obj.get_var('d' + q + 'dzup')
   return result
 
 
+# default
+_SQUARE_QUANT = ('SQUARE_QUANT', ['2'])
+# get value
 def get_square(obj,quant):
-  '''module of a square of a vector'''
-  SQUARE_QUANT = ['2']  # This one must be called the towards the last
-
-  docvar = document_vars.vars_documenter(obj, 'SQUARE_QUANT', SQUARE_QUANT, get_square.__doc__)
-  docvar('2',  'ending with, Square of a vector [simu units]')
-
-  if (quant == '') or not quant[-1] in SQUARE_QUANT:
+  '''|vector| squared. Equals got product of vector with itself'''
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_SQUARE_QUANT, get_square.__doc__)
+    docvar('2',  'ending with, Square of a vector [simu units].' +\
+                 ' (Dot product of vector with itself.) Example: b2 --> bx^2 + by^2 + bz^2.')
     return None
 
-  try: 
-    result = obj.get_var(quant[:-1] + 'xc') ** 2
-    result += obj.get_var(quant[:-1] + 'yc') ** 2
-    result += obj.get_var(quant[:-1] + 'zc') ** 2
+  getq = quant[-1]
+  if not getq in _SQUARE_QUANT[1]:
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _SQUARE_QUANT[0])
+
+  # interpret quant string
+  q = quant[:-1]  # vector name
+
+  # do calculations and return result
+  if getq == '2':
+    result  = obj.get_var(q + 'xc') ** 2
+    result += obj.get_var(q + 'yc') ** 2
+    result += obj.get_var(q + 'zc') ** 2
     return result
-  except Exception:
-    return None
 
 
+# default
+_LOG_QUANT = ('LOG_QUANT', ['lg', 'log_', 'ln_'])
+# get value
 def get_lg(obj,quant):
-  '''Logarithmic base 10 of a variable'''
-  LG_QUANT = ['lg']  
-
-  docvar = document_vars.vars_documenter(obj, 'LG_QUANT', LG_QUANT, get_lg.__doc__)
-  docvar('LG',  'starting with, Logarithmic of a variable [simu units]')
-
-  if (quant == '') or not quant[:2] in LG_QUANT:
+  '''Logarithm of a variable. E.g. log_r --> log10(r)'''
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_LOG_QUANT, get_lg.__doc__)
+    for lg in ['lg', 'log_']:
+      docvar(lg,  'starting with, logarithm base 10 of a variable expressed in [simu. units].')
+    docvar('ln_', 'starting with, logarithm base e  of a variable expressed in [simu. units].')
     return None
 
-  try: 
-    return np.log10(obj.get_var(quant[2:]))
-  except Exception:
+  # interpret quant string
+  for LGQ in _LOG_QUANT[1]:
+    if quant.startswith(LGQ):
+      getq = LGQ                   # the quant we are "getting" via this function. (e.g. 'lg' or 'ln_')
+      q    = quant[len(LGQ) : ]    # the "base" quant, i.e. whatever is left after pulling getq.
+      break
+  else:  # if we did not break, we did not match any LGQ to quant, so we return None.
     return None
 
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0])
 
+  # do calculations and return result
+  if getq in ['lg', 'log_']:
+    return np.log10(obj.get_var(q))
+  elif getq == 'ln_':
+    return np.log(obj.get_var(q))
+
+
+# default
+_RATIO_QUANT = ('RATIO_QUANT', ['rat'])
+# get value
 def get_ratios(obj,quant):
   '''Ratio of two variables'''
-  RATIO_QUANT = 'rat'
-
-  docvar = document_vars.vars_documenter(obj, 'RATIO_QUANT', RATIO_QUANT, get_ratios.__doc__)
-  docvar('rat',  'in between with, Ratio of two variables [simu units]')
-
-  if (quant != '') or not RATIO_QUANT in quant:
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_RATIO_QUANT, get_ratios.__doc__)
+    docvar('rat',  'in between with, ratio of two variables [simu units]. aratb gives a/b.')
     return None
 
-  # Calculate module of vector quantity
-  q = quant[:quant.find(RATIO_QUANT)]
-  if q[0] == 'b':
-    if not obj.do_mhd:
-      raise ValueError("No magnetic field available.")
-  result = obj.get_var(q)
-  q = quant[quant.find(RATIO_QUANT) + 3:]
-  if q[0] == 'b':
-    if not obj.do_mhd:
-      raise ValueError("No magnetic field available.")
-  return result / (obj.get_var(q) + 1e-19)
+  # interpret quant string
+  for RAT in _RATIO_QUANT[1]:
+    qA, rat, qB = quant.partition(RAT)
+    if qB != '':
+      break
+  else:  # if we did not break, we did not match any RAT to quant, so we return None.
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, rat, _RATIO_QUANT[0])
+
+  # do calculations and return result
+  qA_val = obj.get_var(qA)
+  qB_val = obj.get_var(qB)
+  return qA_val / (qB_val + EPSILON)
 
 
+# default
+_PROJ_QUANT = ('PROJ_QUANT', ['par', 'per'])
+# get value
 def get_projections(obj,quant):
   '''Projected vectors'''
-  PROJ_QUANT = ['par', 'per']
-
-  docvar = document_vars.vars_documenter(obj, 'PROJ_QUANT', PROJ_QUANT, get_projections.__doc__)
-  docvar('par',  'in between with, parallel component of the first vector respect to the second vector [simu units]')
-  docvar('per',  'in between with, perpendicular component of the first vector respect to the second vector [simu units]')
-
-
-  if (quant == '') or not quant[1:4] in PROJ_QUANT:
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_PROJ_QUANT, get_projections.__doc__)
+    docvar('par',  'in between with, parallel component of the first vector respect to the second vector [simu units]')
+    docvar('per',  'in between with, perpendicular component of the first vector respect to the second vector [simu units]')
     return None
 
-  # projects v1 onto v2
-  v1 = quant[0]
-  v2 = quant[4]
-  x_a = obj.get_var(v1 + 'xc', obj.snap)
-  y_a = obj.get_var(v1 + 'yc', obj.snap)
-  z_a = obj.get_var(v1 + 'zc', obj.snap)
-  x_b = obj.get_var(v2 + 'xc', obj.snap)
-  y_b = obj.get_var(v2 + 'yc', obj.snap)
-  z_b = obj.get_var(v2 + 'zc', obj.snap)
-  # can be used for threadQuantity() or as is
+  # interpret quant string
+  for PAR in _PROJ_QUANT[1]:
+    v1, par, v2 = quant.partition(PAR)
+    if v2 != '':
+      break
+  else:  # if we did not break, we did not match any PAR to quant, so we return None.
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, par, _PROJ_QUANT[0])
+
+  # do calculations and return result v1 onto v2
+  x_a = obj.get_var(v1 + 'xc')
+  y_a = obj.get_var(v1 + 'yc')
+  z_a = obj.get_var(v1 + 'zc')
+  x_b = obj.get_var(v2 + 'xc')
+  y_b = obj.get_var(v2 + 'yc')
+  z_b = obj.get_var(v2 + 'zc')
   def proj_task(x1, y1, z1, x2, y2, z2):
+    '''do projecting; can be used in threadQuantity() or as is'''
     v2Mag = np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2)
     v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
     parScal = x1 * v2x + y1 * v2y + z1 * v2z
     parX, parY, parZ = parScal * v2x, parScal * v2y, parScal * v2z
-    result = np.abs(parScal)
-    if quant[1:4] == 'per':
+    if par == 'par':
+      return np.abs(parScal)
+    elif par == 'per':
       perX = x1 - parX
       perY = y1 - parY
       perZ = z1 - parZ
       v1Mag = np.sqrt(perX**2 + perY**2 + perZ**2)
-      result = v1Mag
-    return result
+      return v1Mag
 
   if obj.numThreads > 1:
     if obj.verbose:
@@ -584,15 +679,21 @@ def get_projections(obj,quant):
     return proj_task(x_a, y_a, z_a, x_b, y_b, z_b)
 
 
+# default
+_VECTOR_PRODUCT_QUANT = \
+          ('VECTOR_PRODUCT_QUANT',
+            ['times', '_facecross_', '_edgecross_',
+             '_facecrosstocenter_', '_facecrosstoface_'
+            ]
+          )
+# get value
 def get_vector_product(obj,quant):
   '''cross product between two vectors.
   call via <v1><times><v2><x>.
   Example, for the x component of b cross u, you should call get_var('b_facecross_ux').
   '''
-  VECO_QUANT = ['times', '_facecross_', '_edgecross_', '_facecrosstocenter_', '_facecrosstoface_']
-
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, 'VECO_QUANT', VECO_QUANT, get_vector_product.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_VECTOR_PRODUCT_QUANT, get_vector_product.__doc__)
     docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
     docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u. '
                            'result is edge-centered. E.g. result_x is at ( 0  , -0.5, -0.5).'))
@@ -605,20 +706,22 @@ def get_vector_product(obj,quant):
                            'result is face-centered E.g. result_x is at ( 0  , -0.5,  0  ).'))
     return None
 
-  cross = ''
-  for times in VECO_QUANT:
-    A, cross, q = quant.partition(times)
-    if cross==times: # then the partition was successful, i.e. (times in quant).
+  # interpret quant string
+  for TIMES in _VECTOR_PRODUCT_QUANT[1]:
+    A, cross, q = quant.partition(TIMES)
+    if q != '':
       B, x = q[:-1], q[-1]
-      y, z = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))[x]
+      y, z = YZ_FROM_X[x]
       break
-
-  if cross == '':
+  else:  # if we did not break, we did not match any RAT to quant, so we return None.
     return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, cross, _VECTOR_PRODUCT_QUANT[0])
 
   # at this point, we know quant looked like <A><times><B><x>
 
-  elif cross == 'times':
+  if cross == 'times':
     return (obj.get_var(A + y) * obj.get_var(B + z) -
             obj.get_var(A + z) * obj.get_var(B + y))
 
@@ -667,10 +770,12 @@ def get_vector_product(obj,quant):
     return obj.get_var(A+'_facecrosstocenter_'+B+x + x+'dn')
 
 
-AXES = ('x', 'y', 'z')
+# default
 _HATS = ['_hat'+x for x in AXES]
-_ANGLES_XXY = ['_angle'+ xxy for xxy in ['xxy', 'yyz', 'zzx']]  # <<< TODO
-ANGLE_QUANT = _HATS + _ANGLES_XXY
+_ANGLES_XXY = ['_angle'+ xxy for xxy in ['xxy', 'yyz', 'zzx']]
+_ANGLE_QUANT = _HATS + _ANGLES_XXY
+_ANGLE_QUANT = ('ANGLE_QUANT', _ANGLE_QUANT)
+# get value
 def get_angle(obj,quant):
   '''angles. includes unit vector, and angle off an axis in a plane (xy, yz, or zx).
 
@@ -680,7 +785,7 @@ def get_angle(obj,quant):
   Example: b_angleyyz --> angle off of the positive y axis in the yz plane, for b (magnetic field).
   '''
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, 'ANGLE_QUANT', ANGLE_QUANT, get_angle.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_ANGLE_QUANT, get_angle.__doc__)
     for x in AXES:
       docvar('_hat'+x, x+'-component of unit vector. Example: b_hat'+x+' is '+x+'-component of unit vector for b.')
     for _angle_xxy in _ANGLES_XXY:
@@ -688,12 +793,17 @@ def get_angle(obj,quant):
       docvar(_angle_xxy, 'angle off of the positive '+x+'-axis in the '+x+y+'plane. Result in range [-pi, pi].')
     return None
 
+  # interpret quant string
   var, _, command = quant.rpartition('_')
   command = '_' + command
 
-  if command not in ANGLE_QUANT:
+  if command not in _ANGLE_QUANT[1]:
     return None
 
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, command, _ANGLE_QUANT[0])
+
+  # do calculations and return result
   if command in _HATS:
     x = command[-1]  # axis; 'x', 'y', or 'z'
     varhatx = obj.get_var(var+x) / obj.get_var('mod'+var)
@@ -705,6 +815,8 @@ def get_angle(obj,quant):
     vary = obj.get_var(var + y)
     return np.arctan2(vary, varx)
 
+
+''' ------------- End get_quant() functions; Begin helper functions -------------  '''
 
 def threadQuantity(task, numThreads, *args):
   # split arg arrays

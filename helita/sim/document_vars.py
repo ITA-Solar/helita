@@ -38,17 +38,31 @@ vardict = {
     },
     ...
 }
+
+
+TODO:
+    documentation for simple vars. (And quant_tracking for simple vars)
+    Add units to vars.
 """
 
 #import built-ins
 import math #for pretty strings
-from collections import namedtuple
+import collections
+import functools
+import types  # for MethodType
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
 QUANTDOC = '_DOC_QUANT'                 #key for dd.vardict[TYPE_QUANT] containing doc for what TYPE_QUANT means.
 NFLUID  = 'nfluid'    #key which stores number of fluids. (e.g. 0 for none; 1 for "uses ifluid but not jfluid". 
 CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are running get_var('') to create vardict.
+
+QUANT_SELECTED  = '_quant_selected'     #attribute of obj which stores vardict lookup info for the latest quant selected.
+QUANTS_SELECTED = '_quants_selected'    #attribute of obj which stores quant_selected for QUANT_NTRACKING recent quants.
+QUANT_NTRACKING = '_quant_ntracking'    #attribute of obj which, if it exists, sets maxlen for _quants_selected deque.
+QUANT_TRACKING_N = 50                   #default for number of quant selections to remember.
+
+HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
 
 # global variable which tells which quantity you are setting now.
 METAQUANT = None
@@ -114,18 +128,18 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
         write = True
     if write:
         # define function (which will be returned)
-        def document_var(varname, vardoc, nfluid=nfluid):
+        def document_var(varname, vardoc, nfluid=nfluid, **kw__more_info_about_var):
             '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].'''
             if (QUANT_VARS is not None) and (varname not in QUANT_VARS):
                 return
             tqd = vardict[TYPE_QUANT]
+            var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__more_info_about_var}
             try:
-                vd = tqd[varname]   # vd = vardict[TYPE_QUANT][varname], if possible.
-            except KeyError:
-                tqd[varname] = {'doc': vardoc, 'nfluid': nfluid} # else, initialize tqd[varname]
-            else:                   # if vd assignment was successful, set doc and nfluid.
-                vd['doc'] = vardoc
-                vd['nfluid'] = nfluid
+                vd = tqd[varname]   # vd = vardict[TYPE_QUANT][varname] (if it already exists)
+            except KeyError:        # else, initialize tqd[varname]:
+                tqd[varname] = var_info_dict
+            else:                   # if vd assignment was successful, set info.
+                vd.update(var_info_dict)
 
         # initialize documentation to NONEDOC for var in QUANT_VARS
         if QUANT_VARS is not None:
@@ -144,14 +158,26 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
         return dont_document_var
 
 def create_vardict(obj):
-    '''call obj.get_var('') but with prints turned off. Afterwards, obj.vardict will be full of documentation.'''
+    '''call obj.get_var('') but with prints turned off.
+    Afterwards, obj.vardict will be full of documentation.
+
+    Also, set obj.gotten_vars() to a function which returns obj._quants_selected.
+        (conceptually this belongs elsewhere but it is convenient to do it here.)
+    '''
+    # creat vardict
     setattr(obj, CREATING_VARDICT, True)
     obj.get_var('')
     setattr(obj, CREATING_VARDICT, False)
+    # set gotten_vars
+    obj.gotten_vars = types.MethodType(gotten_vars, obj)
 
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
     return getattr(obj, CREATING_VARDICT, default)
+
+def gotten_vars(obj):
+    '''returns obj._quants_selected, which shows the most recent quants which get_var got.'''
+    return getattr(obj, QUANTS_SELECTED, [])
 
 
 ''' ----------------------------- search vardict ----------------------------- '''
@@ -162,7 +188,7 @@ def _apply_keys(d, keys):
         d = d[key]
     return d
 
-search_result = namedtuple('vardict_search_result', ('result', 'type', 'keys'))
+search_result = collections.namedtuple('vardict_search_result', ('result', 'type', 'keys'))
 
 def search_vardict(vardict, x):
     '''search vardict for x. x is the key we are looking for.
@@ -335,5 +361,71 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
     obj.search_vardict = _search_vardict
 
 
+''' ----------------------------- quant tracking ----------------------------- '''
 
+QuantVardictInfo = collections.namedtuple('QuantVardictInfo', ('quant', 'typequant', 'metaquant'))
 
+def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
+    '''updates obj._quants_selected with info.
+    if _quants_selected attr doesn't exist, make a deque.
+
+    maxlen for deque will be obj._quant_ntracking if it exists; else value of maxlen kwarg.
+    '''
+    if hasattr(obj, QUANTS_SELECTED):
+        getattr(obj, QUANTS_SELECTED).appendleft(info)
+    else:
+        maxlen = getattr(obj, QUANT_NTRACKING, maxlen)  # maxlen kwarg is default value.
+        setattr(obj, QUANTS_SELECTED, collections.deque([info], maxlen))
+    return getattr(obj, QUANTS_SELECTED)
+
+def setattr_quant_selected(obj, quant, typequant, metaquant=None):
+    '''sets obj._quant_selected = QuantVardictInfo(quant, typequant, metaquant)
+    if metaquant is None, use helita.sim.document_vars.METAQUANT as default.
+    returns the value in obj._quant_selected.
+    '''
+    if metaquant is None:
+        metaquant = METAQUANT
+    info = QuantVardictInfo(quant=quant, typequant=typequant, metaquant=metaquant)
+    setattr(obj, QUANT_SELECTED, info)
+    _track_quants_selected(obj, info)
+    return info
+
+def quant_tracking_simple(typequant, metaquant=None):
+    '''returns a function dectorator which turns f(obj, quant, *args, **kwargs) into:
+        result = f(...)
+        if result is not None:
+            obj._quant_selected = QuantVardictInfo(quant, typequant, metaquant)
+        return result
+    if metaquant is None, use helita.sim.document_vars.METAQUANT as default.
+
+    Suggested use:
+        use this wrapper for any get_..._quant functions whose results correspond to
+        the entire quant. For examples see helita.sim.load_mf_quantities.py (or load_quantities.py).
+
+        do NOT use this wrapper for get_..._quant functions whose results correspond to
+        only a PART of the quant entered. For example, don't use this for get_square() in
+        load_arithmetic_quantities, since that function pulls a '2' off the end of quant,
+        E.g. get_var('b2') --> bx**2 + by**2 + bz**2. For this case, see quant_tracker() instead.
+    '''
+    def decorator(f):
+        @functools.wraps(f)
+        def f_but_quant_tracking(obj, quant, *args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            result = f(obj, quant, *args, **kwargs)
+            if result is not None:
+                setattr_quant_selected(obj, quant, typequant, metaquant)
+            return result
+        return f_but_quant_tracking
+    return decorator
+
+def quant_tracker(obj, typequant, metaquant=None):
+    '''returns a function f(quant) which sets obj._quant_selected appropriately.
+    Use this in cases where quant_tracking_simple is not sufficienct. 
+    For examples see the file helita.sim.load_arithmetic_quantities.py.
+    '''
+    def set_quant_selected(quant):
+        '''sets obj._quant_selected = QuantVardictInfo(quant, typequant, metaquant).
+        This function was generated by the function helita.sim.document_vars.quant_tracker().
+        '''
+        return setattr_quant_selected(obj, quant, typequant, metaquant)
+    return set_quant_selected
