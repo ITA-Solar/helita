@@ -75,7 +75,6 @@ LOADING_LEVEL    = '_loading_level'
 ## defaults for "top level" quants (passed to get_var externally, e.g. outside of load_..._quantities files)
 TYPEQUANT_TOP_LEVEL = 'TOP_LEVEL'
 METAQUANT_TOP_LEVEL = 'top_level'
-METAQUANT_MID_LEVEL = 'mid_level'
 ## defaults for "mid level" quants (passed to get_var internally, e.g. inside of load_..._quantities files)
 ## these will be hit by .format(level=getattr(obj, LOADING_LEVEL, 0)).
 TYPEQUANT_LEVEL_N   = 'LEVEL_{level:}'   #NOTE: gotten_vars() assumes these very specific forms
@@ -457,7 +456,7 @@ def quant_tracking_top_level(f):
     '''function decorator which is like quant_tracking_simple(...), with contents
     depending on whether we are LOADING_QUANTITY right now or not.
     if we ARE loading_quantity right now, wrap with:
-        quant_tracking_simple(TYPEQUANT_MID_LEVEL, METAQUANT_MID_LEVEL)
+        quant_tracking_simple(TYPEQUANT_LEVEL_N, METAQUANT_LEVEL_N)
     if we are NOT loading_quantity, wrap with:
         quant_tracking_simple(TYPEQUANT_TOP_LEVEL, METAQUANT_TOP_LEVEL)
     '''
@@ -469,7 +468,7 @@ def quant_tracking_top_level(f):
         loading_level = getattr(obj, LOADING_LEVEL, 0)
         if loading_level == 0: # we are NOT loading; use TOP level.
             typequant = TYPEQUANT_TOP_LEVEL
-            metaquant = METAQUANT_MID_LEVEL
+            metaquant = METAQUANT_TOP_LEVEL
         else:                  # we are MID loading; use mid level and format with the level info.
             typequant = TYPEQUANT_LEVEL_N.format(level=loading_level)
             metaquant = METAQUANT_LEVEL_N.format(level=loading_level)
