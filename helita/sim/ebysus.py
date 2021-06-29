@@ -407,16 +407,18 @@ class EbysusData(BifrostData):
                 self.variables['metadata'] = self._metadata()
 
         rdt = self.r.dtype
-        if (self.nz>1):
-            cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
-                              self.zdn.astype(rdt), self.dzidzup.astype(rdt),
-                              self.dzidzdn.astype(rdt))
-            self.cstagger_exists = True   # we can use cstagger methods!
-        else:
-            self.cstagger_exists = False
-            #cstagger.init_stagger_mz1(self.nz, self.dx, self.dy, self.z.astype(rdt))
-            #self.cstagger_exists = True  # we must avoid using cstagger methods.
-
+        if self.stagger_kind == 'cstagger':
+            if (self.nz>1):
+                cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
+                                  self.zdn.astype(rdt), self.dzidzup.astype(rdt),
+                                  self.dzidzdn.astype(rdt))
+                self.cstagger_exists = True   # we can use cstagger methods!
+            else:
+                self.cstagger_exists = False
+                #cstagger.init_stagger_mz1(self.nz, self.dx, self.dy, self.z.astype(rdt))
+                #self.cstagger_exists = True  # we must avoid using cstagger methods.
+        else: 
+            self.cstagger_exists = True
 
     # fluid-setting functions
     set_mf_fluid = fluid_tools.set_mf_fluid

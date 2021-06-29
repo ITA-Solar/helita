@@ -38,12 +38,14 @@ import warnings
 
 # import internal modules
 from . import cstagger
+from . import stagger 
 from . import document_vars
 
 # import external public modules
 import numpy as np
 
 # set constants
+DEFAULT_STAGGER_KIND = 'stagger'
 AXES      = ('x', 'y', 'z')
 YZ_FROM_X = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))  # right-handed coord system x,y,z given x.
 EPSILON   = 1.0e-20   # small number which is added in denominators of some operations.
@@ -54,14 +56,19 @@ EPSILON   = 1.0e-20   # small number which is added in denominators of some oper
 ## painful to change the method itself (required re-installing helita for me) so we will
 ## instead just change our calls to the method here. -SE Apr 22 2021
 CSTAGGER_TYPES = ['float32']  # these are the allowed types
-def do_cstagger(arr, operation='xup', default_type=CSTAGGER_TYPES[0]):
+def do_cstagger(arr, operation='xup', default_type=CSTAGGER_TYPES[0], 
+  obj=None):
   '''does cstagger, after ensuring arr is the correct type, converting if necessary.
   if type conversion is necessary, convert to default_type.
   '''
-  arr = np.array(arr, copy=False)     # make numpy array, if necessary.
-  if arr.dtype not in CSTAGGER_TYPES: # if necessary,
-    arr = arr.astype(default_type)      # convert type
-  return cstagger.do(arr, operation)  # call the original cstagger function
+  kind = getattr(obj,'stagger_kind',DEFAULT_STAGGER_KIND)
+  if kind == 'cstagger': 
+    arr = np.array(arr, copy=False)     # make numpy array, if necessary.
+    if arr.dtype not in CSTAGGER_TYPES: # if necessary,
+      arr = arr.astype(default_type)      # convert type
+    return cstagger.do(arr, operation)  # call the original cstagger function
+  else:
+    return stagger.do(arr, operation)
 
 def _can_interp(obj, axis, warn=True):
   '''return whether we can interpolate. Make warning if we can't.'''
@@ -172,7 +179,7 @@ def get_deriv(obj,quant):
       print('Threading', whsp*8, end="\r", flush=True)
     quantlist = [quant[-4:] for numb in range(obj.numThreads)]
     def deriv_loop(var, quant):
-      return do_cstagger(var, 'd' + quant[0])
+      return do_cstagger(var, 'd' + quant[0], obj=obj)
     if axis != 'z':
       return threadQuantity_z(deriv_loop, obj.numThreads, var, quantlist)
     else:
@@ -183,17 +190,17 @@ def get_deriv(obj,quant):
       if axis != 'z':
         for iiz in range(obj.nz):
           slicer = np.s_[:, :, iiz:iiz+1]
-          staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+          staggered = do_cstagger(var[slicer], 'd' + quant[-4:], obj=obj)
           output[slicer] = staggered
       else:
         for iiy in range(obj.ny):
           slicer = np.s_[:, iiy:iiy+1, :]
-          staggered = do_cstagger(var[slicer], 'd' + quant[-4:])
+          staggered = do_cstagger(var[slicer], 'd' + quant[-4:], obj=obj)
           output[slicer] = staggered
 
       return output
     else:
-      return do_cstagger(var, 'd' + quant[-4:])
+      return do_cstagger(var, 'd' + quant[-4:], obj=obj)
 
 
 # default
@@ -240,18 +247,18 @@ def get_center(obj,quant, *args, **kwargs):
         if axis != 'z':
           for iiz in range(obj.nz):
             slicer = np.s_[:, :, iiz:iiz+1]
-            staggered = do_cstagger(var[slicer], interp)
+            staggered = do_cstagger(var[slicer], interp, obj=obj)
             output[slicer] = staggered
         else:
           for iiy in range(obj.ny):
             slicer = np.s_[:, iiy:iiy+1, :]
-            staggered = do_cstagger(var[slicer], interp)
+            staggered = do_cstagger(var[slicer], interp, obj=obj)
             output[slicer] = staggered
   else:
     # do "regular" version of interpolation
     for interp in transf:
       if _can_interp(obj, interp[0]):
-        var = do_cstagger(var, interp)
+        var = do_cstagger(var, interp, obj=obj)
   return var
 
 
@@ -279,7 +286,7 @@ def get_interp(obj, quant):
 
   val = obj.get_var(varname)      # un-interpolated value
   if _can_interp(obj, interp[0]):
-    val = do_cstagger(val, interp) # interpolated value
+    val = do_cstagger(val, interp, obj=obj) # interpolated value
   return val
 
 

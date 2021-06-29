@@ -3,6 +3,7 @@ import os
 from glob import glob
 import warnings
 from . import document_vars
+from .load_arithmetic_quantities import *
 
 # set constants
 ELEMLIST = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni']
@@ -809,7 +810,7 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
       if getattr(obj, 'nx') < 5:
         return np.zeros_like(var)
       else:
-        return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
+        return 1. / (do_cstagger(var, 'ddzup',obj=obj) + 1e-12)
     elif quant == 'cs':
       return np.sqrt(obj.params['gamma'][obj.snapInd] *
                      var / obj.get_var('r'))
@@ -880,12 +881,12 @@ def get_wavemode(obj, quant, WAVE_QUANT=None, **kwargs):
     uperb = obj.get_var('uperb')
     uperbVect = uperb * unitB
     # cross product (uses cstagger bc no variable gets uperbVect)
-    curlX = (cstagger.do(cstagger.do(uperbVect[2], 'ddydn'), 'yup') -
-             cstagger.do(cstagger.do(uperbVect[1], 'ddzdn'), 'zup'))
-    curlY = (-cstagger.do(cstagger.do(uperbVect[2], 'ddxdn'), 'xup')
-             + cstagger.do(cstagger.do(uperbVect[0], 'ddzdn'), 'zup'))
-    curlZ = (cstagger.do(cstagger.do(uperbVect[1], 'ddxdn'), 'xup') -
-             cstagger.do(cstagger.do(uperbVect[0], 'ddydn'), 'yup'))
+    curlX = (do_cstagger(do_cstagger(uperbVect[2], 'ddydn', obj=obj), 'yup',obj=obj) -
+             do_cstagger(do_cstagger(uperbVect[1], 'ddzdn',obj=obj), 'zup',obj=obj))
+    curlY = (-do_cstagger(do_cstagger(uperbVect[2], 'ddxdn',obj=obj), 'xup',obj=obj)
+             + do_cstagger(do_cstagger(uperbVect[0], 'ddzdn',obj=obj), 'zup',obj=obj))
+    curlZ = (do_cstagger(do_cstagger(uperbVect[1], 'ddxdn',obj=obj), 'xup',obj=obj) -
+             do_cstagger(do_cstagger(uperbVect[0], 'ddydn',obj=obj), 'yup',obj=obj))
     curl = np.stack((curlX, curlY, curlZ))
     # dot product
     result = np.abs((unitB * curl).sum(0))
@@ -893,15 +894,15 @@ def get_wavemode(obj, quant, WAVE_QUANT=None, **kwargs):
     uperb = obj.get_var('uperb')
     uperbVect = uperb * unitB
 
-    result = np.abs(cstagger.do(cstagger.do(
-      uperbVect[0], 'ddxdn'), 'xup') + cstagger.do(cstagger.do(
-        uperbVect[1], 'ddydn'), 'yup') + cstagger.do(
-          cstagger.do(uperbVect[2], 'ddzdn'), 'zup'))
+    result = np.abs(do_cstagger(do_cstagger(
+      uperbVect[0], 'ddxdn',obj=obj), 'xup',obj=obj) + do_cstagger(do_cstagger(
+        uperbVect[1], 'ddydn',obj=obj), 'yup',obj=obj) + do_cstagger(
+          do_cstagger(uperbVect[2], 'ddzdn',obj=obj), 'zup',obj=obj))
   else:
     dot1 = obj.get_var('uparb')
-    grad = np.stack((cstagger.do(cstagger.do(dot1, 'ddxdn'),
-            'xup'), cstagger.do(cstagger.do(dot1, 'ddydn'), 'yup'),
-                     cstagger.do(cstagger.do(dot1, 'ddzdn'), 'zup')))
+    grad = np.stack((do_cstagger(do_cstagger(dot1, 'ddxdn',obj=obj),
+            'xup',obj=obj), do_cstagger(do_cstagger(dot1, 'ddydn',obj=obj), 'yup',obj=obj),
+                     do_cstagger(do_cstagger(dot1, 'ddzdn',obj=obj), 'zup',obj=obj)))
     result = np.abs((unitB * grad).sum(0))
   return result
 

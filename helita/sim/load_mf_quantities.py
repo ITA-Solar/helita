@@ -15,6 +15,7 @@ try:
   from at_tools import fluids as fl
 except ImportError:
   warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.load_mf_quantities may crash')
+from .load_arithmetic_quantities import *
 
 # set constants
 MATCH_PHYSICS = 0  # don't change this value.  # this one is the default (see ebysus.py)
@@ -1267,7 +1268,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       if getattr(obj, 'nx') < 5:
         return obj.zero()
       else:
-        return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
+        return 1. / (do_cstagger(var, 'ddzup',obj=obj) + 1e-12)
     elif quant == 'cs':
       return np.sqrt(obj.params['gamma'][obj.snapInd] *
                      var / obj.get_var('totr'))

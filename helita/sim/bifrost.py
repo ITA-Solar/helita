@@ -13,10 +13,6 @@ from scipy import interpolate
 from scipy.ndimage import map_coordinates
 
 # import internal modules
-try:
-    from . import cstagger
-except ImportError:
-    print("(WWW) cstagger routines not imported, certain functions will be inaccesible")
 from .load_quantities import *
 from .load_arithmetic_quantities import *
 from .tools import *
@@ -86,7 +82,8 @@ class BifrostData(object):
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.', fast=False,
                  verbose=True, dtype='f4', big_endian=False, cstagop=True,
                  ghost_analyse=False, lowbus=False, numThreads=1, 
-                 params_only=False, sel_units=None, use_relpath=False):
+                 params_only=False, sel_units=None, use_relpath=False, 
+                 stagger_kind = 'stagger'):
         """
         Loads metadata and initialises variables.
         """
@@ -100,6 +97,7 @@ class BifrostData(object):
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
         self.cstagop = cstagop
+        self.stagger_kind = stagger_kind
         self.sel_units = sel_units 
         self.numThreads = numThreads
         self.fast = fast
@@ -447,14 +445,17 @@ class BifrostData(object):
                         print('(WWW) init_vars: could not read '
                             'variable %s' % var)
         rdt = self.r.dtype
-        if (self.nz > 1): 
-            cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
-                              self.zdn.astype(rdt), self.dzidzup.astype(rdt),
-                              self.dzidzdn.astype(rdt))
-            self.cstagger_exists = True   # we can use cstagger methods!
-        else:
-            cstagger.init_stagger_mz1d(self.nz, self.dx, self.dy, self.z.astype(rdt))
-            self.cstagger_exists = True  # we must avoid using cstagger methods.
+        if self.stagger_kind == 'cstagger': 
+            if (self.nz > 1): 
+                cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
+                                  self.zdn.astype(rdt), self.dzidzup.astype(rdt),
+                                  self.dzidzdn.astype(rdt))
+                self.cstagger_exists = True   # we can use cstagger methods!
+            else:
+                cstagger.init_stagger_mz1d(self.nz, self.dx, self.dy, self.z.astype(rdt))
+                self.cstagger_exists = True  # we must avoid using cstagger methods.
+        else: 
+            self.cstagger_exists = True
 
     def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None, 
                     *args, **kwargs):
@@ -1044,9 +1045,12 @@ class BifrostData(object):
         rho = self.r[sx, sy, sz]
 
         if self.do_mhd:
-            Bx = cstagger.xup(self.bx)[sx, sy, sz]
-            By = cstagger.yup(self.by)[sx, sy, sz]
-            Bz = cstagger.zup(self.bz)[sx, sy, sz]
+            Bx = do_cstagger(self.bx, 'xup', obj=self)[sx, sy, sz]
+            By = do_cstagger(self.by, 'yup', obj=self)[sx, sy, sz]
+            Bz = do_cstagger(self.bz, 'zup', obj=self)[sx, sy, sz]
+            #Bx = cstagger.xup(self.bx)[sx, sy, sz]
+            #By = cstagger.yup(self.by)[sx, sy, sz]
+            B#z = cstagger.zup(self.bz)[sx, sy, sz]
             # Change sign of Bz (because of height scale) and By
             # (to make right-handed system)
             Bx = Bx * ub
@@ -1055,7 +1059,8 @@ class BifrostData(object):
         else:
             Bx = By = Bz = None
 
-        vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
+        vz = do_cstagger(self.pz, 'zup', obj=self)[sx, sy, sz] / rho
+        #vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         x = self.x[sx] * ul
         y = self.y[sy] * (-ul)
@@ -1118,11 +1123,12 @@ class BifrostData(object):
         rho = self.r[sx, sy, sz]
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
-        vx = cstagger.xup(self.px)[sx, sy, sz] / rho
+        #vx = cstagger.xup(self.px)[sx, sy, sz] / rho
+        vx = do_cstagger(self.px, 'xup', obj=self)[sx, sy, sz] / rho
         vx *= uv
-        vy = cstagger.yup(self.py)[sx, sy, sz] / rho
+        vy = do_cstagger(self.py, 'yup', obj=self)[sx, sy, sz] / rho
         vy *= -uv
-        vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
+        vz = do_cstagger(self.pz, 'zup', obj=self)[sx, sy, sz] / rho
         vz *= -uv
         rho = rho * ur  # to cgs
         x = self.x[sx] * ul
@@ -2177,15 +2183,15 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
     z = data.z[sz] * (-ul)
 
     rdt = data.r.dtype
-    cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
-                          data.zdn.astype(rdt), data.dzidzup.astype(rdt),
-                          data.dzidzdn.astype(rdt))
+    #cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
+    #                      data.zdn.astype(rdt), data.dzidzup.astype(rdt),
+    #                      data.dzidzdn.astype(rdt))
 
     for i, s in enumerate(snaps):
         data.set_snap(s)
         tgas[:, i] = np.squeeze(data.tg)[sx, sz]
         rho = np.squeeze(data.r)[sx, sz]
-        vz[:, i] = np.squeeze(cstagger.zup(data.pz))[sx, sz] / rho * (-uv)
+        vz[:, i] = np.squeeze(do_cstagger(data.pz,'zup',obj=data))[sx, sz] / rho * (-uv)
         if writeB:
             Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
             By[:, i] = np.squeeze(-data.by)[sx, sz] * ub
