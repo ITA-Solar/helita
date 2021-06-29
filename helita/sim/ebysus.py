@@ -166,7 +166,7 @@ class EbysusData(BifrostData):
 
         # begin processing:
         result = dict()
-        if hasattr(self.mf_tabparam,'COLL_KEYS'): 
+        if 'COLL_KEYS' in self.mf_tabparam: 
             x = self.mf_tabparam['COLL_KEYS']
             for tokenline in x:      # example tokenline: ['01', '02', 'EL']
                 ispec, jspec, collkey = tokenline
@@ -181,6 +181,7 @@ class EbysusData(BifrostData):
                 rkey = (key[1], key[0])  # reversed
                 if rkey not in result.keys():
                     result[rkey] = result[key]
+
         self.coll_keys = result
 
     def _set_snapvars(self,firstime=False):
@@ -990,7 +991,10 @@ class EbysusData(BifrostData):
         self.iiy = iiy
         self.iiz = iiz
         slicer   = (self.iix, self.iiy, self.iiz)
-        self.xLength, self.yLength, self.zLength = self.r[slicer].shape
+        if self.r[slicer].size == 1: 
+            self.xLength, self.yLength, self.zLength = (1,1,1)
+        else: 
+            self.xLength, self.yLength, self.zLength = self.r[slicer].shape
         #   note it is ok to use self.r because many get_var methods already assume self.r exists.
 
         snapLen = np.size(self.snap)
