@@ -990,12 +990,12 @@ class EbysusData(BifrostData):
         self.iix = iix
         self.iiy = iiy
         self.iiz = iiz
-        slicer   = (self.iix, self.iiy, self.iiz)
-        if self.r[slicer].size == 1: 
-            self.xLength, self.yLength, self.zLength = (1,1,1)
-        else: 
-            self.xLength, self.yLength, self.zLength = self.r[slicer].shape
+        self.xLength = self.r[iix,  0 ,  0 ].size
+        self.yLength = self.r[ 0 , iiy,  0 ].size
+        self.zLength = self.r[ 0 ,  0 , iiz].size
         #   note it is ok to use self.r because many get_var methods already assume self.r exists.
+        #   note we cannot do xLength, yLength, zLength = self.r[iix, iiy, iiz].shape,
+        #       because any of the indices might be integers, e.g. iix=5, for single pixel in x.
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
