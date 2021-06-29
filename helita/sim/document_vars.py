@@ -75,6 +75,7 @@ LOADING_LEVEL    = '_loading_level'
 ## defaults for "top level" quants (passed to get_var externally, e.g. outside of load_..._quantities files)
 TYPEQUANT_TOP_LEVEL = 'TOP_LEVEL'
 METAQUANT_TOP_LEVEL = 'top_level'
+METAQUANT_MID_LEVEL = 'mid_level'
 ## defaults for "mid level" quants (passed to get_var internally, e.g. inside of load_..._quantities files)
 ## these will be hit by .format(level=getattr(obj, LOADING_LEVEL, 0)).
 TYPEQUANT_LEVEL_N   = 'LEVEL_{level:}'   #NOTE: gotten_vars() assumes these very specific forms
