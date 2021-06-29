@@ -129,6 +129,8 @@ class EbysusData(BifrostData):
         self.caching    = lambda: self.do_caching and not self.cache.is_NoneCache()  # (used by load_mf_quantities)
         self.panic=False
 
+        setattr(self, document_vars.LOADING_LEVEL, 0) # tells how deep we are into loading a quantity now.
+
         # call BifrostData.__init__
         super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
 
@@ -490,14 +492,19 @@ class EbysusData(BifrostData):
         return file_memory._dict_equals(alt_metadata, self_metadata, ignore_keys=['ifluid', 'jfluid'])
 
     @fluid_tools.maintain_fluids
-    @file_memory.maintain_attrs('match_type')
+    @document_vars.quant_tracking_top_level
+    @file_memory.maintain_attrs('match_type', document_vars.LOADING_LEVEL)
     @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
     def _load_quantity(self, var, panic=False):
         '''helper function for get_var; actually calls load_quantities for var.
         Also, restores self.ifluid and self.jfluid afterwards.
         Also, restores self.match_type afterwards.
         '''
+        # pre-processing
         __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
+        loading_level_attr = document_vars.LOADING_LEVEL
+        setattr(self, loading_level_attr, getattr(self, loading_level_attr, 0) + 1)
+        # getting var
         if self._metadata_matches(self.variables.get('metadata', dict())) and var in self.variables:
             val = self.variables[var]
         elif var in self.simple_vars:

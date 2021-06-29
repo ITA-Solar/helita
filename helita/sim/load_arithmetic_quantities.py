@@ -115,6 +115,9 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
     val = get_vector_product(obj,quant)
   if val is None:
     val = get_angle(obj, quant)
+
+  if val is not None:                         # if got a value, use obj._quant_selection
+    document_vars.select_quant_selection(obj) #           to update obj._quant_selected.
   return val
 
 
@@ -144,7 +147,7 @@ def get_deriv(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _DERIV_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _DERIV_QUANT[0], delay=True)
 
   # interpret quant string
   axis = quant[-3]
@@ -210,7 +213,7 @@ def get_center(obj,quant, *args, **kwargs):
       return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _CENTER_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _CENTER_QUANT[0], delay=True)
 
   # interpret quant string
   axis = quant[-2]
@@ -272,7 +275,7 @@ def get_interp(obj, quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, interp, _INTERP_QUANT[0])
+  document_vars.setattr_quant_selected(obj, interp, _INTERP_QUANT[0], delay=True)
 
   val = obj.get_var(varname)      # un-interpolated value
   if _can_interp(obj, interp[0]):
@@ -304,7 +307,7 @@ def get_module(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _MODULE_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _MODULE_QUANT[0], delay=True)
 
   # actually get the quant:
   result = obj.get_var(q + 'xc') ** 2
@@ -333,7 +336,7 @@ def get_horizontal_average(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _HORVAR_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _HORVAR_QUANT[0], delay=True)
 
   # Compares the variable with the horizontal mean
   if getq == 'horvar':
@@ -386,7 +389,7 @@ def get_gradients_vect(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _GRADVECT_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _GRADVECT_QUANT[0], delay=True)
 
   # do calculations and return result
   if getq == 'chkdiv':
@@ -527,7 +530,7 @@ def get_gradients_scalar(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _GRADSCAL_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _GRADSCAL_QUANT[0], delay=True)
   
   # do calculations and return result
   if getq == 'gra':
@@ -554,7 +557,7 @@ def get_square(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _SQUARE_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _SQUARE_QUANT[0], delay=True)
 
   # interpret quant string
   q = quant[:-1]  # vector name
@@ -589,7 +592,7 @@ def get_lg(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0])
+  document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0], delay=True)
 
   # do calculations and return result
   if getq in ['lg', 'log_']:
@@ -617,7 +620,7 @@ def get_ratios(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, rat, _RATIO_QUANT[0])
+  document_vars.setattr_quant_selected(obj, rat, _RATIO_QUANT[0], delay=True)
 
   # do calculations and return result
   qA_val = obj.get_var(qA)
@@ -645,7 +648,7 @@ def get_projections(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, par, _PROJ_QUANT[0])
+  document_vars.setattr_quant_selected(obj, par, _PROJ_QUANT[0], delay=True)
 
   # do calculations and return result v1 onto v2
   x_a = obj.get_var(v1 + 'xc')
@@ -717,7 +720,7 @@ def get_vector_product(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, cross, _VECTOR_PRODUCT_QUANT[0])
+  document_vars.setattr_quant_selected(obj, cross, _VECTOR_PRODUCT_QUANT[0], delay=True)
 
   # at this point, we know quant looked like <A><times><B><x>
 
@@ -801,7 +804,7 @@ def get_angle(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, command, _ANGLE_QUANT[0])
+  document_vars.setattr_quant_selected(obj, command, _ANGLE_QUANT[0], delay=True)
 
   # do calculations and return result
   if command in _HATS:

@@ -45,11 +45,14 @@ TODO:
     Add units to vars.
 """
 
-#import built-ins
+# import built-ins
 import math #for pretty strings
 import collections
 import functools
 import types  # for MethodType
+
+# import internal modules
+from . import file_memory
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
@@ -57,10 +60,27 @@ QUANTDOC = '_DOC_QUANT'                 #key for dd.vardict[TYPE_QUANT] containi
 NFLUID  = 'nfluid'    #key which stores number of fluids. (e.g. 0 for none; 1 for "uses ifluid but not jfluid". 
 CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are running get_var('') to create vardict.
 
-QUANT_SELECTED  = '_quant_selected'     #attribute of obj which stores vardict lookup info for the latest quant selected.
-QUANTS_SELECTED = '_quants_selected'    #attribute of obj which stores quant_selected for QUANT_NTRACKING recent quants.
-QUANT_NTRACKING = '_quant_ntracking'    #attribute of obj which, if it exists, sets maxlen for _quants_selected deque.
-QUANT_TRACKING_N = 50                   #default for number of quant selections to remember.
+# defaults for quant tracking
+## attributes of obj
+QUANT_SELECTED  = '_quant_selected'     #stores vardict lookup info for the latest quant selected.
+QUANTS_SELECTED = '_quants_selected'    #stores quant_selected for QUANT_NTRACKING recent quants.
+QUANT_SELECTION = '_quant_selection'    #stores info for latest quant selected; use for hesitant setting.
+QUANT_NTRACKING = '_quant_ntracking'    #if it exists, sets maxlen for _quants_selected deque.
+## misc
+QUANT_TRACKING_N = 1000                 #default for number of quant selections to remember.
+
+# defaults for loading level tracking
+## attribute of obj which tells how deep we are into loading a quantity right now. 0 = top level.
+LOADING_LEVEL    = '_loading_level'     
+## defaults for "top level" quants (passed to get_var externally, e.g. outside of load_..._quantities files)
+TYPEQUANT_TOP_LEVEL = 'TOP_LEVEL'
+METAQUANT_TOP_LEVEL = 'top_level'
+## defaults for "mid level" quants (passed to get_var internally, e.g. inside of load_..._quantities files)
+## these will be hit by .format(level=getattr(obj, LOADING_LEVEL, 0)).
+TYPEQUANT_LEVEL_N   = 'LEVEL_{level:}'   #NOTE: gotten_vars() assumes these very specific forms
+METAQUANT_LEVEL_N   = 'level_{level:}'   #      for TYPEQUANT_LEVEL_N and METAQUANT_LEVEL_N.
+                                         # If you change these values you need to update _get_level_from_q().
+
 
 HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
 
@@ -174,10 +194,6 @@ def create_vardict(obj):
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
     return getattr(obj, CREATING_VARDICT, default)
-
-def gotten_vars(obj):
-    '''returns obj._quants_selected, which shows the most recent quants which get_var got.'''
-    return getattr(obj, QUANTS_SELECTED, [])
 
 
 ''' ----------------------------- search vardict ----------------------------- '''
@@ -363,7 +379,7 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
 
 ''' ----------------------------- quant tracking ----------------------------- '''
 
-QuantVardictInfo = collections.namedtuple('QuantVardictInfo', ('quant', 'typequant', 'metaquant'))
+QuantInfo = collections.namedtuple('QuantInfo', ('quant', 'typequant', 'metaquant'))
 
 def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
     '''updates obj._quants_selected with info.
@@ -378,14 +394,32 @@ def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
         setattr(obj, QUANTS_SELECTED, collections.deque([info], maxlen))
     return getattr(obj, QUANTS_SELECTED)
 
-def setattr_quant_selected(obj, quant, typequant, metaquant=None):
-    '''sets obj._quant_selected = QuantVardictInfo(quant, typequant, metaquant)
+def setattr_quant_selected(obj, quant, typequant, metaquant=None, delay=False):
+    '''sets obj._quant_selected = QuantInfo(quant, typequant, metaquant)
     if metaquant is None, use helita.sim.document_vars.METAQUANT as default.
     returns the value in obj._quant_selected.
+
+    if delay, set QUANT_SELECTION instead of QUANT_SELECTED.
+    (if delay, it is recommended to later call quant_select_selection to update.)
+    QUANT_SELECTION is maintained by document_vars.quant_tracking_top_level() wrapper
     '''
     if metaquant is None:
         metaquant = METAQUANT
-    info = QuantVardictInfo(quant=quant, typequant=typequant, metaquant=metaquant)
+    info = QuantInfo(quant=quant, typequant=typequant, metaquant=metaquant)
+    if delay:
+        setattr(obj, QUANT_SELECTION, info)
+    else:
+        setattr(obj, QUANT_SELECTED, info)
+        _track_quants_selected(obj, info)
+    return info
+
+def select_quant_selection(obj, info_default=None):
+    '''puts data from QUANT_SELECTION into QUANT_SELECTED.
+    Also, updates QUANTS_SELECTED with the info.
+
+    Recommended to only use after doing setattr_quant_selected(..., delay=True).
+    '''
+    info = getattr(obj, QUANT_SELECTION, info_default)
     setattr(obj, QUANT_SELECTED, info)
     _track_quants_selected(obj, info)
     return info
@@ -394,7 +428,7 @@ def quant_tracking_simple(typequant, metaquant=None):
     '''returns a function dectorator which turns f(obj, quant, *args, **kwargs) into:
         result = f(...)
         if result is not None:
-            obj._quant_selected = QuantVardictInfo(quant, typequant, metaquant)
+            obj._quant_selected = QuantInfo(quant, typequant, metaquant)
         return result
     if metaquant is None, use helita.sim.document_vars.METAQUANT as default.
 
@@ -418,14 +452,111 @@ def quant_tracking_simple(typequant, metaquant=None):
         return f_but_quant_tracking
     return decorator
 
-def quant_tracker(obj, typequant, metaquant=None):
-    '''returns a function f(quant) which sets obj._quant_selected appropriately.
-    Use this in cases where quant_tracking_simple is not sufficienct. 
-    For examples see the file helita.sim.load_arithmetic_quantities.py.
+def quant_tracking_top_level(f):
+    '''function decorator which is like quant_tracking_simple(...), with contents
+    depending on whether we are LOADING_QUANTITY right now or not.
+    if we ARE loading_quantity right now, wrap with:
+        quant_tracking_simple(TYPEQUANT_MID_LEVEL, METAQUANT_MID_LEVEL)
+    if we are NOT loading_quantity, wrap with:
+        quant_tracking_simple(TYPEQUANT_TOP_LEVEL, METAQUANT_TOP_LEVEL)
     '''
-    def set_quant_selected(quant):
-        '''sets obj._quant_selected = QuantVardictInfo(quant, typequant, metaquant).
-        This function was generated by the function helita.sim.document_vars.quant_tracker().
-        '''
-        return setattr_quant_selected(obj, quant, typequant, metaquant)
-    return set_quant_selected
+    @file_memory.maintain_attrs(QUANT_SELECTION)
+    @functools.wraps(f)
+    def f_but_quant_tracking_level(obj, quant, *args, **kwargs):
+        __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+        # figure out names for typequant and metaquant for quant_tracking_simple wrapper
+        loading_level = getattr(obj, LOADING_LEVEL, 0)
+        if loading_level == 0: # we are NOT loading; use TOP level.
+            typequant = TYPEQUANT_TOP_LEVEL
+            metaquant = METAQUANT_MID_LEVEL
+        else:                  # we are MID loading; use mid level and format with the level info.
+            typequant = TYPEQUANT_LEVEL_N.format(level=loading_level)
+            metaquant = METAQUANT_LEVEL_N.format(level=loading_level)
+        # define f but wrapped by quant_tracking_simple.
+        @quant_tracking_simple(typequant, metaquant)
+        def wrapped_f(obj, quant, *args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            return f(obj, quant, *args, **kwargs)
+        # call the f wrapped by quant_tracking simple; return the result.
+        return wrapped_f(obj, quant, *args, **kwargs)
+    return f_but_quant_tracking_level
+
+
+''' ----------------------------- quant tracking - lookup ----------------------------- '''
+
+def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info: False,
+                hide_quants=[], hide_typequants=[], hide_metaquants=[]):
+    '''returns obj._quants_selected, which shows the most recent quants which get_var got.
+
+    It is possible to hide quants from the list using the kwargs of this function.
+
+    hide_level: integer (default 2)
+        hide all QuantInfo tuples with typequant or metaquant like 'level_n' with n >= hide_level.
+        case insensitive. Also, 'top_level' is treated like 'level_0'.
+        (This can only hide quants with otherwise unnamed typequant/metaquant info.)
+    hide_interp: True (default) or False
+        whether hide all quants which are one of the following types:
+        'INTERP_QUANT', 'CENTER_QUANT'
+    hide: list. (default [])
+        hide all QuantInfo tuples with quant, typequant, or metaquant in this list.
+    hidef: function(info) --> bool. Default: (lambda info: False)
+        if evaluates to True for a QuantInfo tuple, hide this info.
+        Such objects are namedtuples, with contents (quant, typequant, metaquant).
+    hide_quants:     list. (default [])
+        hide all QuantInfo tuples with   quant   in this list.
+    hide_typequants: list. (default [])
+        hide all QuantInfo tuples with typequant in this list.
+    hide_metaquants: list. (default [])
+        hide all QuantInfo tuples with metaquant in this list.
+    '''
+    quants_selected = getattr(obj, QUANTS_SELECTED, collections.deque([]))
+    result = collections.deque(maxlen=quants_selected.maxlen)
+    for info in quants_selected:
+        quant, typequant, metaquant = info
+        # if we should hide this one, continue.
+        level = _get_level_from_quant_info(info)
+        if level is not None:
+            if level >= hide_level:
+                continue
+        if hide_interp:
+            if typequant in ['INTERP_QUANT', 'CENTER_QUANT']:
+                continue
+        if len(hide) > 0:
+            if (quant in hide) or (typequant in hide) or (metaquant in hide):
+                continue
+        if (quant in hide_quants) or (typequant in hide_typequants) or (metaquant in hide_metaquants):
+            continue
+        if hidef(info):
+            continue
+        # else, add this one to result.
+        result.append(info)
+    return result
+
+def _get_level_from_q(q):
+    '''gets level from typequant or metaquant q.
+    Returns None if q is not a level quant.
+    '''
+    q = q.lower()
+    if not 'level' in q:
+        return None
+    levelstr, _, leveln = q.rpartition('_')
+    if levelstr == 'level':   # q.lower() looks like level_N
+        return int(leveln)
+    if levelstr == 'top':     # q.lower() looks like top_level
+        return 0
+
+def _get_level_from_quant_info(quant_info):
+    '''gets level from QuantInfo tuple.
+    Returns None if q is not a level quant.
+    '''
+    typelevel = _get_level_from_q(quant_info.typequant)
+    metalevel = _get_level_from_q(quant_info.metaquant)
+    if typelevel is None:
+        if metalevel is None:
+            return None
+        else:
+            return metalevel
+    elif metalevel is None:
+        return typelevel
+    else:
+        return max(typelevel, metalevel)
