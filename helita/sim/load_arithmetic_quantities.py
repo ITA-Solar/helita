@@ -37,9 +37,15 @@ from multiprocessing.dummy import Pool as ThreadPool
 import warnings
 
 # import internal modules
-from . import cstagger
-from . import stagger 
 from . import document_vars
+try:
+  from . import cstagger
+except ImportError:
+  warnings.warn("failed to import helita.sim.cstagger; running stagger with stagger_kind='cstagger' will crash.")
+try:
+  from . import stagger
+except ImportError:
+  warnings.warn("failed to import helita.sim.stagger; running stagger with stagger_kind='stagger' will crash.")
 
 # import external public modules
 import numpy as np
