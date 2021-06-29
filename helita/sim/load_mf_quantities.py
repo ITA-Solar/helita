@@ -1149,7 +1149,9 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
 
 
 # default
-_DRIFT_QUANT = ('DRIFT_QUANT', ['ud', 'pd', 'ed', 'rd', 'tgd', 'uid'])
+_DRIFT_QUANT  = ['ed', 'rd', 'tgd']
+_DRIFT_QUANT += [dq + x for dq in ('ud', 'pd', 'uid') for x in AXES]
+_DRIFT_QUANT  = ('DRIFT_QUANT', _DRIFT_QUANT)
 # get value
 @document_vars.quant_tracking_simple(_DRIFT_QUANT[0])
 def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
@@ -1160,27 +1162,30 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
   if var=='':
     docvar = document_vars.vars_documenter(obj, _DRIFT_QUANT[0], DRIFT_QUANT, get_mf_driftvar.__doc__, nfluid=2)
     def doc_start(var):
-      return '"drift" for quantity ("{var}"). I.e. ({va_} for ifluid) - ({va_} for jfluid). '.format(var=var, va_=var[:-1])
-    def doc_axis(var):
-      return ' Must append x, y, or z; e.g. {var}x for (ifluid {va_}x) - (jfluid {va_}x).'.format(var=var, va_=var[:-1])
-    docvar('ud', doc_start(var='ud') + 'u = velocity [simu. units].' + doc_axis(var='ud'))
-    docvar('uid', doc_start(var='uid') + 'ui = velocity [simu. units].' + doc_axis(var='uid'))
-    docvar('pd', doc_start(var='pd') + 'p = momentum density [simu. units].' + doc_axis(var='pd'))
+      return '"drift" for quantity "{var}". I.e. ({var} for ifluid) - ({var} for jfluid). '.format(var=var)
+    for x in AXES:
+      docvar('ud'+x, doc_start(var='u'+x) + 'u = velocity [simu. units].')
+    for x in AXES:
+      docvar('uid'+x, doc_start(var='ui'+x) + 'ui = velocity [simu. units].')
+    for x in AXES:
+      docvar('pd'+x, doc_start(var='p'+x) + 'p = momentum density [simu. units].')
     docvar('ed', doc_start(var='ed') + 'e = energy (density??) [simu. units].')
     docvar('rd', doc_start(var='rd') + 'r = mass density [simu. units].')
     docvar('tgd', doc_start(var='tgd') + 'tg = temperature [K].')
     return None
 
-  if var[:-1] in DRIFT_QUANT:
-    axis = var[-1]
-    varn = var[:-2]
-    return (obj.get_var(varn + axis, mf_ispecies=obj.mf_ispecies, mf_ilevel=obj.mf_ilevel) -
-            obj.get_var(varn + axis, mf_ispecies=obj.mf_jspecies, mf_ilevel=obj.mf_jlevel))
-  elif var in DRIFT_QUANT:
-    return (obj.get_var(var[:-1], mf_ispecies=obj.mf_ispecies, mf_ilevel=obj.mf_ilevel) -
-            obj.get_var(var[:-1], mf_ispecies=obj.mf_jspecies, mf_ilevel=obj.mf_jlevel))
-  else:
+  if var not in DRIFT_QUANT:
     return None
+
+  else:
+    if var[-1] == 'd':    # scalar drift quant                 e.g. tgd
+      quant = var[:-1] # "base quant"; without d.              e.g. tg
+    elif var[-2] == 'd':  # vector drift quant                 e.g. uidx
+      quant = var[:-2] + var[-1]  # "base quant"; without d    e.g. uix
+
+    q_i = obj.get_var(quant, ifluid=obj.ifluid)
+    q_j = obj.get_var(quant, ifluid=obj.jfluid)
+    return q_i - q_j
 
 
 # default
