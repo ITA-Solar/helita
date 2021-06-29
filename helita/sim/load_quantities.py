@@ -3,7 +3,7 @@ import os
 from glob import glob
 import warnings
 from . import document_vars
-from .load_arithmetic_quantities import *
+from .load_arithmetic_quantities import do_cstagger
 
 # set constants
 ELEMLIST = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni']
