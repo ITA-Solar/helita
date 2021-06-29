@@ -15,7 +15,7 @@ try:
   from at_tools import fluids as fl
 except ImportError:
   warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.load_mf_quantities may crash')
-from .load_arithmetic_quantities import *
+from .load_arithmetic_quantities import do_cstagger
 
 # set constants
 MATCH_PHYSICS = 0  # don't change this value.  # this one is the default (see ebysus.py)

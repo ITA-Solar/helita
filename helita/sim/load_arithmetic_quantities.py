@@ -37,9 +37,15 @@ from multiprocessing.dummy import Pool as ThreadPool
 import warnings
 
 # import internal modules
-from . import cstagger
-from . import stagger 
 from . import document_vars
+try:
+  from . import cstagger
+except ImportError:
+  warnings.warn("failed to import helita.sim.cstagger; running stagger with stagger_kind='cstagger' will crash.")
+try:
+  from . import stagger
+except ImportError:
+  warnings.warn("failed to import helita.sim.stagger; running stagger with stagger_kind='stagger' will crash.")
 
 # import external public modules
 import numpy as np
@@ -56,19 +62,24 @@ EPSILON   = 1.0e-20   # small number which is added in denominators of some oper
 ## painful to change the method itself (required re-installing helita for me) so we will
 ## instead just change our calls to the method here. -SE Apr 22 2021
 CSTAGGER_TYPES = ['float32']  # these are the allowed types
-def do_cstagger(arr, operation='xup', default_type=CSTAGGER_TYPES[0], 
-  obj=None):
+def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
   '''does cstagger, after ensuring arr is the correct type, converting if necessary.
   if type conversion is necessary, convert to default_type.
   '''
   kind = getattr(obj,'stagger_kind',DEFAULT_STAGGER_KIND)
-  if kind == 'cstagger': 
+  if kind == 'cstagger': # use cstagger routine.
     arr = np.array(arr, copy=False)     # make numpy array, if necessary.
     if arr.dtype not in CSTAGGER_TYPES: # if necessary,
       arr = arr.astype(default_type)      # convert type
     return cstagger.do(arr, operation)  # call the original cstagger function
-  else:
-    return stagger.do(arr, operation)
+  else:                  # use stagger routine.
+    # stagger routine requires 'diff' kwarg if doing a derivative.
+    if operation.startswith('dd'):
+      x    = operation[2]  # get the axis. operation is like ddxup or ddxdn. x may be x, y, or z.
+      diff = getattr(obj, 'd'+x+'1d')  # for debugging: if crashing here, make sure obj is not None.
+    else:
+      diff = None
+    return stagger.do(arr, operation, diff=diff)
 
 def _can_interp(obj, axis, warn=True):
   '''return whether we can interpolate. Make warning if we can't.'''
