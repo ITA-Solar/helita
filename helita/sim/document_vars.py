@@ -62,24 +62,22 @@ CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are 
 
 # defaults for quant tracking
 ## attributes of obj
+VARNAME_INPUT   = '_varname_input'      #stores name of most recent variable which was input to get_var.
 QUANT_SELECTED  = '_quant_selected'     #stores vardict lookup info for the latest quant selected.
 QUANTS_SELECTED = '_quants_selected'    #stores quant_selected for QUANT_NTRACKING recent quants.
+QUANTS_BY_LEVEL = '_quants_by_level'    #stores quant_selected by level.
+QUANTS_TREE     = '_quants_tree'        #stores quant_selected as a tree. 
 QUANT_SELECTION = '_quant_selection'    #stores info for latest quant selected; use for hesitant setting.
 QUANT_NTRACKING = '_quant_ntracking'    #if it exists, sets maxlen for _quants_selected deque.
+
 ## misc
-QUANT_TRACKING_N = 1000                 #default for number of quant selections to remember.
+QUANT_TRACKING_N = 1000       #default for number of quant selections to remember.
+QUANT_BY_LEVEL_N = 50         #default for number of quant selections to remember at each level.
+QUANT_NOT_FOUND  = '???'      #default for typequant and metaquant when quant is not found. Do not use None.
 
 # defaults for loading level tracking
 ## attribute of obj which tells how deep we are into loading a quantity right now. 0 = top level.
-LOADING_LEVEL    = '_loading_level'     
-## defaults for "top level" quants (passed to get_var externally, e.g. outside of load_..._quantities files)
-TYPEQUANT_TOP_LEVEL = 'TOP_LEVEL'
-METAQUANT_TOP_LEVEL = 'top_level'
-## defaults for "mid level" quants (passed to get_var internally, e.g. inside of load_..._quantities files)
-## these will be hit by .format(level=getattr(obj, LOADING_LEVEL, 0)).
-TYPEQUANT_LEVEL_N   = 'LEVEL_{level:}'   #NOTE: gotten_vars() assumes these very specific forms
-METAQUANT_LEVEL_N   = 'level_{level:}'   #      for TYPEQUANT_LEVEL_N and METAQUANT_LEVEL_N.
-                                         # If you change these values you need to update _get_level_from_q().
+LOADING_LEVEL    = '_loading_level'
 
 
 HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
@@ -181,15 +179,18 @@ def create_vardict(obj):
     '''call obj.get_var('') but with prints turned off.
     Afterwards, obj.vardict will be full of documentation.
 
-    Also, set obj.gotten_vars() to a function which returns obj._quants_selected.
-        (conceptually this belongs elsewhere but it is convenient to do it here.)
+    Also, set a few more things (conceptually these belong elsewhere but it is convenient to do them here) :
+        set obj.gotten_vars() to a function which returns obj._quants_selected.
+        set obj.got_vars_tree() to a function which returns obj._quants_tree.
     '''
     # creat vardict
     setattr(obj, CREATING_VARDICT, True)
     obj.get_var('')
     setattr(obj, CREATING_VARDICT, False)
-    # set gotten_vars
-    obj.gotten_vars = types.MethodType(gotten_vars, obj)
+    # do the few misc. things (which conceptually belong elsewhere)
+    obj.gotten_vars   = types.MethodType(gotten_vars, obj)
+    obj.got_vars_tree = types.MethodType(got_vars_tree, obj)
+
 
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
@@ -379,23 +380,25 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
 
 ''' ----------------------------- quant tracking ----------------------------- '''
 
-QuantInfo = collections.namedtuple('QuantInfo', ('quant', 'typequant', 'metaquant'))
+QuantInfo = collections.namedtuple('QuantInfo', ('varname', 'quant', 'typequant', 'metaquant', 'level'),
+                                   defaults = [None, None, None, None, None])
 
-def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
-    '''updates obj._quants_selected with info.
-    if _quants_selected attr doesn't exist, make a deque.
+def setattr_quant_selected(obj, quant, typequant, metaquant=None, varname=None, level=None, delay=False):
+    '''sets QUANT_SELECTED to QuantInfo(varname, quant, typequant, metaquant, level).
 
-    maxlen for deque will be obj._quant_ntracking if it exists; else value of maxlen kwarg.
-    '''
-    if hasattr(obj, QUANTS_SELECTED):
-        getattr(obj, QUANTS_SELECTED).appendleft(info)
-    else:
-        maxlen = getattr(obj, QUANT_NTRACKING, maxlen)  # maxlen kwarg is default value.
-        setattr(obj, QUANTS_SELECTED, collections.deque([info], maxlen))
-    return getattr(obj, QUANTS_SELECTED)
+    varname   = name of var which was input.
+        default (if None): getattr(obj, VARNAME_INPUT, None)
+    quant     = name of quant which matches var.
+        (e.g. '2' maches 'b2'; see get_square from load_arithmetic_quantities.)
+    typequant = type associated with quant
+        e.g. 'SQUARE_QUANT'
+    metaquant = metatype associated with quant
+        e.g. 'arquantities'
+        default (if None): METAQUANT (global variable in document_vars module, set in load_..._quantities files).
+    level     = loading_level
+        i.e. number of layers deep right now in the chain of get_var call(s).
+        default (if None): getattr(obj, LOADING_LEVEL, 0)
 
-def setattr_quant_selected(obj, quant, typequant, metaquant=None, delay=False):
-    '''sets obj._quant_selected = QuantInfo(quant, typequant, metaquant)
     if metaquant is None, use helita.sim.document_vars.METAQUANT as default.
     returns the value in obj._quant_selected.
 
@@ -403,15 +406,54 @@ def setattr_quant_selected(obj, quant, typequant, metaquant=None, delay=False):
     (if delay, it is recommended to later call quant_select_selection to update.)
     QUANT_SELECTION is maintained by document_vars.quant_tracking_top_level() wrapper
     '''
+    if varname is None:
+        varname = getattr(obj, VARNAME_INPUT, None)
     if metaquant is None:
         metaquant = METAQUANT
-    info = QuantInfo(quant=quant, typequant=typequant, metaquant=metaquant)
+    if level is None:
+        level = getattr(obj, LOADING_LEVEL, 0)
+        loading_level = level
+    info = QuantInfo(varname=varname, quant=quant, typequant=typequant, metaquant=metaquant, level=level)
     if delay:
         setattr(obj, QUANT_SELECTION, info)
     else:
         setattr(obj, QUANT_SELECTED, info)
         _track_quants_selected(obj, info)
     return info
+
+def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
+    '''updates obj._quants_selected with info.
+    if _quants_selected attr doesn't exist, make a deque.
+
+    maxlen for deque will be obj._quant_ntracking if it exists; else value of maxlen kwarg.
+
+    Also, updates obj._quants_by_level with info. (same info; different format.)
+    '''
+    # put info into QUANTS_SELECTED
+    if hasattr(obj, QUANTS_SELECTED):
+        getattr(obj, QUANTS_SELECTED).appendleft(info)
+    else:
+        maxlen = getattr(obj, QUANT_NTRACKING, maxlen)  # maxlen kwarg is default value.
+        setattr(obj, QUANTS_SELECTED, collections.deque([info], maxlen))
+
+    # put info into QUANTS_BY_LEVEL
+    loading_level = getattr(obj, LOADING_LEVEL, 0)
+    if not hasattr(obj, QUANTS_BY_LEVEL):
+        setattr(obj, QUANTS_BY_LEVEL,
+                {loading_level : collections.deque([info], maxlen=QUANT_BY_LEVEL_N)})
+    else:
+        qbl_dict = getattr(obj, QUANTS_BY_LEVEL)
+        try:
+            qbl_dict[loading_level].appendleft(info)
+        except KeyError:
+            qbl_dict[loading_level] = collections.deque([info], maxlen=QUANT_BY_LEVEL_N)
+
+    # put info in QUANTS_TREE
+    if hasattr(obj, QUANTS_TREE):
+        getattr(obj, QUANTS_TREE).set_data(info)
+
+    # return QUANTS_SELECTED
+    return getattr(obj, QUANTS_SELECTED)
 
 def select_quant_selection(obj, info_default=None):
     '''puts data from QUANT_SELECTION into QUANT_SELECTED.
@@ -452,34 +494,95 @@ def quant_tracking_simple(typequant, metaquant=None):
         return f_but_quant_tracking
     return decorator
 
-def quant_tracking_top_level(f):
-    '''function decorator which is like quant_tracking_simple(...), with contents
-    depending on whether we are LOADING_QUANTITY right now or not.
-    if we ARE loading_quantity right now, wrap with:
-        quant_tracking_simple(TYPEQUANT_LEVEL_N, METAQUANT_LEVEL_N)
-    if we are NOT loading_quantity, wrap with:
-        quant_tracking_simple(TYPEQUANT_TOP_LEVEL, METAQUANT_TOP_LEVEL)
-    '''
-    @file_memory.maintain_attrs(QUANT_SELECTION)
+class QuantTree:
+    '''use for tree representation of quants.'''
+    def __init__(self, data, level=0):
+        self.data     = data
+        self.children = collections.deque()
+        self._level   = level
+
+    def add_child(self, child):
+        if isinstance(child, QuantTree):
+            self.children.append(child)
+        else:
+            child = QuantTree(child, level=self._level + 1)
+            self.add_child(child)
+        return child
+
+    def set_data(self, data):
+        self.data = data
+
+    def __str__(self):
+        fmtdict = dict(level=self._level, data=self.data)
+        if len(self.children) == 0:
+            return '(L{level}) {data}'.format(**fmtdict)
+        else:
+            space = ' '*(self._level + 1)
+            return '(L{level}) {data} : {children}'.format(**fmtdict,
+                        children=''.join(['\n' + space + str(child) for child in self.children]))
+
+    def __repr__(self):
+        return '<{}. For pretty formatting of contents, print or convert to string.>'.format(object.__repr__(self))
+
+
+def quant_tree_tracking(f):
+    '''wrapper for f which makes it track quant tree.'''
     @functools.wraps(f)
-    def f_but_quant_tracking_level(obj, quant, *args, **kwargs):
+    def f_but_quant_tree_tracking(obj, varname, *args, **kwargs):
+        # get loading_level. Outside of any f, the default is -1.
+        loading_level = getattr(obj, LOADING_LEVEL, -1)
+        if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
+            orig_tree = QuantTree(None)
+            setattr(obj, QUANTS_TREE, orig_tree)
+        else:
+            orig_tree = getattr(obj, QUANTS_TREE)
+            tree_child = orig_tree.add_child(None)
+            setattr(obj, QUANTS_TREE, tree_child)
+        # call f.
+        result = f(obj, varname, *args, **kwargs)
+        # retore original tree. (The data is set by f, via _track_quants_selected and quant_tracking_top_level)
+        #print('>> After getting quant =',repr(quant),'the tree looks like:')
+        #print(getattr(obj, QUANTS_TREE))
+        # spot A
+        setattr(obj, QUANTS_TREE, orig_tree)
+        # spot B
+        #print('>>>> Meanwhile, the original tree for quant =',repr(quant),'now looks like:')
+        #print(orig_tree)
+        # here we can "inject" units tracking. TODO: do this, but in units.py.
+        # in the meantime, here are notes (which can be verified via the print()s above:
+        #   the info for the "children" (i.e. the quants we must get to get varname)
+        #   of quant related to the varname which was entered can be gotten via...:
+        #      at spot A: [child.data for child in getattr(obj, QUANTS_TREE).children]
+        #      at spot B: [child.data for child in getattr(obj, QUANTS_TREE).children[-1].children]
+        # The way to inject units tracking might be to have it tag along with this tree,
+        # or to implement a similar structure but for a units tree.
+        # The reason the children might be important to units is for arithmetic_quantities.
+        # Examples: units(dVARdxdn) = units(VAR) / units(l); units(VAR2) = units(VAR)**2.
+
+        # return result of f.
+        return result
+    return f_but_quant_tree_tracking
+
+def quant_tracking_top_level(f):
+    '''decorator which improves quant tracking. (decorate _load_quantities using this.)'''
+    @quant_tree_tracking
+    @file_memory.maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
+    @functools.wraps(f)
+    def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        # figure out names for typequant and metaquant for quant_tracking_simple wrapper
-        loading_level = getattr(obj, LOADING_LEVEL, 0)
-        if loading_level == 0: # we are NOT loading; use TOP level.
-            typequant = TYPEQUANT_TOP_LEVEL
-            metaquant = METAQUANT_TOP_LEVEL
-        else:                  # we are MID loading; use mid level and format with the level info.
-            typequant = TYPEQUANT_LEVEL_N.format(level=loading_level)
-            metaquant = METAQUANT_LEVEL_N.format(level=loading_level)
-        # define f but wrapped by quant_tracking_simple.
-        @quant_tracking_simple(typequant, metaquant)
-        def wrapped_f(obj, quant, *args, **kwargs):
-            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-            return f(obj, quant, *args, **kwargs)
-        # call the f wrapped by quant_tracking simple; return the result.
-        return wrapped_f(obj, quant, *args, **kwargs)
+        setattr(obj, VARNAME_INPUT, varname)      # save name of the variable which was input.
+        setattr(obj, QUANT_SELECTED, QuantInfo(None))  # smash QUANT_SELECTED before doing f.
+        result = f(obj, varname, *args, **kwargs)
+        # even if we don't recognize this quant (because we didn't put quant tracking document_vars code for it (yet)),
+        ## we should still set QUANT_SELECTED to the info we do know (i.e. the varname), with blanks for what we dont know.
+        quant_info = getattr(obj, QUANT_SELECTED, QuantInfo)
+        if quant_info.varname is None:  # f did not set varname for quant_info, so we'll do it now.
+            setattr_quant_selected(obj, quant=QUANT_NOT_FOUND, typequant=QUANT_NOT_FOUND, metaquant=QUANT_NOT_FOUND,
+                                   varname=varname)
+        return result
     return f_but_quant_tracking_level
+
+
 
 
 ''' ----------------------------- quant tracking - lookup ----------------------------- '''
@@ -490,7 +593,7 @@ def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info:
 
     It is possible to hide quants from the list using the kwargs of this function.
 
-    hide_level: integer (default 2)
+    hide_level: integer (default 3)
         hide all QuantInfo tuples with typequant or metaquant like 'level_n' with n >= hide_level.
         case insensitive. Also, 'top_level' is treated like 'level_0'.
         (This can only hide quants with otherwise unnamed typequant/metaquant info.)
@@ -512,9 +615,9 @@ def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info:
     quants_selected = getattr(obj, QUANTS_SELECTED, collections.deque([]))
     result = collections.deque(maxlen=quants_selected.maxlen)
     for info in quants_selected:
-        quant, typequant, metaquant = info
+        quant, typequant, metaquant = info.quant, info.typequant, info.metaquant
+        varname, level = info.varname, info.level
         # if we should hide this one, continue.
-        level = _get_level_from_quant_info(info)
         if level is not None:
             if level >= hide_level:
                 continue
@@ -532,31 +635,18 @@ def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info:
         result.append(info)
     return result
 
-def _get_level_from_q(q):
-    '''gets level from typequant or metaquant q.
-    Returns None if q is not a level quant.
-    '''
-    q = q.lower()
-    if not 'level' in q:
-        return None
-    levelstr, _, leveln = q.rpartition('_')
-    if levelstr == 'level':   # q.lower() looks like level_N
-        return int(leveln)
-    if levelstr == 'top':     # q.lower() looks like top_level
-        return 0
+def got_vars_tree(obj, as_data=False):
+    '''prints QUANTS_TREE for obj.
+    This tree shows the vars which were gotten during the most recent "level 0" call to get_var.
+    (Calls to get_var from outside of helita have level == 0.)
 
-def _get_level_from_quant_info(quant_info):
-    '''gets level from QuantInfo tuple.
-    Returns None if q is not a level quant.
+    Use as_data=True to return the QuantTree object instead of printing it.
     '''
-    typelevel = _get_level_from_q(quant_info.typequant)
-    metalevel = _get_level_from_q(quant_info.metaquant)
-    if typelevel is None:
-        if metalevel is None:
-            return None
-        else:
-            return metalevel
-    elif metalevel is None:
-        return typelevel
+    # get QUANTS_TREE attr. Since this function (got_vars_tree) is optional, and for end-user,
+    # crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.
+    quants_tree = getattr(obj, QUANTS_TREE)
+    # if as_data, return. Else, print.
+    if as_data:
+        return quants_tree
     else:
-        return max(typelevel, metalevel)
+        print(quants_tree)
