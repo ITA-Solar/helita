@@ -21,6 +21,7 @@ from . import file_memory
 
 whsp = '  '
 
+
 class BifrostData(object):
     """
     Reads data from Bifrost simulations in native format.
@@ -55,11 +56,13 @@ class BifrostData(object):
         operations layer by layer using threads (slower).
     numThreads - integer, optional
         number of threads for certain operations that use parallelism.
-    fast  - whether to read data "fast", by only reading the requested data.
-            implemented as a flag, with False as default, for backwards compatibility;
-            some previous codes may have assumed non-requested data was read.
-            To avoid issues, just ensure you use get_var() every time you want to have data,
-            and don't assume things exist (e.g. self.bx) unless you do get_var for that thing (e.g. get_var('bx')).
+    fast - whether to read data "fast", by only reading the requested data.
+        implemented as a flag, with False as default, for backwards 
+        compatibility; some previous codes may have assumed non-requested 
+        data was read. To avoid issues, just ensure you use get_var() 
+        every time you want to have data, and don't assume things exist 
+        (e.g. self.bx) unless you do get_var for that thing 
+        (e.g. get_var('bx')).
 
     Examples
     --------
@@ -78,12 +81,14 @@ class BifrostData(object):
 
     >>> vx = a.get_var("ux")
     """
+
     snap = None
-    def __init__(self, file_root, snap=None, meshfile=None, fdir='.', fast=False,
-                 verbose=True, dtype='f4', big_endian=False, cstagop=True,
-                 ghost_analyse=False, lowbus=False, numThreads=1, 
-                 params_only=False, sel_units=None, use_relpath=False, 
-                 stagger_kind = 'stagger'):
+
+    def __init__(self, file_root, snap=None, meshfile=None, fdir='.', 
+                 fast=False, verbose=True, dtype='f4', big_endian=False, 
+                 cstagop=True, ghost_analyse=False, lowbus=False, 
+                 numThreads=1, params_only=False, sel_units=None, 
+                 use_relpath=False, stagger_kind = 'stagger'):
         """
         Loads metadata and initialises variables.
         """
@@ -101,7 +106,7 @@ class BifrostData(object):
         self.sel_units = sel_units 
         self.numThreads = numThreads
         self.fast = fast
-        self._fast_skip_flag = False if fast else None #None-> never skip
+        self._fast_skip_flag = False if fast else None  # None-> never skip
 
         # endianness and data type
         if big_endian:
@@ -121,23 +126,24 @@ class BifrostData(object):
                     tmp = find_first_match("mhd.in", fdir)
                 except IndexError:
                     raise ValueError(("(EEE) init: no .idl or mhd.in files "
-                                    "found"))
-        self.uni = Bifrost_units(filename=tmp,fdir=fdir)
+                                      "found"))
+        self.uni = Bifrost_units(filename=tmp, fdir=fdir)
 
-        self.set_snap(snap,True,params_only=params_only)
+        self.set_snap(snap, True, params_only=params_only)
         
         self.genvar()
         self.transunits = False
         self.cross_sect = cross_sect_for_obj(self)
         if 'tabinputfile' in self.params.keys(): 
-            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
+            tabfile = os.path.join(self.fdir, 
+                self.params['tabinputfile'][self.snapInd].strip())
             if os.access(tabfile, os.R_OK):
-                self.rhoee = Rhoeetab(tabfile=tabfile,fdir=fdir,radtab=True)
+                self.rhoee = Rhoeetab(tabfile=tabfile, fdir=fdir, radtab=True)
 
         document_vars.create_vardict(self)
         document_vars.set_vardocs(self)
     
-    def _set_snapvars(self,firstime=False):
+    def _set_snapvars(self, firstime=False):
         """
             Sets list of avaible variables
         """
@@ -183,7 +189,8 @@ class BifrostData(object):
         if snap is None:
             try:
                 tmp = sorted(glob("%s*idl" % self.file_root))[0]
-                snap_string = tmp.split(self.file_root + '_')[-1].split(".idl")[0]
+                snap_string = tmp.split(
+                    self.file_root + '_')[-1].split(".idl")[0]
                 if snap_string.isdigit():
                     snap = int(snap_string)
                 else:
@@ -200,11 +207,13 @@ class BifrostData(object):
                     except IndexError:
                         raise ValueError(("(EEE) set_snap: snapshot not defined "
                                       "and no .idl files found"))
+
         def snap_str_from_snap(snap):
-            if snap==0:
+            if snap == 0:
                 return ''
             else:
                 return '_%03i' % snap
+
         self.snap = snap
         if np.shape(self.snap) != ():
             self.snap_str = []
@@ -216,14 +225,14 @@ class BifrostData(object):
 
         self._read_params(firstime=firstime)
         # Read mesh for all snaps because meshfiles could differ
-        self.__read_mesh(self.meshfile,firstime=firstime)
+        self.__read_mesh(self.meshfile, firstime=firstime)
         # variables: lists and initialisation
         self._set_snapvars(firstime=firstime)
         # Do not call if params_only requested
         if(not params_only):
             self._init_vars(firstime=firstime)
 
-    def _read_params(self,firstime=False):
+    def _read_params(self, firstime=False):
         """
         Reads parameter file (.idl)
         """
@@ -288,7 +297,8 @@ class BifrostData(object):
             self.params[key] = np.array(
                 [self.paramList[i][key] for i in range(0, len(self.paramList))    \
                     if key in self.paramList[i].keys()])
-                    #the if statement is required in case extra params in self.ParmList[0]
+                    # the if statement is required in case extra params in 
+                    # self.ParmList[0]
         self.time = self.params['t']
         if self.sel_units=='cgs': 
             self.time *= self.uni.uni['t']
@@ -419,9 +429,9 @@ class BifrostData(object):
         if self._fast_skip_flag is True:
             return
         elif self._fast_skip_flag is False:
-            self._fast_skip_flag = True #swaps flag to True, then runs the rest of the code (this time around).
-        #else, fast_skip_flag is None, so the code should never be skipped.
-        #as long as fast is False, fast_skip_flag should be None.
+            self._fast_skip_flag = True # swaps flag to True, then runs the rest of the code (this time around).
+        # else, fast_skip_flag is None, so the code should never be skipped.
+        # as long as fast is False, fast_skip_flag should be None.
 
         self.variables = {}
         for var in self.simple_vars:
@@ -512,7 +522,6 @@ class BifrostData(object):
             value[..., i] = self.get_var(var, self.snap[i], iix=self.iix,
                                          iiy=self.iiy, iiz=self.iiz)
 
-
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
                         
@@ -556,7 +565,6 @@ class BifrostData(object):
             if indSize == 1:
                 temp = np.asarray(getattr(self, dim))
                 setattr(self, dim, temp.item())
-
 
     def genvar(self): 
         '''
@@ -690,7 +698,7 @@ class BifrostData(object):
                               'get_quantity can read others computed variables '
                               "see e.g. help(self.get_var) or get_var('')) for guidance"
                               '.' % (var, repr(self.simple_vars))))
-            #val = self.get_quantity(var, *args, **kwargs)
+            # val = self.get_quantity(var, *args, **kwargs)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
             if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
@@ -711,7 +719,7 @@ class BifrostData(object):
         return val
 
 
-    def trans2comm(self,varname,snap=None, *args, **kwargs): 
+    def trans2comm(self, varname, snap=None, *args, **kwargs): 
         '''
         Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
         is: 
@@ -756,10 +764,10 @@ class BifrostData(object):
             cte=1.0
           else: 
             cte=1.0e8
-          self.x =  self.x*cte
-          self.dx =  self.dx*cte
-          self.y =  self.y*cte
-          self.dy =  self.dy*cte
+          self.x = self.x*cte
+          self.dx = self.dx*cte
+          self.y = self.y*cte
+          self.dy = self.dy*cte
           self.z = - self.z[::-1].copy()*cte
           self.dz = - self.dz1d[::-1].copy()*cte 
 
@@ -778,7 +786,8 @@ class BifrostData(object):
           self.z = - self.z[::-1].copy()/cte
           self.dz = - self.dz1d[::-1].copy()/cte
 
-    def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
+    def _get_simple_var(self, var, order='F', mode='r', 
+                        panic=False, *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
         Parameters
@@ -915,7 +924,8 @@ class BifrostData(object):
 
         if var in ['ux', 'uy', 'uz']:  # velocities
             # u = p / r.
-            ## r is on center of grid cell, but p is on face, so we need to interpolate.
+            ## r is on center of grid cell, but p is on face, 
+            ## so we need to interpolate.
             ## r is at (0,0,0), ux and px are at (-0.5, 0, 0)
             ## --> to align r with px, shift by xdn
             x = var[-1]  # axis; 'x', 'y', or 'z'
@@ -1048,9 +1058,9 @@ class BifrostData(object):
             Bx = do_cstagger(self.bx, 'xup', obj=self)[sx, sy, sz]
             By = do_cstagger(self.by, 'yup', obj=self)[sx, sy, sz]
             Bz = do_cstagger(self.bz, 'zup', obj=self)[sx, sy, sz]
-            #Bx = cstagger.xup(self.bx)[sx, sy, sz]
-            #By = cstagger.yup(self.by)[sx, sy, sz]
-            B#z = cstagger.zup(self.bz)[sx, sy, sz]
+            # Bx = cstagger.xup(self.bx)[sx, sy, sz]
+            # By = cstagger.yup(self.by)[sx, sy, sz]
+            # Bz = cstagger.zup(self.bz)[sx, sy, sz]
             # Change sign of Bz (because of height scale) and By
             # (to make right-handed system)
             Bx = Bx * ub
@@ -1060,7 +1070,7 @@ class BifrostData(object):
             Bx = By = Bz = None
 
         vz = do_cstagger(self.pz, 'zup', obj=self)[sx, sy, sz] / rho
-        #vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
+        # vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         x = self.x[sx] * ul
         y = self.y[sy] * (-ul)
@@ -1123,7 +1133,7 @@ class BifrostData(object):
         rho = self.r[sx, sy, sz]
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
-        #vx = cstagger.xup(self.px)[sx, sy, sz] / rho
+        # vx = cstagger.xup(self.px)[sx, sy, sz] / rho
         vx = do_cstagger(self.px, 'xup', obj=self)[sx, sy, sz] / rho
         vx *= uv
         vy = do_cstagger(self.py, 'yup', obj=self)[sx, sy, sz] / rho
@@ -1171,6 +1181,7 @@ def write_br_snap(rootname,r,px,py,pz,e,bx,by,bz):
     data[...,6] = by
     data[...,7] = bz
     data.flush()
+
 
 def paramfile_br_update(infile, outfile, new_values):
     ''' Updates a given number of fields with values on a bifrost.idl file.
@@ -1358,6 +1369,7 @@ class Bifrost_units(object):
             if file_exists:
                 # file exists -> set units using file.
                 self.params = read_idl_ascii(file,firstime=True)
+                
                 def set_unit(key):
                     if getattr(self, key, None) is not None:
                         return
@@ -1398,8 +1410,9 @@ class Bifrost_units(object):
                       'If you decide you really need to access self.uni.params, then you can '
                       'remove the line of code which deletes self.params, in helita.sim.bifrost.py.'
                       '(the line looks like: "self.params = params_are_empty()"')
-            def __getitem__(self, i):  raise Exception(self.errmsg)
+
             def __contains__(self, i): raise Exception(self.errmsg)
+            def __getitem__(self, i):  raise Exception(self.errmsg)
             def keys(self):            raise Exception(self.errmsg)
             def values(self):          raise Exception(self.errmsg)
             def items(self):           raise Exception(self.errmsg)
@@ -1544,7 +1557,7 @@ class Bifrost_units(object):
         '''returns name of unit u. e.g. u_r -> 'r'; usi_hz -> 'hz', 'nq' -> 'nq'.'''
         for prefix in ['u_', 'usi_']:
             if u.startswith(prefix):
-                u = u[ len(prefix) : ]
+                u = u[len(prefix):]
                 break
         return u
 
@@ -1627,7 +1640,8 @@ class Bifrost_units(object):
                 rat = value / val
             except TypeError:
                 continue
-            if sign_sensitive: rat = abs(rat)
+            if sign_sensitive: 
+                rat = abs(rat)
             compare_val = abs(rat - 1)
             if best == 0:  # we handle this separately to prevent division by 0 error.
                 if compare_val < reltol:
@@ -1676,7 +1690,7 @@ class Rhoeetab:
         ''' Reads tabparam.in file, populates parameters. '''
         self.params = read_idl_ascii(tabfile, obj=self)
         if self.verbose:
-            print(('*** Read parameters from ' + tabfile), whsp*4 ,end="\r",
+            print(('*** Read parameters from ' + tabfile), whsp*4, end="\r",
                     flush=True)
         p = self.params
         # construct lnrho array
@@ -2037,7 +2051,8 @@ class Cross_sect:
         '''
         self.fdir = fdir
         self.dtype = dtype
-        if verbose is None: verbose = False if obj is None else getattr(obj, 'verbose', False)
+        if verbose is None: 
+            verbose = False if obj is None else getattr(obj, 'verbose', False)
         self.verbose = verbose
         self.obj = obj
         self.kelvin = kelvin
@@ -2113,7 +2128,6 @@ def cross_sect_for_obj(obj=None):
     return _init_cross_sect
 
 
-
 ###########
 #  TOOLS  #
 ###########
@@ -2183,7 +2197,7 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
     z = data.z[sz] * (-ul)
 
     rdt = data.r.dtype
-    #cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
+    # cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
     #                      data.zdn.astype(rdt), data.dzidzup.astype(rdt),
     #                      data.dzidzdn.astype(rdt))
 
