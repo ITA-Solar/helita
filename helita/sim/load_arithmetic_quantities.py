@@ -76,7 +76,8 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
     # stagger routine requires 'diff' kwarg if doing a derivative.
     if operation.startswith('dd'):
       x    = operation[2]  # get the axis. operation is like ddxup or ddxdn. x may be x, y, or z.
-      diff = getattr(obj, 'd'+x+'1d')  # for debugging: if crashing here, make sure obj is not None.
+      xdir = operation[2:]
+      diff = getattr(obj, 'd'+x+'id'+xdir)  # for debugging: if crashing here, make sure obj is not None.
     else:
       diff = None
     return stagger.do(arr, operation, diff=diff)

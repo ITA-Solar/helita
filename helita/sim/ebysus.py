@@ -1058,6 +1058,7 @@ class EbysusData(BifrostData):
     def match_physics(self):
         '''return whether self.match_type == MATCH_PHYSICS'''
         return self._get_match_type() == MATCH_PHYSICS
+
     def match_aux(self):
         '''return whether self.match_type == MATCH_AUX'''
         return self._get_match_type() == MATCH_AUX
@@ -1109,12 +1110,14 @@ class EbysusData(BifrostData):
     # include methods from fluid_tools.
     def MaintainingFluids(self):
         return fluid_tools._MaintainingFluids(self)
+
     MaintainingFluids.__doc__ = fluid_tools._MaintainingFluids.__doc__.replace(
                                 '_MaintainingFluids(dd', 'dd.MaintainingFluids(')  # set docstring
     MaintainFluids = MaintainingFluids  # alias
 
     def UsingFluids(self, **kw__fluids):
         return fluid_tools._UsingFluids(self, **kw__fluids)
+
     UsingFluids.__doc__ = fluid_tools._UsingFluids.__doc__.replace(
                                 '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
     UseFluids = UsingFluids  # alias
