@@ -503,10 +503,7 @@ class EbysusData(BifrostData):
         Also, restores self.ifluid and self.jfluid afterwards.
         Also, restores self.match_type afterwards.
         '''
-        # pre-processing
         __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
-        loading_level_attr = document_vars.LOADING_LEVEL
-        setattr(self, loading_level_attr, getattr(self, loading_level_attr, -1) + 1)
         # getting var
         if self._metadata_matches(self.variables.get('metadata', dict())) and var in self.variables:
             val = self.variables[var]

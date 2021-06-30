@@ -519,7 +519,7 @@ class QuantTree:
         else:
             space = ' '*(self._level + 1)
             return '(L{level}) {data} : {children}'.format(**fmtdict,
-                        children=''.join(['\n' + space + str(child) for child in self.children]))
+                        children=','.join(['\n' + space + str(child) for child in self.children]))
 
     def __repr__(self):
         return '<{}. For pretty formatting of contents, print or convert to string.>'.format(object.__repr__(self))
@@ -570,12 +570,13 @@ def quant_tracking_top_level(f):
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+        setattr(obj, LOADING_LEVEL, getattr(obj, LOADING_LEVEL, -1) + 1) # increment LOADING_LEVEL.
         setattr(obj, VARNAME_INPUT, varname)      # save name of the variable which was input.
         setattr(obj, QUANT_SELECTED, QuantInfo(None))  # smash QUANT_SELECTED before doing f.
         result = f(obj, varname, *args, **kwargs)
         # even if we don't recognize this quant (because we didn't put quant tracking document_vars code for it (yet)),
         ## we should still set QUANT_SELECTED to the info we do know (i.e. the varname), with blanks for what we dont know.
-        quant_info = getattr(obj, QUANT_SELECTED, QuantInfo)
+        quant_info = getattr(obj, QUANT_SELECTED, QuantInfo(None))
         if quant_info.varname is None:  # f did not set varname for quant_info, so we'll do it now.
             setattr_quant_selected(obj, quant=QUANT_NOT_FOUND, typequant=QUANT_NOT_FOUND, metaquant=QUANT_NOT_FOUND,
                                    varname=varname)
