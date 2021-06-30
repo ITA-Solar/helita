@@ -498,7 +498,7 @@ class QuantTree:
     '''use for tree representation of quants.'''
     def __init__(self, data, level=0):
         self.data     = data
-        self.children = collections.deque()
+        self.children = []
         self._level   = level
 
     def add_child(self, child):
@@ -524,41 +524,68 @@ class QuantTree:
     def __repr__(self):
         return '<{}. For pretty formatting of contents, print or convert to string.>'.format(object.__repr__(self))
 
+    def get_child(self, i_child=0, oldest_first=True):
+        '''returns the child determined by index i_child.
+
+        self.get_child() (with no args/kwargs entered) returns the oldest child (the child added first).
+
+        Parameters
+        ----------
+        i_child: int (default 0)
+            index of child to get. See oldest_first kwarg for ordering convention.
+        oldest_first: True (default) or False.
+            Determines the ordering convention for children:
+            True --> sort from oldest to youngest (0 is the oldest child (added first)).
+                     Equivalent to self.children[::-1][i_child]
+            False -> sort from youngest to oldest (0 is the youngest child (added most-recently)).
+                     Equivalent to self.children[i_child]
+        '''
+        if oldest_first:
+            return self.children[::-1][i_child]
+        else:
+            return self.children[i_child]
+        
 
 def quant_tree_tracking(f):
-    '''wrapper for f which makes it track quant tree.'''
+    '''wrapper for f which makes it track quant tree.
+    
+    QUANTS_TREE (attr of obj) will be a tree like:
+    (L(N-1)) None :
+    (L(N)) QuantInfo(var_current_layer) :
+     (L(N+1)) QuantInfo(var_1, i.e. 1st var gotten while calculating var_current_layer) :
+      (L(N+2)) ... (tree for var_1)
+     (L(N+1)) QuantInfo(var_2, i.e. 2nd var gotten while calcualting var_current_layer) :
+      (L(N+2)) ... (tree for var_2)
+    
+    Another way to write it; it will be a tree like:
+    QuantTree(data=None, level=N-1, children= \
+    [
+        QuantTree(data=QuantInfo(var_current_layer), level=N, children= \
+        [
+            QuantTree(data=QuantInfo(var_1, level=N+1, children=...)),
+            QuantTree(data=QuantInfo(var_2, level=N+1, children=...)),
+            ...
+        ])
+    ])
+    '''
     @functools.wraps(f)
     def f_but_quant_tree_tracking(obj, varname, *args, **kwargs):
         # get loading_level. Outside of any f, the default is -1.
         loading_level = getattr(obj, LOADING_LEVEL, -1)
         if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
-            orig_tree = QuantTree(None)
-            setattr(obj, QUANTS_TREE, orig_tree)
+            orig_tree = QuantTree(None, level=-1)
         else:
             orig_tree = getattr(obj, QUANTS_TREE)
-            tree_child = orig_tree.add_child(None)
-            setattr(obj, QUANTS_TREE, tree_child)
+        tree_child = orig_tree.add_child(None)
+        setattr(obj, QUANTS_TREE, tree_child)
         # call f.
         result = f(obj, varname, *args, **kwargs)
         # retore original tree. (The data is set by f, via _track_quants_selected and quant_tracking_top_level)
-        #print('>> After getting quant =',repr(quant),'the tree looks like:')
+        #print('>> After getting var =',repr(varname),'the tree looks like:')
         #print(getattr(obj, QUANTS_TREE))
-        # spot A
         setattr(obj, QUANTS_TREE, orig_tree)
-        # spot B
-        #print('>>>> Meanwhile, the original tree for quant =',repr(quant),'now looks like:')
+        #print('>>>> Meanwhile, the original tree for var =',repr(varname),'now looks like:')
         #print(orig_tree)
-        # here we can "inject" units tracking. TODO: do this, but in units.py.
-        # in the meantime, here are notes (which can be verified via the print()s above:
-        #   the info for the "children" (i.e. the quants we must get to get varname)
-        #   of quant related to the varname which was entered can be gotten via...:
-        #      at spot A: [child.data for child in getattr(obj, QUANTS_TREE).children]
-        #      at spot B: [child.data for child in getattr(obj, QUANTS_TREE).children[-1].children]
-        # The way to inject units tracking might be to have it tag along with this tree,
-        # or to implement a similar structure but for a units tree.
-        # The reason the children might be important to units is for arithmetic_quantities.
-        # Examples: units(dVARdxdn) = units(VAR) / units(l); units(VAR2) = units(VAR)**2.
-
         # return result of f.
         return result
     return f_but_quant_tree_tracking
@@ -636,16 +663,28 @@ def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info:
         result.append(info)
     return result
 
-def got_vars_tree(obj, as_data=False):
+def got_vars_tree(obj, as_data=False, i_child=0, oldest_first=True):
     '''prints QUANTS_TREE for obj.
     This tree shows the vars which were gotten during the most recent "level 0" call to get_var.
     (Calls to get_var from outside of helita have level == 0.)
 
     Use as_data=True to return the QuantTree object instead of printing it.
+
+    Use i_child to get a child other than children[-1] (default).
+        Note that if you are calling got_vars_tree externally (not inside any calls to get_var),
+        then there will be only one child, and it will be the QuantTree for the var passed to get_var.
+
+    Use oldest_first to tell the children ordering convention:
+        True --> 0 is the oldest child (added first); -1 is the newest child (added most-recently).
+        False -> the order is reversed, e.g. -1 is the oldest child instead.
     '''
-    # get QUANTS_TREE attr. Since this function (got_vars_tree) is optional, and for end-user,
-    # crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.
+    # Get QUANTS_TREE attr. Since this function (got_vars_tree) is optional, and for end-user,
+    ## crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.
     quants_tree = getattr(obj, QUANTS_TREE)
+    # By design, data in top level of QUANTS_TREE is always None
+    ## (except inside the wrapper quant_tree_tracking, which is the code that manages the tree).
+    ## Thus the top level of quants_tree is not useful data, so we go to a child instead.
+    quants_tree = quants_tree.get_child(i_child, oldest_first)
     # if as_data, return. Else, print.
     if as_data:
         return quants_tree
