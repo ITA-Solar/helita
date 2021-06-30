@@ -37,6 +37,7 @@ def do(var, operation='xup', diff=None, pad_mode=None):
         'y': _yshift,
         'z': _zshift,
     }
+ 
     DEFAULT_PAD = {'x': 'wrap', 'y': 'wrap', 'z': 'reflect'}
     if operation[-2:].lower() == 'up':
         up = True
@@ -93,13 +94,15 @@ def _xshift(var, diff, up=True, derivative=False):
     start = int(2.5 - sign*0.5)  
     end = - int(2.5 + sign*0.5)
     nx, ny, nz = var.shape
+    out=np.zeros((nx,ny,nz))
     for k in prange(nz): 
         for j in prange(ny):
             for i in prange(start, nx + end):
-                var[i, j, k] = diff[i] * (a * (var[i, j, k] + pm * var[i + sign, j, k]) +
+                out[i, j, k] = diff[i] * (a * (var[i, j, k] + pm * var[i + sign, j, k]) +
                                 b * (var[i - sign*1, j, k] + pm * var[i + sign*2, j, k]) +
                                 c * (var[i - sign*2, j, k] + pm * var[i + sign*3, j, k]))
-    return var[start:end]
+
+    return out[start:end]
 
 
 @njit(parallel=True)
@@ -121,13 +124,14 @@ def _yshift(var, diff, up=True, derivative=False):
     start = int(2.5 - sign*0.5)  
     end = - int(2.5 + sign*0.5)
     nx, ny, nz = var.shape
+    out=np.zeros((nx,ny,nz))
     for k in prange(nz): 
         for j in prange(start, ny + end):
             for i in prange(nx):
-                var[i, j, k] = diff[j] * (a * (var[i, j, k] + pm * var[i, j + sign, k]) +
+                out[i, j, k] = diff[j] * (a * (var[i, j, k] + pm * var[i, j + sign, k]) +
                                 b * (var[i, j - sign*1, k] + pm * var[i, j + sign*2, k]) +
                                 c * (var[i, j - sign*2, k] + pm * var[i, j + sign*3, k]))
-    return var[:, start:end]
+    return out[:, start:end]
 
 
 @njit(parallel=True)
@@ -149,10 +153,11 @@ def _zshift(var, diff, up=True, derivative=False):
     start = int(2.5 - sign*0.5)  
     end = - int(2.5 + sign*0.5)
     nx, ny, nz = var.shape
+    out=np.zeros((nx,ny,nz))
     for k in prange(start, nz + end): 
         for j in prange(ny):
             for i in prange(nx):
-                var[i, j, k] = diff[k] * (a * (var[i, j, k] + pm * var[i, j, k + sign]) +
+                out[i, j, k] = diff[k] * (a * (var[i, j, k] + pm * var[i, j, k + sign]) +
                                 b * (var[i, j, k - sign*1] + pm * var[i, j, k + sign*2]) +
                                 c * (var[i, j, k - sign*2] + pm * var[i, j, k + sign*3]))
-    return var[..., start:end]
+    return out[..., start:end]
