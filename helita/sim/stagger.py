@@ -78,9 +78,9 @@ def do(var, operation='xup', diff=None, pad_mode=None):
 @njit(parallel=True)
 def _xshift(var, diff, up=True, derivative=False):
     if up:
-        sign = 1
+        grdshf = 1
     else:
-        sign = -1
+        grdshf = -1
     if derivative:
         pm = -1
         c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
@@ -98,9 +98,9 @@ def _xshift(var, diff, up=True, derivative=False):
     for k in prange(nz): 
         for j in prange(ny):
             for i in prange(start, nx + end):
-                out[i, j, k] = diff[i] * (a * (var[i, j, k] + pm * var[i + sign, j, k]) +
-                                b * (var[i - sign*1, j, k] + pm * var[i + sign*2, j, k]) +
-                                c * (var[i - sign*2, j, k] + pm * var[i + sign*3, j, k]))
+                out[i, j, k] = diff[i] * (a * (var[i+ grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
+                                b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
+                                c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
 
     return out[start:end]
 
@@ -108,9 +108,9 @@ def _xshift(var, diff, up=True, derivative=False):
 @njit(parallel=True)
 def _yshift(var, diff, up=True, derivative=False):
     if up:
-        sign = 1
+        grdshf = 1
     else:
-        sign = -1
+        grdshf = 0
     if derivative:
         pm = -1
         c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
@@ -128,18 +128,18 @@ def _yshift(var, diff, up=True, derivative=False):
     for k in prange(nz): 
         for j in prange(start, ny + end):
             for i in prange(nx):
-                out[i, j, k] = diff[j] * (a * (var[i, j, k] + pm * var[i, j + sign, k]) +
-                                b * (var[i, j - sign*1, k] + pm * var[i, j + sign*2, k]) +
-                                c * (var[i, j - sign*2, k] + pm * var[i, j + sign*3, k]))
+                out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] + pm * var[i, j - 1 + grdshf, k]) +
+                                b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 - grdshf, k]) +
+                                c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 - grdshf, k]))
     return out[:, start:end]
 
 
 @njit(parallel=True)
 def _zshift(var, diff, up=True, derivative=False):
     if up:
-        sign = 1
+        grdshf = 1
     else:
-        sign = -1
+        grdshf = 0
     if derivative:
         pm = -1
         c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
@@ -157,7 +157,7 @@ def _zshift(var, diff, up=True, derivative=False):
     for k in prange(start, nz + end): 
         for j in prange(ny):
             for i in prange(nx):
-                out[i, j, k] = diff[k] * (a * (var[i, j, k] + pm * var[i, j, k + sign]) +
-                                b * (var[i, j, k - sign*1] + pm * var[i, j, k + sign*2]) +
-                                c * (var[i, j, k - sign*2] + pm * var[i, j, k + sign*3]))
+                out[i, j, k] = diff[k] * (a * (var[i, j, k + grdshf] + pm * var[i, j, k - 1 + grdshf]) +
+                                b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
+                                c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
     return out[..., start:end]
