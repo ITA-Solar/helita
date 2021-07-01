@@ -53,6 +53,7 @@ import types  # for MethodType
 
 # import internal modules
 from . import file_memory
+from . import units       # not used heavily; just here for setting defaults, and setting obj.get_units
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
@@ -108,7 +109,7 @@ def set_meta_quant(obj, name, QUANT_DOC=NONEDOC):
         vardict[METAQUANT] = dict()
     vardict[METAQUANT][QUANTDOC] = QUANT_DOC
 
-def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=None, rewrite=False):
+def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=None, rewrite=False, **kw__defaults):
     '''function factory; returns function(varname, vardoc, nfluid=None) which writes documentation of var.
     The documentation goes to vd['doc'] where vd = obj.vardict[METAQUANT][TYPE_QUANT][varname].
 
@@ -133,6 +134,17 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
     if not rewrite, and TYPE_QUANT already in obj.vardict[METAQUANT].keys() (when vars_documenter is called),
         instead do nothing and return a function which does nothing.
 
+    kw__defaults become default values for all quants in QUANT_VARS.
+        Example:
+            docvar = vars_documenter(obj, typequant, ['var1', 'var2', 'var3'], foo_kwarg='bar')
+            docvar('var1', 'info about var 1')
+            docvar('var2', 'info about var 2', foo_kwarg='overwritten')
+            docvar('var3', 'info about var 3')
+        Leads to obj.vardict[METAQUANT][typequant] like:
+            {'var1': {'doc':'info about var 1', 'foo_kwarg':'bar'},
+             'var2': {'doc':'info about var 2', 'foo_kwarg':'overwritten'},
+             'var3': {'doc':'info about var 3', 'foo_kwarg':'bar'}}
+
     also sets obj.vardict[METAQUANT][TYPE_QUANT][document_vars.QUANTDOC] = QUANT_DOC.
     '''
     if METAQUANT is None:
@@ -151,7 +163,7 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
             if (QUANT_VARS is not None) and (varname not in QUANT_VARS):
                 return
             tqd = vardict[TYPE_QUANT]
-            var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__more_info_about_var}
+            var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__defaults, **kw__more_info_about_var}
             try:
                 vd = tqd[varname]   # vd = vardict[TYPE_QUANT][varname] (if it already exists)
             except KeyError:        # else, initialize tqd[varname]:
@@ -179,18 +191,23 @@ def create_vardict(obj):
     '''call obj.get_var('') but with prints turned off.
     Afterwards, obj.vardict will be full of documentation.
 
-    Also, set a few more things (conceptually these belong elsewhere but it is convenient to do them here) :
+    Also, set a few more things (conceptually these belong elsewhere,
+    but it is convenient to do them here because create_vardict is called in __init__ for all the DataClass objects) :
         set obj.gotten_vars() to a function which returns obj._quants_selected.
         set obj.got_vars_tree() to a function which returns obj._quants_tree.
+        set obj.quant_lookup() to a function which returns dict of info about quant, as found in obj.vardict.
     '''
     # creat vardict
     setattr(obj, CREATING_VARDICT, True)
     obj.get_var('')
     setattr(obj, CREATING_VARDICT, False)
-    # do the few misc. things (which conceptually belong elsewhere)
-    obj.gotten_vars   = types.MethodType(gotten_vars, obj)
-    obj.got_vars_tree = types.MethodType(got_vars_tree, obj)
-
+    # set some other useful functions in obj.
+    obj.gotten_vars    = types.MethodType(gotten_vars, obj)
+    obj.got_vars_tree  = types.MethodType(got_vars_tree, obj)
+    obj.get_quant_info = types.MethodType(get_quant_info, obj)
+    obj.get_var_info   = obj.get_quant_info   # alias
+    obj.quant_lookup   = types.MethodType(quant_lookup, obj)
+    obj.get_units      = types.MethodType(units.get_units, obj)
 
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
@@ -487,9 +504,19 @@ def quant_tracking_simple(typequant, metaquant=None):
         @functools.wraps(f)
         def f_but_quant_tracking(obj, quant, *args, **kwargs):
             __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            # we need to save original METAQUANT now, because doing f might change METAQUANT.
+            ## (quant_tracking_simple is meant to wrap a function inside a load_..._quantities file,
+            ## so when that function (f) is called, METAQUANT will be the correct value.)
+            if metaquant is None:
+                remembered_metaquant = METAQUANT
+            else:
+                remembered_metaquant = metaquant
+            # call f
             result = f(obj, quant, *args, **kwargs)
+            # set quant_selected
             if result is not None:
-                setattr_quant_selected(obj, quant, typequant, metaquant)
+                setattr_quant_selected(obj, quant, typequant, remembered_metaquant)
+            # return result of f
             return result
         return f_but_quant_tracking
     return decorator
@@ -690,3 +717,23 @@ def got_vars_tree(obj, as_data=False, i_child=0, oldest_first=True):
         return quants_tree
     else:
         print(quants_tree)
+
+def quant_lookup(obj, quant_info):
+    '''returns entry in obj.vardict related to quant_info (a QuantInfo object).
+    if quant_info does not have an entry in obj.vardict, return an empty dict().
+    '''
+    vardict = getattr(obj, VARDICT, dict())
+    metaquant_dict = vardict.get(quant_info.metaquant, dict())
+    typequant_dict = metaquant_dict.get(quant_info.typequant, dict())
+    quant_dict     = typequant_dict.get(quant_info.quant, dict())
+    return quant_dict
+
+def get_quant_info(obj, lookup_in_vardict=False):
+    '''returns QuantInfo object for the top-level quant in got_vars_tree.
+    If lookup_in_vardict, also use obj.quant_lookup to look up that info in obj.vardict.
+    '''
+    quant_info = got_vars_tree(obj, as_data=True, i_child=0).data
+    if lookup_in_vardict:
+        return quant_lookup(obj, quant_info)
+    else:
+        return quant_info
