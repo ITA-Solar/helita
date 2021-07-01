@@ -8,7 +8,9 @@ from .file_memory import Caching   # never alters results, but caches them for b
                                    # see also cache_with_nfluid and cache kwargs of get_var.
 ## import the relevant things from the internal module "units"
 from .units import (
-  UNI, USI, UCGS, U_SYM, U_SYMS, U_TUPLE, DIMENSIONLESS, NO_UNITS
+  UNI, USI, UCGS, Usym, Usyms, UsymD, U_TUPLE,
+  DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
+  UNI_length, UNI_time, UNI_mass
 )
 
 # import external public modules
@@ -315,20 +317,19 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   if var=='':
     docvar = document_vars.vars_documenter(obj, _ONEFLUID_QUANT[0], ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
     docvar('nr', 'number density of ifluid [simu. number density units]',
-                 uni_f=UNI.nr, usi_name=U_SYM('m')**3, ucgs_name=U_SYM('cm')**3)
+                 uni=U_TUPLE(UNI.nr, UsymD(usi='m', ucgs='cm')**(-3)))
     docvar('nq', 'charge density of ifluid [simu. charge density units]')
     for tg in ['tg', 'temperature']:
-      docvar(tg, 'temperature of ifluid [K]')
+      docvar(tg, 'temperature of ifluid [K]', uni=U_TUPLE(UNITS_FACTOR_1, Usym('K')))
     for p in ['p', 'pressure']:
-      docvar(p, 'pressure of ifluid [simu. energy density units]')
-    docvar('ke', 'kinetic energy density of ifluid [simu. units]')
+      docvar(p, 'pressure of ifluid [simu. energy density units]', uni_f=UNI.e)
+    docvar('ke', 'kinetic energy density of ifluid [simu. units]', uni_f=UNI.e, usi_name=Usym('J')/Usym('m')**3)
     _equivstr = " Equivalent to obj.get_var('{ve:}') when obj.mf_ispecies < 0; obj.get_var('{vf:}'), otherwise."
     equivstr = lambda v: _equivstr.format(ve=v.replace('i', 'e'), vf=v.replace('i', ''))
     docvar('vtherm', 'thermal speed of ifluid [simu. velocity units]. = sqrt (8 * k_b * T_i / (pi * m_i) )')
     docvar('ri', 'mass density of ifluid [simu. mass density units]. '+equivstr('ri'))
     for uix in ['uix', 'uiy', 'uiz']:
-      docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix),
-                  uni_f=UNI.u, usi_name=U_SYM('m')/U_SYM('s'), ucgs_name=U_SYM('cm')/U_SYM('s'))
+      docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix), uni=UNI_length / UNI_time )
     for pix in ['pix', 'piy', 'piz']:
       docvar(pix, 'momentum density of ifluid [simu. momentum density units]. '+equivstr(pix))
     return None
