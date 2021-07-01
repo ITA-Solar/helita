@@ -129,8 +129,8 @@ def _yshift(var, diff, up=True, derivative=False):
         for j in prange(start, ny + end):
             for i in prange(nx):
                 out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] + pm * var[i, j - 1 + grdshf, k]) +
-                                b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 - grdshf, k]) +
-                                c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 - grdshf, k]))
+                                b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
+                                c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
     return out[:, start:end]
 
 
