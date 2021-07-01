@@ -85,13 +85,7 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
       diff = getattr(obj, 'd'+x+'id'+xdir)  # for debugging: if crashing here, make sure obj is not None.
     else:
       diff = None
-    bdr_pad = {'x': 'wrap', 'y': 'wrap', 'z': 'wrap'}
-    if obj.params['periodic_x'] == 0: 
-      bdr_pad['z'] = 'reflect'
-    if obj.params['periodic_y'] == 0: 
-      bdr_pad['y'] = 'reflect'
-    if obj.params['periodic_z'] == 0: 
-      bdr_pad['z'] = 'reflect'
+    bdr_pad = {x: ('reflect' if obj.get_param('periodic_'+x) else 'wrap') for x in AXES}
     return stagger.do(arr, operation, diff=diff, DEFAULT_PAD = bdr_pad)
 
 def _can_interp(obj, axis, warn=True):
