@@ -29,6 +29,10 @@ TODO:
 - have a units_system flag attribute which allows to convert units at top level automatically.
     - (By default the conversion will be off.)
     - Don't tell Juan about this attribute because he won't like it ;) but he doesn't ever have to use it!
+- make it so that if any of the names involved in calculating units name are not entered,
+    the resulting name will be something like '???'.
+    (Currently default name is '???' however we need to handle the case of ratio of two unnamed quants,
+    e.g. right now the ratio of two unnamed quants will give a name '' (because it does '???' / '???').)
 
 USER FRIENDLY GUIDE
     The way to input units is to put them in the documentation segment of get_quant functions.
@@ -143,6 +147,17 @@ USER FRIENDLY GUIDE
     Meaning, the units are not actually being evaluated until they are told to be.
     So, if you enter something wrong, or enter incomplete info, it will only affect
     code which actively tries to get the relevant units.
+
+    ----- TROUBLESHOOTING -----
+    Notes about troubleshooting go here.
+    - due to implementation, operations involving UnitsTuples (or units funcs or units names)
+        and literal constants must never have the literal constant appearing first.
+        For Example (of what NOT to do):
+            (1 / UNI.t)         # NOT ALLOWED
+            5 * UNI_speed       # NOT ALLOWED
+        For Example (of what to do instead):
+            UNI.t ** (-1)       # allowed
+            UNI_speed * 5       # allowed
 """
 
 # import built-ins
@@ -714,7 +729,10 @@ def _default_units_f(info=''):
     return Funclike(f)
 
 DEFAULT_UNITS_F = _default_units_f()
-DEFAULT_UNITS_NAME = UnitsExpression()
+DEFAULT_UNITS_NAME = UnitSymbol('???')   # for now, use ??? for default.
+                    # Then if we see ??? in name result, we know someone's name is missing.
+                    # TODO (maybe): make a separate object which converts the ENTIRE name to ???
+                    #    if ANY of the names involved are the default name.
 
 ''' ----------------------------- Units Tuple ----------------------------- '''
 
@@ -932,7 +950,8 @@ from .units import (
     Usym, Usyms, UsymD,
     U_TUPLE,
     DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
-    UNI_length, UNI_time, UNI_mass
+    UNI_length, UNI_time, UNI_mass,
+    UNI_speed, UNI_rho, UNI_nr, UNI_hz
 )
 """
 
@@ -962,3 +981,7 @@ NO_NAME        = DIMENSIONLESS_NAME      # dimensionless name  (name is '')
 UNI_length = U_TUPLE(UNI.l, UsymD(usi='m', ucgs='cm'))
 UNI_time   = U_TUPLE(UNI.t, Usym('s'))
 UNI_mass   = U_TUPLE(UNI.m, UsymD(usi='kg', ucgs='g'))
+UNI_speed  = U_TUPLE(UNI.u, UNI_length.name / UNI_time.name)
+UNI_rho    = U_TUPLE(UNI.r, UNI_mass.name / (UNI_length.name**3))  # mass density
+UNI_nr     = U_TUPLE(UNI.nr, UNI_length.name ** (-3))              # number density
+UNI_hz     = U_TUPLE(UNI.hz, Usym('s')**(-1))                      # frequency
