@@ -6,6 +6,10 @@ from . import document_vars
 from .file_memory import Caching   # never alters results, but caches them for better efficiency.
                                    # use sparingly on "short" calculations; apply liberally to "long" calculations.
                                    # see also cache_with_nfluid and cache kwargs of get_var.
+## import the relevant things from the internal module "units"
+from .units import (
+  UNI, USI, UCGS, U_SYM, U_SYMS, U_TUPLE, DIMENSIONLESS, NO_UNITS
+)
 
 # import external public modules
 import numpy as np
@@ -310,7 +314,8 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, _ONEFLUID_QUANT[0], ONEFLUID_QUANT, get_onefluid_var.__doc__, nfluid=1)
-    docvar('nr', 'number density of ifluid [simu. number density units]')
+    docvar('nr', 'number density of ifluid [simu. number density units]',
+                 uni_f=UNI.nr, usi_name=U_SYM('m')**3, ucgs_name=U_SYM('cm')**3)
     docvar('nq', 'charge density of ifluid [simu. charge density units]')
     for tg in ['tg', 'temperature']:
       docvar(tg, 'temperature of ifluid [K]')
@@ -322,7 +327,8 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     docvar('vtherm', 'thermal speed of ifluid [simu. velocity units]. = sqrt (8 * k_b * T_i / (pi * m_i) )')
     docvar('ri', 'mass density of ifluid [simu. mass density units]. '+equivstr('ri'))
     for uix in ['uix', 'uiy', 'uiz']:
-      docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix))
+      docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix),
+                  uni_f=UNI.u, usi_name=U_SYM('m')/U_SYM('s'), ucgs_name=U_SYM('cm')/U_SYM('s'))
     for pix in ['pix', 'piy', 'piz']:
       docvar(pix, 'momentum density of ifluid [simu. momentum density units]. '+equivstr(pix))
     return None

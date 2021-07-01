@@ -47,6 +47,11 @@ try:
 except ImportError:
   warnings.warn("failed to import helita.sim.stagger; running stagger with stagger_kind='stagger' will crash.")
 
+## import the relevant things from the internal module "units"
+from .units import (
+  UNI, USI, UCGS, U_SYM, U_SYMS, U_TUPLE, DIMENSIONLESS, NO_UNITS
+)
+
 # import external public modules
 import numpy as np
 
@@ -151,7 +156,9 @@ def get_deriv(obj,quant):
   # quant = quant.lower()    # if we want to use lower, it should be elsewhere in the code.
                              # (in get_var, or load_arithmetic_quantities(), perhaps.) -SE June 28, 2021.
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_DERIV_QUANT, get_deriv.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_DERIV_QUANT, get_deriv.__doc__,
+                                           usi =USI.quant_child(0)  / U_TUPLE(USI.l,  U_SYM('m')),
+                                           ucgs=UCGS.quant_child(0) / U_TUPLE(UCGS.l, U_SYM('cm')) )
     docvar('dxup',  'spatial derivative in the x axis with half grid up [simu units]')
     docvar('dyup',  'spatial derivative in the y axis with half grid up [simu units]')
     docvar('dzup',  'spatial derivative in the z axis with half grid up [simu units]')
@@ -223,7 +230,8 @@ def get_center(obj,quant, *args, **kwargs):
   Center the variable in the midle of the grid cells
   '''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_CENTER_QUANT, get_center.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_CENTER_QUANT, get_center.__doc__,
+                                           uni=UNI.quant_child(0))
     return None
 
   getq = quant[-2:]  # the quant we are "getting" by this function.
