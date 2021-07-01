@@ -2,7 +2,8 @@ import numpy as np
 from numba import jit, njit, prange
 
 
-def do(var, operation='xup', diff=None, pad_mode=None):
+def do(var, operation='xup', diff=None, pad_mode=None, 
+    DEFAULT_PAD = {'x': 'wrap', 'y': 'wrap', 'z': 'reflect'}):
     """
     Do a stagger operation on `var` by doing a 6th order polynomial interpolation of 
     the variable from cell centres to cell faces (down operations), or cell faces
@@ -38,7 +39,6 @@ def do(var, operation='xup', diff=None, pad_mode=None):
         'z': _zshift,
     }
  
-    DEFAULT_PAD = {'x': 'wrap', 'y': 'wrap', 'z': 'reflect'}
     if operation[-2:].lower() == 'up':
         up = True
     elif operation[-2:].lower() == 'dn':
