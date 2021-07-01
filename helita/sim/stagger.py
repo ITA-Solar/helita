@@ -80,7 +80,7 @@ def _xshift(var, diff, up=True, derivative=False):
     if up:
         grdshf = 1
     else:
-        grdshf = -1
+        grdshf = 0
     if derivative:
         pm = -1
         c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
@@ -91,8 +91,8 @@ def _xshift(var, diff, up=True, derivative=False):
         c = 3.0 / 256.0
         b = -25.0 / 256.0
         a = 0.5 - b - c
-    start = int(2.5 - sign*0.5)  
-    end = - int(2.5 + sign*0.5)
+    start = int(3. - grdshf)  
+    end = - int(2. + grdshf)
     nx, ny, nz = var.shape
     out=np.zeros((nx,ny,nz))
     for k in prange(nz): 
@@ -121,8 +121,8 @@ def _yshift(var, diff, up=True, derivative=False):
         c = 3.0 / 256.0
         b = -25.0 / 256.0
         a = 0.5 - b - c
-    start = int(2.5 - sign*0.5)  
-    end = - int(2.5 + sign*0.5)
+    start = int(3. - grdshf)  
+    end = - int(2. + grdshf)
     nx, ny, nz = var.shape
     out=np.zeros((nx,ny,nz))
     for k in prange(nz): 
@@ -150,8 +150,8 @@ def _zshift(var, diff, up=True, derivative=False):
         c = 3.0 / 256.0
         b = -25.0 / 256.0
         a = 0.5 - b - c
-    start = int(2.5 - sign*0.5)  
-    end = - int(2.5 + sign*0.5)
+    start = int(3. - grdshf)  
+    end = - int(2. + grdshf)
     nx, ny, nz = var.shape
     out=np.zeros((nx,ny,nz))
     for k in prange(start, nz + end): 
