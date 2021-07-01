@@ -597,6 +597,7 @@ def quant_tree_tracking(f):
     '''
     @functools.wraps(f)
     def f_but_quant_tree_tracking(obj, varname, *args, **kwargs):
+        __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
         # get loading_level. Outside of any f, the default is -1.
         loading_level = getattr(obj, LOADING_LEVEL, -1)
         if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
