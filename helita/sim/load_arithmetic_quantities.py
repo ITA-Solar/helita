@@ -85,7 +85,8 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
       diff = getattr(obj, 'd'+x+'id'+xdir)  # for debugging: if crashing here, make sure obj is not None.
     else:
       diff = None
-    bdr_pad = {x: ('reflect' if obj.get_param('periodic_'+x) else 'wrap') for x in AXES}
+    # deal with boundaries. (Note obj.get_param isn't defined for everyone, e.g. BifrostData, so we can't use it.)
+    bdr_pad = {x: ('reflect' if obj.params['periodic_'+x] else 'wrap') for x in AXES}
     return stagger.do(arr, operation, diff=diff, DEFAULT_PAD = bdr_pad)
 
 def _can_interp(obj, axis, warn=True):
