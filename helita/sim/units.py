@@ -14,16 +14,6 @@ FOR NOW:
 State of the code right now:
 - The "hesitant execution" of methods in here means that if you do not call obj.get_units()
     or any other units-related functions, then nothing in units.py should cause a crash.
-- There are very few units actually implemented in load_..._quantities files.
-    - This implementation is pending a possible addition of some "quality-of-life" improvements:
-        - e.g. "universal naming scheme" (see TODO)
-        - e.g. "common unit tuples" (see TODO)
-    - The units which are actually implemented are:
-        - units in get_deriv in load_arithmetic_quantities
-        - units in get_center in load_arithmetic_quantities
-        - units in get_square in load_arithmetic_quantities
-        - units for 'nr' and 'uix' in get_onefluid_var in load_mf_quantities
-        - a few more misc. units in load_mf_quantities.
 
 TODO:
 - have a units_system flag attribute which allows to convert units at top level automatically.
@@ -33,6 +23,7 @@ TODO:
     the resulting name will be something like '???'.
     (Currently default name is '???' however we need to handle the case of ratio of two unnamed quants,
     e.g. right now the ratio of two unnamed quants will give a name '' (because it does '???' / '???').)
+- implement units for simplevars (this goes along with implementing quant tracking for simplevars).
 
 USER FRIENDLY GUIDE
     The way to input units is to put them in the documentation segment of get_quant functions.
