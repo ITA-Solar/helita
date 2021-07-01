@@ -26,14 +26,123 @@ State of the code right now:
         - a few more misc. units in load_mf_quantities.
 
 TODO:
-- (high priority) make a "User-friendly" guide to units.py at the top of this file.
-    - (in the meantime you can try to figure it out from examples in load_..._quantities files)
 - have a units_system flag attribute which allows to convert units at top level automatically.
     - (By default the conversion will be off.)
     - Don't tell Juan about this attribute because he won't like it ;) but he doesn't ever have to use it!
-- test that the code is working properly...
 
+USER FRIENDLY GUIDE
+    The way to input units is to put them in the documentation segment of get_quant functions.
 
+    There are a few different ways to enter the units, and you can enter as much or as little info as you want.
+    The available keys to enter are:
+        ----- AVAILABLE KEYS -----
+           usi_f = function which tells >> si << units. (given info about obj)
+          ucgs_f = function which tells >> cgs << units. (given info about obj)
+           uni_f = function which tells >> any << units. (given info about obj, and unit system)
+        usi_name = UnitsExpression which gives name for >> si << units.
+       ucgs_name = UnitsExpression which gives name for >> cgs << units.
+        uni_name = UnitsExpression which gives name for >> any << units. (given info about unit system)
+             usi = UnitsTuple giving (function, name) for >> si << units. (given info about obj)
+            ucgs = UnitsTuple giving (function, name) for >> cgs << units. (given info about obj)
+             uni = UnitsTuple giving (function, name) for >> any << units. (given info about obj, and unit system)
+
+    You should not try to build your own functions from scratch.
+    Instead, use the building blocks from units.py in order to fill in the units details.
+        ----- BUILDING BLOCKS -----
+        First, it is recommended to import the following directly into the local namespace, for convenience:
+            from helita.sim.units import (
+                UNI, USI, UCGS, UCONST,
+                Usym, Usyms, UsymD,
+                U_TUPLE,
+                DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
+                UNI_length, UNI_time, UNI_mass
+            )
+        Here is a guide to these building blocks.
+            ----- FUNCTION BUILDERS -----
+            > UCONST: access the exact attribute provided here, from obj.uni.
+                Example: UCONST.ksi_b --> obj.uni.ksi_b
+            > USI: access si units from obj.uni. (prepend 'usi_' to the attribute here)
+                Example: (USI.r * USI.l) --> (obj.uni.usi_r * obj.uni.usi_l)
+            > UCGS: access cgs units from obj.uni. (prepend 'u_' to the attribute here)
+                Example: (UCGS.r * UCGS.l) --> (obj.uni.u_r * obj.uni.u_l)
+            > UNI: when units are evaluated, UNI works like USI or UCGS, depending on selected unit system.
+
+            These can be manipulated using +, -, *, /, ** in the intuitive ways.
+            Example: UCGS.r ** 3 / (UCONST.amu * UCGS.t)  --> (obj.uni.u_r)**3 / (obj.uni.amu * obj.uni.u_t)
+            (Note + and - are not fully tested, and probably should not be used for units anyways.)
+
+            Also, the attributes are "magically" transferred to obj.uni, so any attribute can be entered.
+            Example: USI.my_arbitrary_attribute --> obj.uni.usi_my_artbitrary_attribute
+
+            ----- NAME BUILDERS -----
+            The tools here build UnitsExpression objects, which can be manipulated intuitively using *, /, **.
+            UnitsExpression objects provide a nice-looking string for units when converted to string.
+            Example: str(Usym('m') ** 3 / (Usym('m') * Usym('s')) --> 'm^{2} / s'
+
+            > Usym: gives a UnitsExpression representing the entered string (to the first power)
+            > Usyms: generate multiple Usym at once.
+                Example: Usyms('m', 's', 'g') is equivalent to (Usym('m'), Usym('s'), Usym('g'))
+            > UsymD: gives a dict of UnitsExpressions; the name to use is picked when unit system info is entered.
+                Example: UsymD(usi='m', ucgs='cm') -->
+                    Usym('m') when unit system is 'si'
+                    Usym('cm') when unit system is 'cgs'.
+                The keys to use for UsymD are always the keys usi, ucgs.
+
+            ----- TUPLE BUILDER -----
+            > U_TUPLE: turns function and name into a UnitsTuple. Mainly for convenience.
+                The following are equivalent (for any ufunc and uname):
+                    docvar(..., usi=U_TUPLE(ufunc, uname)
+                    docvar(..., usi_f=ufunc, usi_name=uname)
+                This also applies similarly to ucgs and uni (in place of usi).
+            
+            UnitsTuple objects can be manipulated intuitively using *, /, **.
+            Example: U_TUPLE(fA, nameA) ** 3 / (U_TUPLE(fB, nameB) * U_TUPLE(fC, nameC))
+                --> U_TUPLE(fA**3 / (fB * fC), nameA**3 / (nameB * nameC))
+
+            ----- QUANT CHILDREN -----
+            For some units it is necessary to know the units of the "children" which contribute to the quant.
+            For example, the units of AratB (== A/B) will be the units of A divided by the units of B.
+            (This is probably only necessary for quantities in load_arithmetic_quantities)
+
+            This can be accomplished using some special attributes from the function builders UNI, USI, or UCGS:
+                > quant_child_f(i) or qcf(i)
+                    gives the units function for the i'th-oldest child.
+                > quant_child_name(i) or qcn(i)
+                    gives the UnitsExpression for the i'th-oldest child.
+                > quant_child(i) or qc(i)
+                    gives the UnitsTuple for the i'th-oldest child.
+            Example:
+                for the AratB example above, we can enter for rat:
+                    docvar('rat', ..., uni=UNI.quant_child(0) / UNI.quant_child(1))
+                assuming the code for AratB gets A first, then gets B, and
+                gets no other vars (at that layer of the code; i.e. ignoring internal calls to
+                get_var while getting A and/or B), then this will cause the units for AratB to
+                evaluate to (units for A) / (units for B).
+
+            ----- CONVENIENCE TOOLS -----
+            The remanining imported tools are there for convenience.
+            > NO_NAME: an empty UnitsExpression.
+            > UNITS_FACTOR_1: a units function which always returns 1 when units are evaluated.
+                Example: docvar('tg', ..., uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
+                # get_var('tg') returns temperature in kelvin, so the conversion factor is 1 and the name is 'K'.
+            > DIMENSIONLESS: UnitsTuple(UNITS_FACTOR_1, NO_NAME)
+                Example: docvar('beta', ..., uni=DIMENSIONLESS)
+                # get_var('beta') returns plasma beta, a dimensionless quantities, so we use DIMENSIONLESS.
+            > UNI_length: UnitsTuple(UNI.l, UsymD(usi='m', ucgs='cm'))
+                UNI_length evaluates to the correct units and name for length in either unit system.
+            > UNI_time: UnitsTuple(UNI.t, Usym('s'))
+                UNI_time evaluates to the correct units and name for time in either unit system.
+            > UNI_mass: UnitsTuple(UNI.m, UsymD(usi='kg', ucgs='g'))
+                UNI_mass evaluates to the correct units and name for mass in either unit system.
+
+    To get started it is best to use this guide as a reference,
+    and look at the existing examples in the load_..._quantities files.
+
+    If it seems overwhelming, don't worry too much.
+    The units.py "add-on" is designed to "execute hesitantly".
+    Meaning, the units are not actually being evaluated until they are told to be.
+    So, if you enter something wrong, or enter incomplete info, it will only affect
+    code which actively tries to get the relevant units.
 """
 
 # import built-ins
@@ -690,13 +799,13 @@ class UnitsFuncBuilder(FuncBuilder):
         return_type: string (default 'tuple')
             'tuple' --> return a UnitsTuple object.
                         (alternate funcs: quant_child, qc)
-            'units' --> return the units function only. (UnitsTuple.f)
+            'ufunc' --> return the units function only. (UnitsTuple.f)
                         (alternate funcs: quant_child_units, qcu)
             'name'  --> return the units name only. (UnitsTuple.name)
                         (alternate funcs: quant_child_name, qcn)
         '''
         return_type = return_type.lower()
-        assert return_type in ('tuple', 'units', 'name'), 'Got invalid return_type(={})'.format(repr(return_type))
+        assert return_type in ('tuple', 'ufunc', 'name'), 'Got invalid return_type(={})'.format(repr(return_type))
         def f_qc(obj_uni, obj, quant_tree, *args, **kwargs):
             '''gets quant child number {i} from quant tree of obj,
             sorting from i=0 as {age0} to i=-1 as {agef}.
@@ -710,7 +819,7 @@ class UnitsFuncBuilder(FuncBuilder):
                 units_key = self.units_key
             units_tuple = _units_lookup_by_quant_info(obj, child_tree.data, units_key)
             result      = units_tuple(obj_uni, obj, child_tree, *args, **kwargs)
-            if return_type == 'units':
+            if return_type == 'ufunc':
                 return result.f
             elif return_type == 'name':
                 return result.name
@@ -734,11 +843,11 @@ class UnitsFuncBuilder(FuncBuilder):
 
     qc = quant_child  # alias
 
-    def quant_child_units(self, i, oldest_first=True):
+    def quant_child_f(self, i, oldest_first=True):
         '''returns a Funclike which gets units func for i'th quant child in QUANTS_TREE for object=args[1].'''
-        return self._quant_child(i, oldest_first, return_type='units')
+        return self._quant_child(i, oldest_first, return_type='ufunc')
 
-    qcu = quant_child_units  # alias
+    qcf = quant_child_f  # alias
 
     def quant_child_name(self, i, oldest_first=True):
         '''returns a Funclike which gets units name for i'th quant child in QUANTS_TREE for object=args[1].'''
@@ -819,7 +928,9 @@ def get_units(obj, mode='si', **kw__units_f):
 # for example, in a load_..._quantities file, you would do:
 """
 from .units import (
-    UNI, USI, UCGS, Usym, Usyms, UsymD, U_TUPLE,
+    UNI, USI, UCGS, UCONST,
+    Usym, Usyms, UsymD,
+    U_TUPLE,
     DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
     UNI_length, UNI_time, UNI_mass
 )
@@ -831,6 +942,8 @@ UNI     = UnitsFuncBuilder(units_key=None)  # , format_attr=None
 USI     = UnitsFuncBuilder(units_key=UNITS_MODES['si'][0],  format_attr=UNITS_MODES['si'][1] )
 # for making cgs units
 UCGS    = UnitsFuncBuilder(units_key=UNITS_MODES['cgs'][0], format_attr=UNITS_MODES['cgs'][1])
+# for making "constant" units
+UCONST  = FuncBuilder(FunclikeType=AttrsFunclike, format_attr='{}')
 
 # for making unit names ("UnitsExpression"s)
 Usym   = UnitSymbol      # returns a single symbol
