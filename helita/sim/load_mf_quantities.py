@@ -611,6 +611,8 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
 # default
 _HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
                  'qcol_u', 'qcol_tg', 'qcol',
+                 'e_to_tg',
+                 'tg_qcol',  # TODO: add tg_qcol_... for as many of the qcol terms as applicable.
                  'qjoulei']
 _TGQCOL_EQUIL  = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
 _HEATING_QUANT += _TGQCOL_EQUIL
@@ -640,6 +642,8 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, _HEATING_QUANT[0], HEATING_QUANT, get_heating_quant.__doc__)
+    # qcol: heating due to collisions in addition to velocity and/or temperature differences
+    ## qcol tells the energy density change per unit time.
     heati = 'heating of ifluid [simu. energy density per time]'
     units_qcol = dict(uni_f=UNI.e / UNI.t, usi_name=Usym('J')/(Usym('m')**3 * Usym('s')))
     docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2, **units_qcol)
@@ -651,6 +655,13 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     docvar('qcol_u',   heati + ' due to collisions and velocity drifts.', nfluid=1, **units_qcol)
     docvar('qcol_tg',  heati + ' due to collisions and temperature differences.', nfluid=1, **units_qcol)
     docvar('qcol',     'total '+heati+'.', nfluid=1, **units_qcol)
+    # converting from qcol (energy density per time) to tg_qcol (temperature per time)
+    units_e_to_tg = dict(uni_f=UNITS_FACTOR_1 / UNI.e, usi_name=Usym('K') / (Usym('J') / Usym('m')**3))
+    docvar('e_to_tg',  'conversion factor from energy density to temperature for ifluid. '+\
+                       'e_ifluid * e_to_tg = tg_ifluid', nfluid=1, **units_e_to_tg)
+    tg_heati = 'heating of ifluid [Kelvin per simu. time]'
+    units_tg = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
+    docvar('tg_qcol',  'total '+tg_heati+'.', nfluid=1, **units_tg)
     # "simple equilibrium" vars
     equili = '"simple equilibrium" temperature [K] of ifluid (setting sum_j Qcol_ij=0 and solving for Ti)'
     ## note: these all involve setting sum_j Qcol_ij = 0 and solving for Ti.
@@ -658,7 +669,6 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     ### Ti == ( sum_{s!=i}(Cis Uis + Cis * 2 kB Ts) ) / ( 2 kB sum_{s!=i}(Cis) )
     ## so for the "components" terms, we pick out only one term in this sum (in the numerator), e.g.:
     ### tgqcol_equil_uj == Cij Uij / ( 2 kB sum_{s!=i}(Cis) )
-    units_tg = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
     docvar('tgqcol_equil_uj', equili + ', due only to contribution from velocity drift with jfluid.', nfluid=2, **units_tg)
     docvar('tgqcol_equil_tgj', equili + ', due only to contribution from temperature of jfluid.', nfluid=2, **units_tg)
     docvar('tgqcol_equil_j', equili + ', due only to contribution from jfluid.', nfluid=2, **units_tg)
@@ -682,7 +692,6 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
       return (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
 
   # qcol terms
-  
   if var == 'qcol_coeffj':
     if heating_is_off() or obj.i_j_same_fluid():
       return obj.zero()
@@ -724,8 +733,20 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     if heating_is_off(): return obj.zero()
     return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
 
-  # other terms
+  # converting to temperature (from energy density) terms
+  elif var == 'e_to_tg':
+    simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
+    return (obj.uni.gamma - 1) / (obj.get_var('nr') * simu_kB)
 
+  elif var.startswith('tg_'):
+    print('spot 1')
+    qcol = var[len('tg_') : ]  # var looks like tg_qcol
+    assert qcol in HEATING_QUANT, "qcol must be in heating quant to get tg_qcol. qcol={}".format(repr(qcol))
+    qcol_value = obj.get_var(qcol)         # [simu energy density / time]
+    e_to_tg    = obj.get_var('e_to_tg')    # [K / simu energy density (of ifluid)]
+    return qcol_value * e_to_tg            # [K]
+
+  # "simple equilibrium temperature" terms
   elif var in _TGQCOL_EQUIL:
     suffix  = var.split('_')[-1]  # uj, tgj, j, u, tg, or equil
     ## Let Cij = qcol_coeffj; Uij = qcol_uj, Tj = temperature of j. Then:
@@ -888,8 +909,10 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_se_spitzcoul', 'coulomb collisions between s & e-, including spitzer correction. ' +\
                               'Formula in Oppenheim et al 2020 appendix A eq 4. [simu freq]', nfluid=1)
     docvar('nu_ij_capcoul', 'coulomb collisions using Capitelli 2013 formulae. [simu freq]', nfluid=2)
-    docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j', nfluid=2)
-    docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j', nfluid=2)
+    docvar('nu_ij_to_ji', 'nu_ij_to_ji * nu_ij = nu_ji.  nu_ij_to_ji = m_i * n_i / (m_j * n_j) = r_i / r_j',
+                          nfluid=2, uni=DIMENSIONLESS)
+    docvar('nu_sj_to_js', 'nu_sj_to_js * nu_sj = nu_js.  nu_sj_to_js = m_s * n_s / (m_j * n_j) = r_s / r_j',
+                          nfluid=2, uni=DIMENSIONLESS)
     docvar('1dcolslope', '-(nu_ij + nu_ji)', nfluid=2)
     docvar('c_tot_per_vol', 'number density of collisions per volume per time '
                             '[simu. number density * simu. frequency] between ifluid and jfluid.', nfluid=2,
