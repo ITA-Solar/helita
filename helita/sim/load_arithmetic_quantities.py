@@ -49,9 +49,11 @@ except ImportError:
 
 ## import the relevant things from the internal module "units"
 from .units import (
-    UNI, USI, UCGS, Usym, Usyms, UsymD, U_TUPLE,
-    DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
-    UNI_length, UNI_time, UNI_mass
+  UNI, USI, UCGS, UCONST,
+  Usym, Usyms, UsymD,
+  U_TUPLE,
+  DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
+  UNI_length, UNI_time
 )
 
 # import external public modules
