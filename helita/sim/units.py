@@ -21,6 +21,7 @@ State of the code right now:
     - The units which are actually implemented are:
         - units in get_deriv in load_arithmetic_quantities
         - units in get_center in load_arithmetic_quantities
+        - units in get_square in load_arithmetic_quantities
         - units for 'nr' and 'uix' in get_onefluid_var in load_mf_quantities
 
 TODO:
@@ -28,17 +29,11 @@ TODO:
     - (in the meantime you can try to figure it out from examples in load_..._quantities files)
 - have a units_system flag attribute which allows to convert units at top level automatically.
     - (By default the conversion will be off.)
+    - Don't tell Juan about this attribute because he won't like it ;) but he doesn't ever have to use it!
 - create a "universal naming scheme" which allows to make unit symbols "universal", e.g.
     a unit symbol, U_L which will be 'cm' for cgs and 'm' for si.
 - (maybe) create "common unit tuples" e.g. Lenth_Tuple = UnitsTuple(USI.l, U_SYM('m'))
 - test that the code is working properly...
-
-
-KNOWN ISSUES:
-- quant_child methods do not actually traverse the quants_tree; they all only look at the top layer.
-    This is fine for quants who only ever need to look at children one layer down,
-    however it causes crash when evaluating units for quants such as '2',
-    where one layer down is a quant like 'xc', which needs to look even one layer further down for units.
 
 
 """
@@ -615,20 +610,19 @@ class UnitsFuncBuilder(FuncBuilder):
         '''
         return_type = return_type.lower()
         assert return_type in ('tuple', 'units', 'name'), 'Got invalid return_type(={})'.format(repr(return_type))
-        def f_qc(obj_uni, obj, *args, **kwargs):
+        def f_qc(obj_uni, obj, quant_tree, *args, **kwargs):
             '''gets quant child number {i} from quant tree of obj,
             sorting from i=0 as {age0} to i=-1 as {agef}.
             '''
             #print('f_qc called with uni, obj, args, kwargs:', obj_uni, obj, *args, **kwargs)
             __tracebackhide__ = self._tracebackhide
-            quant_tree  = obj.got_vars_tree(as_data=True)
-            child       = quant_tree.get_child(i, oldest_first)
+            child_tree  = quant_tree.get_child(i, oldest_first)
             if self.units_key is None:
                 units_key = kwargs[UNITS_KEY_KWARG]
             else:
                 units_key = self.units_key
-            units_tuple = _units_lookup_by_quant_info(obj, child.data, units_key)
-            result      = units_tuple(obj_uni, obj, *args, **kwargs)
+            units_tuple = _units_lookup_by_quant_info(obj, child_tree.data, units_key)
+            result      = units_tuple(obj_uni, obj, child_tree, *args, **kwargs)
             if return_type == 'units':
                 return result.f
             elif return_type == 'name':
@@ -718,11 +712,12 @@ def get_units(obj, mode='si', **kw__units_f):
     # lookup info.
     quant_info  = obj.get_quant_info(lookup_in_vardict=False)
     units_tuple = _units_lookup_by_quant_info(obj, quant_info, units_key=units_key)
+    quant_tree  = obj.got_vars_tree(as_data=True)
     # evaluate units_tuple, given obj.uni, obj, and **kwargs.
     kw__units_f[ATTR_FORMAT_KWARG] = kw__units_f.get(ATTR_FORMAT_KWARG, format_attr)
     kw__units_f[UNITS_KEY_KWARG]   = kw__units_f.get(UNITS_KEY_KWARG,   units_key  )
     #print('in get_units, units_tuple is', units_tuple)
-    result = units_tuple(obj.uni, obj, **kw__units_f)
+    result = units_tuple(obj.uni, obj, quant_tree, **kw__units_f)
     # make result formatting prettier and return result.
     result = EvaluatedUnits(result.f, str(result.name))
     return result

@@ -574,7 +574,8 @@ _SQUARE_QUANT = ('SQUARE_QUANT', ['2'])
 def get_square(obj,quant):
   '''|vector| squared. Equals got product of vector with itself'''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_SQUARE_QUANT, get_square.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_SQUARE_QUANT, get_square.__doc__,
+                                           uni=UNI.quant_child(0)**2)
     docvar('2',  'ending with, Square of a vector [simu units].' +\
                  ' (Dot product of vector with itself.) Example: b2 --> bx^2 + by^2 + bz^2.')
     return None
