@@ -23,6 +23,7 @@ State of the code right now:
         - units in get_center in load_arithmetic_quantities
         - units in get_square in load_arithmetic_quantities
         - units for 'nr' and 'uix' in get_onefluid_var in load_mf_quantities
+        - a few more misc. units in load_mf_quantities.
 
 TODO:
 - (high priority) make a "User-friendly" guide to units.py at the top of this file.
@@ -30,9 +31,6 @@ TODO:
 - have a units_system flag attribute which allows to convert units at top level automatically.
     - (By default the conversion will be off.)
     - Don't tell Juan about this attribute because he won't like it ;) but he doesn't ever have to use it!
-- create a "universal naming scheme" which allows to make unit symbols "universal", e.g.
-    a unit symbol, U_L which will be 'cm' for cgs and 'm' for si.
-- (maybe) create "common unit tuples" e.g. Lenth_Tuple = UnitsTuple(USI.l, U_SYM('m'))
 - test that the code is working properly...
 
 
@@ -466,7 +464,11 @@ class UnitsExpression:
         for key in result.keys():
             result[key] *= b
         return UnitsExpression(result, order=self.order, frac=self.frac)
-            
+
+    def __call__(self, *args, **kwargs):
+        '''return self. For compatibility with UnitsMultiExpression.'''
+        return self
+
 
 class UnitSymbol(UnitsExpression):
     '''symbol for a single unit.
@@ -509,6 +511,87 @@ def UnitSymbols(names, *args, **kwargs):
 UnitsSymbols = UnitSymbols  # alias
 
 
+class UnitsExpressionDict(UnitsExpression):
+    '''expressions of units, but in multiple unit systems.
+
+    Contains multiple UnitsExpression.
+    '''
+    def __init__(self, contents=dict(), **kw__units_expression_init):
+        '''contents should be a dict with:
+            keys = units_keys;
+                when UnitsExpressionDict is called, it returns contents[kwargs[UNITS_KEY_KWARG]]
+            values = dicts or UnitsExpression objects;
+                dicts in contents are used to make a UnitsExpression, while
+                UnitsExpressions in contents are saved as-is.
+        The '''
+        self.contents = dict()
+        for key, val in contents.items():
+            if isinstance(val, UnitsExpression):  # already a UnitsExpression; don't need to convert.
+                self.contents[key] = val
+            else:                                 # not a UnitsExpression; must convert.
+                self.contents[key] = UnitsExpression.__init__(val, **kw__units_expression_init)
+        self._kw__units_expression_init = kw__units_expression_init
+
+    def __str__(self):
+        '''pretty string of self.'''
+        return str({key: str(val) for (key, val) in self.contents.items()})
+
+    def __mul__(self, b):
+        '''multiplication with b (another UnitsExpression object).'''
+        result = dict()
+        if isinstance(b, UnitsExpressionDict):
+            assert b.contents.keys() == self.contents.keys()  # must have same keys to multiply dicts.
+            for key, uexpr in b.contents.items():
+                result[key] = self.contents[key] * uexpr
+        elif isinstance(b, UnitsExpression):
+            for key in self.contents.keys():
+                result[key] = self.contents[key] * b
+        else:
+            raise TypeError('Expected UnitsExpression or UnitsExpressionDict type but got type={}'.format(type(b)))
+        return UnitsExpressionDict(result, **self._kw__units_expression_init)
+
+    def __truediv__(self, b):
+        '''multiplication with b (another UnitsExpression object).'''
+        result = dict()
+        if isinstance(b, UnitsExpressionDict):
+            assert b.contents.keys() == self.contents.keys()  # must have same keys to multiply dicts.
+            for key, uexpr in b.contents.items():
+                result[key] = self.contents[key] / uexpr
+        elif isinstance(b, UnitsExpression):
+            for key in self.contents.keys():
+                result[key] = self.contents[key] / b
+        else:
+            raise TypeError('Expected UnitsExpression or UnitsExpressionDict type but got type={}'.format(type(b)))
+        return UnitsExpressionDict(result, **self._kw__units_expression_init)
+
+    def __pow__(self, b):
+        '''raising to b (a number).'''
+        result = dict()
+        for key, internal_uexpr in self.contents.items():
+            result[key] = internal_uexpr ** b
+        return UnitsExpressionDict(result, **self._kw__units_expression_init)
+
+    def __call__(self, *args, **kwargs):
+        '''return self.contents[kwargs[UNITS_KEY_KWARG]].
+        in other words, return the relevant UnitsExpression, based on units_key.
+        '''
+        return self.contents[kwargs[UNITS_KEY_KWARG]]
+
+class UnitSymbolDict(UnitsExpressionDict):
+    '''a dict of symbols for unit.
+
+    UnitSymbolDict(usi='m', ucgs='cm') is like:
+        UnitsExpressionDict(contents=dict(usi=UnitSymbol('m'), ucgs=UnitSymbol('cm'))
+
+    the properties kwarg is passed to UnitsExpressionDict.__init__() as **properties.
+    '''
+    def __init__(self, properties=dict(), **symbols_dict):
+        self.symbols_dict = symbols_dict
+        contents = {key: UnitSymbol(val) for (key, val) in symbols_dict.items()}
+        UnitsExpressionDict.__init__(self, contents, **properties)
+
+
+# make custom error class for when units are not found.
 class UnitsNotFoundError(Exception):
     '''base class for telling that units have not been found.'''
     pass
@@ -526,8 +609,8 @@ DEFAULT_UNITS_NAME = UnitsExpression()
 
 ''' ----------------------------- Units Tuple ----------------------------- '''
 
-UnitsTupleBase = collections.namedtuple('Units', ('f', 'name'),
-                                        defaults=[DEFAULT_UNITS_F, DEFAULT_UNITS_NAME]
+UnitsTupleBase = collections.namedtuple('Units', ('f', 'name', 'evaluated'),
+                                        defaults=[DEFAULT_UNITS_F, DEFAULT_UNITS_NAME, False]
                                         )
 
 def make_UnitsTuple_magic(op, op_name=None):
@@ -560,6 +643,7 @@ class UnitsTuple(UnitsTupleBase):
     And if the second object is not a UnitsTuple, the operation is distributed instead:
         op(UnitsTuple(a1,b1), x) = UnitsTuple(op(a1,x), op(b1,x)) for op in *, /, **.
     '''
+
     __mul__     = make_UnitsTuple_magic(operator.__mul__,     ' * ')    # multiply
     __add__     = make_UnitsTuple_magic(operator.__add__,     ' + ')    # add
     __sub__     = make_UnitsTuple_magic(operator.__sub__,     ' - ')    # subtract
@@ -567,7 +651,12 @@ class UnitsTuple(UnitsTupleBase):
     __pow__     = make_UnitsTuple_magic(operator.__pow__,     ' ** ')   # raise to a power
 
     def __call__(self, *args, **kwargs):
-        return UnitsTuple(self.f(*args, **kwargs), self.name)
+        if callable(self.name):  # if self.name is a UnitsExpressionDict
+            name = self.name(*args, **kwargs)    # then, call it.
+        else:                    # otherwise, self.name is a UnitsExpression.
+            name = self.name                     # so, don't call it.
+        factor = self.f(*args, **kwargs)
+        return UnitsTuple(factor, name, evaluated=True)
 
 ''' ----------------------------- Dimensionless Tuple ----------------------------- '''
 # in this section is a units tuple which should be used for dimensionless quantities.
@@ -577,10 +666,8 @@ def dimensionless_units_f(*args, **kwargs):
     return 1
 
 DIMENSIONLESS_UNITS = Funclike(dimensionless_units_f)
-NO_UNITS = DIMENSIONLESS_UNITS
 
 DIMENSIONLESS_NAME  = UnitsExpression()
-NO_NAME  = DIMENSIONLESS_NAME
 
 DIMENSIONLESS_TUPLE = UnitsTuple(DIMENSIONLESS_UNITS, DIMENSIONLESS_NAME)
 
@@ -698,6 +785,8 @@ def _multiple_lookup(x, *keys, default=None):
 ''' ----------------------------- Evaluate Units ----------------------------- '''
 
 EvaluatedUnits = collections.namedtuple('EvaluatedUnits', ('factor', 'name'))
+# TODO: make prettier formatting for the units (e.g. {:.3e})
+# TODO: allow to change name formatting (via editting "order" and "frac" of underlying UnitsExpression object)
 
 def get_units(obj, mode='si', **kw__units_f):
     '''evaluates units for most-recently-gotten var (at top of obj._quants_tree).
@@ -730,7 +819,9 @@ def get_units(obj, mode='si', **kw__units_f):
 # for example, in a load_..._quantities file, you would do:
 """
 from .units import (
-    UNI, USI, UCGS, U_SYM, U_SYMS, U_TUPLE, DIMENSIONLESS, NO_UNITS
+    UNI, USI, UCGS, Usym, Usyms, UsymD, U_TUPLE,
+    DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
+    UNI_length, UNI_time, UNI_mass
 )
 """
 
@@ -742,12 +833,19 @@ USI     = UnitsFuncBuilder(units_key=UNITS_MODES['si'][0],  format_attr=UNITS_MO
 UCGS    = UnitsFuncBuilder(units_key=UNITS_MODES['cgs'][0], format_attr=UNITS_MODES['cgs'][1])
 
 # for making unit names ("UnitsExpression"s)
-U_SYM   = UnitSymbol      # returns a single symbol
-U_SYMS  = UnitSymbols     # returns multiple symbols
+Usym   = UnitSymbol      # returns a single symbol
+Usyms  = UnitSymbols     # returns multiple symbols
+UsymD  = UnitSymbolDict  # returns a dict of unit symbols
 
 # for putting units info in vardict
 U_TUPLE = UnitsTuple      # tuple with (units function, units expression)
 
 # for dimensionless quantities
-DIMENSIONLESS = DIMENSIONLESS_TUPLE  # alias
-NO_UNITS      = DIMENSIONLESS_TUPLE  # alias
+DIMENSIONLESS  = DIMENSIONLESS_TUPLE     # dimensionless tuple (factor is 1 and name is '')
+UNITS_FACTOR_1 = DIMENSIONLESS_UNITS     # dimensionless units (factor is 1)
+NO_NAME        = DIMENSIONLESS_NAME      # dimensionless name  (name is '')
+
+# for "common" basic unit tuples
+UNI_length = U_TUPLE(UNI.l, UsymD(usi='m', ucgs='cm'))
+UNI_time   = U_TUPLE(UNI.t, Usym('s'))
+UNI_mass   = U_TUPLE(UNI.m, UsymD(usi='kg', ucgs='g'))
