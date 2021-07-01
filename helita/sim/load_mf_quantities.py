@@ -739,7 +739,6 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     return (obj.uni.gamma - 1) / (obj.get_var('nr') * simu_kB)
 
   elif var.startswith('tg_'):
-    print('spot 1')
     qcol = var[len('tg_') : ]  # var looks like tg_qcol
     assert qcol in HEATING_QUANT, "qcol must be in heating quant to get tg_qcol. qcol={}".format(repr(qcol))
     qcol_value = obj.get_var(qcol)         # [simu energy density / time]
