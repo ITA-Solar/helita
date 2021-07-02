@@ -49,7 +49,11 @@ except ImportError:
 
 ## import the relevant things from the internal module "units"
 from .units import (
-  UNI, USI, UCGS, U_SYM, U_SYMS, U_TUPLE, DIMENSIONLESS, NO_UNITS
+  UNI, USI, UCGS, UCONST,
+  Usym, Usyms, UsymD,
+  U_TUPLE,
+  DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
+  UNI_length, UNI_time
 )
 
 # import external public modules
@@ -85,13 +89,8 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
       diff = getattr(obj, 'd'+x+'id'+xdir)  # for debugging: if crashing here, make sure obj is not None.
     else:
       diff = None
-    bdr_pad = {'x': 'wrap', 'y': 'wrap', 'z': 'wrap'}
-    if obj.params['periodic_x'] == 0: 
-      bdr_pad['z'] = 'reflect'
-    if obj.params['periodic_y'] == 0: 
-      bdr_pad['y'] = 'reflect'
-    if obj.params['periodic_z'] == 0: 
-      bdr_pad['z'] = 'reflect'
+    # deal with boundaries. (Note obj.get_param isn't defined for everyone, e.g. BifrostData, so we can't use it.)
+    bdr_pad = {x: ('reflect' if obj.params['periodic_'+x][obj.snapInd] else 'wrap') for x in AXES}
     return stagger.do(arr, operation, diff=diff, DEFAULT_PAD = bdr_pad)
 
 def _can_interp(obj, axis, warn=True):
@@ -164,8 +163,7 @@ def get_deriv(obj,quant):
                              # (in get_var, or load_arithmetic_quantities(), perhaps.) -SE June 28, 2021.
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_DERIV_QUANT, get_deriv.__doc__,
-                                           usi =USI.quant_child(0)  / U_TUPLE(USI.l,  U_SYM('m')),
-                                           ucgs=UCGS.quant_child(0) / U_TUPLE(UCGS.l, U_SYM('cm')) )
+                                           uni=UNI.quant_child(0) / UNI_length)
     docvar('dxup',  'spatial derivative in the x axis with half grid up [simu units]')
     docvar('dyup',  'spatial derivative in the y axis with half grid up [simu units]')
     docvar('dzup',  'spatial derivative in the z axis with half grid up [simu units]')
