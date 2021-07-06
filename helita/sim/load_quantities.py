@@ -9,7 +9,7 @@ from .load_arithmetic_quantities import do_cstagger
 ELEMLIST = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni']
 CROSTAB_LIST =   ['e_'+elem for elem in ELEMLIST]   \
                + [elem+'_e' for elem in ELEMLIST]   \
-               + [ e1 + e2  for e1 in ELEMLIST for e2 in ELEMLIST]
+               + [ e1 +'_'+ e2  for e1 in ELEMLIST for e2 in ELEMLIST]
 
 POLARIZABILITY_DICT = {  # polarizability (used in maxwell collisions)
   'h'  : 6.68E-31,
