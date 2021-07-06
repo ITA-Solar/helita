@@ -506,9 +506,9 @@ class EbysusData(BifrostData):
         return file_memory._dict_equals(alt_metadata, self_metadata, ignore_keys=['ifluid', 'jfluid'])
 
     @fluid_tools.maintain_fluids
-    @document_vars.quant_tracking_top_level
     @file_memory.maintain_attrs('match_type')
     @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
+    @document_vars.quant_tracking_top_level
     def _load_quantity(self, var, panic=False):
         '''helper function for get_var; actually calls load_quantities for var.
         Also, restores self.ifluid and self.jfluid afterwards.

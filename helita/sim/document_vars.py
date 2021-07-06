@@ -40,13 +40,14 @@ vardict = {
 }
 
 
-TODO:
-    Solve sad interaction between caching and quant_tracking.
-        E.g. get 'nre' twice:
-            - first time is fine
-            - second time, quant_tracking is not given proper quant, typequant, metaquant info,
-                and this is related to nre being read from cache. (it only occurs when do_caching=True.)
-        The fix might be as simple as rearranging the function wrappers, but be cautious.
+[TODO]:
+    - [FIX] Solve sad interaction between self.variables checking and quant_tracking.
+        - E.g. get_var('r') after initialization of EbysusData confuses quant_tracking,
+            because it returns the data in self.r immediately, instead of loading a quantity.
+
+    - [ADD] allow to put a "level cutoff" when printing QuantTree.
+        - E.g. hide_level=3 will hide layers (L3), (L4), (L5), ....
+
 """
 
 # import built-ins
@@ -56,7 +57,6 @@ import functools
 import types  # for MethodType
 
 # import internal modules
-from . import file_memory
 from . import units       # not used heavily; just here for setting defaults, and setting obj.get_units
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
@@ -399,6 +399,33 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
     obj.search_vardict = _search_vardict
 
 
+''' --------------------- restore attrs --------------------- '''
+
+# this helper function probably should go in another file, but this is the best place for it for now.
+
+def maintain_attrs(*attrs):
+    '''return decorator which restores attrs of obj after running function.
+    It is assumed that obj is the first arg of function.
+    '''
+    def attr_restorer(f):
+        @functools.wraps(f)
+        def f_but_maintain_attrs(obj, *args, **kwargs):
+            '''f but attrs are maintained.'''
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            memory = dict()  # dict of attrs to maintain
+            for attr in attrs:
+                if hasattr(obj, attr):
+                    memory[attr] = getattr(obj, attr)
+            try:
+                return f(obj, *args, **kwargs)
+            finally:
+                # restore attrs
+                for attr, val in memory.items(): 
+                    setattr(obj, attr, val)
+        return f_but_maintain_attrs
+    return attr_restorer
+
+
 ''' ----------------------------- quant tracking ----------------------------- '''
 
 QuantInfo = collections.namedtuple('QuantInfo', ('varname', 'quant', 'typequant', 'metaquant', 'level'),
@@ -527,13 +554,20 @@ def quant_tracking_simple(typequant, metaquant=None):
 
 class QuantTree:
     '''use for tree representation of quants.'''
-    def __init__(self, data, level=0):
+    def __init__(self, data, level=-1):
         self.data     = data
         self.children = []
         self._level   = level
 
-    def add_child(self, child):
+    def add_child(self, child, adjust_level=False):
+        '''add child to self.
+
+        If child is QuantTree and adjust_level=True,
+            adjust level of child so that child._level == self._level + 1.
+        '''
         if isinstance(child, QuantTree):
+            if adjust_level:
+                child.set_base_level(self._level + 1)
             self.children.append(child)
         else:
             child = QuantTree(child, level=self._level + 1)
@@ -576,6 +610,34 @@ class QuantTree:
         else:
             return self.children[i_child]
         
+    def set_base_level(self, level):
+        '''sets self._level to level; also adjusts level of all children appropriately.
+
+        Example: self._level==2, self.children[0]._level==3;
+            self.set_base_level(0) --> self._level==0, self.children[0]._level==1
+        '''
+        lsubtract = self._level - level
+        self._adjust_base_level(lsubtract)
+
+    def _adjust_base_level(self, l_subtract):
+        '''sets self._level to self._level - l_subtract.
+        Also decreases level of all children by ldiff, and all childrens' children, etc.
+        '''
+        self._level -= l_subtract
+        for child in self.children:
+            child._adjust_base_level(l_subtract)
+
+
+def _get_orig_tree(obj):
+    '''gets QUANTS_TREE from obj (when LOADING_LEVEL is not -1; else, returns a new QuantTree).'''
+    loading_level = getattr(obj, LOADING_LEVEL, -1) # get loading_level. Outside of f, the default is -1.
+    if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
+        #print('       - _get_orig_tree resets tree')
+        orig_tree = QuantTree(None, level=-1)
+    else:
+        #print('       - _get_orig_tree gets tree at loading_level', loading_level)
+        orig_tree = getattr(obj, QUANTS_TREE)
+    return orig_tree
 
 def quant_tree_tracking(f):
     '''wrapper for f which makes it track quant tree.
@@ -602,12 +664,7 @@ def quant_tree_tracking(f):
     @functools.wraps(f)
     def f_but_quant_tree_tracking(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        # get loading_level. Outside of any f, the default is -1.
-        loading_level = getattr(obj, LOADING_LEVEL, -1)
-        if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
-            orig_tree = QuantTree(None, level=-1)
-        else:
-            orig_tree = getattr(obj, QUANTS_TREE)
+        orig_tree  = _get_orig_tree(obj)
         tree_child = orig_tree.add_child(None)
         setattr(obj, QUANTS_TREE, tree_child)
         # call f.
@@ -625,7 +682,7 @@ def quant_tree_tracking(f):
 def quant_tracking_top_level(f):
     '''decorator which improves quant tracking. (decorate _load_quantities using this.)'''
     @quant_tree_tracking
-    @file_memory.maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
+    @maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
@@ -643,6 +700,36 @@ def quant_tracking_top_level(f):
     return f_but_quant_tracking_level
 
 
+def get_quant_tracking_state(obj, from_internal=False):
+    '''returns quant tracking state of obj.
+    The state includes only the quant_tree and the quant_selected.
+
+    from_internal: False (default) or True
+        True  <-> use when we are caching due to a "with Caching(...)" block.
+        False <-> use when we are caching due to the "@with_caching" wrapper.
+    '''
+    _default_tree = QuantTree(None)
+    _default_tree.add_child(QuantTree(None))
+    state = dict(quants_tree    = getattr(obj, QUANTS_TREE, _default_tree),
+                 quant_selected = getattr(obj, QUANT_SELECTED, QuantInfo(None)),
+                 from_internal  = from_internal,
+                )
+    return state
+
+def restore_quant_tracking_state(obj, state):
+    '''restores the quant tracking state of obj.'''
+    from_internal_caching = state['from_internal']  # True if we are inside a with Caching. 
+    state_tree = state['quants_tree']
+    obj_tree = _get_orig_tree(obj)
+    if from_internal_caching:  # we are restoring state while INSIDE ("this" layer of) get_var, 
+        child_to_add = state_tree               # so add        state_tree       as a child of QUANTS_TREE.
+    else:                      # we are resotring state while OUTSIDE ("this" layer of) get_var, 
+        child_to_add = state_tree.children[-1]  # so add state_tree.children[-1] as a child of QUANTS_TREE.
+    obj_tree.add_child(child_to_add, adjust_level=True)
+    setattr(obj, QUANTS_TREE, obj_tree)
+    
+    selected = state.get('quant_selected', QuantInfo(None))
+    setattr(obj, QUANT_SELECTED, selected)
 
 
 ''' ----------------------------- quant tracking - lookup ----------------------------- '''
@@ -709,6 +796,24 @@ def got_vars_tree(obj, as_data=False, i_child=0, oldest_first=True):
     Use oldest_first to tell the children ordering convention:
         True --> 0 is the oldest child (added first); -1 is the newest child (added most-recently).
         False -> the order is reversed, e.g. -1 is the oldest child instead.
+
+    Notes to User:
+    --------------
+    QuantInfo level misaligning with QuantTree level indicates that a cached value was read.
+    Example:
+        dd.get_var('nre')    # 'nre' is cached by default, if caching is on.
+        dd.get_var('nq', iS=-1)  # gets nr; nr with iS=-1 gets nre.
+        dd.got_vars_tree()
+        >>> (L0) QuantInfo(varname='nq', quant='nq', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=0) : 
+             (L1) QuantInfo(varname='nr', quant='nr', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=1) : 
+              (L2) QuantInfo(varname='nre', quant='nre', typequant='ELECTRON_QUANT', metaquant='mf_quantities', level=0) : 
+               (L3) QuantInfo(varname='nr', quant='nr', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=1) : 
+                (L4) QuantInfo(varname='r', quant='r', typequant='SIMPLE_VARS', metaquant='fromfile', level=2)
+        At L2 in the tree, the varname is 'nre'. Its data is in the cache, so it is read from the cache,
+        assuming check_cache==True, which is the default. When we got 'nre' originally, it was at level=0,
+        because we called dd.get_var('nre') directly. Thus, the original quants_tree for 'nre', in which
+        'nre' is level 0, is put here.
+
     '''
     # Get QUANTS_TREE attr. Since this function (got_vars_tree) is optional, and for end-user,
     ## crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.
