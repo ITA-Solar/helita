@@ -41,8 +41,12 @@ vardict = {
 
 
 TODO:
-    documentation for simple vars. (And quant_tracking for simple vars)
-    Add units to vars.
+    Solve sad interaction between caching and quant_tracking.
+        E.g. get 'nre' twice:
+            - first time is fine
+            - second time, quant_tracking is not given proper quant, typequant, metaquant info,
+                and this is related to nre being read from cache. (it only occurs when do_caching=True.)
+        The fix might be as simple as rearranging the function wrappers, but be cautious.
 """
 
 # import built-ins
