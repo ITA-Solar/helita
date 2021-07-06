@@ -20,6 +20,11 @@ TODO:
 
         In the long-term, we should find which attribute of dd points to dd, and fix it.
 
+    Refactor calling separately in _load_quantities the following functions:
+        _get_simple_vars, _get_simple_vars_xy, and _get_composite_var.
+        Instead, make a load_simple_quantities function (or something like that),
+        which calls all those functions, as appropriate.
+
 """
 
 # import built-in modules
@@ -39,6 +44,13 @@ from .load_arithmetic_quantities import load_arithmetic_quantities
 from . import document_vars
 from . import file_memory
 from . import fluid_tools
+from .units import (
+    UNI, USI, UCGS, UCONST,
+    Usym, Usyms, UsymD,
+    U_TUPLE,
+    UNI_length, UNI_time, UNI_mass,
+    UNI_speed, UNI_rho, UNI_nr, UNI_hz
+)
 
 # import external public modules
 import numpy as np
@@ -56,6 +68,8 @@ from .load_mf_quantities import (
 MATCH_TYPE_DEFAULT = MATCH_PHYSICS  # can change this one. Tells whether to match physics or aux.
                                # match physics -> try to return physical value.
                                # match aux     -> try to return value matching aux.
+
+AXES = ('x', 'y', 'z')
 
 
 class EbysusData(BifrostData):
@@ -271,18 +285,21 @@ class EbysusData(BifrostData):
                 delattr(self, file_memory.MEMORY_MEMMAP)
         super(EbysusData, self).set_snap(snap, *args__set_snap, **kwargs__set_snap)
 
-    def get_param(self, param, default=None, warning=None):
+    def get_param(self, param, default=None, warning=None, error=None):
         ''' get param via self.params[param][self.snapInd].
         if param not in self.params.keys():
             return default.
-            if warning not None, also do warnings.warn(warning).
+            if warning is not None, also do warnings.warn(warning).
+            if error is not None, raise error instead.
         '''
         try:
             p = self.params[param]
         except KeyError:
-            p = default
             if warning is not None:
                 warnings.warn(warning)
+            if error_if_failed is not None:
+                raise error_if_failed
+            return default
         else:
             p = p[self.snapInd]
         return p
@@ -293,28 +310,21 @@ class EbysusData(BifrostData):
 
         self.nspecies_max = 28
         self.nlevels_max = 28
-        try:
-            self.mf_epf = self.params['mf_epf'][self.snapInd]
-        except KeyError:
-            raise KeyError('read_params: could not find mf_epf in idl file!')
-        try:
-            self.mf_nspecies = self.params['mf_nspecies'][self.snapInd]
-        except KeyError:
-            raise KeyError('read_params: could not find mf_nspecies in idl file!')
-        try:
-            self.with_electrons = self.params['mf_electrons'][self.snapInd]
-        except KeyError:
-            raise KeyError(
-                'read_params: could not find mf_electrons in idl file!')
-        # mf_total_nlevel
-        self.mf_total_nlevel = self.get_param('mf_total_nlevel',
-                        warning='warning, this idl file does not include mf_total_nlevel')
-        # mf_param_file
+
+        # get misc. params (these have no default values. Make error if we can't get them).
+        errmsg = 'read_params: could not find {} in idl file!'
+        self.mf_epf          = self.get_param('mf_epf',          error=KeyError(errmsg.format('mf_epf'))          )
+        self.mf_nspecies     = self.get_param('mf_nspecies',     error=KeyError(errmsg.format('mf_nspecies'))     )
+        self.with_electrons  = self.get_param('mf_electrons',    error=KeyError(errmsg.format('mf_electrons'))    )
+        self.mf_total_nlevel = self.get_param('mf_total_nlevel', error=KeyError(errmsg.format('mf_total_nlevel')) )
+
+        # get param_file params (these have default values).
+        ## mf_param_file
         param_file = self.get_param('mf_param_file', default='mf_params.in',
                         warning='mf_param_file not found in this idl file; trying to use mf_params.in')
         file = os.path.join(self.fdir, param_file.strip())
         self.mf_tabparam = read_mftab_ascii(file, obj=self)
-        # mf_eparam_file
+        ## mf_eparam_file
         do_ohm_ecol = self.get_param('do_ohm_ecol', 0)
         warning = 'mf_eparam_file parameter not found; trying to use mf_eparams.in' if do_ohm_ecol else None
         eparam_file = self.get_param('mf_eparam_file', default='mf_eparams.in', warning=warning)
@@ -346,13 +356,13 @@ class EbysusData(BifrostData):
 
         self.mf_common_file = (self.root_name + '_mf_common')
         if os.path.exists('%s.io' % self.file_root):
-            self.mfr_file = (self.root_name + '_mfr_%02i_%02i')
-            self.mfp_file = (self.root_name + '_mfp_%02i_%02i')
+            self.mfr_file = (self.root_name + '_mfr_{iS:}_{iL:}')
+            self.mfp_file = (self.root_name + '_mfp_{iS:}_{iL:}')
         else:
-            self.mf_file = (self.root_name + '_mf_%02i_%02i')
-        self.mfe_file = (self.root_name + '_mfe_%02i_%02i')
-        self.mfc_file = (self.root_name + '_mfc_%02i_%02i')
-        self.mm_file = (self.root_name + '_mm_%02i_%02i')
+            self.mf_file = (self.root_name + '_mf_{iS:}_{iL:}')
+        self.mfe_file = (self.root_name + '_mfe_{iS:}_{iL:}')
+        self.mfc_file = (self.root_name + '_mfc_{iS:}_{iL:}')
+        self.mm_file = (self.root_name + '_mm_{iS:}_{iL:}')
         self.mf_e_file = (self.root_name + '_mf_e')
         self.aux_file = (self.root_name)
 
@@ -504,26 +514,34 @@ class EbysusData(BifrostData):
         Also, restores self.match_type afterwards.
         '''
         __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
-        # getting var
+        # look for var in self.variables, if metadata is appropriate.
         if self._metadata_matches(self.variables.get('metadata', dict())) and var in self.variables:
-            val = self.variables[var]
-        elif var in self.simple_vars:
+            return self.variables[var]
+        # get simple_vars var. (if we make it to this point at all.)
+        if var in self.simple_vars or var == '':  # the var == '' case is for document_vars purposes, only.
+            # get simple var.
+            ## (first, set meta_quant, to allow quant_tracking to work properly for simple vars;
+            ##  this must happen outside the simple_quant_tracking wrapper around _get_simple_var.)
+            document_vars.set_meta_quant(self, 'saved_data')
             val = self._get_simple_var(var, panic=panic)
-        elif var in self.auxxyvars:
-            val =  super(EbysusData, self)._get_simple_var_xy(var)
-        elif var in self.compvars:
-            val =  super(EbysusData, self)._get_composite_var(var)
-        else:
-            # Loading quantities
-            val = load_quantities(self,var,PLASMA_QUANT='',
-                        CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                        IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                        DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                        COULOMB_COL_QUANT='', AMB_QUANT='')
-            if val is None:
-                val = load_mf_quantities(self,var)
-            if val is None:
-                val = load_arithmetic_quantities(self,var)
+            if var != '':    # if we are not doing the documentation case (when var==''), return val.
+                return val
+        # get auxxyvars var. (if we make it to this point at all.)
+        if var in self.auxxyvars:
+            return super(EbysusData, self)._get_simple_var_xy(var)
+        # get compvars var. (if we make it to this point at all.)
+        if var in self.compvars:
+            return super(EbysusData, self)._get_composite_var(var)
+        # load quantities. (if we make it to this point at all.)
+        val = load_quantities(self,var,PLASMA_QUANT='',
+                    CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                    IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                    DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                    COULOMB_COL_QUANT='', AMB_QUANT='')
+        if val is None:
+            val = load_mf_quantities(self,var)
+        if val is None:
+            val = load_arithmetic_quantities(self,var)
         return val
 
     def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
@@ -582,7 +600,7 @@ class EbysusData(BifrostData):
         if var == '' and not document_vars.creating_vardict(self):
             help(self.get_var)
 
-        if var in ['x', 'y', 'z']:
+        if var in AXES:
             return getattr(self, var)
 
         if match_type is not None:
@@ -684,23 +702,10 @@ class EbysusData(BifrostData):
         '''
         return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
 
-    def _get_simple_var(
-            self,
-            var,
-            mf_ispecies=None,
-            mf_ilevel=None,
-            mf_jspecies=None,
-            mf_jlevel=None,
-            order='F',
-            mode='r',
-            panic=False, 
-            *args,
-            **kwargs):
+    @document_vars.quant_tracking_simple('SIMPLE_VARS')
+    def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
-
-        Overloads super class to make a distinction between different
-        filenames for different variables
 
         Parameters:
         -----------
@@ -711,211 +716,225 @@ class EbysusData(BifrostData):
         mode - string, optional
             numpy.memmap read mode. By default is read only ('r'), but
             you can use 'r+' to read and write. DO NOT USE 'w+'.
+        panic - False (default) or True.
+            whether we are trying to read a '.panic' file.
+
+        *args and **kwargs go to NOWHERE.
+
+        Minor Deprecation Notice:
+        -------------------------
+        Support for entering fluids args/kwargs (mf_ispecies, mf_ilevel, mf_jspecies, mf_jlevel)
+            directly into _get_simple_var has been deprecated as of July 6, 2021.
+        As an alternative, use self.set_fluids() (or self.set_mfi() and self.set_mfj()),
+            before calling self._get_simple_var().
 
         Returns
         -------
         result - numpy.memmap array
             Requested variable.
         """
+        # handle documentation for simple_vars
+        ## set documentation for vardict, if var == ''.
         if var == '':
-            print(help(self._get_simple_var))
+            _simple_vars_msg = ('Quantities which are stored by the simulation. These are '
+                                'loaded as numpy memmaps by reading data files directly.')
+            docvar = document_vars.vars_documenter(self, 'SIMPLE_VARS', None, _simple_vars_msg)
+            # TODO (maybe): ^^^ use self.simple_vars, instead of None, for QUANT_VARS (args[2])
+            #    However, that might not be viable, depending on when self.simple_vars is assigned
+            for x in AXES:
+                docvar('b'+x, x+'-component of magnetic field [simu. units]', uni=U_TUPLE(UNI.b, UsymD(usi='T', ucgs='G')))
+            docvar('r', 'mass density of ifluid [simu. units]', uni=UNI_rho)
+            for x in AXES:
+                docvar('p'+x, x+'-component of momentum density of ifluid [simu. units]', uni=UNI_speed * UNI_rho)
+            units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
+            docvar('e', 'energy density of ifluid [simu. units]. Use -1 for electrons.', **units_e)
+            return None
 
-        self.set_mfi(mf_ispecies, mf_ilevel)
-        self.set_mfj(mf_jspecies, mf_jlevel)
+        # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
+        filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, mode=mode, panic=panic, *args, **kwargs)
+        
+        # actually get the memmap and return result.
+        result = get_numpy_memmap(filename, **kw__get_mmap)
+        return result
 
-        if (np.size(self.snap) > 1):
+    def _get_simple_var_file_info(self, var, order='F', mode='r', panic=False, *args, **kwargs):
+        '''gets file info but does not read memmap; helper function for _get_simple_var.'''
+
+        # set currSnap, currStr = (current single snap, string for this snap)
+        if (np.size(self.snap) > 1):  # self.snap is list; pick snapInd value from list.
             currSnap = self.snap[self.snapInd]
             currStr = self.snap_str[self.snapInd]
-        else:
+        else:                         # self.snap is single snap.
             currSnap = self.snap
             currStr = self.snap_str
-        if currSnap < 0:
-            filename = self.file_root
-            fsuffix_b = '.scr'
+
+        # check if we are reading .scr (snap < 0), snap0 (snap == 0), or "normal" snap (snap > 1)
+        if currSnap > 0:      # reading "normal" snap
+            _reading_scr = False
+            #currStr = currStr
+        elif currSnap == 0:   # reading snap0
+            _reading_scr = False
             currStr = ''
-        elif currSnap == 0:
-            filename = self.file_root
-            fsuffix_b = ''
+        else: #currSnap < 0   # reading .scr
+            _reading_scr = True
             currStr = ''
-        else:
-            filename = self.file_root
-            fsuffix_b = ''
 
         self.mf_arr_size = 1
+        iS = str(self.mf_ispecies).zfill(2)   # ispecies as str. min 2 digits. (E.g.  3 --> '03')
+        iL = str(self.mf_ilevel).zfill(2)     # ilevel as str.   min 2 digits. (E.g. 14 --> '14')
+        iSL = dict(iS=iS, iL=iL)
+
+        # -------- figure out file name and idx (used to find offset in file). --------- #
+
         if os.path.exists('%s.io' % self.file_root):
+            # in this case, we are reading an ebysus-like snapshot.
+            _reading_ebysuslike_snap = True
+            
+            # check if var is a simple var from snaps.
+            _reading_snap_not_aux = True       # whether we are reading '.snap' (not '.aux')
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
-                    var in ['bx', 'by', 'bz']):
-                idx = self.mhdvars.index(var)
-                fsuffix_a = '.snap'
-                dirvars = '%s.io/mf_common/' % self.file_root
-                filename = self.mf_common_file
-            elif var in self.snaprvars and self.mf_ispecies > 0:
-                idx = self.snaprvars.index(var)
-                fsuffix_a = '.snap'
-                dirvars = '%s.io/mf_%02i_%02i/mfr/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mfr_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.snappvars and self.mf_ispecies > 0:
-                idx = self.snappvars.index(var)
-                fsuffix_a = '.snap'
-                dirvars = '%s.io/mf_%02i_%02i/mfp/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mfp_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.snapevars and self.mf_ispecies > 0:
-                idx = self.snapevars.index(var)
-                fsuffix_a = '.snap'
-                dirvars = '%s.io/mf_%02i_%02i/mfe/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.snapevars and self.mf_ispecies < 0:
-                idx = self.snapevars.index(var)
-                filename = self.mf_e_file
-                dirvars = '%s.io/mf_e/'% self.file_root
-                fsuffix_a = '.snap'
-            elif var in self.auxvars:
-                idx = self.auxvars.index(var)
-                fsuffix_a = '.aux'
-                dirvars = '%s.io/mf_common/' % self.file_root
-                filename = self.aux_file
-            elif var in self.varsmf:
-                idx = self.varsmf.index(var)
-                fsuffix_a = '.aux'
-                dirvars = '%s.io/mf_%02i_%02i/mfa/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmm:
-                idx = self.varsmm.index(var)
-                fsuffix_a = '.aux'
-                dirvars = '%s.io/mf_%02i_%02i/mm/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
-                self.mf_arr_size = self.mf_total_nlevel
-                jdx=0
-                for ispecies in range(1,self.mf_nspecies+1):
-                    nlevels=self.att[ispecies].params.nlevel
-                    for ilevel in range(1,nlevels+1):
-                        if (ispecies < self.mf_jspecies):
-                            jdx += 1
-                        elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
-                            jdx += 1
-            elif var in self.varsmfr:
-                idx = self.varsmfr.index(var)
-                fsuffix_a = '.aux'
-                dirvars = '%s.io/mf_%02i_%02i/mfr/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mfr_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmfp:
-                idx = self.varsmfp.index(var)
-                fsuffix_a = '.aux'
-                dirvars = '%s.io/mf_%02i_%02i/mfp/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mfp_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmfe:
-                idx = self.varsmfe.index(var)
-                fsuffix_a = '.aux'
-                dirvars = '%s.io/mf_%02i_%02i/mfe/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmfc:
-                idx = self.varsmfc.index(var)
-                fsuffix_a = '.aux'
-                dirvars = '%s.io/mf_%02i_%02i/mfc/' % (self.file_root,
-                        self.mf_ispecies, self.mf_ilevel)
-                filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
-            else:
-                errmsg = "Failed to find '{}' in simple vars for {}. (at point 1 in ebysus.py)"
-                errmsg = errmsg.format(var, self.quick_look())
-                raise ValueError(errmsg)
+                    var in ['bx', 'by', 'bz']):  # magnetic field, or a fluid-specific mhd simple variable)
+                idx      = self.mhdvars.index(var)
+                filename = os.path.join('mf_common', self.mf_common_file)
+            elif var in self.snaprvars and self.mf_ispecies > 0:  # mass density (for non-electron fluid)
+                idx      = self.snaprvars.index(var)
+                filename = os.path.join('mf_{iS:}_{iL:}', 'mfr', self.mfr_file).format(**iSL)
+            elif var in self.snappvars and self.mf_ispecies > 0:  # momentum density (for non-electron fluid)
+                idx      = self.snappvars.index(var)
+                filename = os.path.join('mf_{iS:}_{iL:}', 'mfp', self.mfp_file).format(**iSL)
+            elif var in self.snapevars and self.mf_ispecies > 0:  # energy density (for non-electron fluid)
+                idx      = self.snapevars.index(var)
+                filename = os.path.join('mf_{iS:}_{iL:}', 'mfe', self.mfe_file).format(**iSL)
+            elif var in self.snapevars and self.mf_ispecies < 0:  # energy density (for electrons)
+                idx      = self.snapevars.index(var)
+                filename = os.path.join('mf_e', self.mf_e_file)
+            else: # var is not a simple var from snaps.
+                # check if var is from aux.
+                _reading_snap_not_aux = False  # we are reading '.aux' (not '.snap')
+                if var in self.auxvars:    # global auxvars
+                    idx      = self.auxvars.index(var)
+                    filename = os.path.join('mf_common', self.aux_file)
+                elif var in self.varsmf:   # ??
+                    idx      = self.varsmf.index(var)
+                    filename = os.path.join('mf_{iS:}_{iL:}', 'mfa', self.mf_file).format(**iSL)
+                elif var in self.varsmfr:  # ??
+                    idx      = self.varsmfr.index(var)
+                    filename = os.path.join('mf_{iS:}_{iL:}', 'mfr',  self.mfr_file).format(**iSL)
+                elif var in self.varsmfp:  # ??
+                    idx      = self.varsmfp.index(var)
+                    filename = os.path.join('mf_{iS:}_{iL:}', 'mfp',  self.mfp_file).format(**iSL)
+                elif var in self.varsmfe:  # ??
+                    idx      = self.varsmfe.index(var)
+                    filename = os.path.join('mf_{iS:}_{iL:}', 'mfe',  self.mfe_file).format(**iSL)
+                elif var in self.varsmfc:  # ??
+                    idx      = self.varsmfc.index(var)
+                    filename = os.path.join('mf_{iS:}_{iL:}', 'mfc',  self.mfc_file).format(**iSL)
+                elif var in self.varsmm:   # two-fluid auxvars, e.g. mm_cross.
+                    idx      = self.varsmm.index(var)
+                    filename = os.path.join('mf_{iS:}_{iL:}', 'mm',  self.mm_file).format(**iSL)
+                    # calculate important details for data's offset in file.
+                    self.mf_arr_size = self.mf_total_nlevel
+                    jdx=0 # count number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
+                    for ispecies in range(1,self.mf_nspecies+1):
+                        nlevels=self.att[ispecies].params.nlevel
+                        for ilevel in range(1,nlevels+1):
+                            if (ispecies < self.mf_jspecies): 
+                                jdx += 1
+                            elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
+                                jdx += 1
+                else:
+                    errmsg = "Failed to find '{}' in simple vars for {}. (at point 1 in ebysus.py)"
+                    errmsg = errmsg.format(var, self)
+                    raise ValueError(errmsg)
         else:
-            dirvars = ''
+            # in this case, we are reading a bifrost-like snapshot. (There is NO snapname.io folder.)
+            _reading_ebysuslike_snap = True
+            # check if var is a simple var from snaps.
+            _reading_snap_not_aux = True       # whether we are reading '.snap' (not '.aux')
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
-                    var in ['bx', 'by', 'bz']):
-                idx = self.mhdvars.index(var)
-                fsuffix_a = '.snap'
+                    var in ['bx', 'by', 'bz']):   # magnetic field, or a fluid-specific mhd simple variable)
+                idx      = self.mhdvars.index(var)
                 filename = self.mf_common_file
-            elif var in self.snapvars and self.mf_ispecies > 0:
-                idx = self.snapvars.index(var)
-                fsuffix_a = '.snap'
-                filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.snapevars and self.mf_ispecies > 0:
-                idx = self.snapevars.index(var)
-                fsuffix_a = '.snap'
-                filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.snapevars and self.mf_ispecies < 0:
-                idx = self.snapevars.index(var)
+            elif var in self.snapvars and self.mf_ispecies > 0:  # snapvars
+                idx      = self.snapvars.index(var)
+                filename = self.mf_file.format(**iSL)
+            elif var in self.snapevars and self.mf_ispecies > 0: # snapevars (non-electrons) (??)
+                idx      = self.snapevars.index(var)
+                filename = self.mfe_file.format(**iSL)
+            elif var in self.snapevars and self.mf_ispecies < 0: # snapevars (electrons) (??)
+                idx      = self.snapevars.index(var)
                 filename = self.mf_e_file
-                fsuffix_a = '.snap'
-            elif var in self.auxvars:
-                idx = self.auxvars.index(var)
-                fsuffix_a = '.aux'
-                filename = self.aux_file
-            elif var in self.varsmf:
-                idx = self.varsmf.index(var)
-                fsuffix_a = '.aux'
-                filename = self.mf_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmm:
-                idx = self.varsmm.index(var)
-                fsuffix_a = '.aux'
-                filename = self.mm_file % (self.mf_ispecies, self.mf_ilevel)
-                self.mf_arr_size = self.mf_total_nlevel
-                jdx=0
-                for ispecies in range(1,self.mf_nspecies+1):
-                    nlevels=self.att[ispecies].params.nlevel
-                    for ilevel in range(1,nlevels+1):
-                        if (ispecies < self.mf_jspecies):
-                            jdx += 1
-                        elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
-                            jdx += 1
-            elif var in self.varsmfr:
-                idx = self.varsmfr.index(var)
-                fsuffix_a = '.aux'
-                filename = self.mfr_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmfp:
-                idx = self.varsmfp.index(var)
-                fsuffix_a = '.aux'
-                filename = self.mfp_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmfe:
-                idx = self.varsmfe.index(var)
-                fsuffix_a = '.aux'
-                filename = self.mfe_file % (self.mf_ispecies, self.mf_ilevel)
-            elif var in self.varsmfc:
-                idx = self.varsmfc.index(var)
-                fsuffix_a = '.aux'
-                filename = self.mfc_file % (self.mf_ispecies, self.mf_ilevel)
-            else:
-                errmsg = "Failed to find '{}' in simple vars for {}. (at point 2 in ebysus.py)"
-                errmsg = errmsg.format(var, self.quick_look())
-                raise ValueError(errmsg)
+            else: # var is not a simple var from snaps.
+                # check if var is from aux.
+                _reading_snap_not_aux = False  # we are reading '.aux' (not '.snap')
+                if var in self.auxvars:    # global auxvars
+                    idx      = self.auxvars.index(var)
+                    filename = self.aux_file
+                elif var in self.varsmf:   # ??
+                    idx      = self.varsmf.index(var)
+                    filename = self.mf_file.format(**iSL)
+                elif var in self.varsmfr:  # ??
+                    idx      = self.varsmfr.index(var)
+                    filename = self.mfr_file.format(**iSL)
+                elif var in self.varsmfp:  # ??
+                    idx      = self.varsmfp.index(var)
+                    filename = self.mfp_file.format(**iSL)
+                elif var in self.varsmfe:  # ??
+                    idx      = self.varsmfe.index(var)
+                    filename = self.mfe_file.format(**iSL)
+                elif var in self.varsmfc:  # ??
+                    idx      = self.varsmfc.index(var)
+                    filename = self.mfc_file.format(**iSL)
+                elif var in self.varsmm:   # two-fluid auxvars, e.g. mm_cross. (??)
+                    idx      = self.varsmm.index(var)
+                    filename = self.mm_file.format(**iSL)
+                    # calculate important details for data's offset in file.
+                    self.mf_arr_size = self.mf_total_nlevel
+                    jdx=0 # count number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
+                    for ispecies in range(1,self.mf_nspecies+1):
+                        nlevels=self.att[ispecies].params.nlevel
+                        for ilevel in range(1,nlevels+1):
+                            if (ispecies < self.mf_jspecies):
+                                jdx += 1
+                            elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
+                                jdx += 1
+                else:
+                    errmsg = "Failed to find '{}' in simple vars for {}. (at point 2 in ebysus.py)"
+                    errmsg = errmsg.format(var, self)
+                    raise ValueError(errmsg)
 
-        if panic: 
-            if fsuffix_a == '.aux': 
-                filename = dirvars + filename  + fsuffix_a + '.panic' 
-            else: 
-                filename = dirvars + filename + '.panic'
+        _snapdir = (self.file_root + '.io') if _reading_ebysuslike_snap else ''
+        filename = os.path.join(_snapdir, filename)  # TODO: remove formats above; put .format(**iSL) here.
 
+        if panic:
+            _suffix_panic = '.panic' if _reading_snap_not_aux else '.aux.panic'
+            filename = filename + _fsuffix_panic
         else: 
-            filename = dirvars + filename + currStr + fsuffix_a + fsuffix_b
+            _suffix_dotsnap = '.snap' if _reading_snap_not_aux else '.aux'
+            _suffix_dotscr  = '.scr'  if _reading_scr else ''
+            filename = filename + currStr + _suffix_dotsnap + _suffix_dotscr
 
-        '''if var not in self.mhdvars and not (var in self.snapevars and
-            self.mf_ispecies < 0) and var not in self.auxvars :
-            filename = filename % (self.mf_ispecies, self.mf_ilevel)'''
+        # -------- use filename and offset details to pick appropriate kwargs for numpy memmap --------- #
 
+        # calculate info which numpy needs to read file as memmap.
         dsize = np.dtype(self.dtype).itemsize
         offset = self.nx * self.ny * self.nzb * idx * dsize * self.mf_arr_size
+
+        # kwargs which will be passed to get_numpy_memmap.
         kw__get_mmap = dict(dtype=self.dtype, order=order, mode=mode,          # kwargs for np.memmap
                             offset=offset, shape=(self.nx, self.ny, self.nzb), # kwargs for np.memmap
                             obj=self if (self.N_memmap != 0) else None,        # kwarg for memmap management
-                            ) 
-        if (self.mf_arr_size == 1):
-            result = get_numpy_memmap(filename, **kw__get_mmap)
-        else:
-            if var in  self.varsmm:
-                kw__get_mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
-                result = get_numpy_memmap(filename, **kw__get_mmap)
-            else:
-                kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
-                result = get_numpy_memmap(filename, **kw__get_mmap)
-        return result
+                            )
+        if (self.mf_arr_size == 1): # in case of mf_arr_size == 1, kw__get_mmap is already correct.
+            pass
+        elif var in self.varsmm:    # in case of var in varsmm, apply jdx info to offset.
+            kw__get_mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
+        else:                       # in case of (else), adjust the shape kwarg appropriately.
+            kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
+
+        return (filename, kw__get_mmap)
+
+
 
     def get_var_if_in_aux(self, var, *args__get_var, **kw__get_var):
         """ get_var but only if it appears in aux (i.e. self.params['aux'][self.snapInd])
@@ -1079,7 +1098,7 @@ class EbysusData(BifrostData):
                 return 1
             else:
                 return dx1d.min()
-        return np.array([_dxmin(x) for x in ['x', 'y', 'z']])
+        return np.array([_dxmin(x) for x in AXES])
 
     def get_kmax(self):
         '''return largest value of each component of wavevector resolvable by self.
@@ -1351,7 +1370,7 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
     fluids.assign_vectors('v', (np.array(v, copy=False) / uni.usi_u))          # [ebysus units] velocity
     fluids.p         = fluids.v * fluids.rho[:, np.newaxis]                    # [ebysus units] momentum density
-    for x in ('x', 'y', 'z'):
+    for x in AXES:
         setattr(fluids, 'p'+x, fluids.p[:, dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
     return dict(B=B, ee=energy_electrons)
 
