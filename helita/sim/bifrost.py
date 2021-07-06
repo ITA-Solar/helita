@@ -15,6 +15,7 @@ from scipy.ndimage import map_coordinates
 # import internal modules
 from .load_quantities import *
 from .load_arithmetic_quantities import *
+from . import load_fromfile_quantities 
 from .tools import *
 from . import document_vars
 from . import file_memory
@@ -595,6 +596,8 @@ class BifrostData(object):
             Snapshot number to read. By default reads the loaded snapshot;
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
+
+        **kwargs go to load_..._quantities functions.
         """
         if self.verbose:
             print('(get_var): reading ', var, whsp*6, end="\r", flush=True)
@@ -658,27 +661,20 @@ class BifrostData(object):
             cgsunits = 1.0
                 
         # get value of variable.
-        if var in self.variables:
-            val = self.variables[var] * cgsunits
-        elif var in self.simple_vars:  # is variable already loaded?
-            
-            val = self._get_simple_var(var, *args, **kwargs) * cgsunits
-            if self.verbose:
-                print('(get_var): reading simple ', np.shape(val), whsp*5,
-                    end="\r",flush=True)
-        elif var in self.auxxyvars:
-            val = self._get_simple_var_xy(var, *args, **kwargs)
-        elif var in self.compvars:  # add to variable list
-            self.variables[var] = self._get_composite_var(var, *args, **kwargs)
-            setattr(self, var, self.variables[var])
-            val = self.variables[var]
+        if var in self.variables:                 # if var is still in memory,
+            val = self.variables[var] * cgsunits  #   load from memory instead of re-reading.
         else:
-            # Loading quantities
-            val = load_quantities(self, var, **kwargs)
-            # Loading arithmetic quantities
-            if np.shape(val) == ():
+            # Try to load simple quantities.
+            val = load_fromfile_quantities.load_fromfile_quantities(self, var,
+                                                    save_if_composite=True, **kwargs)
+            if val is None:
+                # Try to load "regular" quantities
+                val = load_quantities(self, var, **kwargs)
+            if val is None:
+                # Try to load "arithmetic" quantities.
                 val = load_arithmetic_quantities(self, var, **kwargs) 
 
+        # handle documentation case
         if document_vars.creating_vardict(self):
             return None
         elif var == '':
@@ -691,14 +687,16 @@ class BifrostData(object):
                 self.vardocs()
             return None
 
-            if np.shape(val) == ():
-                raise ValueError(('get_var: do not know (yet) how to '
-                              'calculate quantity %s. Note that simple_var '
-                              'available variables are: %s.\nIn addition, '
-                              'get_quantity can read others computed variables '
-                              "see e.g. help(self.get_var) or get_var('')) for guidance"
-                              '.' % (var, repr(self.simple_vars))))
-            # val = self.get_quantity(var, *args, **kwargs)
+        # handle "don't know how to get this var" case
+        if val is None:
+            errmsg = ('get_var: do not know (yet) how to calculate quantity {}. '
+                '(Got None while trying to calculate it.) '
+                'Note that simple_var available variables are: {}. '
+                '\nIn addition, get_quantity can read others computed variables; '
+                "see e.g. help(self.get_var) or get_var('')) for guidance.")
+            raise ValueError(errmsg.format(var, repr(self.simple_vars)))
+        
+        # reshape if necessary... (When it could be necessary?? -SE July 6 2021)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
             if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
@@ -786,6 +784,7 @@ class BifrostData(object):
           self.z = - self.z[::-1].copy()/cte
           self.dz = - self.dz1d[::-1].copy()/cte
 
+    @document_vars.quant_tracking_simple('SIMPLE_VARS')
     def _get_simple_var(self, var, order='F', mode='r', 
                         panic=False, *args, **kwargs):
         """
@@ -805,7 +804,18 @@ class BifrostData(object):
             Requested variable.
         """
         if var == '':
-            print(help(self._get_simple_var))
+            _simple_vars_msg = ('Quantities which are stored by the simulation. These are '
+                                'loaded as numpy memmaps by reading data files directly.')
+            docvar = document_vars.vars_documenter(self, 'SIMPLE_VARS', None, _simple_vars_msg)
+            # TODO: << add documentation for bifrost simple vars, here.
+            return None
+
+        if var not in self.simple_vars:
+            return None
+
+        if self.verbose:
+            print('(get_var): reading simple ', np.shape(val), var, whsp*5,
+                end="\r",flush=True)
 
         if np.shape(self.snap) != ():
             currSnap = self.snap[self.snapInd]
@@ -883,65 +893,26 @@ class BifrostData(object):
             return np.memmap(filename, dtype=self.dtype, order=order,
                              mode=mode, offset=offset, shape=ss)
 
-    def _get_simple_var_xy(self, var, order='F', mode='r'):
-        """
-        Reads a given 2D variable from the _XY.aux file
-        """
-        if var in self.auxxyvars:
-            fsuffix = '_XY.aux'
-            idx = self.auxxyvars.index(var)
-            filename = self.file_root + fsuffix
-        else:
+    def _get_simple_var_xy(self, *args, **kwargs):
+        '''returns load_fromfile_quantities._get_simple_var_xy(self, *args, **kwargs).
+        raises ValueError if result is None (to match historical behavior of this function).
+
+        included for backwards compatibility purposes, only.
+        new code should instead use the function from load_fromfile_quantitites.
+        '''
+        val = load_fromfile_quantities._get_simple_var_xy(self, *args, **kwargs)
+        if val is None:
             raise ValueError(('_get_simple_var_xy: variable'
                               ' %s not available. Available vars:'
                               % (var) + '\n' + repr(self.auxxyvars)))
-        # Now memmap the variable
-        if not os.path.isfile(filename):
-            raise IOError(('_get_simple_var_xy: variable'
-                           ' %s should be in %s file, not found!' %
-                           (var, filename)))
-        # size of the data type
-        dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
-                         offset=offset, shape=(self.nx, self.ny))
 
-    def _get_composite_var(self, var, *args, EOSTAB_QUANT=None, **kwargs):
-        """ gets velocities, internal energy ('e' / 'r'), entropy."""
+    def _get_composite_var(self, *args, **kwargs):
+        '''returns load_fromfile_quantities._get_composite_var(self, *args, **kwargs).
 
-        COMPOSITE_QUANT = ['ux', 'uy', 'uz', 'ee', 's']
-        if var == '':
-            docvar = document_vars.vars_documenter(obj, 'COMPOSITE_QUANT',
-                                                   COMPOSITE_QUANT, _get_composite_var.__doc__)
-            for ux in ['ux', 'uy', 'uz']:
-                docvar(ux, '{x:}-component of velocity [simu. velocity units]'.format(x=ux[-1]))
-            docvar('ee', "internal energy. get_var('e')/get_var('r').")
-            docvar('s', 'entropy (??)')
-            return None
-
-        if var not in COMPOSITE_QUANT:
-            return None
-
-        if var in ['ux', 'uy', 'uz']:  # velocities
-            # u = p / r.
-            ## r is on center of grid cell, but p is on face, 
-            ## so we need to interpolate.
-            ## r is at (0,0,0), ux and px are at (-0.5, 0, 0)
-            ## --> to align r with px, shift by xdn
-            x = var[-1]  # axis; 'x', 'y', or 'z'
-            interp = x+'dn'
-            p = self.get_var('p' + x)
-            r = self.get_var('r' + interp)
-            return p / r
-
-        elif var == 'ee':   # internal energy
-            return self.get_var('e') / self.get_var('r')
-
-        elif var == 's':   # entropy?
-            return np.log(self.get_var('p', *args, **kwargs)) - \
-                self.params['gamma'][self.snapInd] * np.log(
-                    self.get_var('r', *args, **kwargs))
-
+        included for backwards compatibility purposes, only.
+        new code should instead use the function from load_fromfile_quantitites.
+        '''
+        return load_fromfile_quantities._get_composite_var(self, *args, **kwargs)
 
     def get_electron_density(self, sx=slice(None), sy=slice(None), sz=slice(None)):
         """

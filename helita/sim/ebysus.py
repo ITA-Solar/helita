@@ -41,6 +41,7 @@ from . import cstagger
 from .load_mf_quantities         import load_mf_quantities
 from .load_quantities            import load_quantities
 from .load_arithmetic_quantities import load_arithmetic_quantities
+from .load_fromfile_quantities   import load_fromfile_quantities
 from . import document_vars
 from . import file_memory
 from . import fluid_tools
@@ -515,25 +516,13 @@ class EbysusData(BifrostData):
         '''
         __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
         # look for var in self.variables, if metadata is appropriate.
-        if self._metadata_matches(self.variables.get('metadata', dict())) and var in self.variables:
+        if var in self.variables and self._metadata_matches(self.variables.get('metadata', dict())):
             return self.variables[var]
-        # get simple_vars var. (if we make it to this point at all.)
-        if var in self.simple_vars or var == '':  # the var == '' case is for document_vars purposes, only.
-            # get simple var.
-            ## (first, set meta_quant, to allow quant_tracking to work properly for simple vars;
-            ##  this must happen outside the simple_quant_tracking wrapper around _get_simple_var.)
-            document_vars.set_meta_quant(self, 'saved_data')
-            val = self._get_simple_var(var, panic=panic)
-            if var != '':    # if we are not doing the documentation case (when var==''), return val.
-                return val
-        # get auxxyvars var. (if we make it to this point at all.)
-        if var in self.auxxyvars:
-            return super(EbysusData, self)._get_simple_var_xy(var)
-        # get compvars var. (if we make it to this point at all.)
-        if var in self.compvars:
-            return super(EbysusData, self)._get_composite_var(var)
-        # load quantities. (if we make it to this point at all.)
-        val = load_quantities(self,var,PLASMA_QUANT='',
+        
+        # load quantities.
+        val = load_fromfile_quantities(self, var, panic=panic, save_if_composite=False)
+        if val is None:
+            val = load_quantities(self, var, PLASMA_QUANT='',
                     CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
                     IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
                     DEBYE_LN_QUANT='', CROSTAB_QUANT='',
@@ -748,6 +737,9 @@ class EbysusData(BifrostData):
                 docvar('p'+x, x+'-component of momentum density of ifluid [simu. units]', uni=UNI_speed * UNI_rho)
             units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
             docvar('e', 'energy density of ifluid [simu. units]. Use -1 for electrons.', **units_e)
+            return None
+
+        if var not in self.simple_vars:
             return None
 
         # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
