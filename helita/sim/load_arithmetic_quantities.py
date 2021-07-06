@@ -159,8 +159,6 @@ def get_deriv(obj,quant):
   Computes derivative of quantity.
   Example: 'drdxup' does dxup for var 'r'.
   '''
-  # quant = quant.lower()    # if we want to use lower, it should be elsewhere in the code.
-                             # (in get_var, or load_arithmetic_quantities(), perhaps.) -SE June 28, 2021.
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_DERIV_QUANT, get_deriv.__doc__,
                                            uni=UNI.quant_child(0) / UNI_length)

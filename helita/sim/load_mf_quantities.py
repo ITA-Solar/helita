@@ -6,6 +6,8 @@ from . import document_vars
 from .file_memory import Caching   # never alters results, but caches them for better efficiency.
                                    # use sparingly on "short" calculations; apply liberally to "long" calculations.
                                    # see also cache_with_nfluid and cache kwargs of get_var.
+from .load_arithmetic_quantities import do_cstagger
+
 ## import the relevant things from the internal module "units"
 from .units import (
   UNI, USI, UCGS, UCONST,
@@ -24,7 +26,6 @@ try:
   from at_tools import fluids as fl
 except ImportError:
   warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.load_mf_quantities may crash')
-from .load_arithmetic_quantities import do_cstagger
 
 # set constants
 MATCH_PHYSICS = 0  # don't change this value.  # this one is the default (see ebysus.py)
