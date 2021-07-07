@@ -233,8 +233,7 @@ def get_center(obj,quant, *args, **kwargs):
   Center the variable in the midle of the grid cells
   '''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_CENTER_QUANT, get_center.__doc__,
-                                           uni=UNI.quant_child(0))
+    docvar = document_vars.vars_documenter(obj, *_CENTER_QUANT, get_center.__doc__, uni=UNI.quant_child(0))
     return None
 
   getq = quant[-2:]  # the quant we are "getting" by this function.
@@ -293,7 +292,7 @@ def get_interp(obj, quant):
   e.g. get_var('rxup') --> do_cstagger(get_var('r'), 'xup')
   '''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_INTERP_QUANT, get_interp.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_INTERP_QUANT, get_interp.__doc__, uni=UNI.quant_child(0))
     for xup in _INTERP_QUANT[1]:
       docvar(xup, 'move half grid {up:} in the {x:} axis'.format(up=xup[1:], x=xup[0]))
     return None
@@ -321,7 +320,7 @@ def get_module(obj,quant):
   Module or horizontal component of vectors
   '''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_MODULE_QUANT, get_module.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_MODULE_QUANT, get_module.__doc__, uni=UNI.quant_child(0))
     docvar('mod',  'starting with mod computes the module of the vector [simu units]. sqrt(vx^2 + vy^2 + vz^2).')
     docvar('h',  'ending with h computes the horizontal component of the vector [simu units]. sqrt(vx^2 + vy^2).')
     return None
@@ -398,12 +397,12 @@ def get_gradients_vect(obj,quant):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, *_GRADVECT_QUANT, get_gradients_vect.__doc__)
     for div in ['div', 'divup']:
-      docvar(div,     'starting with, divergence [simu units], shifting up (e.g. dVARdxup) for derivatives')
-    docvar('divdn',   'starting with, divergence [simu units], shifting down (e.g. dVARdxdn) for derivatives')
-    docvar('rot',     'starting with, rotational (a.k.a. curl) [simu units]')
-    docvar('she',     'starting with, shear [simu units]')
-    docvar('curlcc',  'starting with, curl but shifted (via interpolation) back to original location on cell [simu units]')
-    docvar('curvec',  'starting with, curl of face-centered vector (e.g. B, p) [simu units]')
+      docvar(div,     'starting with, divergence [simu units], shifting up (e.g. dVARdxup) for derivatives', uni=UNI.quant_child(0))
+    docvar('divdn',   'starting with, divergence [simu units], shifting down (e.g. dVARdxdn) for derivatives', uni=UNI.quant_child(0))
+    docvar('rot',     'starting with, rotational (a.k.a. curl) [simu units]', uni=UNI.quant_child(0))
+    docvar('she',     'starting with, shear [simu units]', uni=UNI.quant_child(0))
+    docvar('curlcc',  'starting with, curl but shifted (via interpolation) back to original location on cell [simu units]', uni=UNI.quant_child(0))
+    docvar('curvec',  'starting with, curl of face-centered vector (e.g. B, p) [simu units]', uni=UNI.quant_child(0))
     docvar('chkdiv',  'starting with, ratio of the divergence with the maximum of the abs of each spatial derivative [simu units]')
     docvar('chbdiv',  'starting with, ratio of the divergence with the sum of the absolute of each spatial derivative [simu units]')
     docvar('chhdiv',  'starting with, ratio of the divergence with horizontal averages of the absolute of each spatial derivative [simu units]')
@@ -551,7 +550,7 @@ def get_gradients_scalar(obj,quant):
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_GRADSCAL_QUANT, get_gradients_scalar.__doc__)
     docvar('gra',  'starting with, Gradient of a scalar [simu units]. dqdx + dqdy + dqdz.' +\
-                   ' Shifting up for derivatives.')
+                   ' Shifting up for derivatives.', uni=UNI.quant_child(0))
     return None
 
   getq = quant[:3]
@@ -607,7 +606,7 @@ _LOG_QUANT = ('LOG_QUANT', ['lg', 'log_', 'ln_'])
 def get_lg(obj,quant):
   '''Logarithm of a variable. E.g. log_r --> log10(r)'''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_LOG_QUANT, get_lg.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_LOG_QUANT, get_lg.__doc__, uni=DIMENSIONLESS)
     for lg in ['lg', 'log_']:
       docvar(lg,  'starting with, logarithm base 10 of a variable expressed in [simu. units].')
     docvar('ln_', 'starting with, logarithm base e  of a variable expressed in [simu. units].')
@@ -638,7 +637,7 @@ _RATIO_QUANT = ('RATIO_QUANT', ['rat'])
 def get_ratios(obj,quant):
   '''Ratio of two variables'''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_RATIO_QUANT, get_ratios.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_RATIO_QUANT, get_ratios.__doc__, uni=UNI.qc(0)/UNI.qc(1))
     docvar('rat',  'in between with, ratio of two variables [simu units]. aratb gives a/b.')
     return None
 
@@ -665,7 +664,7 @@ _PROJ_QUANT = ('PROJ_QUANT', ['par', 'per'])
 def get_projections(obj,quant):
   '''Projected vectors'''
   if quant == '':
-    docvar = document_vars.vars_documenter(obj, *_PROJ_QUANT, get_projections.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_PROJ_QUANT, get_projections.__doc__, uni=UNI.quant_child(0))
     docvar('par',  'in between with, parallel component of the first vector respect to the second vector [simu units]')
     docvar('per',  'in between with, perpendicular component of the first vector respect to the second vector [simu units]')
     return None
@@ -727,7 +726,8 @@ def get_vector_product(obj,quant):
   Example, for the x component of b cross u, you should call get_var('b_facecross_ux').
   '''
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, *_VECTOR_PRODUCT_QUANT, get_vector_product.__doc__)
+    docvar = document_vars.vars_documenter(obj, *_VECTOR_PRODUCT_QUANT, get_vector_product.__doc__,
+                                           uni=UNI.quant_child(0) * UNI.quant_child(1))
     docvar('times',  '"naive" cross product between two vectors. (We do not do any interpolation.) [simu units]')
     docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u. '
                            'result is edge-centered. E.g. result_x is at ( 0  , -0.5, -0.5).'))
@@ -737,7 +737,7 @@ def get_vector_product(obj,quant):
                            'result is fully centered. E.g. result_x is at ( 0  ,  0  ,  0  ).'
                            'for most cases, it is better to use _facecrosstoface_'))
     docvar('_facecrosstoface_', ('cross product for two face-centered vectors such as B, u. '
-                           'result is face-centered E.g. result_x is at ( 0  , -0.5,  0  ).'))
+                           'result is face-centered E.g. result_x is at ( 0  , -0.5,  0  ).'), uni=UNI.quant_child(0))
     return None
 
   # interpret quant string
@@ -821,10 +821,12 @@ def get_angle(obj,quant):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, *_ANGLE_QUANT, get_angle.__doc__)
     for x in AXES:
-      docvar('_hat'+x, x+'-component of unit vector. Example: b_hat'+x+' is '+x+'-component of unit vector for b.')
+      docvar('_hat'+x, x+'-component of unit vector. Example: b_hat'+x+' is '+x+'-component of unit vector for b.',
+                       uni=DIMENSIONLESS)
     for _angle_xxy in _ANGLES_XXY:
       x, y = _angle_xxy[-2], _angle_xxy[-1]   # _angle_xxy[-3] == _angle_xxy[-1]
-      docvar(_angle_xxy, 'angle off of the positive '+x+'-axis in the '+x+y+'plane. Result in range [-pi, pi].')
+      docvar(_angle_xxy, 'angle off of the positive '+x+'-axis in the '+x+y+'plane. Result in range [-pi, pi].',
+                         uni_f=UNITS_FACTOR_1, uni_name=Usym('radians'))
     return None
 
   # interpret quant string
