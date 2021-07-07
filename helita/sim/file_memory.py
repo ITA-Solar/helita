@@ -17,14 +17,9 @@ TODO:
             keep in memory the memmaps for the files we are reading more often.
         - some combination of the above ideas.
 
-    implement cache metadata checking as functions of object, instead of in this module.
-    E.g. _cache_details_from_obj and _matches_cached_fluids_dict should be attached to obj.
-    E.g.:
-        - Make methods of obj which:
-            - get fluid metadata and nonfluid metadata.
-            - create fluid dict using fluid metadata and nfluid.
-            - compare fluid dicts to see if they match.
-        - Then alter the functions in this file to call those methods when checking for matches.
+    allow for check_cache to propagate downwards throughout all calls to get_var.
+        E.g. right now get_var(x, check_cache=False) will not check cache for x,
+            however if it requires to get_var(y) it will still check cache for y.
 
 """
 
