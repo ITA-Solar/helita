@@ -731,12 +731,15 @@ class EbysusData(BifrostData):
             # TODO (maybe): ^^^ use self.simple_vars, instead of None, for QUANT_VARS (args[2])
             #    However, that might not be viable, depending on when self.simple_vars is assigned
             for x in AXES:
-                docvar('b'+x, x+'-component of magnetic field [simu. units]', uni=U_TUPLE(UNI.b, UsymD(usi='T', ucgs='G')))
-            docvar('r', 'mass density of ifluid [simu. units]', uni=UNI_rho)
+                docvar('b'+x, x+'-component of magnetic field [simu. units]',
+                              nfluid=0, uni=U_TUPLE(UNI.b, UsymD(usi='T', ucgs='G')))
+            docvar('r', 'mass density of ifluid [simu. units]', nfluid=1, uni=UNI_rho)
             for x in AXES:
-                docvar('p'+x, x+'-component of momentum density of ifluid [simu. units]', uni=UNI_speed * UNI_rho)
+                docvar('p'+x, x+'-component of momentum density of ifluid [simu. units]',
+                              nfluid=1, uni=UNI_speed * UNI_rho)
             units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
-            docvar('e', 'energy density of ifluid [simu. units]. Use -1 for electrons.', **units_e)
+            docvar('e', 'energy density of ifluid [simu. units]. Use -1 for electrons.',
+                        nfluid=1, **units_e)
             return None
 
         if var not in self.simple_vars:

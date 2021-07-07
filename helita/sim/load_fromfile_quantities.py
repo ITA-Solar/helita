@@ -84,7 +84,7 @@ def _get_composite_var(obj, var, *args, save_if_composite=False, **kwargs):
   *args and **kwargs go to get_var.
   '''
   if var == '':
-      docvar = document_vars.vars_documenter(obj, *_COMPOSITE_QUANT, _get_composite_var.__doc__)
+      docvar = document_vars.vars_documenter(obj, *_COMPOSITE_QUANT, _get_composite_var.__doc__, nfluid=1)
       for ux in ['ux', 'uy', 'uz']:
           docvar(ux, '{x:}-component of velocity [simu. velocity units]'.format(x=ux[-1]), uni=UNI_speed)
       docvar('ee', "internal energy. get_var('e')/get_var('r').", uni_f=UNI.e/UNI.r, usi_name=Usym('J'))
