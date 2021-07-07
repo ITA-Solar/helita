@@ -55,6 +55,7 @@ import math #for pretty strings
 import collections
 import functools
 import types  # for MethodType
+import copy   # for deepcopy of QuantTree during restore_quant_tracking_state.
 
 # import internal modules
 from . import units       # not used heavily; just here for setting defaults, and setting obj.get_units
@@ -609,7 +610,7 @@ class QuantTree:
         (e.g. if count_from_here, and self is level 7, and hide_level is 3: hides level 10 and greater.)
         '''
         orig_hide = self.hide_level
-        if count_from_here:
+        if count_from_here and (hide_level is not None):
             hide_level = hide_level + self._level
         self.hide_level = hide_level
         try:
@@ -765,6 +766,7 @@ def restore_quant_tracking_state(obj, state):
     #print('from_internal:',from_internal_caching,'; adding child', object.__repr__(child_to_add), 'to', object.__repr__(obj_tree))
     #if not from_internal_caching:
     #    print('child:', child_to_add)
+    child_to_add = copy.deepcopy(child_to_add)  # prevents recursion errors (e.g. for get_var('tgqcol_equil_u'))
     obj_tree.add_child(child_to_add, adjust_level=True)
     setattr(obj, QUANTS_TREE, obj_tree)
     
