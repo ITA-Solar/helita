@@ -45,8 +45,8 @@ vardict = {
         - E.g. get_var('r') after initialization of EbysusData confuses quant_tracking,
             because it returns the data in self.r immediately, instead of loading a quantity.
 
-    - [ADD] allow to put a "level cutoff" when printing QuantTree.
-        - E.g. hide_level=3 will hide layers (L3), (L4), (L5), ....
+    - [FIX] Solve RecursionError coming from interaction between caching and QuantTree.
+        - E.g. get_var('tgqcol_equil_u') makes this error, and caches multiple quantitites.
 
 """
 
@@ -553,11 +553,16 @@ def quant_tracking_simple(typequant, metaquant=None):
     return decorator
 
 class QuantTree:
-    '''use for tree representation of quants.'''
+    '''use for tree representation of quants.
+
+    Notes:
+    - level should always be larger for children than for their parents.
+    '''
     def __init__(self, data, level=-1):
         self.data     = data
         self.children = []
         self._level   = level
+        self.hide_level = None
 
     def add_child(self, child, adjust_level=False):
         '''add child to self.
@@ -578,16 +583,39 @@ class QuantTree:
         self.data = data
 
     def __str__(self):
+        # check hide level. if level >= hide_level, hide.
+        if self.hide_level is not None:
+            if self._level >= self.hide_level:
+                fmtdict = dict(level=self._level, desc=1 + self.count_descendants())
+                return '(L{level}) [hiding {desc} nodes with L>={level}]'.format(**fmtdict)
+        # if we reach this line it means we are not hiding.
         fmtdict = dict(level=self._level, data=self.data)
+        # if no children, return string with level and data.
         if len(self.children) == 0:
             return '(L{level}) {data}'.format(**fmtdict)
-        else:
-            space = ' '*(self._level + 1)
-            return '(L{level}) {data} : {children}'.format(**fmtdict,
-                        children=','.join(['\n' + space + str(child) for child in self.children]))
+        # else, we have children, so return a string with level, data, and children
+        space    = ' '*(self._level + 1)
+        children = ','.join(['\n' + space + child.str(self.hide_level, count_from_here=False) for child in self.children])
+        return '(L{level}) {data} : {children}'.format(**fmtdict, children=children)
 
     def __repr__(self):
         return '<{}. For pretty formatting of contents, print or convert to string.>'.format(object.__repr__(self))
+
+    def str(self, hide_level=None, count_from_here=True):
+        '''sets self.hide_level, returns str(self).
+        restores self.hide_level to its original value before returning result.
+
+        if count_from_here, only hides after getting hide_level more levels deep than we are now.
+        (e.g. if count_from_here, and self is level 7, and hide_level is 3: hides level 10 and greater.)
+        '''
+        orig_hide = self.hide_level
+        if count_from_here:
+            hide_level = hide_level + self._level
+        self.hide_level = hide_level
+        try:
+            return self.__str__()
+        finally:
+            self.hide_level = orig_hide
 
     def get_child(self, i_child=0, oldest_first=True):
         '''returns the child determined by index i_child.
@@ -626,6 +654,13 @@ class QuantTree:
         self._level -= l_subtract
         for child in self.children:
             child._adjust_base_level(l_subtract)
+
+    def count_descendants(self):
+        '''returns total number of descendants (children, childrens' children, etc) of self.'''
+        result = len(self.children)
+        for child in self.children:
+            result += child.count_descendants()
+        return result
 
 
 def _get_orig_tree(obj):
@@ -714,6 +749,7 @@ def get_quant_tracking_state(obj, from_internal=False):
                  quant_selected = getattr(obj, QUANT_SELECTED, QuantInfo(None)),
                  from_internal  = from_internal,
                 )
+    #print('    storing quants_tree', state['quants_tree'].str(hide_level=3))
     return state
 
 def restore_quant_tracking_state(obj, state):
@@ -721,10 +757,14 @@ def restore_quant_tracking_state(obj, state):
     from_internal_caching = state['from_internal']  # True if we are inside a with Caching. 
     state_tree = state['quants_tree']
     obj_tree = _get_orig_tree(obj)
+    #print('obj_tree:', obj_tree)
     if from_internal_caching:  # we are restoring state while INSIDE ("this" layer of) get_var, 
         child_to_add = state_tree               # so add        state_tree       as a child of QUANTS_TREE.
     else:                      # we are resotring state while OUTSIDE ("this" layer of) get_var, 
         child_to_add = state_tree.children[-1]  # so add state_tree.children[-1] as a child of QUANTS_TREE.
+    #print('from_internal:',from_internal_caching,'; adding child', object.__repr__(child_to_add), 'to', object.__repr__(obj_tree))
+    #if not from_internal_caching:
+    #    print('child:', child_to_add)
     obj_tree.add_child(child_to_add, adjust_level=True)
     setattr(obj, QUANTS_TREE, obj_tree)
     
@@ -782,12 +822,14 @@ def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info:
         result.append(info)
     return result
 
-def got_vars_tree(obj, as_data=False, i_child=0, oldest_first=True):
+def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=True):
     '''prints QUANTS_TREE for obj.
     This tree shows the vars which were gotten during the most recent "level 0" call to get_var.
     (Calls to get_var from outside of helita have level == 0.)
 
     Use as_data=True to return the QuantTree object instead of printing it.
+
+    Use hide_level=N to hide all layers of the tree with L >= N.
 
     Use i_child to get a child other than children[-1] (default).
         Note that if you are calling got_vars_tree externally (not inside any calls to get_var),
@@ -826,7 +868,7 @@ def got_vars_tree(obj, as_data=False, i_child=0, oldest_first=True):
     if as_data:
         return quants_tree
     else:
-        print(quants_tree)
+        print(quants_tree.str(hide_level=hide_level))
 
 def quant_lookup(obj, quant_info):
     '''returns entry in obj.vardict related to quant_info (a QuantInfo object).
