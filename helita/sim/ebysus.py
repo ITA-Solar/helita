@@ -298,8 +298,8 @@ class EbysusData(BifrostData):
         except KeyError:
             if warning is not None:
                 warnings.warn(warning)
-            if error_if_failed is not None:
-                raise error_if_failed
+            if error is not None:
+                raise error from None  # "from None" --> show just this error, not also the triggering KeyError
             return default
         else:
             p = p[self.snapInd]
