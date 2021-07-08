@@ -3,13 +3,21 @@ Created by Sam Evans on Apr 27 2021
 
 purpose: enabling "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
 
+TL;DR:
+    >>>> Use obj.get_units() to see the units for the most-recent quantity. <<<< 
+
 The idea is to:
 - have all load_quantities functions return values in simulation units.
 - have a way to lookup how to convert any variable to a desired set of units.
 - have an attribute of the DataClass object tell which system of units we want output.
 
-FOR NOW:
->>>> Use obj.get_units() to see the units for the most-recent quantity. (at top of QUANTS_TREE.) <<<< 
+EXAMPLE USAGE:
+    dd = EbysusData(...)
+    b_squared = dd.get_var('b2')
+    dd.get_units('si')                # 'si' by default; other option is cgs.
+    >>> EvaluatedUnits(factor=1.2566e-11, name='T^{2}')
+    b_squared * dd.get_units('si').factor   # == magnetic field squared, in SI units.
+
 
 State of the code right now:
 - The "hesitant execution" of methods in here means that if you do not call obj.get_units()
@@ -19,11 +27,6 @@ TODO:
 - have a units_system flag attribute which allows to convert units at top level automatically.
     - (By default the conversion will be off.)
     - Don't tell Juan about this attribute because he won't like it ;) but he doesn't ever have to use it!
-- make it so that if any of the names involved in calculating units name are not entered,
-    the resulting name will be something like '???'.
-    (Currently default name is '???' however we need to handle the case of ratio of two unnamed quants,
-    e.g. right now the ratio of two unnamed quants will give a name '' (because it does '???' / '???').)
-- implement units for simplevars (this goes along with implementing quant tracking for simplevars).
 
 USER FRIENDLY GUIDE
     The way to input units is to put them in the documentation segment of get_quant functions.
@@ -138,17 +141,6 @@ USER FRIENDLY GUIDE
     Meaning, the units are not actually being evaluated until they are told to be.
     So, if you enter something wrong, or enter incomplete info, it will only affect
     code which actively tries to get the relevant units.
-
-    ----- TROUBLESHOOTING -----
-    Notes about troubleshooting go here.
-    - due to implementation, operations involving UnitsTuples (or units funcs or units names)
-        and literal constants must never have the literal constant appearing first.
-        For Example (of what NOT to do):
-            (1 / UNI.t)         # NOT ALLOWED
-            5 * UNI_speed       # NOT ALLOWED
-        For Example (of what to do instead):
-            UNI.t ** (-1)       # allowed
-            UNI_speed * 5       # allowed
 """
 
 # import built-ins
@@ -244,7 +236,7 @@ class FuncBuilder:
             try:
                 return kwargs[a]
             except KeyError as e:
-                message = 'Expected kwargs to contain key {} but they did not!'.format(a)
+                message = 'Expected kwargs to contain key {} but they did not!'.format(repr(a))
                 raise KeyError(message) from None
         f_a.__doc__  = f_a.__doc__.replace('{a}', repr(a))
         f_a.__name__ = a
@@ -262,7 +254,7 @@ class FuncBuilder:
         f_i.__name__ = 'arg' + str(i)
         return self.FunclikeType(f_i, required_args=[i], **self._kw__funclike_init)
     
-def make_Funclike_magic(op, op_name=None):
+def make_Funclike_magic(op, op_name=None, reverse=False):
     '''makes magic funclike for binary operator
     it will be named magic + op_name.
     
@@ -274,31 +266,41 @@ def make_Funclike_magic(op, op_name=None):
         
     make_Funclike_magic returns a function of (a, b) which returns a Funclike-like object that does op(a, b).
     type(result) will be type(a) unless issubclass(b, a), in which case it will be type(b).
+
+    if reverse, we aim to return methods to use with r magic, e.g. __radd__.
     '''
-    def magic(a, b):
-        typeA, typeB = type(a), type(b)
-        # apply operation
-        if callable(b):
-            def f(*args, **kwargs):
-                __tracebackhide__ = HIDE_INTERNAL_TRACEBACKS
-                return op(a(*args, **kwargs), b(*args, **kwargs))
-            bname = getattr(b, '__name__', typeB.__name__)
+    def name(x):  # handle naming...
+        if callable(x):
+            if hasattr(x, '__name__'):
+                return getattr(x, '__name__')
+            else:
+                return type(x).__name__
         else:
-            def f(*args, **kwargs):
-                __tracebackhide__ = HIDE_INTERNAL_TRACEBACKS
-                return op(a(*args, **kwargs), b)
-            bname = str(b)
-            if len(bname) > 5:
-                bname = 'value'
+            result = str(x)
+            if len(result) > 5:
+                result = 'value'   # x name too long; use string 'value' instead.
+            return result
+
+    def magic(a, b):
+        type_A0, type_B0 = type(a), type(b)   # types before (possibly) reversing
+        if reverse:
+            (a, b) = (b, a)
+        # apply operation
+        def f(*args, **kwargs):
+            __tracebackhide__ = HIDE_INTERNAL_TRACEBACKS
+            a_val = a if not callable(a) else a(*args, **kwargs)
+            b_val = b if not callable(b) else b(*args, **kwargs)
+            return op(a_val, b_val)
         # set name of f
         if op_name is not None:
-            f.__name__ = '(' + a.__name__ + op_name + bname + ')'
+            f.__name__ = '(' + name(a) + op_name + name(b) + ')'
         # typecast f to appropriate type of Funclike-like object, and return it.
-        if issubclass(typeB, typeA):
-            returntype = typeB
+        if issubclass(type_B0, type_A0):
+            ReturnType = type_B0
         else:
-            returntype = typeA
-        return returntype(f, parents=[a,b])
+            ReturnType = type_A0
+        result = ReturnType(f, parents=[a,b])
+        return result
     if op_name is not None:
         magic.__name__ = 'magic' + op_name
     return magic
@@ -347,15 +349,22 @@ class Funclike:
         orig = getattr(self, original_required, [])
         setattr(self, original_required,  sorted(list( set(orig + new_required) ))  )
 
+    # make Funclike behave like a function (i.e. it is callable)
     def __call__(self, *args, **kwargs):
         __tracebackhide__ = self._tracebackhide
         return self.f(*args, **kwargs)
         
+    # make Funclike behave like a number (i.e. it can participate in arithmetic)
     __mul__     = make_Funclike_magic(operator.__mul__,     ' * ')    # multiply
     __add__     = make_Funclike_magic(operator.__add__,     ' + ')    # add
     __sub__     = make_Funclike_magic(operator.__sub__,     ' - ')    # subtract
     __truediv__ = make_Funclike_magic(operator.__truediv__, ' / ')    # divide
     __pow__     = make_Funclike_magic(operator.__pow__,     ' ** ')   # raise to a power
+
+    __rmul__     = make_Funclike_magic(operator.__mul__,     ' * ', reverse=True)    # rmultiply
+    __radd__     = make_Funclike_magic(operator.__add__,     ' + ', reverse=True)    # radd
+    __rsub__     = make_Funclike_magic(operator.__sub__,     ' - ', reverse=True)    # rsubtract
+    __rtruediv__ = make_Funclike_magic(operator.__truediv__, ' / ', reverse=True)    # rdivide
 
     def _strinfo(self):
         '''info about self. (goes to repr)'''
@@ -474,10 +483,11 @@ class UnitsExpression:
 
     TODO: make display mode options (e.g. "latex", "pythonic", etc)
     '''
-    def __init__(self, contents=collections.OrderedDict(), order='entered', frac=True):
+    def __init__(self, contents=collections.OrderedDict(), order='entered', frac=True, unknown=False):
         self.contents = contents
         self.order    = order
         self.frac     = frac      # whether to show negatives in denominator
+        self.unknown  = unknown   # whether the units are actually unknown.
 
     def _order_exponent(self, ascending=False):
         '''returns keys for self.contents, ordered by exponent.
@@ -517,6 +527,8 @@ class UnitsExpression:
 
     def __str__(self):
         '''str of self: pretty string telling the units which self represents.'''
+        if self.unknown:
+            return '???'
         if self.order == 'exp':
             key_order = self._order_exponent()
         elif self.order == 'absexp':
@@ -559,7 +571,8 @@ class UnitsExpression:
                 result[key] += val
             except KeyError:
                 result[key] = val
-        return UnitsExpression(result, order=self.order, frac=self.frac)
+        unknown = self.unknown or getattr(b, 'unknown', False)
+        return UnitsExpression(result, order=self.order, frac=self.frac, unknown=unknown)
 
     def __truediv__(self, b):
         '''division by b (another UnitsExpression object).'''
@@ -571,14 +584,16 @@ class UnitsExpression:
                 result[key] -= val
             except KeyError:
                 result[key] = -1 * val
-        return UnitsExpression(result, order=self.order, frac=self.frac)
+        unknown = self.unknown or getattr(b, 'unknown', False)
+        return UnitsExpression(result, order=self.order, frac=self.frac, unknown=unknown)
 
     def __pow__(self, b):
         '''raising to b (a number).'''
         result = self.contents.copy()
         for key in result.keys():
             result[key] *= b
-        return UnitsExpression(result, order=self.order, frac=self.frac)
+        unknown = self.unknown or getattr(b, 'unknown', False)
+        return UnitsExpression(result, order=self.order, frac=self.frac, unknown=unknown)
 
     def __call__(self, *args, **kwargs):
         '''return self. For compatibility with UnitsMultiExpression.'''
@@ -720,10 +735,7 @@ def _default_units_f(info=''):
     return Funclike(f)
 
 DEFAULT_UNITS_F = _default_units_f()
-DEFAULT_UNITS_NAME = UnitSymbol('???')   # for now, use ??? for default.
-                    # Then if we see ??? in name result, we know someone's name is missing.
-                    # TODO (maybe): make a separate object which converts the ENTIRE name to ???
-                    #    if ANY of the names involved are the default name.
+DEFAULT_UNITS_NAME = UnitSymbol('???', unknown=True)
 
 ''' ----------------------------- Units Tuple ----------------------------- '''
 
@@ -731,20 +743,28 @@ UnitsTupleBase = collections.namedtuple('Units', ('f', 'name', 'evaluated'),
                                         defaults=[DEFAULT_UNITS_F, DEFAULT_UNITS_NAME, False]
                                         )
 
-def make_UnitsTuple_magic(op, op_name=None):
+def make_UnitsTuple_magic(op, op_name=None, reverse=False):
     '''makes magic func for binary operator acting on UnitsTuple object.
     it will be named magic + op_name.
     
     make_UnitsTuple_magic is a low-level function which serves as a helper function for the UnitsTuple class.
     '''
     def magic(a, b):
-        # apply operation
-        if isinstance(b, UnitsTuple):
-            f    = op(a.f, b.f)
-            name = op(a.name, b.name)
+        # reverse if needed
+        if reverse:
+            (a, b) = (b, a)
+        # get f and name for a and b
+        if isinstance(a, UnitsTuple):
+            a_f, a_name = a.f, a.name
         else:
-            f    = op(a.f, b)
-            name = op(a.name, b)
+            a_f, a_name = a,   a
+        if isinstance(b, UnitsTuple):
+            b_f, b_name = b.f, b.name
+        else:
+            b_f, b_name = b,   b
+        # apply operation
+        f    = op(a_f, b_f)
+        name = op(a_name, b_name)
         return UnitsTuple(f, name)
     # rename magic (based on op_name)
     if op_name is not None:
@@ -762,12 +782,19 @@ class UnitsTuple(UnitsTupleBase):
         op(UnitsTuple(a1,b1), x) = UnitsTuple(op(a1,x), op(b1,x)) for op in *, /, **.
     '''
 
+    # make Funclike behave like a number (i.e. it can participate in arithmetic)
     __mul__     = make_UnitsTuple_magic(operator.__mul__,     ' * ')    # multiply
     __add__     = make_UnitsTuple_magic(operator.__add__,     ' + ')    # add
     __sub__     = make_UnitsTuple_magic(operator.__sub__,     ' - ')    # subtract
     __truediv__ = make_UnitsTuple_magic(operator.__truediv__, ' / ')    # divide
     __pow__     = make_UnitsTuple_magic(operator.__pow__,     ' ** ')   # raise to a power
 
+    __rmul__     = make_UnitsTuple_magic(operator.__mul__,     ' * ', reverse=True)    # rmultiply
+    __radd__     = make_UnitsTuple_magic(operator.__add__,     ' + ', reverse=True)    # radd
+    __rsub__     = make_UnitsTuple_magic(operator.__sub__,     ' - ', reverse=True)    # rsubtract
+    __rtruediv__ = make_UnitsTuple_magic(operator.__truediv__, ' / ', reverse=True)    # rdivide
+
+    # make Funclike behave like a function (i.e. it is callable)
     def __call__(self, *args, **kwargs):
         if callable(self.name):  # if self.name is a UnitsExpressionDict
             name = self.name(*args, **kwargs)    # then, call it.
@@ -906,27 +933,49 @@ EvaluatedUnits = collections.namedtuple('EvaluatedUnits', ('factor', 'name'))
 # TODO: make prettier formatting for the units (e.g. {:.3e})
 # TODO: allow to change name formatting (via editting "order" and "frac" of underlying UnitsExpression object)
 
-def get_units(obj, mode='si', **kw__units_f):
+def _get_units_info_from_mode(mode='si'):
+    '''returns units_key, format_attr given units mode. Case-insensitive.'''
+    mode = mode.lower()
+    assert mode in UNITS_MODES, 'Mode invalid! valid modes={}; got mode={}'.format(list(UNITS_MODES.keys()), repr(mode))
+    units_key, format_attr = UNITS_MODES[mode]
+    return units_key, format_attr
+
+def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', **kw__units_tuple):
+    '''evaluates units for units_tuple using the attrs of obj and the selected units mode.
+
+    units_tuple is called with units_tuple(obj.uni, obj, *args__units_tuple, **kw__units_tuple).
+        Though, first, ATTR_FORMAT_KWARG and UNITS_KEY_KWARG will be set in kw__units_tuple,
+        to their "default" values (based on mode), unless other values are provided in kw__units_tuple.
+    
+    Accepted modes are 'si' for SI units, and 'cgs' for cgs units. Case-insensitive.
+    '''
+    # initial processing of mode.
+    units_key, format_attr = _get_units_info_from_mode(mode=mode)
+    # set defaults based on mode (unless they are already set in kw__units_tuple)
+    kw__units_tuple[ATTR_FORMAT_KWARG] = kw__units_tuple.get(ATTR_FORMAT_KWARG, format_attr)
+    kw__units_tuple[UNITS_KEY_KWARG]   = kw__units_tuple.get(UNITS_KEY_KWARG,   units_key  )
+    # evaluate units_tuple, using obj and **kwargs.
+    result = units_tuple(obj.uni, obj, *args__units_tuple, **kw__units_tuple)
+    # make result formatting prettier and return result.
+    result = EvaluatedUnits(result.f, str(result.name))
+    return result
+
+def get_units(obj, mode='si', **kw__units_tuple):
     '''evaluates units for most-recently-gotten var (at top of obj._quants_tree).
     Accepted modes are defined by UNITS_MODES in helita.sim.units.py near top of file.
 
     Accepted modes are 'si' for SI units, and 'cgs' for cgs units. Case-insensitive.
+
+    kw__units_tuple go to units function.
+        (meanwhile, kwargs related to units mode are automatically set, unless provided here)
     '''
-    # initial processing of mode.
-    mode = mode.lower()
-    assert mode in UNITS_MODES, 'Mode invalid! valid modes={}; got mode={}'.format(list(UNITS_MODES.keys()), repr(mode))
-    units_key, format_attr = UNITS_MODES[mode]
-    # lookup info.
+    units_key, format_attr = _get_units_info_from_mode(mode=mode)
+    # lookup info about most-recently-gotten var.
     quant_info  = obj.get_quant_info(lookup_in_vardict=False)
     units_tuple = _units_lookup_by_quant_info(obj, quant_info, units_key=units_key)
     quant_tree  = obj.got_vars_tree(as_data=True)
     # evaluate units_tuple, given obj.uni, obj, and **kwargs.
-    kw__units_f[ATTR_FORMAT_KWARG] = kw__units_f.get(ATTR_FORMAT_KWARG, format_attr)
-    kw__units_f[UNITS_KEY_KWARG]   = kw__units_f.get(UNITS_KEY_KWARG,   units_key  )
-    #print('in get_units, units_tuple is', units_tuple)
-    result = units_tuple(obj.uni, obj, quant_tree, **kw__units_f)
-    # make result formatting prettier and return result.
-    result = EvaluatedUnits(result.f, str(result.name))
+    result = evaluate_units_tuple(units_tuple, obj, quant_tree, mode=mode, **kw__units_tuple)
     return result
 
 
