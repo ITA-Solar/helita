@@ -51,7 +51,6 @@ vardict = {
 import math #for pretty strings
 import collections
 import functools
-import types  # for MethodType
 import copy   # for deepcopy for QuantTree
 
 # import internal modules
@@ -204,12 +203,18 @@ def create_vardict(obj):
     obj.get_var('')
     setattr(obj, CREATING_VARDICT, False)
     # set some other useful functions in obj.
-    obj.gotten_vars    = types.MethodType(gotten_vars, obj)
-    obj.got_vars_tree  = types.MethodType(got_vars_tree, obj)
-    obj.get_quant_info = types.MethodType(get_quant_info, obj)
+    def _make_weak_bound_method(f):
+        @functools.wraps(f)
+        def _weak_bound_method(*args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            return f(obj, *args, **kwargs)   # << obj which was passed to create_vardict
+        return _weak_bound_method
+    obj.gotten_vars    = _make_weak_bound_method(gotten_vars)
+    obj.got_vars_tree  = _make_weak_bound_method(got_vars_tree)
+    obj.get_quant_info = _make_weak_bound_method(get_quant_info)
     obj.get_var_info   = obj.get_quant_info   # alias
-    obj.quant_lookup   = types.MethodType(quant_lookup, obj)
-    obj.get_units      = types.MethodType(units.get_units, obj)
+    obj.quant_lookup   = _make_weak_bound_method(quant_lookup)
+    obj.get_units      = _make_weak_bound_method(units.get_units)
 
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
