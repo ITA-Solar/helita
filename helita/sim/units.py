@@ -4,7 +4,7 @@ Created by Sam Evans on Apr 27 2021
 purpose: enabling "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
 
 TL;DR:
-    >>>> Use obj.get_units() to see the units for the most-recent quantity. <<<< 
+    >>>> Use obj.get_units() to see the units for the most-recent quantity that obj got with get_var(). <<<< 
 
 The idea is to:
 - have all load_quantities functions return values in simulation units.
@@ -667,7 +667,7 @@ class UnitsExpressionDict(UnitsExpression):
         return str({key: str(val) for (key, val) in self.contents.items()})
 
     def __mul__(self, b):
-        '''multiplication with b (another UnitsExpression object).'''
+        '''multiplication of self * b. (b is another UnitsExpression or UnitsExpressionDict object).'''
         result = dict()
         if isinstance(b, UnitsExpressionDict):
             assert b.contents.keys() == self.contents.keys()  # must have same keys to multiply dicts.
@@ -681,7 +681,7 @@ class UnitsExpressionDict(UnitsExpression):
         return UnitsExpressionDict(result, **self._kw__units_expression_init)
 
     def __truediv__(self, b):
-        '''multiplication with b (another UnitsExpression object).'''
+        '''division of self / b. (b is another UnitsExpression or UnitsExpressionDict object).'''
         result = dict()
         if isinstance(b, UnitsExpressionDict):
             assert b.contents.keys() == self.contents.keys()  # must have same keys to multiply dicts.
@@ -701,6 +701,27 @@ class UnitsExpressionDict(UnitsExpression):
             result[key] = internal_uexpr ** b
         return UnitsExpressionDict(result, **self._kw__units_expression_init)
 
+    # handle cases of (b * a) and (b / a), for b=UnitsExpression(...), a=UnitsExpressionDict(...).
+    ## b * a --> TypeError --> try a.__rmul__(b).
+    __rmul__ = __mul__
+
+    ## b / a --> TypeError --> try a.__rtrudiv__(b).
+    def __rtruediv__(self, b):
+        '''division of b / self. (b is another UnitsExpression or UnitsExpressionDict object).'''
+        result = dict()
+        if isinstance(b, UnitsExpressionDict):
+            # < we should probably never reach this section but I'm keeping it for now...
+            assert b.contents.keys() == self.contents.keys()  # must have same keys to multiply dicts.
+            for key, uexpr in b.contents.items():
+                result[key] = uexpr / self.contents[key]
+        elif isinstance(b, UnitsExpression):
+            for key in self.contents.keys():
+                result[key] = b / self.contents[key]
+        else:
+            raise TypeError('Expected UnitsExpression or UnitsExpressionDict type but got type={}'.format(type(b)))
+        return UnitsExpressionDict(result, **self._kw__units_expression_init)
+
+    # call self (return the correct UnitsExpression based on UNITS_KEY_KWARG)
     def __call__(self, *args, **kwargs):
         '''return self.contents[kwargs[UNITS_KEY_KWARG]].
         in other words, return the relevant UnitsExpression, based on units_key.
