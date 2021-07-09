@@ -15,15 +15,15 @@ TODO:
 
         This leak could be caused by an attribute of dd pointing to dd without using weakref.
 
+        It is also possible that there isn't a leak, because Python can collect objects in circular
+        reference chains as long as none of the objects in the chain have defined a __del__ method.
+        So it is possible that there is a circular reference which gets collected when __del__ is
+        not defined (when DEBUG_MEMORY_LEAK=False), but then can't get collected when __del__ is defined...
+
         A short-term solution is to hope python's default garbage collection routines
         will collect the garbage often enough, or to do import gc; and gc.collect() sometimes.
 
         In the long-term, we should find which attribute of dd points to dd, and fix it.
-
-    Refactor calling separately in _load_quantities the following functions:
-        _get_simple_vars, _get_simple_vars_xy, and _get_composite_var.
-        Instead, make a load_simple_quantities function (or something like that),
-        which calls all those functions, as appropriate.
 
 """
 
