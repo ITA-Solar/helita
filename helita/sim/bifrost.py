@@ -440,21 +440,21 @@ class BifrostData(object):
                 self.variables[var] = self._get_simple_var(
                     var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
-            except Exception:
+            except Exception as err:
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable %s' % var)
+                            'variable {} due to {}'.format(var, err))
         for var in self.auxxyvars:
             try:
                 self.variables[var] = self._get_simple_var_xy(var, *args,
                                                               **kwargs)
                 setattr(self, var, self.variables[var])
-            except Exception:
+            except Exception as err:
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable %s' % var)
+                            'variable {} due to {}'.format(var, err))
         rdt = self.r.dtype
         if self.stagger_kind == 'cstagger': 
             if (self.nz > 1): 
@@ -814,7 +814,7 @@ class BifrostData(object):
             return None
 
         if self.verbose:
-            print('(get_var): reading simple ', np.shape(val), var, whsp*5,
+            print('(get_var): reading simple ', var, whsp*5,  # TODO: show np.shape(val) info somehow?
                 end="\r",flush=True)
 
         if np.shape(self.snap) != ():
