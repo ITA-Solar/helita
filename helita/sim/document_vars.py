@@ -767,7 +767,8 @@ def get_quant_tracking_state(obj, from_internal=False):
         quants_tree = getattr(obj, QUANTS_TREE).get_child(-1)  # get the newest child.
     state = dict(quants_tree    = quants_tree,
                  quant_selected = getattr(obj, QUANT_SELECTED, QuantInfo(None)),
-                 _from_internal  = from_internal,  # not used, but maybe helpful for debugging.
+                 _from_internal = from_internal,  # not used, but maybe helpful for debugging.
+                 _ever_restored = False # whether we have ever restored this state.
                 )
     return state
 
@@ -776,9 +777,17 @@ def restore_quant_tracking_state(obj, state):
     state_tree   = state['quants_tree']
     obj_tree     = _get_orig_tree(obj)
     child_to_add = state_tree   # add state tree as child of obj_tree.
+    if not state['_ever_restored']:
+        state['_ever_restored'] = True
+        if isinstance(child_to_add.data, QuantInfo):
+            # adjust level of top QuantInfo in tree, to indicate it is from cache.
+            q = child_to_add.data._asdict()
+            q['level'] = str(q['level']) + ' (FROM CACHE)'
+            child_to_add.data = QuantInfo(**q)
+    # add child to obj_tree.
     obj_tree.add_child(child_to_add, adjusted_level=True)
     setattr(obj, QUANTS_TREE, obj_tree)
-    
+    # set QUANT_SELECTED.
     selected = state.get('quant_selected', QuantInfo(None))
     setattr(obj, QUANT_SELECTED, selected)
 
@@ -849,24 +858,6 @@ def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=T
     Use oldest_first to tell the children ordering convention:
         True --> 0 is the oldest child (added first); -1 is the newest child (added most-recently).
         False -> the order is reversed, e.g. -1 is the oldest child instead.
-
-    Notes to User:
-    --------------
-    QuantInfo level misaligning with QuantTree level indicates that a cached value was read.
-    Example:
-        dd.get_var('nre')    # 'nre' is cached by default, if caching is on.
-        dd.get_var('nq', iS=-1)  # gets nr; nr with iS=-1 gets nre.
-        dd.got_vars_tree()
-        >>> (L0) QuantInfo(varname='nq', quant='nq', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=0) : 
-             (L1) QuantInfo(varname='nr', quant='nr', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=1) : 
-              (L2) QuantInfo(varname='nre', quant='nre', typequant='ELECTRON_QUANT', metaquant='mf_quantities', level=0) : 
-               (L3) QuantInfo(varname='nr', quant='nr', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=1) : 
-                (L4) QuantInfo(varname='r', quant='r', typequant='SIMPLE_VARS', metaquant='fromfile', level=2)
-        At L2 in the tree, the varname is 'nre'. Its data is in the cache, so it is read from the cache,
-        assuming check_cache==True, which is the default. When we got 'nre' originally, it was at level=0,
-        because we called dd.get_var('nre') directly. Thus, the original quants_tree for 'nre', in which
-        'nre' is level 0, is put here.
-
     '''
     # Get QUANTS_TREE attr. Since this function (got_vars_tree) is optional, and for end-user,
     ## crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.
