@@ -557,7 +557,7 @@ class Cache:
 
     if DEBUG_MEMORY_LEAK:
         def __del__(self):
-            print('cache deleted')
+            print('deleted {}'.format(self))
 
 
 def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
