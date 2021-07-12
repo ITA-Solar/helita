@@ -1582,9 +1582,11 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
                   nfluid=1, uni=UNI_hz * UNI_length**2)
     for thermal_xopt_rad in ['thermal_xopt', 'thermal_xopt_rad']:
       docvar(thermal_xopt_rad, 'thermal instability optimal angle between k and (Ve - Vi) to maximize growth.' +\
-                'result will be in radians. Result will be between -pi/4 and pi/4.', nfluid=1, uni=DIMENSIONLESS)
+                'result will be in radians. Result will be between -pi/4 and pi/4.', nfluid=1,
+                uni_f=UNITS_FACTOR_1, uni_name='radians')
     docvar('thermal_xopt_deg', 'thermal instability optimal angle between k and (Ve - Vi) to maximize growth.' +\
-                'result will be in degrees. Result will be between -45 and 45.', nfluid=1, uni=DIMENSIONLESS)
+                'result will be in degrees. Result will be between -45 and 45.', nfluid=1,
+                uni_f=UNITS_FACTOR_1, uni_name='degrees')
     docvar('thermal_tan2xopt', 'tangent of 2 times thermal_xopt', nfluid=1, uni=DIMENSIONLESS)
     for x in AXES:
       docvar('thermal_u0'+x, x+'-component of (Ve - Vi). Warning: proper interpolation not yet implemented.',
