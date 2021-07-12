@@ -488,6 +488,7 @@ class UnitsExpression:
         self.order    = order
         self.frac     = frac      # whether to show negatives in denominator
         self.unknown  = unknown   # whether the units are actually unknown.
+        self._mode    = None      # mode for units. unused unless unknown is True.
 
     def _order_exponent(self, ascending=False):
         '''returns keys for self.contents, ordered by exponent.
@@ -528,7 +529,10 @@ class UnitsExpression:
     def __str__(self):
         '''str of self: pretty string telling the units which self represents.'''
         if self.unknown:
-            return '???'
+            if self._mode is None:
+                return '???'
+            else:
+                return self._mode
         if self.order == 'exp':
             key_order = self._order_exponent()
         elif self.order == 'absexp':
@@ -596,7 +600,15 @@ class UnitsExpression:
         return UnitsExpression(result, order=self.order, frac=self.frac, unknown=unknown)
 
     def __call__(self, *args, **kwargs):
-        '''return self. For compatibility with UnitsMultiExpression.'''
+        '''return self. For compatibility with UnitsExpressionDict.
+        Also, sets self._mode (print string if unknown units) based on UNITS_KEY_KWARG if possible.'''
+        units_key = kwargs.get(UNITS_KEY_KWARG, None)
+        if units_key == 'usi':
+            self._mode = 'SI units'
+        elif units_key == 'ucgs':
+            self._mode = 'cgs units'
+        else:
+            self._mode = 'simu. units'
         return self
 
 
@@ -653,7 +665,7 @@ class UnitsExpressionDict(UnitsExpression):
             values = dicts or UnitsExpression objects;
                 dicts in contents are used to make a UnitsExpression, while
                 UnitsExpressions in contents are saved as-is.
-        The '''
+        '''
         self.contents = dict()
         for key, val in contents.items():
             if isinstance(val, UnitsExpression):  # already a UnitsExpression; don't need to convert.
@@ -726,7 +738,9 @@ class UnitsExpressionDict(UnitsExpression):
         '''return self.contents[kwargs[UNITS_KEY_KWARG]].
         in other words, return the relevant UnitsExpression, based on units_key.
         '''
-        return self.contents[kwargs[UNITS_KEY_KWARG]]
+        units_key = kwargs[UNITS_KEY_KWARG]
+        uexpr = self.contents[units_key]   # relevant UnitsExpression based on units_key
+        return uexpr
 
 class UnitSymbolDict(UnitsExpressionDict):
     '''a dict of symbols for unit.
