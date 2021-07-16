@@ -17,14 +17,9 @@ TODO:
             keep in memory the memmaps for the files we are reading more often.
         - some combination of the above ideas.
 
-    implement cache metadata checking as functions of object, instead of in this module.
-    E.g. _cache_details_from_obj and _matches_cached_fluids_dict should be attached to obj.
-    E.g.:
-        - Make methods of obj which:
-            - get fluid metadata and nonfluid metadata.
-            - create fluid dict using fluid metadata and nfluid.
-            - compare fluid dicts to see if they match.
-        - Then alter the functions in this file to call those methods when checking for matches.
+    allow for check_cache to propagate downwards throughout all calls to get_var.
+        E.g. right now get_var(x, check_cache=False) will not check cache for x,
+            however if it requires to get_var(y) it will still check cache for y.
 
 """
 
@@ -37,6 +32,14 @@ from collections import OrderedDict, namedtuple
 import sys  # for debugging 'too many files' crash; will be removed in the future
 import time  # for time profiling for caching
 import weakref  # for refering to parent in cache without making circular reference.
+
+# import local modules
+from . import document_vars
+
+# import attributes of local modules into this namespace, for historical reasons.
+from .document_vars import (
+    maintain_attrs
+)
 
 # import external public modules
 try:
@@ -287,37 +290,10 @@ def referrers(obj):
     return [namestr(refe, globals()) for refe in gc.get_referrers(obj)]
 
 
-''' --------------------- restore attrs --------------------- '''
-
-# this helper function probably should go in another file, but this is the best place for it for now.
-
-def maintain_attrs(*attrs):
-    '''return decorator which restores attrs of obj after running function.
-    It is assumed that obj is the first arg of function.
-    '''
-    def attr_restorer(f):
-        @functools.wraps(f)
-        def f_but_maintain_attrs(obj, *args, **kwargs):
-            '''f but attrs are maintained.'''
-            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-            memory = dict()  # dict of attrs to maintain
-            for attr in attrs:
-                if hasattr(obj, attr):
-                    memory[attr] = getattr(obj, attr)
-            try:
-                return f(obj, *args, **kwargs)
-            finally:
-                # restore attrs
-                for attr, val in memory.items(): 
-                    setattr(obj, attr, val)
-        return f_but_maintain_attrs
-    return attr_restorer
-
-
 ''' --------------------- cache --------------------- '''
 
-CacheEntry = namedtuple('CacheEntry', ['value', 'metadata', 'id', 'nbytes', 'calctime'],
-                        defaults = [None, None, None, None, None])
+CacheEntry = namedtuple('CacheEntry', ['value', 'metadata', 'id', 'nbytes', 'calctime', 'qtracking_state'],
+                        defaults = [None, None, None, None, None, dict()])
 #        value: value.
 #     metadata: additional params which are associated with this value of var.
 #           id: unique id associated to this var and cache_params for this cache.
@@ -475,23 +451,30 @@ class Cache:
         # else (var is in self):
         for entry in var_cache_entries:
             if self._metadata_matches(entry.metadata, metadata=metadata, obj=obj):
-                if self.debugging >= 1:
-                    print(' -> Loaded   {:^15s} -> {}'.format(var, entry))
+                # we found a match! So, return this entry (after doing some bookkeeping).
+                if self.debugging >= 1: print(' -> Loaded   {:^15s} -> {}'.format(var, entry))
+                ## update performance tracker.
                 self._update_performance_tracker(entry)
+                ## update QUANT_SELECTED in self.parent()
+                parent = self.parent()
+                if parent is not None:
+                    document_vars.restore_quant_tracking_state(parent, entry.qtracking_state)
                 return entry
         # else (var is in self but not associated with this metadata):
         if self.debugging >= 2: print(' > Getting {:15s}, var in cache but not with this metadata.'.format(var))
         return CacheEntry(None)
 
-    def cache(self, var, val, metadata=None, obj=None, with_nfluid=2, calctime=None):
+    def cache(self, var, val, metadata=None, obj=None, with_nfluid=2, calctime=None, from_internal=False):
         '''add var with value val (and associated with cache_params) to self.'''
         if self.debugging >= 2: print(' < Caching {:15s}; with_nfluid={}'.format(var, with_nfluid))
         val = np.array(val, copy=True)  # copy ensures value in cache isn't altered even if val array changes.
         nbytes = val.nbytes
         self._nbytes += nbytes
         metadata = self.get_metadata(metadata=metadata, obj=obj, with_nfluid=with_nfluid)
+        quant_tracking_state = document_vars.get_quant_tracking_state(self.parent(), from_internal=from_internal)
         entry  = CacheEntry(value=val, metadata=metadata,
-                            id=self._take_next_cacheid(), nbytes=nbytes, calctime=calctime)
+                            id=self._take_next_cacheid(), nbytes=nbytes, calctime=calctime,
+                            qtracking_state=quant_tracking_state)
         if self.debugging >= 1: print(' <- Caching {:^15s} <- {}'.format(var, entry))
         if var in self._content.keys():
             self._content[var] += [entry]
@@ -574,7 +557,7 @@ class Cache:
 
     if DEBUG_MEMORY_LEAK:
         def __del__(self):
-            print('cache deleted')
+            print('deleted {}'.format(self))
 
 
 def with_caching(check_cache=True, cache=False, cache_with_nfluid=None):
@@ -656,7 +639,7 @@ class Caching():
                 return
             #else
             calctime = time.time() - self.start
-            self.obj.cache.cache(var, value, metadata=self.metadata, calctime=calctime)
+            self.obj.cache.cache(var, value, metadata=self.metadata, calctime=calctime, from_internal=True)
             if restart_timer:
                 self.start = time.time() # restart the clock.
 

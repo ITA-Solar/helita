@@ -5,6 +5,7 @@ Set of programs to read and interact with output from Bifrost
 # import builtin modules
 import os
 import functools
+import weakref
 from glob import glob
 
 # import external public modules
@@ -15,6 +16,7 @@ from scipy.ndimage import map_coordinates
 # import internal modules
 from .load_quantities import *
 from .load_arithmetic_quantities import *
+from . import load_fromfile_quantities 
 from .tools import *
 from . import document_vars
 from . import file_memory
@@ -135,8 +137,7 @@ class BifrostData(object):
         self.transunits = False
         self.cross_sect = cross_sect_for_obj(self)
         if 'tabinputfile' in self.params.keys(): 
-            tabfile = os.path.join(self.fdir, 
-                self.params['tabinputfile'][self.snapInd].strip())
+            tabfile = os.path.join(self.fdir, self.get_param('tabinputfile').strip())
             if os.access(tabfile, os.R_OK):
                 self.rhoee = Rhoeetab(tabfile=tabfile, fdir=fdir, radtab=True)
 
@@ -148,20 +149,18 @@ class BifrostData(object):
             Sets list of avaible variables
         """
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
-        self.auxvars = self.params['aux'][self.snapInd].split()
+        self.auxvars = self.get_param('aux', error_prop=True).split()
         if self.do_mhd:
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
         self.heliumvars = []
-        if 'do_hion' in self.params:
-            if self.params['do_hion'][self.snapInd] > 0:
-                self.hionvars = ['hionne', 'hiontg', 'n1',
-                                 'n2', 'n3', 'n4', 'n5', 'n6', 'nh2']
-                self.hion = True
-        if 'do_helium' in self.params:
-            if self.params['do_helium'][self.snapInd] > 0:
-                self.heliumvars = ['nhe1', 'nhe2', 'nhe3']
-                self.heion = True
+        if self.get_param('do_hion', default=0) > 0:
+            self.hionvars = ['hionne', 'hiontg', 'n1',
+                             'n2', 'n3', 'n4', 'n5', 'n6', 'nh2']
+            self.hion = True
+        if self.get_param('do_helium', default=0) > 0:
+            self.heliumvars = ['nhe1', 'nhe2', 'nhe3']
+            self.heion = True
         self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
         self.simple_vars = self.snapvars + self.auxvars + self.hionvars + \
             self.heliumvars
@@ -302,6 +301,34 @@ class BifrostData(object):
         self.time = self.params['t']
         if self.sel_units=='cgs': 
             self.time *= self.uni.uni['t']
+
+    def get_param(self, param, default=None, warning=None, error_prop=None):
+        ''' get param via self.params[param][self.snapInd].
+
+        if param not in self.params.keys(), then the following kwargs may play a role:
+            default: None (default) or any value.
+                return this value (eventually) instead. (check warning and error_prop first.)
+            warning: None (default) or any Warning or string.
+                if not None, do warnings.warn(warning).
+            error_prop: None (default), True, or any Exception object.
+                None --> ignore this kwarg.
+                True --> raise the original KeyError caused by trying to get self.params[param].
+                else --> raise error_prop from None.
+        '''
+        try:
+            p = self.params[param]
+        except KeyError as err_triggered:
+            if warning is not None:
+                warnings.warn(warning)
+            if error_prop is not None:
+                if isinstance(error_prop, BaseException):
+                    raise error_prop from None  # "from None" --> show just this error, not also err_triggered
+                elif error_prop:
+                    raise err_triggered
+            return default
+        else:
+            p = p[self.snapInd]
+        return p
         
     def __read_mesh(self, meshfile, firstime=False):
         """
@@ -309,7 +336,7 @@ class BifrostData(object):
         """
         if meshfile is None:
             meshfile = os.path.join(
-                self.fdir, self.params['meshfile'][self.snapInd].strip())
+                self.fdir, self.get_param('meshfile', error_prop=True).strip())
         if os.path.isfile(meshfile):
             f = open(meshfile, 'r')
             for p in ['x', 'y', 'z']:
@@ -439,21 +466,21 @@ class BifrostData(object):
                 self.variables[var] = self._get_simple_var(
                     var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
-            except Exception:
+            except Exception as err:
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable %s' % var)
+                            'variable {} due to {}'.format(var, err))
         for var in self.auxxyvars:
             try:
                 self.variables[var] = self._get_simple_var_xy(var, *args,
                                                               **kwargs)
                 setattr(self, var, self.variables[var])
-            except Exception:
+            except Exception as err:
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable %s' % var)
+                            'variable {} due to {}'.format(var, err))
         rdt = self.r.dtype
         if self.stagger_kind == 'cstagger': 
             if (self.nz > 1): 
@@ -595,6 +622,8 @@ class BifrostData(object):
             Snapshot number to read. By default reads the loaded snapshot;
             if a different number is requested, will load that snapshot
             by running self.set_snap(snap).
+
+        **kwargs go to load_..._quantities functions.
         """
         if self.verbose:
             print('(get_var): reading ', var, whsp*6, end="\r", flush=True)
@@ -658,27 +687,20 @@ class BifrostData(object):
             cgsunits = 1.0
                 
         # get value of variable.
-        if var in self.variables:
-            val = self.variables[var] * cgsunits
-        elif var in self.simple_vars:  # is variable already loaded?
-            
-            val = self._get_simple_var(var, *args, **kwargs) * cgsunits
-            if self.verbose:
-                print('(get_var): reading simple ', np.shape(val), whsp*5,
-                    end="\r",flush=True)
-        elif var in self.auxxyvars:
-            val = self._get_simple_var_xy(var, *args, **kwargs)
-        elif var in self.compvars:  # add to variable list
-            self.variables[var] = self._get_composite_var(var, *args, **kwargs)
-            setattr(self, var, self.variables[var])
-            val = self.variables[var]
+        if var in self.variables:                 # if var is still in memory,
+            val = self.variables[var] * cgsunits  #   load from memory instead of re-reading.
         else:
-            # Loading quantities
-            val = load_quantities(self, var, **kwargs)
-            # Loading arithmetic quantities
-            if np.shape(val) == ():
+            # Try to load simple quantities.
+            val = load_fromfile_quantities.load_fromfile_quantities(self, var,
+                                                    save_if_composite=True, **kwargs)
+            if val is None:
+                # Try to load "regular" quantities
+                val = load_quantities(self, var, **kwargs)
+            if val is None:
+                # Try to load "arithmetic" quantities.
                 val = load_arithmetic_quantities(self, var, **kwargs) 
 
+        # handle documentation case
         if document_vars.creating_vardict(self):
             return None
         elif var == '':
@@ -691,14 +713,16 @@ class BifrostData(object):
                 self.vardocs()
             return None
 
-            if np.shape(val) == ():
-                raise ValueError(('get_var: do not know (yet) how to '
-                              'calculate quantity %s. Note that simple_var '
-                              'available variables are: %s.\nIn addition, '
-                              'get_quantity can read others computed variables '
-                              "see e.g. help(self.get_var) or get_var('')) for guidance"
-                              '.' % (var, repr(self.simple_vars))))
-            # val = self.get_quantity(var, *args, **kwargs)
+        # handle "don't know how to get this var" case
+        if val is None:
+            errmsg = ('get_var: do not know (yet) how to calculate quantity {}. '
+                '(Got None while trying to calculate it.) '
+                'Note that simple_var available variables are: {}. '
+                '\nIn addition, get_quantity can read others computed variables; '
+                "see e.g. help(self.get_var) or get_var('')) for guidance.")
+            raise ValueError(errmsg.format(var, repr(self.simple_vars)))
+        
+        # reshape if necessary... (When it could be necessary?? -SE July 6 2021)
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
             # at least one slice has more than one value
             if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
@@ -786,6 +810,7 @@ class BifrostData(object):
           self.z = - self.z[::-1].copy()/cte
           self.dz = - self.dz1d[::-1].copy()/cte
 
+    @document_vars.quant_tracking_simple('SIMPLE_VARS')
     def _get_simple_var(self, var, order='F', mode='r', 
                         panic=False, *args, **kwargs):
         """
@@ -805,7 +830,18 @@ class BifrostData(object):
             Requested variable.
         """
         if var == '':
-            print(help(self._get_simple_var))
+            _simple_vars_msg = ('Quantities which are stored by the simulation. These are '
+                                'loaded as numpy memmaps by reading data files directly.')
+            docvar = document_vars.vars_documenter(self, 'SIMPLE_VARS', None, _simple_vars_msg)
+            # TODO: << add documentation for bifrost simple vars, here.
+            return None
+
+        if var not in self.simple_vars:
+            return None
+
+        if self.verbose:
+            print('(get_var): reading simple ', var, whsp*5,  # TODO: show np.shape(val) info somehow?
+                end="\r",flush=True)
 
         if np.shape(self.snap) != ():
             currSnap = self.snap[self.snapInd]
@@ -839,7 +875,7 @@ class BifrostData(object):
             filename += fsuffix_a + fsuffix_b
         elif var in self.hionvars:
             idx = self.hionvars.index(var)
-            isnap = self.params['isnap'][self.snapInd]
+            isnap = self.get_param('isnap', error_prop=True)
             if panic: 
                 filename = filename + '.hion.panic'
             else: 
@@ -853,7 +889,7 @@ class BifrostData(object):
                         filename = '%s_.hion%s.snap' % (self.file_root, isnap)
         elif var in self.heliumvars:
             idx = self.heliumvars.index(var)
-            isnap = self.params['isnap'][self.snapInd]
+            isnap = self.get_param('isnap', error_prop=True)
             if panic: 
                 filename = filename + '.helium.panic'
             else:
@@ -883,65 +919,26 @@ class BifrostData(object):
             return np.memmap(filename, dtype=self.dtype, order=order,
                              mode=mode, offset=offset, shape=ss)
 
-    def _get_simple_var_xy(self, var, order='F', mode='r'):
-        """
-        Reads a given 2D variable from the _XY.aux file
-        """
-        if var in self.auxxyvars:
-            fsuffix = '_XY.aux'
-            idx = self.auxxyvars.index(var)
-            filename = self.file_root + fsuffix
-        else:
+    def _get_simple_var_xy(self, *args, **kwargs):
+        '''returns load_fromfile_quantities._get_simple_var_xy(self, *args, **kwargs).
+        raises ValueError if result is None (to match historical behavior of this function).
+
+        included for backwards compatibility purposes, only.
+        new code should instead use the function from load_fromfile_quantitites.
+        '''
+        val = load_fromfile_quantities._get_simple_var_xy(self, *args, **kwargs)
+        if val is None:
             raise ValueError(('_get_simple_var_xy: variable'
                               ' %s not available. Available vars:'
                               % (var) + '\n' + repr(self.auxxyvars)))
-        # Now memmap the variable
-        if not os.path.isfile(filename):
-            raise IOError(('_get_simple_var_xy: variable'
-                           ' %s should be in %s file, not found!' %
-                           (var, filename)))
-        # size of the data type
-        dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * idx * dsize
-        return np.memmap(filename, dtype=self.dtype, order=order, mode=mode,
-                         offset=offset, shape=(self.nx, self.ny))
 
-    def _get_composite_var(self, var, *args, EOSTAB_QUANT=None, **kwargs):
-        """ gets velocities, internal energy ('e' / 'r'), entropy."""
+    def _get_composite_var(self, *args, **kwargs):
+        '''returns load_fromfile_quantities._get_composite_var(self, *args, **kwargs).
 
-        COMPOSITE_QUANT = ['ux', 'uy', 'uz', 'ee', 's']
-        if var == '':
-            docvar = document_vars.vars_documenter(obj, 'COMPOSITE_QUANT',
-                                                   COMPOSITE_QUANT, _get_composite_var.__doc__)
-            for ux in ['ux', 'uy', 'uz']:
-                docvar(ux, '{x:}-component of velocity [simu. velocity units]'.format(x=ux[-1]))
-            docvar('ee', "internal energy. get_var('e')/get_var('r').")
-            docvar('s', 'entropy (??)')
-            return None
-
-        if var not in COMPOSITE_QUANT:
-            return None
-
-        if var in ['ux', 'uy', 'uz']:  # velocities
-            # u = p / r.
-            ## r is on center of grid cell, but p is on face, 
-            ## so we need to interpolate.
-            ## r is at (0,0,0), ux and px are at (-0.5, 0, 0)
-            ## --> to align r with px, shift by xdn
-            x = var[-1]  # axis; 'x', 'y', or 'z'
-            interp = x+'dn'
-            p = self.get_var('p' + x)
-            r = self.get_var('r' + interp)
-            return p / r
-
-        elif var == 'ee':   # internal energy
-            return self.get_var('e') / self.get_var('r')
-
-        elif var == 's':   # entropy?
-            return np.log(self.get_var('p', *args, **kwargs)) - \
-                self.params['gamma'][self.snapInd] * np.log(
-                    self.get_var('r', *args, **kwargs))
-
+        included for backwards compatibility purposes, only.
+        new code should instead use the function from load_fromfile_quantitites.
+        '''
+        return load_fromfile_quantities._get_composite_var(self, *args, **kwargs)
 
     def get_electron_density(self, sx=slice(None), sy=slice(None), sz=slice(None)):
         """
@@ -994,7 +991,7 @@ class BifrostData(object):
         else:
             rho = self.r[sx, sy, sz] * self.uni.u_r
             subsfile = os.path.join(self.fdir, 'subs.dat')
-            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
+            tabfile = os.path.join(self.fdir, self.get_param('tabinputfile', error_prop=True).strip())
             tabparams = []
             if os.access(tabfile, os.R_OK):
                 tabparams = read_idl_ascii(tabfile, obj=self)
@@ -1167,6 +1164,55 @@ class BifrostData(object):
             fout2.write("\n%i\n" % nz)
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
+
+    # --- misc. convenience methods --- #
+
+    def get_varm(self, *args__get_var, **kwargs__get_var):
+        '''get_var but returns np.mean() of result.
+        provided for convenience for quicker debugging.
+        '''
+        return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
+
+    def zero(self):
+        '''return np.zeros_like(self.r, subok=False).
+        (an array of zeros with same shape and dtype like self.r but which is not a memmap.)
+        '''
+        return np.zeros_like(self.r, subok=False)
+
+    def get_lmin(self):
+        '''return smallest length resolvable for each direction ['x', 'y', 'z'].
+        result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
+
+        return 1 (instead of 0) for any direction with number of points < 2.
+        '''
+        def _dxmin(x):
+            dx1d = getattr(self, 'd'+x+'1d')
+            if len(dx1d)==1:
+                return 1
+            else:
+                return dx1d.min()
+        return np.array([_dxmin(x) for x in AXES])
+
+    def get_kmax(self):
+        '''return largest value of each component of wavevector resolvable by self.
+        I.e. returns [max kx, max ky, max kz].
+        result is in [1/ simu. length units]. Divide by self.uni.usi_l to convert to SI.
+        '''
+        return 2 * np.pi / self.get_lmin()
+
+    def get_unit_vector(self, var, mean=False, **kw__get_var):
+        '''return unit vector of var. [varx, vary, varz]/|var|.'''
+        varx = self.get_var(var+'x', **kw__get_var)
+        vary = self.get_var(var+'y', **kw__get_var)
+        varz = self.get_var(var+'z', **kw__get_var)
+        varmag = self.get_var('mod'+var, **kw__get_var)
+        if mean:
+            varx, vary, varz, varmag = varx.mean(), vary.mean(), varz.mean(), varmag.mean()
+        return np.array([varx, vary, varz]) / varmag
+
+    if file_memory.DEBUG_MEMORY_LEAK:
+        def __del__(self):
+            print('deleted {}'.format(self), flush=True)
 
 
 def write_br_snap(rootname,r,px,py,pz,e,bx,by,bz):
@@ -2054,9 +2100,10 @@ class Cross_sect:
         if verbose is None: 
             verbose = False if obj is None else getattr(obj, 'verbose', False)
         self.verbose = verbose
-        self.obj = obj
         self.kelvin = kelvin
         self.units = {True: 'K', False: 'eV'}[self.kelvin]
+        # save pointer to obj. Use weakref to help ensure we don't create a circular reference.
+        self.obj = (lambda: None) if (obj is None) else weakref.ref(obj)  # self.obj() returns obj.
         # read table file and calculate parameters
         if cross_tab is None:
             cross_tab = ['h-h-data2.txt', 'h-h2-data.txt', 'he-he.txt',
@@ -2078,7 +2125,7 @@ class Cross_sect:
         self.cross_tab = dict()
         for itab in range(len(self.cross_tab_list)):
             self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab],firstime=firstime,
-                                                  obj=getattr(self, 'obj', None), kelvin=self.kelvin)
+                                                  obj=self.obj(), kelvin=self.kelvin)
             
 
     def tab_interp(self, tg, itab=0, out='el', order=1):
@@ -2220,7 +2267,8 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
 @file_memory.remember_and_recall('_memory_read_idl_ascii')
 def read_idl_ascii(filename,firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary.
-    if obj is not None,'''
+    if obj is not None, remember the result and restore it if ever reading the same exact file again.
+    '''
     li = 0
     params = {}
     # go through the file, add stuff to dictionary

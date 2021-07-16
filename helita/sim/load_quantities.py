@@ -1,9 +1,14 @@
-import numpy as np
+# import builtins
 import os
-from glob import glob
 import warnings
+#from glob import glob   # this is only used for find_first_match which is never called...
+
+# import internal modules
 from . import document_vars
 from .load_arithmetic_quantities import do_cstagger
+
+# import external public modules
+import numpy as np
 
 # set constants
 ELEMLIST = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni']
@@ -1642,6 +1647,15 @@ def find_first_match(name, path,incl_path=False, **kwargs):
   incl_root: boolean, if true will add full path, otherwise, the name.
   path : sring, e.g., '.'
   '''
+  errmsg = ('find_first_match() from load_quantities has been deprecated. '
+            'If you believe it should not be deprecated, you can easily restore it by going to '
+            'helita.sim.load_quantities and doing the following: '
+            '(1) uncomment the "from glob import glob" at top of the file; '
+            '(2) edit the find_first_match function: remove this error and uncomment the code. '
+            '(3) please put a comment to explain where load_quantities.find_first_match() is used, '
+            ' since it is not being used anywhere in the load_quantities file directly.')
+  raise Exception(errmsg)
+  """
   originalpath=os.getcwd()
   os.chdir(path)
   for file in glob(name):
@@ -1652,3 +1666,4 @@ def find_first_match(name, path,incl_path=False, **kwargs):
       os.chdir(originalpath)
       return file
   os.chdir(originalpath)
+  """

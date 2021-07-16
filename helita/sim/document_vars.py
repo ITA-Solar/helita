@@ -40,19 +40,20 @@ vardict = {
 }
 
 
-TODO:
-    documentation for simple vars. (And quant_tracking for simple vars)
-    Add units to vars.
+[TODO]:
+    - [FIX] Solve sad interaction between self.variables checking and quant_tracking.
+        - E.g. get_var('r') after initialization of EbysusData confuses quant_tracking,
+            because it returns the data in self.r immediately, instead of loading a quantity.
+
 """
 
 # import built-ins
 import math #for pretty strings
 import collections
 import functools
-import types  # for MethodType
+import copy   # for deepcopy for QuantTree
 
 # import internal modules
-from . import file_memory
 from . import units       # not used heavily; just here for setting defaults, and setting obj.get_units
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
@@ -202,12 +203,18 @@ def create_vardict(obj):
     obj.get_var('')
     setattr(obj, CREATING_VARDICT, False)
     # set some other useful functions in obj.
-    obj.gotten_vars    = types.MethodType(gotten_vars, obj)
-    obj.got_vars_tree  = types.MethodType(got_vars_tree, obj)
-    obj.get_quant_info = types.MethodType(get_quant_info, obj)
+    def _make_weak_bound_method(f):
+        @functools.wraps(f)
+        def _weak_bound_method(*args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            return f(obj, *args, **kwargs)   # << obj which was passed to create_vardict
+        return _weak_bound_method
+    obj.gotten_vars    = _make_weak_bound_method(gotten_vars)
+    obj.got_vars_tree  = _make_weak_bound_method(got_vars_tree)
+    obj.get_quant_info = _make_weak_bound_method(get_quant_info)
     obj.get_var_info   = obj.get_quant_info   # alias
-    obj.quant_lookup   = types.MethodType(quant_lookup, obj)
-    obj.get_units      = types.MethodType(units.get_units, obj)
+    obj.quant_lookup   = _make_weak_bound_method(quant_lookup)
+    obj.get_units      = _make_weak_bound_method(units.get_units)
 
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
@@ -395,6 +402,33 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
     obj.search_vardict = _search_vardict
 
 
+''' --------------------- restore attrs --------------------- '''
+
+# this helper function probably should go in another file, but this is the best place for it for now.
+
+def maintain_attrs(*attrs):
+    '''return decorator which restores attrs of obj after running function.
+    It is assumed that obj is the first arg of function.
+    '''
+    def attr_restorer(f):
+        @functools.wraps(f)
+        def f_but_maintain_attrs(obj, *args, **kwargs):
+            '''f but attrs are maintained.'''
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            memory = dict()  # dict of attrs to maintain
+            for attr in attrs:
+                if hasattr(obj, attr):
+                    memory[attr] = getattr(obj, attr)
+            try:
+                return f(obj, *args, **kwargs)
+            finally:
+                # restore attrs
+                for attr, val in memory.items(): 
+                    setattr(obj, attr, val)
+        return f_but_maintain_attrs
+    return attr_restorer
+
+
 ''' ----------------------------- quant tracking ----------------------------- '''
 
 QuantInfo = collections.namedtuple('QuantInfo', ('varname', 'quant', 'typequant', 'metaquant', 'level'),
@@ -522,15 +556,27 @@ def quant_tracking_simple(typequant, metaquant=None):
     return decorator
 
 class QuantTree:
-    '''use for tree representation of quants.'''
-    def __init__(self, data, level=0):
+    '''use for tree representation of quants.
+
+    Notes:
+    - level should always be larger for children than for their parents.
+    '''
+    def __init__(self, data, level=-1):
         self.data     = data
         self.children = []
         self._level   = level
+        self.hide_level = None
 
-    def add_child(self, child):
+    def add_child(self, child, adjusted_level=False):
+        '''add child to self.
+
+        If child is QuantTree and adjusted_level=True,
+            instead append a copy of child, with its _level adjusted to self._level + 1
+        '''
         if isinstance(child, QuantTree):
-            self.children.append(child)
+            if adjusted_level:
+                child = child.with_adjusted_base_level(self._level + 1)
+            self.children.append(child)   # newest child goes at end of list.
         else:
             child = QuantTree(child, level=self._level + 1)
             self.add_child(child)
@@ -540,16 +586,44 @@ class QuantTree:
         self.data = data
 
     def __str__(self):
-        fmtdict = dict(level=self._level, data=self.data)
+        lvlstr = ' '*self._level + '(L{level}) '.format(level=self._level)
+        # check hide level. if level >= hide_level, hide.
+        if self.hide_level is not None:
+            if self._level >= self.hide_level:
+                return (lvlstr + '{}').format(repr(self))
+        # << if I reach this line it means I am not hiding myself.
+        # if no children, return string with level and data.
         if len(self.children) == 0:
-            return '(L{level}) {data}'.format(**fmtdict)
-        else:
-            space = ' '*(self._level + 1)
-            return '(L{level}) {data} : {children}'.format(**fmtdict,
-                        children=','.join(['\n' + space + str(child) for child in self.children]))
+            return (lvlstr + '{data}').format(data=self.data)
+        # else, we have children, so return a string with level, data, and children
+        def _child_to_str(child):
+            return '\n' + child.str(self.hide_level, count_from_here=False)
+        children_strs = ','.join([_child_to_str(child) for child in self.children])
+        return (lvlstr + '{data} : {children}').format(data=self.data, children=children_strs)
 
     def __repr__(self):
-        return '<{}. For pretty formatting of contents, print or convert to string.>'.format(object.__repr__(self))
+        if isinstance(self.data, QuantInfo):
+            qi_str = "(varname='{}', quant='{}')".format(self.data.varname, self.data.quant)
+        else:
+            qi_str = ''
+        fmtdict = dict(qi_str=qi_str, hexid=hex(id(self)), Nnode=1 + self.count_descendants())
+        return '<<QuantTree{qi_str} at {hexid}> with {Nnode} nodes.>'.format(**fmtdict)
+
+    def str(self, hide_level=None, count_from_here=True):
+        '''sets self.hide_level, returns str(self).
+        restores self.hide_level to its original value before returning result.
+
+        if count_from_here, only hides after getting hide_level more levels deep than we are now.
+        (e.g. if count_from_here, and self is level 7, and hide_level is 3: hides level 10 and greater.)
+        '''
+        orig_hide = self.hide_level
+        if count_from_here and (hide_level is not None):
+            hide_level = hide_level + self._level
+        self.hide_level = hide_level
+        try:
+            return self.__str__()
+        finally:
+            self.hide_level = orig_hide
 
     def get_child(self, i_child=0, oldest_first=True):
         '''returns the child determined by index i_child.
@@ -563,15 +637,56 @@ class QuantTree:
         oldest_first: True (default) or False.
             Determines the ordering convention for children:
             True --> sort from oldest to youngest (0 is the oldest child (added first)).
-                     Equivalent to self.children[::-1][i_child]
-            False -> sort from youngest to oldest (0 is the youngest child (added most-recently)).
                      Equivalent to self.children[i_child]
+            False -> sort from youngest to oldest (0 is the youngest child (added most-recently)).
+                     Equivalent to self.children[::-1][i_child]
         '''
         if oldest_first:
-            return self.children[::-1][i_child]
-        else:
             return self.children[i_child]
+        else:
+            return self.children[::-1][i_child]
         
+    def set_base_level(self, level):
+        '''sets self._level to level; also adjusts level of all children appropriately.
+
+        Example: self._level==2, self.children[0]._level==3;
+            self.set_base_level(0) --> self._level==0, self.children[0]._level==1
+        '''
+        lsubtract = self._level - level
+        self._adjust_base_level(lsubtract)
+
+    def _adjust_base_level(self, l_subtract):
+        '''sets self._level to self._level - l_subtract.
+        Also decreases level of all children by ldiff, and all childrens' children, etc.
+        '''
+        self._level -= l_subtract
+        for child in self.children:
+            child._adjust_base_level(l_subtract)
+
+    def with_adjusted_base_level(self, level):
+        '''set_base_level(self) except it is nondestructive, i.e. sets level for a deepcopy of self.
+        returns the copy with the base level set to level.
+        '''
+        result = copy.deepcopy(self)
+        result.set_base_level(level)
+        return result
+
+    def count_descendants(self):
+        '''returns total number of descendants (children, childrens' children, etc) of self.'''
+        result = len(self.children)
+        for child in self.children:
+            result += child.count_descendants()
+        return result
+
+
+def _get_orig_tree(obj):
+    '''gets QUANTS_TREE from obj (when LOADING_LEVEL is not -1; else, returns a new QuantTree).'''
+    loading_level = getattr(obj, LOADING_LEVEL, -1) # get loading_level. Outside of f, the default is -1.
+    if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
+        orig_tree = QuantTree(None, level=-1)
+    else:
+        orig_tree = getattr(obj, QUANTS_TREE)
+    return orig_tree
 
 def quant_tree_tracking(f):
     '''wrapper for f which makes it track quant tree.
@@ -598,22 +713,13 @@ def quant_tree_tracking(f):
     @functools.wraps(f)
     def f_but_quant_tree_tracking(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        # get loading_level. Outside of any f, the default is -1.
-        loading_level = getattr(obj, LOADING_LEVEL, -1)
-        if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
-            orig_tree = QuantTree(None, level=-1)
-        else:
-            orig_tree = getattr(obj, QUANTS_TREE)
+        orig_tree  = _get_orig_tree(obj)
         tree_child = orig_tree.add_child(None)
         setattr(obj, QUANTS_TREE, tree_child)
         # call f.
         result = f(obj, varname, *args, **kwargs)
         # retore original tree. (The data is set by f, via _track_quants_selected and quant_tracking_top_level)
-        #print('>> After getting var =',repr(varname),'the tree looks like:')
-        #print(getattr(obj, QUANTS_TREE))
         setattr(obj, QUANTS_TREE, orig_tree)
-        #print('>>>> Meanwhile, the original tree for var =',repr(varname),'now looks like:')
-        #print(orig_tree)
         # return result of f.
         return result
     return f_but_quant_tree_tracking
@@ -621,7 +727,7 @@ def quant_tree_tracking(f):
 def quant_tracking_top_level(f):
     '''decorator which improves quant tracking. (decorate _load_quantities using this.)'''
     @quant_tree_tracking
-    @file_memory.maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
+    @maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
@@ -639,6 +745,51 @@ def quant_tracking_top_level(f):
     return f_but_quant_tracking_level
 
 
+def get_quant_tracking_state(obj, from_internal=False):
+    '''returns quant tracking state of obj.
+    The state includes only the quant_tree and the quant_selected.
+
+    from_internal: False (default) or True
+        True  <-> use when we are caching due to a "with Caching(...)" block.
+        False <-> use when we are caching due to the "@with_caching" wrapper.
+    '''
+    if not hasattr(obj, QUANTS_TREE):   # not sure if this ever happens.
+        quants_tree = QuantTree(None)   #   if it does, return an empty QuantTree so we don't crash.
+    elif from_internal:   # we are saving state while INSIDE quant_tree_tracking (inside _load_quantity).
+        # QUANTS_TREE looks like QuantTree(None) but it is the child of the tree which will have
+        ## the data that we are getting from this call of get_var (which we are inside now).
+        ## Thus, when the call to get_var is completed, the data for this tree will be filled
+        ## with the appropriate QuantInfo about the quant we are getting now.
+        quants_tree = getattr(obj, QUANTS_TREE) 
+    else:                 # we are saving state while OUTSIDE quant_tree_tracking (outside _load_quantity).
+        # QUANTS_TREE looks like [None : [..., QuantTree(QuantInfo( v ))]] where
+        ## v is the var we just got with the latest call to _load_quantity.
+        quants_tree = getattr(obj, QUANTS_TREE).get_child(-1)  # get the newest child.
+    state = dict(quants_tree    = quants_tree,
+                 quant_selected = getattr(obj, QUANT_SELECTED, QuantInfo(None)),
+                 _from_internal = from_internal,  # not used, but maybe helpful for debugging.
+                 _ever_restored = False # whether we have ever restored this state.
+                )
+    return state
+
+def restore_quant_tracking_state(obj, state):
+    '''restores the quant tracking state of obj.'''
+    state_tree   = state['quants_tree']
+    obj_tree     = _get_orig_tree(obj)
+    child_to_add = state_tree   # add state tree as child of obj_tree.
+    if not state['_ever_restored']:
+        state['_ever_restored'] = True
+        if isinstance(child_to_add.data, QuantInfo):
+            # adjust level of top QuantInfo in tree, to indicate it is from cache.
+            q = child_to_add.data._asdict()
+            q['level'] = str(q['level']) + ' (FROM CACHE)'
+            child_to_add.data = QuantInfo(**q)
+    # add child to obj_tree.
+    obj_tree.add_child(child_to_add, adjusted_level=True)
+    setattr(obj, QUANTS_TREE, obj_tree)
+    # set QUANT_SELECTED.
+    selected = state.get('quant_selected', QuantInfo(None))
+    setattr(obj, QUANT_SELECTED, selected)
 
 
 ''' ----------------------------- quant tracking - lookup ----------------------------- '''
@@ -691,12 +842,14 @@ def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info:
         result.append(info)
     return result
 
-def got_vars_tree(obj, as_data=False, i_child=0, oldest_first=True):
+def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=True):
     '''prints QUANTS_TREE for obj.
     This tree shows the vars which were gotten during the most recent "level 0" call to get_var.
     (Calls to get_var from outside of helita have level == 0.)
 
     Use as_data=True to return the QuantTree object instead of printing it.
+
+    Use hide_level=N to hide all layers of the tree with L >= N.
 
     Use i_child to get a child other than children[-1] (default).
         Note that if you are calling got_vars_tree externally (not inside any calls to get_var),
@@ -717,7 +870,7 @@ def got_vars_tree(obj, as_data=False, i_child=0, oldest_first=True):
     if as_data:
         return quants_tree
     else:
-        print(quants_tree)
+        print(quants_tree.str(hide_level=hide_level))
 
 def quant_lookup(obj, quant_info):
     '''returns entry in obj.vardict related to quant_info (a QuantInfo object).
