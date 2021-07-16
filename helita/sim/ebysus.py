@@ -1010,13 +1010,14 @@ class EbysusData(BifrostData):
             for it in range(0, snapLen):
                 self.snapInd = it
                 # print update if it is time to print update
-                if (print_freq > 0) and (time.time() - now > print_freq):
-                    _print_clearline()
-                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
-                                    var,     snap[it],         it,    snapLen        ), end='')
-                    now = time.time()
-                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
-                    printed_update=True
+                if self.verbose: 
+                    if (print_freq > 0) and (time.time() - now > print_freq):
+                        _print_clearline()
+                        print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
+                                        var,     snap[it],         it,    snapLen        ), end='')
+                        now = time.time()
+                        print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                        printed_update=True
                     
                 # actually get the values here:
                 value[..., it] = self.get_var(var, snap=snap[it],
