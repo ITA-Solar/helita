@@ -7,6 +7,7 @@ import os
 import functools
 import weakref
 from glob import glob
+import warnings
 
 # import external public modules
 import numpy as np
@@ -375,20 +376,16 @@ class BifrostData(object):
                     np.repeat(self.dzidzdn[-1], self.nb)))
                 self.nz = self.nzb
         else:  # no mesh file
-            if self.verbose:
-                if (firstime):
-                    print('(WWW) Mesh file %s does not exist.' % meshfile)
             if self.dx == 0.0:
                 self.dx = 1.0
             if self.dy == 0.0:
                 self.dy = 1.0
             if self.dz == 0.0:
                 self.dz = 1.0
-            if self.verbose:
-                if (firstime):
-                    print(('(WWW) Creating uniform grid with [dx,dy,dz] = '
-                        '[%f,%f,%f]') % (self.dx, self.dy, self.dz),
-                        2 * whsp, end="\r", flush=True)
+            if self.verbose and firstime:
+                warnings.warn(('Mesh file {mf} does not exist. Creating uniform grid '
+                               'with (dx,dy,dz)=({dx:.2e},{dy:.2e},{dz:.2e})').format(
+                               mf=repr(meshfile), dx=self.dx, dy=self.dy, dz=self.dz))
             # x
             self.x = np.arange(self.nx) * self.dx
             self.xdn = self.x - 0.5 * self.dx
