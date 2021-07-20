@@ -1547,13 +1547,27 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
 # default
 _THERMAL_INSTAB_QUANT  = ['thermal_growth_rate',
                           'thermal_freq', 'thermal_tan2xopt',
-                          'thermal_xopt', 'thermal_xopt_rad', 'thermal_xopt_deg']
+                          'thermal_xopt', 'thermal_xopt_rad', 'thermal_xopt_deg',
+                          'ethermal_s0', 'ethermal_tan2xopt',
+                          'ethermal_xopt', 'ethermal_xopt_rad', 'ethermal_xopt_deg',
+                          ]
 _THERMAL_INSTAB_VECS   = ['thermal_u0', 'thermal_v0']
 _THERMAL_INSTAB_QUANT += [v+x for v in _THERMAL_INSTAB_VECS for x in AXES]
 ## add thermal_growth_rate with combinations of terms.
+### LEGACY: assumes we are using optimal angle for ion thermal plus FB effects;
+### the code implements a formula where the optimal angle is plugged in already.
+### NON-LEGACY: allows to plug in the optimal angle.
+_LEGACY_THERMAL_GROWRATE_QUANTS  = ['legacy_thermal_growth_rate' + x for x in ['', '_fb', '_thermal', '_damping']]
+_LEGACY_THERMAL_GROWRATE_QUANTS += [quant+'_max' for quant in _THERMAL_GROWRATE_QUANTS]
+_THERMAL_INSTAB_QUANT           += _LEGACY_THERMAL_GROWRATE_QUANTS
+
 _THERMAL_GROWRATE_QUANTS  = ['thermal_growth_rate' + x for x in ['', '_fb', '_thermal', '_damping']]
 _THERMAL_GROWRATE_QUANTS += [quant+'_max' for quant in _THERMAL_GROWRATE_QUANTS]
-_THERMAL_INSTAB_QUANT += _THERMAL_GROWRATE_QUANTS
+_THERMAL_INSTAB_QUANT    += _THERMAL_GROWRATE_QUANTS
+_ETHERMAL_GROWRATE_QUANTS   = ['ethermal_growth_rate' + x for x in ['', '_fb', '_it', '_et', '_damping']]
+_ETHERMAL_GROWRATE_QUANTS  += [quant+'_max' for quant in _ETHERMAL_GROWRATE_QUANTS]
+_THERMAL_INSTAB_QUANT      += _ETHERMAL_GROWRATE_QUANTS
+
 _THERMAL_INSTAB_QUANT = ('THERMAL_INSTAB_QUANT', _THERMAL_INSTAB_QUANT)
 # get_value
 @document_vars.quant_tracking_simple(_THERMAL_INSTAB_QUANT[0])
@@ -1572,14 +1586,7 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _THERMAL_INSTAB_QUANT[0], THERMAL_INSTAB_QUANT,
                                            get_thermal_instab_quant.__doc__, nfluid=1)
-    docvar('thermal_growth_rate', 'thermal instability optimal growth rate divided by wavenumber (k) squared. ' +\
-                  'result is in units of [simu. frequency * simu. length^2].',
-                  nfluid=1, uni=UNI_hz * UNI_length**2)
-    docvar('thermal_growth_rate_max', 'thermal_growth_rate times (maximum resolvable wavenumber squared).', nfluid=1, uni=UNI_hz)
-    for x in ['fb', 'thermal', 'damping']:
-      docvar('thermal_growth_rate_'+x, 'thermal instability optimal growth rate divided by wavenumber (k) squared, ' +\
-                  'but just the '+x+' term. Result is in units of [simu. frequency * simu. length^2].',
-                  nfluid=1, uni=UNI_hz * UNI_length**2)
+    # document ion thermal stuff. (Intrinsically coupled to FB and diffusion effects.)
     for thermal_xopt_rad in ['thermal_xopt', 'thermal_xopt_rad']:
       docvar(thermal_xopt_rad, 'thermal instability optimal angle between k and (Ve - Vi) to maximize growth.' +\
                 'result will be in radians. Result will be between -pi/4 and pi/4.', nfluid=1,
@@ -1594,6 +1601,56 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
     for x in AXES:
       docvar('thermal_v0'+x, x+'-component of E x B / B^2. Warning: proper interpolation not yet implemented.',
                             nfluid=0, uni=UNI_speed)
+    # document electron thermal stuff. (Intrinsically coupled to ion thermal, FB, and diffusion effects.)
+    docvar('ethermal_s0', 'S0 = S / sin(2 * ethermal_xopt). (Used in calculated ethermal effects.)' +\
+                          'ifluid must be ion; jfluid must be neutral.', nfluid=2, uni=DIMENSIONLESS)
+    docvar('ethermal_tan2xopt', 'tangent of 2 times ethermal_xopt', nfluid=2, uni=DIMENSIONLESS)
+    docvar('ethermal_xopt', 'ethermal instability optimal angle between k and (Ve - Vi) to maximize growth, ' +\
+                            'when accounting for ion thermal, electron thermal, and Farley-Buneman effects. ' +\
+                            'result will be in radians, and between -pi/4 and pi/4.', nfluid=2,
+                            uni_f=UNITS_FACTOR_1, uni_name='radians')
+    # document ion thermal growrate terms
+    for growquant in _LEGACY_THERMAL_GROWRATE_QUANTS + _THERMAL_GROWRATE_QUANTS + _ETHERMAL_GROWRATE_QUANTS:
+      # build docstring depending on growquant. final will be sGR + sMAX + sINC + sLEG.
+      # determine if MAX.
+      q, ismax, m = growquant.partition('_max')
+      if m != '':
+        continue # looks like '..._max_moretext'. Unrecognized format. Don't document.
+      if ismax:
+        sMAX = 'using wavenumber = 2*pi/(pixel width). result units are [simu. frequency].'
+        units = UNI_hz
+      else:
+        sMAX = 'divided by wavenumber squared. result units are [(simu. frequency) * (simu. length)^2].'
+        units = UNI_hz * UNI_length**2
+      # split (take away the 'thermal_growth_rate' part).
+      e, _, terms = q.partition('thermal_growth_rate')
+      # determine if electron thermal is included.
+      if e == 'e':
+        sGR = 'Optimal growth rate for [electron thermal plus ion thermal plus Farley-Buneman] instability '
+        nfluid = 2
+      else:
+        sGR = 'Optimal growth rate for [ion thermal plus Farley-Buneman] instability '
+        nfluid = 1
+      # determine which term or terms we are INCluding
+      if terms == '':
+        sINC = ''
+      elif terms == '_fb':
+        sINC = ' Includes only the FB term. (No thermal, no damping.)'
+      elif terms == '_damping':
+        sINC = ' Includes only the damping term. (No FB, no thermal.)'
+      elif terms == '_thermal':  # (only available if electron thermal is NOT included)
+        sINC = ' Includes only the ion thermal term. (No FB, no damping.)'
+      elif terms == '_it':       # (only available if electron thermal IS included)
+        sINC = ' Includes only the ion thermal term. (No FB, no damping, no electron thermal.)'
+      elif terms == '_et':       # (only available if electron thermal IS included)
+        sINC = ' Includes only the electron thermal term. (No FB, no damping, no ion thermal.)'
+      # determine if LEGacy.
+      if q.startswith('legacy'):
+        sLEG = ' Calculated using formula where optimal angle has already been entered.'
+      else:
+        sLEG = ''
+      # actually document.
+      docvar(growquant, sGR + sMAX + sINC + sLEG, nfluid=nfluid, uni=units)
     return None
 
   #if quant not in THERMAL_INSTAB_QUANT:
@@ -1603,37 +1660,84 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
     '''checks that ifluid is ion and jfluid is neutral. Only checks up to nfluid. raise error if bad.'''
     if nfluid >=1:
       icharge = obj.get_charge(obj.ifluid)
-      if icharge == 0:
-        raise ValueError('Expected ion or electron ifluid for Thermal Instability quants, but got neutral ifluid.')
-      elif icharge < 0:
-        raise ValueError('Electron Thermal Instability quantities not yet implemented. ispecies<0 not allowed.')
+      if icharge <= 0:
+        raise ValueError('Expected ion ifluid for Thermal Instability quants, but got charge(ifluid)={}.'.format(icharge))
     if nfluid >=2:
-      if obj.get_charge(obj.jfluid) != 0:
-        raise ValueError('Expected neutral jfluid but got non-neutral jfluid.')
+      jcharge = obj.get_charge(obj.jfluid)
+      if jcharge != 0:
+        raise ValueError('Expected neutral jfluid but got charge(jfluid)={}.'.format(jcharge))
     return True
 
-  if quant.startswith('thermal_growth_rate'):
-    check_fluids_ok(nfluid=1)
-    if '_max' in quant:
-      quant = quant.replace('_max', '')
-      k2 = max(obj.get_kmax())**2      # units [simu. length^-2]. (cancels with the [simu. length^2] from non-"_max" quant.
+  if '_max' in quant:
+    if 'thermal_growth_rate' in quant:
+      q_without_max = quant.replace('_max', '')
+      k2 = max(obj.get_kmax())**2   # units [simu. length^-2]. (cancels with the [simu. length^2] from non-"_max" quant.)
+      result = obj.get_var(q_without_max)
+      result *= k2
+      return result
+
+  elif quant.startswith('thermal_growth_rate') or quant.startswith('ethermal_growth_rate'):
+    # determine included terms.
+    if quant=='ethermal_growth_rate':
+        include_terms = ['fb', 'it', 'et', 'damping']
+    elif quant=='thermal_growth_rate':
+      include_terms = ['fb', 'thermal', 'damping']
     else:
-      k2 = 1
-    if quant=='thermal_growth_rate':
+      include_terms = quant.split('_')[3:]
+    # do prep work; calculate coefficient which is in front of all terms.
+    psi    = obj.get_var('psi0')
+    U02    = obj.get_var('thermal_u02')  # U_0^2
+    nu_in  = obj.get_var('nu_sn')        # sum_{j for j in neutrals and j!=i} (nu_ij) 
+    front_coeff = psi * U02 / ((1 + psi) * nu_in)   # leading coefficient (applies to all terms)
+    # do prep work; calculate components which appear in multiple terms.
+    def any_included(*check):
+      return any((x in include_terms for x in check))
+    if any_included('fb', 'thermal', 'it'):
+      kappai = obj.get_var('kappa')
+    if any_included('et', 'damping'):
+      Cs     = obj.get_var('ci')
+      Cs2_over_U02 = Cs**2 / U02
+    if any_included('fb', 'thermal', 'it', 'et'):
+      s_getX = 'ethermal_xopt' if quant.startswith('e') else 'thermal_xopt'
+      X      = obj.get_var(s_getX)
+      cosX   = np.cos(X)
+      sinX   = np.sin(X)
+    if any_included('et'):
+      sin2X  = np.sin(2*X)
+      S0     = obj.get_var('ethermal_s0')
+    # calculating terms and returning result.
+    result = obj.zero()
+    if any_included('fb'):
+      term_fb = (1 - kappai**2) * cosX**2 / (1 + psi)**2
+      result += term_fb
+    if any_included('thermal', 'it'):
+      term_it = (2 / 3) * (kappai**2 * cosX**2 - kappai * cosX * sinX) / (1 + psi)
+      result += term_it
+    if any_included('et'):
+      term_et = (2 / 3) * Cs2_over_U02 * (S0**2 * sin2X**2 - (17/5) * S0 * sin2X)
+      result += term_et
+    if any_included('damping'):
+      term_dp = -1 * Cs2_over_U02
+      result += term_dp
+    result *= front_coeff
+    return result
+
+  elif quant.startswith('legacy_thermal_growth_rate'):
+    if quant=='legacy_thermal_growth_rate':
       include_terms = ['fb', 'thermal', 'damping']
     else:
       include_terms = quant.split('_')[3:]
     # prep work
-    result = obj.zero()
     psi    = obj.get_var('psi0')
     U02    = obj.get_var('thermal_u02')  # U_0^2
-    nu_in  = obj.get_var('nu_sn')
+    nu_in  = obj.get_var('nu_sn')        # sum_{j for j in neutrals and j!=i} (nu_ij) 
     front_coeff = psi * U02 / ((1 + psi) * nu_in)   # leading coefficient (applies to all terms)
     if 'fb' in include_terms or 'thermal' in include_terms:
       # if calculating fb or thermal terms, need to know these values:
       ki2  = obj.get_var('kappa')**2     # kappa_i^2
       A    = (8 + (1 - ki2)**2 + 4 * psi * ki2)**(-1/2)
     # calculating terms
+    result = obj.zero()
     if 'fb' in include_terms:
       fbterm    = (1 - ki2) * (1 + (3 - ki2) * A) / (2 * (1 + psi)**2)
       result += fbterm
@@ -1646,8 +1750,6 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
       result += dampterm
     # multiply by leading coefficient
     result *= front_coeff
-    # multiply by k^2 (1 unless '_max' in name of quant)
-    result *= k2
     return result
 
   elif quant in ['thermal_u0'+x for x in AXES]:
@@ -1682,3 +1784,40 @@ def get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=None):
 
   elif quant == 'thermal_xopt_deg':
     return np.rad2deg(obj.get_var('thermal_xopt_rad'))
+
+  # begin electron thermal quants
+  elif quant == 'ethermal_s0':
+    # S = S0 sin(2 * xopt).
+    # S0 = (psi / (1+psi)) (gyro_i / (delta_en nu_en)) (V0^2 / C_s^2)
+    check_fluids_ok(nfluid=2)
+    psi      = obj.get_var('psi0')
+    gyroi    = obj.get_var('gyrof')
+    with obj.MaintainFluids():
+      nu_en  = obj.get_var('nu_sn', iS=-1)
+    m_n = obj.get_mass(obj.mf_jspecies, units='amu')
+    m_e = obj.get_mass(-1, units='amu')
+    delta_en = 2 * m_e / (m_e + m_n)
+    V02      = obj.get_var('thermal_v02')  # V0^2
+    Cs2      = obj.get_var('ci')**2        # Cs^2
+    factor1 = psi / (1 + psi)
+    factor2 = gyroi / (delta_en * nu_en)
+    factor3 = V02 / Cs2
+    return factor1 * factor2 * factor3
+
+  elif quant == 'ethermal_tan2xopt':
+    # optimal tan(2\chi)... see Sam's derivation (available upon request).
+    # (Assumes |4 * thermal_s0 * sin(2 xopt)| << 34 / 5)
+    check_fluids_ok(nfluid=1)
+    S0     = obj.get_var('ethermal_s0')
+    kappai = obj.get_var('kappa')
+    psi    = obj.get_var('psi0')
+    U02    = obj.get_var('thermal_u02')  # V0^2
+    Cs2    = obj.get_var('ci')**2        # Cs^2
+
+    c1 = - (1 - kappai**2)/(1 + psi)**2  -  2 * kappai**2 / (3 * (1 + psi))
+    c2 = - 2 * kappai / (3 * (1 + psi))  -  (68 / 15) * (Cs2 / U02) * S0
+    return - c2 / c1
+  
+  elif quant in ['ethermal_xopt', 'ethermal_xopt_rad']:
+    #TODO: think about which results are being dropped because np.arctan is not multi-valued.
+    return 0.5 * np.arctan(obj.get_var('ethermal_tan2xopt'))
