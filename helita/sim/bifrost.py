@@ -1170,6 +1170,31 @@ class BifrostData(object):
         '''
         return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
 
+    def get_varu(self, *args__get_var, mode='si', **kwargs__get_var):
+        '''get_var() then get_units() and return (result * units factor, units name).
+        e.g. r = self.get_var('r'); units = self.get_units('si'); return (r*units.factor, units.name).
+        e.g. self.get_varu('r') --> (r * units.factor, 'kg / m^{3}')
+        '''
+        x = self.get_var(*args__get_var, **kwargs__get_var)
+        u = self.get_units(mode=mode)
+        return (x * u.factor, u.name)
+
+    def get_varU(self, *args__get_var, mode='si', **kwargs__get_var):
+        '''get_varm() then get_units and return (result * units factor, units name).
+        equivalent to: x=self.get_varu(...); return (np.mean(x[0]), x[1]).
+        '''
+        x = self.get_varm(*args__get_var, **kwargs__get_var)
+        u = self.get_units(mode=mode)
+        return (x * u.factor, u.name)
+
+    get_varmu = get_varum = get_varU  # aliases for get_varU
+
+    def get_varV(self, var, *args__get_var, mode='si', **kwargs__get_var):
+        '''returns get_varU('mod'+var, mode=mode), get_unit_vector(var, mean=True).'''
+        mod = self.get_varU('mod'+var, *args__get_var, **kwargs__get_var)
+        hat = self.get_unit_vector(var, mean=True, **kwargs__get_var)
+        return (mod, hat)
+
     def zero(self):
         '''return np.zeros_like(self.r, subok=False).
         (an array of zeros with same shape and dtype like self.r but which is not a memmap.)
