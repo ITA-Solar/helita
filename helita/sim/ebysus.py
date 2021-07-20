@@ -495,7 +495,7 @@ class EbysusData(BifrostData):
         Also, restores self.ifluid and self.jfluid afterwards.
         Also, restores self.match_type afterwards.
         '''
-        __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
+        __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables, if metadata is appropriate.
         if var in self.variables and self._metadata_matches(self.variables.get('metadata', dict())):
             return self.variables[var]
