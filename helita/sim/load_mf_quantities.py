@@ -1558,7 +1558,7 @@ _THERMAL_INSTAB_QUANT += [v+x for v in _THERMAL_INSTAB_VECS for x in AXES]
 ### the code implements a formula where the optimal angle is plugged in already.
 ### NON-LEGACY: allows to plug in the optimal angle.
 _LEGACY_THERMAL_GROWRATE_QUANTS  = ['legacy_thermal_growth_rate' + x for x in ['', '_fb', '_thermal', '_damping']]
-_LEGACY_THERMAL_GROWRATE_QUANTS += [quant+'_max' for quant in _THERMAL_GROWRATE_QUANTS]
+_LEGACY_THERMAL_GROWRATE_QUANTS += [quant+'_max' for quant in _LEGACY_THERMAL_GROWRATE_QUANTS]
 _THERMAL_INSTAB_QUANT           += _LEGACY_THERMAL_GROWRATE_QUANTS
 
 _THERMAL_GROWRATE_QUANTS  = ['thermal_growth_rate' + x for x in ['', '_fb', '_thermal', '_damping']]
