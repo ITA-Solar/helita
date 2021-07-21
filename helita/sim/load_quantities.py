@@ -540,11 +540,12 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _COLFRI_QUANT[0], COLFRI_QUANT, get_collision_ms.__doc__)
 
-  if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT:
+  if quant not in COLFRI_QUANT:
     return None
 
-  if ((quant == 'nu_ni_mag') or (quant == 'nu_ni')):
+  elif quant in ('nu_ni_mag', 'nu_ni', 'numx_ni_mag', 'numx_ni'):
     result = np.zeros(np.shape(obj.r))
+    s_nu, _, ni_mag = quant.partition('_')  # s_numx = nu or numx
     for ielem in ELEMLIST: 
       if ielem in ELEMLIST[2:] and '_mag' in quant: 
         const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
@@ -553,36 +554,20 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
         const = 1.0
         mag=''
 
+      nelem_1 = 'n{elem}-1'.format(elem=ielem)
+      nuelem1_imag = '{nu}{elem}1_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
       result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-1' % ielem) * const * \
-              obj.get_var('nu%s1_i%s'% (ielem,mag), **kwargs)
+              obj.get_var(nelem_1) * const * \
+              obj.get_var(nuelem1_imag, **kwargs)
 
       if ((ielem in ELEMLIST[2:]) and ('_mag' in quant)): 
+        nelem_2 = 'n{elem}-2'.format(elem=ielem)
+        nuelem2_imag = '{nu}{elem}2_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
         result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-2' % ielem) * const * \
-              obj.get_var('nu%s2_i%s'% (ielem,mag), **kwargs)
+              obj.get_var(nelem_2) * const * \
+              obj.get_var(nuelem2_imag, **kwargs)               
 
-
-  if ((quant == 'numx_ni_mag') or (quant == 'numx_ni')):
-    result = np.zeros(np.shape(obj.r))
-    for ielem in ELEMLIST: 
-      if ielem in ELEMLIST[2:] and '_mag' in quant: 
-        const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
-        mag='_mag'
-      else: 
-        const = 1.0
-        mag=''
-
-      result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-1' % ielem) * const * \
-              obj.get_var('numx%s1_i%s'% (ielem,mag), **kwargs)
-
-      if ((ielem in ELEMLIST[2:]) and ('_mag' in quant)): 
-        result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-2' % ielem) * const * \
-              obj.get_var('numx%s2_i%s'% (ielem,mag), **kwargs)                
-
-  if ((quant == 'nu_in_mag') or (quant == 'nu_in')):
+  elif ((quant == 'nu_in_mag') or (quant == 'nu_in')):
     result = np.zeros(np.shape(obj.r))
     for ielem in ELEMLIST:
       if (ielem in ELEMLIST[2:] and '_mag' in quant): 
