@@ -1031,8 +1031,8 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
     part += 4.0 * obj.get_var('nhe3')
   # check units of n
   return np.sqrt(obj.uni.permsi / obj.uni.qsi_electron**2 /
-                 (obj.uni.ksi_b * tg.astype('Float64') *
-                  part.astype('Float64') + 1.0e-20))
+                 (obj.uni.ksi_b * tg.astype('float64') *
+                  part.astype('float64') + 1.0e-20))
 
 
 # default
@@ -1045,7 +1045,8 @@ _IONP_QUANT = ('IONP_QUANT', _IONP_QUANT)
 @document_vars.quant_tracking_simple(_IONP_QUANT[0])
 def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   '''
-  densities for specific ionized species
+  densities for specific ionized species.
+  For example, nc-1 gives number density of neutral carbon, in cm^-3. nc-2 is for once-ionized carbon.
   '''
   if (IONP_QUANT is None):
     IONP_QUANT = _IONP_QUANT[1]
