@@ -606,6 +606,7 @@ class BifrostData(object):
         self.varn['by'] = 'by'
         self.varn['bz'] = 'bz'
         
+    @document_vars.quant_tracking_top_level
     def get_var(self, var, snap=None, *args, iix=slice(None), iiy=slice(None),
                 iiz=slice(None), **kwargs):
         """

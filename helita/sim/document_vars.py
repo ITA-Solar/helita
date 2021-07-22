@@ -731,7 +731,8 @@ def quant_tracking_top_level(f):
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        setattr(obj, LOADING_LEVEL, getattr(obj, LOADING_LEVEL, -1) + 1) # increment LOADING_LEVEL.
+        setattr(obj, LOADING_LEVEL, getattr(obj, LOADING_LEVEL, -2) + 1) # increment LOADING_LEVEL.
+        # << if obj didn't have LOADING_LEVEL, its LOADING_LEVEL will now be -1.
         setattr(obj, VARNAME_INPUT, varname)      # save name of the variable which was input.
         setattr(obj, QUANT_SELECTED, QuantInfo(None))  # smash QUANT_SELECTED before doing f.
         result = f(obj, varname, *args, **kwargs)
