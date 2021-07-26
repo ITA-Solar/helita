@@ -119,6 +119,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     docvar('e_ef', 'energy density in electric field [simu. energy density units]', **units_e)
     docvar('e_b', 'energy density in magnetic field [simu. energy density units]', **units_e)
     docvar('total_energy', 'total energy density. tot_e + tot_ke + e_ef + e_b [simu units].', **units_e)
+    docvar('resistivity', 'total resistivity of the plasma. sum of partial resistivity [(simu. E-field units)/(simu. current per area units)]', uni_f=UNI.resistivity, usi_name=(Usym('V'))/(Usym('A')*Usym('m')))
     for axis in AXES:
       docvar('tot_p'+axis, 'sum of '+axis+'-momentum densities of all fluids [simu. mom. dens. units] ' +\
                            'NOTE: does not include "electron momentum" which is assumed to be ~= 0.',
@@ -171,6 +172,15 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     eps0 = obj.uni.permsi       # epsilon_0 [SI units]
     units = obj.uni.usi_ef**2 / obj.uni.usi_e   # convert ef2 * eps0 to [simu energy density units]
     return (0.5 * eps0 * units) * ef2
+  elif var == 'resistivity': 
+
+    ne = obj.get_var('nr', mf_ispecies=-1)   # [simu. number density units]
+    neqe = ne * obj.uni.simu_qsi_e
+    rhoe = obj.get_var('re') 
+    nu_sum = 0.0
+    for fluid in fl.Fluids(dd=obj):
+      nu_sum += obj.get_var('nu_ij',mf_ispecies=-1,jfluid=fluid)
+    output = nu_sum * rhoe / (neqe)**2  
 
   elif var == 'e_b':
     b2   = obj.get_var('b2')    # |B|^2  [simu B-field units, squared]
