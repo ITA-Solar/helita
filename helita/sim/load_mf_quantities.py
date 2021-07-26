@@ -98,7 +98,7 @@ _GLOBAL_QUANT = ('GLOBAL_QUANT',
                   'tot_e', 'tot_ke', 'e_ef', 'e_b', 'total_energy',
                   'tot_px', 'tot_py', 'tot_pz',
                   'grph', 'tot_part', 'mu',
-                  'jx', 'jy', 'jz', 'efx', 'efy', 'efz',
+                  'jx', 'jy', 'jz', 'efx', 'efy', 'efz','resistivity'
                   ]
                 )
 # get value
