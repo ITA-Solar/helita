@@ -15,15 +15,15 @@ TODO:
 
         This leak could be caused by an attribute of dd pointing to dd without using weakref.
 
+        It is also possible that there isn't a leak, because Python can collect objects in circular
+        reference chains as long as none of the objects in the chain have defined a __del__ method.
+        So it is possible that there is a circular reference which gets collected when __del__ is
+        not defined (when DEBUG_MEMORY_LEAK=False), but then can't get collected when __del__ is defined...
+
         A short-term solution is to hope python's default garbage collection routines
         will collect the garbage often enough, or to do import gc; and gc.collect() sometimes.
 
         In the long-term, we should find which attribute of dd points to dd, and fix it.
-
-    Refactor calling separately in _load_quantities the following functions:
-        _get_simple_vars, _get_simple_vars_xy, and _get_composite_var.
-        Instead, make a load_simple_quantities function (or something like that),
-        which calls all those functions, as appropriate.
 
 """
 
@@ -286,25 +286,6 @@ class EbysusData(BifrostData):
                 delattr(self, file_memory.MEMORY_MEMMAP)
         super(EbysusData, self).set_snap(snap, *args__set_snap, **kwargs__set_snap)
 
-    def get_param(self, param, default=None, warning=None, error=None):
-        ''' get param via self.params[param][self.snapInd].
-        if param not in self.params.keys():
-            return default.
-            if warning is not None, also do warnings.warn(warning).
-            if error is not None, raise error instead.
-        '''
-        try:
-            p = self.params[param]
-        except KeyError:
-            if warning is not None:
-                warnings.warn(warning)
-            if error is not None:
-                raise error from None  # "from None" --> show just this error, not also the triggering KeyError
-            return default
-        else:
-            p = p[self.snapInd]
-        return p
-
     def _read_params(self,firstime=False):
         ''' Reads parameter file specific for Multi Fluid Bifrost '''
         super(EbysusData, self)._read_params(firstime=firstime)
@@ -314,10 +295,10 @@ class EbysusData(BifrostData):
 
         # get misc. params (these have no default values. Make error if we can't get them).
         errmsg = 'read_params: could not find {} in idl file!'
-        self.mf_epf          = self.get_param('mf_epf',          error=KeyError(errmsg.format('mf_epf'))          )
-        self.mf_nspecies     = self.get_param('mf_nspecies',     error=KeyError(errmsg.format('mf_nspecies'))     )
-        self.with_electrons  = self.get_param('mf_electrons',    error=KeyError(errmsg.format('mf_electrons'))    )
-        self.mf_total_nlevel = self.get_param('mf_total_nlevel', error=KeyError(errmsg.format('mf_total_nlevel')) )
+        self.mf_epf          = self.get_param('mf_epf',          error_prop=KeyError(errmsg.format('mf_epf'))          )
+        self.mf_nspecies     = self.get_param('mf_nspecies',     error_prop=KeyError(errmsg.format('mf_nspecies'))     )
+        self.with_electrons  = self.get_param('mf_electrons',    error_prop=KeyError(errmsg.format('mf_electrons'))    )
+        self.mf_total_nlevel = self.get_param('mf_total_nlevel', error_prop=KeyError(errmsg.format('mf_total_nlevel')) )
 
         # get param_file params (these have default values).
         ## mf_param_file
@@ -514,7 +495,7 @@ class EbysusData(BifrostData):
         Also, restores self.ifluid and self.jfluid afterwards.
         Also, restores self.match_type afterwards.
         '''
-        __tracebackhide__ = (not self.verbose)  # hide this func from error traceback stack
+        __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables, if metadata is appropriate.
         if var in self.variables and self._metadata_matches(self.variables.get('metadata', dict())):
             return self.variables[var]
@@ -684,12 +665,6 @@ class EbysusData(BifrostData):
             val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
 
         return val
-
-    def get_varm(self, *args__get_var, **kwargs__get_var):
-        '''get_var but returns np.mean() of result.
-        provided for convenience for quicker debugging.
-        '''
-        return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
 
     @document_vars.quant_tracking_simple('SIMPLE_VARS')
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
@@ -1024,13 +999,14 @@ class EbysusData(BifrostData):
             for it in range(0, snapLen):
                 self.snapInd = it
                 # print update if it is time to print update
-                if (print_freq > 0) and (time.time() - now > print_freq):
-                    _print_clearline()
-                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
-                                    var,     snap[it],         it,    snapLen        ), end='')
-                    now = time.time()
-                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
-                    printed_update=True
+                if self.verbose: 
+                    if (print_freq > 0) and (time.time() - now > print_freq):
+                        _print_clearline()
+                        print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
+                                        var,     snap[it],         it,    snapLen        ), end='')
+                        now = time.time()
+                        print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                        printed_update=True
                     
                 # actually get the values here:
                 value[..., it] = self.get_var(var, snap=snap[it],
@@ -1074,51 +1050,8 @@ class EbysusData(BifrostData):
         '''return whether self.match_type == MATCH_AUX'''
         return self._get_match_type() == MATCH_AUX
 
-    def zero(self):
-        '''return np.zeros_like(self.r, subok=False).
-        (an array of zeros with same shape and dtype like self.r but which is not a memmap.)
-        '''
-        return np.zeros_like(self.r, subok=False)
+    # ---  include methods from fluid_tools --- #
 
-    # include methods related to wavegrowth, for convenience
-    def get_lmin(self):
-        '''return smallest length resolvable for each direction ['x', 'y', 'z'].
-        result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
-
-        return 1 (instead of 0) for any direction with number of points < 2.
-        '''
-        def _dxmin(x):
-            dx1d = getattr(self, 'd'+x+'1d')
-            if len(dx1d)==1:
-                return 1
-            else:
-                return dx1d.min()
-        return np.array([_dxmin(x) for x in AXES])
-
-    def get_kmax(self):
-        '''return largest value of each component of wavevector resolvable by self.
-        I.e. returns [max kx, max ky, max kz].
-        result is in [1/ simu. length units]. Divide by self.uni.usi_l to convert to SI.
-        '''
-        return 2 * np.pi / self.get_lmin()
-
-    def get_unit_vector(self, var, mean=False, **kw__get_var):
-        '''return unit vector of var. [varx, vary, varz]/|var|.'''
-        varx = self.get_var(var+'x', **kw__get_var)
-        vary = self.get_var(var+'y', **kw__get_var)
-        varz = self.get_var(var+'z', **kw__get_var)
-        varmag = self.get_var('mod'+var, **kw__get_var)
-        if mean:
-            varx, vary, varz, varmag = varx.mean(), vary.mean(), varz.mean(), varmag.mean()
-        return np.array([varx, vary, varz]) / varmag
-
-
-    if file_memory.DEBUG_MEMORY_LEAK:
-        def __del__(self):
-            print('ebysusdata deleted')
-
-
-    # include methods from fluid_tools.
     def MaintainingFluids(self):
         return fluid_tools._MaintainingFluids(self)
 

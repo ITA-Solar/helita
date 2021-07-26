@@ -51,7 +51,6 @@ vardict = {
 import math #for pretty strings
 import collections
 import functools
-import types  # for MethodType
 import copy   # for deepcopy for QuantTree
 
 # import internal modules
@@ -204,12 +203,18 @@ def create_vardict(obj):
     obj.get_var('')
     setattr(obj, CREATING_VARDICT, False)
     # set some other useful functions in obj.
-    obj.gotten_vars    = types.MethodType(gotten_vars, obj)
-    obj.got_vars_tree  = types.MethodType(got_vars_tree, obj)
-    obj.get_quant_info = types.MethodType(get_quant_info, obj)
+    def _make_weak_bound_method(f):
+        @functools.wraps(f)
+        def _weak_bound_method(*args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
+            return f(obj, *args, **kwargs)   # << obj which was passed to create_vardict
+        return _weak_bound_method
+    obj.gotten_vars    = _make_weak_bound_method(gotten_vars)
+    obj.got_vars_tree  = _make_weak_bound_method(got_vars_tree)
+    obj.get_quant_info = _make_weak_bound_method(get_quant_info)
     obj.get_var_info   = obj.get_quant_info   # alias
-    obj.quant_lookup   = types.MethodType(quant_lookup, obj)
-    obj.get_units      = types.MethodType(units.get_units, obj)
+    obj.quant_lookup   = _make_weak_bound_method(quant_lookup)
+    obj.get_units      = _make_weak_bound_method(units.get_units)
 
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
@@ -726,7 +731,8 @@ def quant_tracking_top_level(f):
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        setattr(obj, LOADING_LEVEL, getattr(obj, LOADING_LEVEL, -1) + 1) # increment LOADING_LEVEL.
+        setattr(obj, LOADING_LEVEL, getattr(obj, LOADING_LEVEL, -2) + 1) # increment LOADING_LEVEL.
+        # << if obj didn't have LOADING_LEVEL, its LOADING_LEVEL will now be -1.
         setattr(obj, VARNAME_INPUT, varname)      # save name of the variable which was input.
         setattr(obj, QUANT_SELECTED, QuantInfo(None))  # smash QUANT_SELECTED before doing f.
         result = f(obj, varname, *args, **kwargs)
@@ -762,7 +768,8 @@ def get_quant_tracking_state(obj, from_internal=False):
         quants_tree = getattr(obj, QUANTS_TREE).get_child(-1)  # get the newest child.
     state = dict(quants_tree    = quants_tree,
                  quant_selected = getattr(obj, QUANT_SELECTED, QuantInfo(None)),
-                 _from_internal  = from_internal,  # not used, but maybe helpful for debugging.
+                 _from_internal = from_internal,  # not used, but maybe helpful for debugging.
+                 _ever_restored = False # whether we have ever restored this state.
                 )
     return state
 
@@ -771,9 +778,17 @@ def restore_quant_tracking_state(obj, state):
     state_tree   = state['quants_tree']
     obj_tree     = _get_orig_tree(obj)
     child_to_add = state_tree   # add state tree as child of obj_tree.
+    if not state['_ever_restored']:
+        state['_ever_restored'] = True
+        if isinstance(child_to_add.data, QuantInfo):
+            # adjust level of top QuantInfo in tree, to indicate it is from cache.
+            q = child_to_add.data._asdict()
+            q['level'] = str(q['level']) + ' (FROM CACHE)'
+            child_to_add.data = QuantInfo(**q)
+    # add child to obj_tree.
     obj_tree.add_child(child_to_add, adjusted_level=True)
     setattr(obj, QUANTS_TREE, obj_tree)
-    
+    # set QUANT_SELECTED.
     selected = state.get('quant_selected', QuantInfo(None))
     setattr(obj, QUANT_SELECTED, selected)
 
@@ -844,24 +859,6 @@ def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=T
     Use oldest_first to tell the children ordering convention:
         True --> 0 is the oldest child (added first); -1 is the newest child (added most-recently).
         False -> the order is reversed, e.g. -1 is the oldest child instead.
-
-    Notes to User:
-    --------------
-    QuantInfo level misaligning with QuantTree level indicates that a cached value was read.
-    Example:
-        dd.get_var('nre')    # 'nre' is cached by default, if caching is on.
-        dd.get_var('nq', iS=-1)  # gets nr; nr with iS=-1 gets nre.
-        dd.got_vars_tree()
-        >>> (L0) QuantInfo(varname='nq', quant='nq', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=0) : 
-             (L1) QuantInfo(varname='nr', quant='nr', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=1) : 
-              (L2) QuantInfo(varname='nre', quant='nre', typequant='ELECTRON_QUANT', metaquant='mf_quantities', level=0) : 
-               (L3) QuantInfo(varname='nr', quant='nr', typequant='ONEFLUID_QUANT', metaquant='mf_quantities', level=1) : 
-                (L4) QuantInfo(varname='r', quant='r', typequant='SIMPLE_VARS', metaquant='fromfile', level=2)
-        At L2 in the tree, the varname is 'nre'. Its data is in the cache, so it is read from the cache,
-        assuming check_cache==True, which is the default. When we got 'nre' originally, it was at level=0,
-        because we called dd.get_var('nre') directly. Thus, the original quants_tree for 'nre', in which
-        'nre' is level 0, is put here.
-
     '''
     # Get QUANTS_TREE attr. Since this function (got_vars_tree) is optional, and for end-user,
     ## crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.

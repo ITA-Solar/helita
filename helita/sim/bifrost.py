@@ -5,7 +5,9 @@ Set of programs to read and interact with output from Bifrost
 # import builtin modules
 import os
 import functools
+import weakref
 from glob import glob
+import warnings
 
 # import external public modules
 import numpy as np
@@ -136,8 +138,7 @@ class BifrostData(object):
         self.transunits = False
         self.cross_sect = cross_sect_for_obj(self)
         if 'tabinputfile' in self.params.keys(): 
-            tabfile = os.path.join(self.fdir, 
-                self.params['tabinputfile'][self.snapInd].strip())
+            tabfile = os.path.join(self.fdir, self.get_param('tabinputfile').strip())
             if os.access(tabfile, os.R_OK):
                 self.rhoee = Rhoeetab(tabfile=tabfile, fdir=fdir, radtab=True)
 
@@ -149,20 +150,18 @@ class BifrostData(object):
             Sets list of avaible variables
         """
         self.snapvars = ['r', 'px', 'py', 'pz', 'e']
-        self.auxvars = self.params['aux'][self.snapInd].split()
+        self.auxvars = self.get_param('aux', error_prop=True).split()
         if self.do_mhd:
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
         self.heliumvars = []
-        if 'do_hion' in self.params:
-            if self.params['do_hion'][self.snapInd] > 0:
-                self.hionvars = ['hionne', 'hiontg', 'n1',
-                                 'n2', 'n3', 'n4', 'n5', 'n6', 'nh2']
-                self.hion = True
-        if 'do_helium' in self.params:
-            if self.params['do_helium'][self.snapInd] > 0:
-                self.heliumvars = ['nhe1', 'nhe2', 'nhe3']
-                self.heion = True
+        if self.get_param('do_hion', default=0) > 0:
+            self.hionvars = ['hionne', 'hiontg', 'n1',
+                             'n2', 'n3', 'n4', 'n5', 'n6', 'nh2']
+            self.hion = True
+        if self.get_param('do_helium', default=0) > 0:
+            self.heliumvars = ['nhe1', 'nhe2', 'nhe3']
+            self.heion = True
         self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
         self.simple_vars = self.snapvars + self.auxvars + self.hionvars + \
             self.heliumvars
@@ -303,6 +302,34 @@ class BifrostData(object):
         self.time = self.params['t']
         if self.sel_units=='cgs': 
             self.time *= self.uni.uni['t']
+
+    def get_param(self, param, default=None, warning=None, error_prop=None):
+        ''' get param via self.params[param][self.snapInd].
+
+        if param not in self.params.keys(), then the following kwargs may play a role:
+            default: None (default) or any value.
+                return this value (eventually) instead. (check warning and error_prop first.)
+            warning: None (default) or any Warning or string.
+                if not None, do warnings.warn(warning).
+            error_prop: None (default), True, or any Exception object.
+                None --> ignore this kwarg.
+                True --> raise the original KeyError caused by trying to get self.params[param].
+                else --> raise error_prop from None.
+        '''
+        try:
+            p = self.params[param]
+        except KeyError as err_triggered:
+            if warning is not None:
+                warnings.warn(warning)
+            if error_prop is not None:
+                if isinstance(error_prop, BaseException):
+                    raise error_prop from None  # "from None" --> show just this error, not also err_triggered
+                elif error_prop:
+                    raise err_triggered
+            return default
+        else:
+            p = p[self.snapInd]
+        return p
         
     def __read_mesh(self, meshfile, firstime=False):
         """
@@ -310,7 +337,7 @@ class BifrostData(object):
         """
         if meshfile is None:
             meshfile = os.path.join(
-                self.fdir, self.params['meshfile'][self.snapInd].strip())
+                self.fdir, self.get_param('meshfile', error_prop=True).strip())
         if os.path.isfile(meshfile):
             f = open(meshfile, 'r')
             for p in ['x', 'y', 'z']:
@@ -349,20 +376,16 @@ class BifrostData(object):
                     np.repeat(self.dzidzdn[-1], self.nb)))
                 self.nz = self.nzb
         else:  # no mesh file
-            if self.verbose:
-                if (firstime):
-                    print('(WWW) Mesh file %s does not exist.' % meshfile)
             if self.dx == 0.0:
                 self.dx = 1.0
             if self.dy == 0.0:
                 self.dy = 1.0
             if self.dz == 0.0:
                 self.dz = 1.0
-            if self.verbose:
-                if (firstime):
-                    print(('(WWW) Creating uniform grid with [dx,dy,dz] = '
-                        '[%f,%f,%f]') % (self.dx, self.dy, self.dz),
-                        2 * whsp, end="\r", flush=True)
+            if self.verbose and firstime:
+                warnings.warn(('Mesh file {mf} does not exist. Creating uniform grid '
+                               'with (dx,dy,dz)=({dx:.2e},{dy:.2e},{dz:.2e})').format(
+                               mf=repr(meshfile), dx=self.dx, dy=self.dy, dz=self.dz))
             # x
             self.x = np.arange(self.nx) * self.dx
             self.xdn = self.x - 0.5 * self.dx
@@ -440,21 +463,21 @@ class BifrostData(object):
                 self.variables[var] = self._get_simple_var(
                     var, *args, **kwargs)
                 setattr(self, var, self.variables[var])
-            except Exception:
+            except Exception as err:
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable %s' % var)
+                            'variable {} due to {}'.format(var, err))
         for var in self.auxxyvars:
             try:
                 self.variables[var] = self._get_simple_var_xy(var, *args,
                                                               **kwargs)
                 setattr(self, var, self.variables[var])
-            except Exception:
+            except Exception as err:
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable %s' % var)
+                            'variable {} due to {}'.format(var, err))
         rdt = self.r.dtype
         if self.stagger_kind == 'cstagger': 
             if (self.nz > 1): 
@@ -583,6 +606,7 @@ class BifrostData(object):
         self.varn['by'] = 'by'
         self.varn['bz'] = 'bz'
         
+    @document_vars.quant_tracking_top_level
     def get_var(self, var, snap=None, *args, iix=slice(None), iiy=slice(None),
                 iiz=slice(None), **kwargs):
         """
@@ -814,7 +838,7 @@ class BifrostData(object):
             return None
 
         if self.verbose:
-            print('(get_var): reading simple ', np.shape(val), var, whsp*5,
+            print('(get_var): reading simple ', var, whsp*5,  # TODO: show np.shape(val) info somehow?
                 end="\r",flush=True)
 
         if np.shape(self.snap) != ():
@@ -849,7 +873,7 @@ class BifrostData(object):
             filename += fsuffix_a + fsuffix_b
         elif var in self.hionvars:
             idx = self.hionvars.index(var)
-            isnap = self.params['isnap'][self.snapInd]
+            isnap = self.get_param('isnap', error_prop=True)
             if panic: 
                 filename = filename + '.hion.panic'
             else: 
@@ -863,7 +887,7 @@ class BifrostData(object):
                         filename = '%s_.hion%s.snap' % (self.file_root, isnap)
         elif var in self.heliumvars:
             idx = self.heliumvars.index(var)
-            isnap = self.params['isnap'][self.snapInd]
+            isnap = self.get_param('isnap', error_prop=True)
             if panic: 
                 filename = filename + '.helium.panic'
             else:
@@ -965,7 +989,7 @@ class BifrostData(object):
         else:
             rho = self.r[sx, sy, sz] * self.uni.u_r
             subsfile = os.path.join(self.fdir, 'subs.dat')
-            tabfile = os.path.join(self.fdir, self.params['tabinputfile'][self.snapInd].strip())
+            tabfile = os.path.join(self.fdir, self.get_param('tabinputfile', error_prop=True).strip())
             tabparams = []
             if os.access(tabfile, os.R_OK):
                 tabparams = read_idl_ascii(tabfile, obj=self)
@@ -1138,6 +1162,80 @@ class BifrostData(object):
             fout2.write("\n%i\n" % nz)
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
+
+    # --- misc. convenience methods --- #
+
+    def get_varm(self, *args__get_var, **kwargs__get_var):
+        '''get_var but returns np.mean() of result.
+        provided for convenience for quicker debugging.
+        '''
+        return np.mean(self.get_var(*args__get_var, **kwargs__get_var))
+
+    def get_varu(self, *args__get_var, mode='si', **kwargs__get_var):
+        '''get_var() then get_units() and return (result * units factor, units name).
+        e.g. r = self.get_var('r'); units = self.get_units('si'); return (r*units.factor, units.name).
+        e.g. self.get_varu('r') --> (r * units.factor, 'kg / m^{3}')
+        '''
+        x = self.get_var(*args__get_var, **kwargs__get_var)
+        u = self.get_units(mode=mode)
+        return (x * u.factor, u.name)
+
+    def get_varU(self, *args__get_var, mode='si', **kwargs__get_var):
+        '''get_varm() then get_units and return (result * units factor, units name).
+        equivalent to: x=self.get_varu(...); return (np.mean(x[0]), x[1]).
+        '''
+        x = self.get_varm(*args__get_var, **kwargs__get_var)
+        u = self.get_units(mode=mode)
+        return (x * u.factor, u.name)
+
+    get_varmu = get_varum = get_varU  # aliases for get_varU
+
+    def get_varV(self, var, *args__get_var, mode='si', **kwargs__get_var):
+        '''returns get_varU('mod'+var, mode=mode), get_unit_vector(var, mean=True).'''
+        mod = self.get_varU('mod'+var, *args__get_var, **kwargs__get_var)
+        hat = self.get_unit_vector(var, mean=True, **kwargs__get_var)
+        return (mod, hat)
+
+    def zero(self):
+        '''return np.zeros_like(self.r, subok=False).
+        (an array of zeros with same shape and dtype like self.r but which is not a memmap.)
+        '''
+        return np.zeros_like(self.r, subok=False)
+
+    def get_lmin(self):
+        '''return smallest length resolvable for each direction ['x', 'y', 'z'].
+        result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
+
+        return 1 (instead of 0) for any direction with number of points < 2.
+        '''
+        def _dxmin(x):
+            dx1d = getattr(self, 'd'+x+'1d')
+            if len(dx1d)==1:
+                return 1
+            else:
+                return dx1d.min()
+        return np.array([_dxmin(x) for x in AXES])
+
+    def get_kmax(self):
+        '''return largest value of each component of wavevector resolvable by self.
+        I.e. returns [max kx, max ky, max kz].
+        result is in [1/ simu. length units]. Divide by self.uni.usi_l to convert to SI.
+        '''
+        return 2 * np.pi / self.get_lmin()
+
+    def get_unit_vector(self, var, mean=False, **kw__get_var):
+        '''return unit vector of var. [varx, vary, varz]/|var|.'''
+        varx = self.get_var(var+'x', **kw__get_var)
+        vary = self.get_var(var+'y', **kw__get_var)
+        varz = self.get_var(var+'z', **kw__get_var)
+        varmag = self.get_var('mod'+var, **kw__get_var)
+        if mean:
+            varx, vary, varz, varmag = varx.mean(), vary.mean(), varz.mean(), varmag.mean()
+        return np.array([varx, vary, varz]) / varmag
+
+    if file_memory.DEBUG_MEMORY_LEAK:
+        def __del__(self):
+            print('deleted {}'.format(self), flush=True)
 
 
 def write_br_snap(rootname,r,px,py,pz,e,bx,by,bz):
@@ -2025,9 +2123,10 @@ class Cross_sect:
         if verbose is None: 
             verbose = False if obj is None else getattr(obj, 'verbose', False)
         self.verbose = verbose
-        self.obj = obj
         self.kelvin = kelvin
         self.units = {True: 'K', False: 'eV'}[self.kelvin]
+        # save pointer to obj. Use weakref to help ensure we don't create a circular reference.
+        self.obj = (lambda: None) if (obj is None) else weakref.ref(obj)  # self.obj() returns obj.
         # read table file and calculate parameters
         if cross_tab is None:
             cross_tab = ['h-h-data2.txt', 'h-h2-data.txt', 'he-he.txt',
@@ -2049,7 +2148,7 @@ class Cross_sect:
         self.cross_tab = dict()
         for itab in range(len(self.cross_tab_list)):
             self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab],firstime=firstime,
-                                                  obj=getattr(self, 'obj', None), kelvin=self.kelvin)
+                                                  obj=self.obj(), kelvin=self.kelvin)
             
 
     def tab_interp(self, tg, itab=0, out='el', order=1):
@@ -2191,7 +2290,8 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
 @file_memory.remember_and_recall('_memory_read_idl_ascii')
 def read_idl_ascii(filename,firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary.
-    if obj is not None,'''
+    if obj is not None, remember the result and restore it if ever reading the same exact file again.
+    '''
     li = 0
     params = {}
     # go through the file, add stuff to dictionary

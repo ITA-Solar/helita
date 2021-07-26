@@ -540,11 +540,12 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _COLFRI_QUANT[0], COLFRI_QUANT, get_collision_ms.__doc__)
 
-  if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT:
+  if quant not in COLFRI_QUANT:
     return None
 
-  if ((quant == 'nu_ni_mag') or (quant == 'nu_ni')):
+  elif quant in ('nu_ni_mag', 'nu_ni', 'numx_ni_mag', 'numx_ni'):
     result = np.zeros(np.shape(obj.r))
+    s_nu, _, ni_mag = quant.partition('_')  # s_numx = nu or numx
     for ielem in ELEMLIST: 
       if ielem in ELEMLIST[2:] and '_mag' in quant: 
         const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
@@ -553,36 +554,20 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
         const = 1.0
         mag=''
 
+      nelem_1 = 'n{elem}-1'.format(elem=ielem)
+      nuelem1_imag = '{nu}{elem}1_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
       result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-1' % ielem) * const * \
-              obj.get_var('nu%s1_i%s'% (ielem,mag), **kwargs)
+              obj.get_var(nelem_1) * const * \
+              obj.get_var(nuelem1_imag, **kwargs)
 
       if ((ielem in ELEMLIST[2:]) and ('_mag' in quant)): 
+        nelem_2 = 'n{elem}-2'.format(elem=ielem)
+        nuelem2_imag = '{nu}{elem}2_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
         result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-2' % ielem) * const * \
-              obj.get_var('nu%s2_i%s'% (ielem,mag), **kwargs)
+              obj.get_var(nelem_2) * const * \
+              obj.get_var(nuelem2_imag, **kwargs)               
 
-
-  if ((quant == 'numx_ni_mag') or (quant == 'numx_ni')):
-    result = np.zeros(np.shape(obj.r))
-    for ielem in ELEMLIST: 
-      if ielem in ELEMLIST[2:] and '_mag' in quant: 
-        const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
-        mag='_mag'
-      else: 
-        const = 1.0
-        mag=''
-
-      result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-1' % ielem) * const * \
-              obj.get_var('numx%s1_i%s'% (ielem,mag), **kwargs)
-
-      if ((ielem in ELEMLIST[2:]) and ('_mag' in quant)): 
-        result += obj.uni.amu * obj.uni.weightdic[ielem] * \
-              obj.get_var('n%s-2' % ielem) * const * \
-              obj.get_var('numx%s2_i%s'% (ielem,mag), **kwargs)                
-
-  if ((quant == 'nu_in_mag') or (quant == 'nu_in')):
+  elif ((quant == 'nu_in_mag') or (quant == 'nu_in')):
     result = np.zeros(np.shape(obj.r))
     for ielem in ELEMLIST:
       if (ielem in ELEMLIST[2:] and '_mag' in quant): 
@@ -1046,8 +1031,8 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
     part += 4.0 * obj.get_var('nhe3')
   # check units of n
   return np.sqrt(obj.uni.permsi / obj.uni.qsi_electron**2 /
-                 (obj.uni.ksi_b * tg.astype('Float64') *
-                  part.astype('Float64') + 1.0e-20))
+                 (obj.uni.ksi_b * tg.astype('float64') *
+                  part.astype('float64') + 1.0e-20))
 
 
 # default
@@ -1060,7 +1045,8 @@ _IONP_QUANT = ('IONP_QUANT', _IONP_QUANT)
 @document_vars.quant_tracking_simple(_IONP_QUANT[0])
 def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   '''
-  densities for specific ionized species
+  densities for specific ionized species.
+  For example, nc-1 gives number density of neutral carbon, in cm^-3. nc-2 is for once-ionized carbon.
   '''
   if (IONP_QUANT is None):
     IONP_QUANT = _IONP_QUANT[1]

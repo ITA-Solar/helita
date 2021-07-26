@@ -735,9 +735,9 @@ def get_vector_product(obj,quant):
                            'result is face-centered. E.g. result_x is at (-0.5,  0  ,  0  ).'))
     docvar('_facecrosstocenter_', ('cross product for two face-centered vectors such as B, u. '
                            'result is fully centered. E.g. result_x is at ( 0  ,  0  ,  0  ).'
-                           'for most cases, it is better to use _facecrosstoface_'))
+                           ' For most cases, it is better to use _facecrosstoface_'))
     docvar('_facecrosstoface_', ('cross product for two face-centered vectors such as B, u. '
-                           'result is face-centered E.g. result_x is at ( 0  , -0.5,  0  ).'), uni=UNI.quant_child(0))
+                           'result is face-centered E.g. result_x is at (-0.5,  0 ,  0  ).'), uni=UNI.quant_child(0))
     return None
 
   # interpret quant string
