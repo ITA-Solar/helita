@@ -964,9 +964,32 @@ def _multiple_lookup(x, *keys, default=None):
 
 ''' ----------------------------- Evaluate Units ----------------------------- '''
 
-EvaluatedUnits = collections.namedtuple('EvaluatedUnits', ('factor', 'name'))
+EvaluatedUnitsTuple = collections.namedtuple('EvaluatedUnits', ('factor', 'name'))
 # TODO: make prettier formatting for the units (e.g. {:.3e})
 # TODO: allow to change name formatting (via editting "order" and "frac" of underlying UnitsExpression object)
+
+class EvaluatedUnits(EvaluatedUnitsTuple):
+    '''tuple of (factor, name).
+    Also, if doing *, /, or **, will only affect factor.
+
+    Example:
+        np.array([1, 2, 3]) * EvaluatedUnits(factor=10, name='m / s')
+        >>> EvaluatedUnits(factor=np.array([10, 20, 30]), name='m / s')
+    '''
+    def __mul__(self, b):      # self * b
+        return EvaluatedUnits(self.factor * b, self.name)
+    def __rmul__(self, b):     # b * self
+        return EvaluatedUnits(b * self.factor, self.name)
+    def __truediv__(self, b):  # self / b
+        return EvaluatedUnits(self.factor / b, self.name)
+    def __rtruediv__(self, b): # b / self
+        return EvaluatedUnits(b / self.factor, self.name)
+    def __pow__(self, b):      # self ** b
+        return EvaluatedUnits(self.factor ** b, self.name)
+    # the next line is to tell numpy that when b is a numpy array,
+    # we should use __rmul__ for b * self and __rtruediv__ for b / self,
+    # instead of making a UfuncTypeError.
+    __array_ufunc__ = None
 
 def _get_units_info_from_mode(mode='si'):
     '''returns units_key, format_attr given units mode. Case-insensitive.'''
