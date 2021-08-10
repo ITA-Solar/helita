@@ -731,7 +731,7 @@ class EbysusData(BifrostData):
         '''gets file info but does not read memmap; helper function for _get_simple_var.'''
 
         # set currSnap, currStr = (current single snap, string for this snap)
-        if (np.size(self.snap) > 1):  # self.snap is list; pick snapInd value from list.
+        if np.shape(self.snap) != ():  # self.snap is list; pick snapInd value from list.
             currSnap = self.snap[self.snapInd]
             currStr = self.snap_str[self.snapInd]
         else:                         # self.snap is single snap.
