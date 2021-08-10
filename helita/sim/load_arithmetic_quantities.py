@@ -313,7 +313,7 @@ def get_interp(obj, quant):
 
 
 # default
-_MODULE_QUANT = ('MODULE_QUANT', ['mod', 'h'])
+_MODULE_QUANT = ('MODULE_QUANT', ['mod', 'h', '_mod'])
 # get value
 def get_module(obj,quant):
   '''
@@ -322,6 +322,8 @@ def get_module(obj,quant):
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_MODULE_QUANT, get_module.__doc__, uni=UNI.quant_child(0))
     docvar('mod',  'starting with mod computes the module of the vector [simu units]. sqrt(vx^2 + vy^2 + vz^2).')
+    docvar('_mod', 'ending with mod computes the module of the vector [simu units]. sqrt(vx^2 + vy^2 + vz^2). ' +\
+                   "This is an alias for starting with mod. E.g. 'modb' and 'b_mod' mean the same thing.")
     docvar('h',  'ending with h computes the horizontal component of the vector [simu units]. sqrt(vx^2 + vy^2).')
     return None
 
@@ -329,6 +331,9 @@ def get_module(obj,quant):
   if quant.startswith('mod'):
     getq = 'mod'
     q    = quant[len('mod') : ]
+  elif quant.endswith('_mod'):
+    getq = 'mod'
+    q    = quant[ : -len('_mod')]
   elif quant.endswith('h'):
     getq = 'h'
     q    = quant[ : -len('h')]
