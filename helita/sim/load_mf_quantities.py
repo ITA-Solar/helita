@@ -1309,8 +1309,8 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     for x in AXES:
       docvar('k'+x, ("{axis} component of kinetic energy density of ifluid [simu. units]."+\
                   "(0.5 * rho * (get_var(u{axis})**2)").format(axis=x), nfluid=1, **units_e)
-    docvar('sgyrof', "signed gryofrequency for ifluid. I.e. qi * |B| / mi. [1 / (simu. time units)]", nfluid=1, uni=DIMENSIONLESS)
-    docvar('gyrof', "gryofrequency for ifluid. I.e. abs(qi * |B| / mi). [1 / (simu. time units)]", nfluid=1, uni=DIMENSIONLESS)
+    docvar('sgyrof', "signed gryofrequency for ifluid. I.e. qi * |B| / mi. [1 / (simu. time units)]", nfluid=1, uni=UNI_hz)
+    docvar('gyrof', "gryofrequency for ifluid. I.e. abs(qi * |B| / mi). [1 / (simu. time units)]", nfluid=1, uni=UNI_hz)
     kappanote = ' "Highly magnetized" when kappa^2 >> 1.'
     docvar('skappa', "signed magnetization for ifluid. I.e. sgryof/nu_sn." + kappanote, nfluid=1, uni=DIMENSIONLESS)
     docvar('kappa', "magnetization for ifluid. I.e. gyrof/nu_sn." + kappanote, nfluid=1, uni=DIMENSIONLESS)
