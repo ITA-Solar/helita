@@ -720,7 +720,7 @@ def get_projections(obj,quant):
 # default
 _VECTOR_PRODUCT_QUANT = \
           ('VECTOR_PRODUCT_QUANT',
-            ['times', '_facecross_', '_edgecross_',
+            ['times', '_facecross_', '_edgecross_', '_edgefacecross_',
              '_facecrosstocenter_', '_facecrosstoface_'
             ]
           )
@@ -737,6 +737,9 @@ def get_vector_product(obj,quant):
     docvar('_facecross_', ('cross product [simu units]. For two face-centered vectors, such as B, u. '
                            'result is edge-centered. E.g. result_x is at ( 0  , -0.5, -0.5).'))
     docvar('_edgecross_', ('cross product [simu units]. For two edge-centered vectors, such as E, I. '
+                           'result is face-centered. E.g. result_x is at (-0.5,  0  ,  0  ).'))
+    docvar('_edgefacecross_', ('cross product [simu units]. A_edgefacecross_Bx gives x-component of A x B.'
+                           'A must be edge-centered (such as E, I); B must be face-centered, such as B, u.'
                            'result is face-centered. E.g. result_x is at (-0.5,  0  ,  0  ).'))
     docvar('_facecrosstocenter_', ('cross product for two face-centered vectors such as B, u. '
                            'result is fully centered. E.g. result_x is at ( 0  ,  0  ,  0  ).'
@@ -787,6 +790,21 @@ def get_vector_product(obj,quant):
     By = obj.get_var(B+y + zup)
     Az = obj.get_var(A+z + yup)
     Bz = obj.get_var(B+z + yup)
+    AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
+    return AxB__x
+
+  elif cross == '_edgefacecross_':
+    # interpolation notes, for x='x', y='y', z='z':
+    ## resultx will be at (-0.5, 0, 0)
+    ## Ay is at (-0.5,  0  , -0.5). we must shift by   zup   to align with result.
+    ## Az is at (-0.5, -0.5,  0  ). we must shift by   yup   to align with result.
+    ## By is at ( 0  , -0.5,  0  ). we must shift by xdn yup to align with result.
+    ## Bz is at ( 0  ,  0  , -0.5). we must shift by xdn zup to align with result.
+    xdn, yup, zup = x+'dn', y+'up', z+'up'
+    Ay = obj.get_var(A+y + zup)
+    Az = obj.get_var(A+z + yup)
+    By = obj.get_var(B+y + xdn+yup)
+    Bz = obj.get_var(B+z + xdn+zup)
     AxB__x = Ay * Bz - By * Az   # x component of A x B. (x='x', 'y', or 'z')
     return AxB__x
 
