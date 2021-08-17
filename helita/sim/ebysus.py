@@ -69,6 +69,13 @@ from .load_mf_quantities import (
 MATCH_TYPE_DEFAULT = MATCH_PHYSICS  # can change this one. Tells whether to match physics or aux.
                                # match physics -> try to return physical value.
                                # match aux     -> try to return value matching aux.
+## list of functions from fluid_tools which will be set as methods of the EbysusData class.
+## for example, for dd=EbysusData(...),
+### dd.get_mass(*args, **kw) == fluid_tools.get_mass(dd, *args, **kw).
+FLUIDTOOLS_EBYSUSDATA_FUNCS = \
+    ['get_species_name', 'get_mass', 'get_charge',
+    'get_cross_tab', 'get_cross_sect', 'get_coll_type',
+    'i_j_same_fluid', 'iter_fluid_SLs']
 
 AXES = ('x', 'y', 'z')
 
@@ -1067,9 +1074,7 @@ class EbysusData(BifrostData):
     UseFluids = UsingFluids  # alias
 
 # include methods from fluid_tools in EbysusData object.
-for func in ['get_species_name', 'get_mass', 'get_charge',
-            'get_cross_tab', 'get_cross_sect', 'get_coll_type',
-            'i_j_same_fluid']:
+for func in FLUIDTOOLS_EBYSUSDATA_FUNCS:
     setattr(EbysusData, func, getattr(fluid_tools, func, None))
 
 del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
