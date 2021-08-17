@@ -295,6 +295,27 @@ def get_species_name(obj, specie):
     else:
         return obj.att[specie].params.element
 
+def get_fluid_name(obj, fluid):
+    '''return fluid's name: 'e-' for electrons; element & ionization for other fluids (e.g. 'H II').
+    fluid can be at_tools.fluids.Fluid object, (species, level) pair, or -1 (for electrons).
+    '''
+    try:
+        return fluid.name
+    except AttributeError:
+        try:
+            specie = fluid[0]
+            electrons_or_bust = False
+        except TypeError:
+            specie = fluid
+            if not (specie < 0):
+                errmsg_badfluid = ('Expected at_tools.fluids.Fluid object or (species, level) for fluid, '
+                                   'but got fluid = {}'.format(fluid))
+                raise TypeError(errmsg_badfluid)
+        if specie < 0:
+            return 'e-'
+        else:
+            return fl.Fluids(dd=obj)[fluid].name
+
 def get_mass(obj, specie, units='amu'):
     '''return specie's mass [units]. default units is amu.
     units: one of: ['amu', 'g', 'kg', 'cgs', 'si', 'simu']. Default 'amu'

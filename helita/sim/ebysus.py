@@ -73,7 +73,7 @@ MATCH_TYPE_DEFAULT = MATCH_PHYSICS  # can change this one. Tells whether to matc
 ## for example, for dd=EbysusData(...),
 ### dd.get_mass(*args, **kw) == fluid_tools.get_mass(dd, *args, **kw).
 FLUIDTOOLS_EBYSUSDATA_FUNCS = \
-    ['get_species_name', 'get_mass', 'get_charge',
+    ['get_species_name', 'get_fluid_name', 'get_mass', 'get_charge',
     'get_cross_tab', 'get_cross_sect', 'get_coll_type',
     'i_j_same_fluid', 'iter_fluid_SLs']
 
