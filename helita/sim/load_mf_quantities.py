@@ -536,7 +536,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
 # default
 _MOMENTUM_QUANT = []
-_MQVECS = ['rij', 'rijsum', 'momflorentz', 'gradp', 'momrate']
+_MQVECS = ['rij', 'rijsum', 'momflorentz', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
 _MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
 _MOMENTUM_QUANT = ('MOMENTUM_QUANT', _MOMENTUM_QUANT)
 # get value
@@ -566,18 +566,33 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     for x in AXES:
       docvar('momrate'+x, x+'-component of rate of change of momentum. ' +\
                           '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1, **units_dpdt)
+    for x in AXES:
+      docvar('ueq'+x, x+'-component of equilibrium velocity of ifluid. Ignores derivatives in momentum equation. ' +\
+                       '= '+x+'-component of [qs (_ueq_scr x B) + (ms) (sum_{j!=s} nu_sj) (_ueq_scr)] /' +\
+                       ' [(qs^2/ms) B^2 + (ms) (sum_{j!=s} nu_sj)^2]. [simu velocity units].', nfluid=1, uni=UNI_speed)
+    for x in AXES:
+      docvar('ueqsimple'+x, x+'-component of "simple" equilibrium velocity of ifluid. ' +\
+                       'Treats these as 0: derivatives in momentum equation, velocity of jfluid, nu_sb for b not jfluid.' +\
+                       '= '+x+'-component of [(qs/(ms nu_sj))^2 (E x B) + qs/(ms nu_sj) E] /' +\
+                       ' [( (qs/ms) (|B|/nu_sj) )^2 + 1]. [simu. velocity units].', nfluid=2, uni=UNI_speed)
+    for x in AXES:
+      docvar('_ueq_scr'+x, x+'-component of helper term which appears twice in formula for ueq. '+x+'-component of ' +\
+                       ' [(qs/ms) E + (sum_{j!=s} nu_sj uj)]. face-centered. [simu velocity units].', nfluid=1, uni=UNI_speed)
     return None
 
   if var not in MOMENTUM_QUANT:
     return None
+
+  # --- momentum equation terms --- #
 
   if var in ['rijx', 'rijy', 'rijz']:
     if obj.i_j_same_fluid():      # when ifluid==jfluid, u_j = u_i, so rij = 0.
       return obj.zero()           # save time by returning 0 without reading any data.
     x = var[-1]  # axis; x= 'x', 'y', or 'z'.
     # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
-    nu_ij = obj.get_var('nu_ij')
-    ri  = obj.get_var('ri')
+    ## Scalars are at (0,0,0) so we must shift by xdn to align with face-centered u at (-0.5,0,0)
+    nu_ij = obj.get_var('nu_ij' + x+'dn')
+    ri  = obj.get_var('ri' + x+'dn')
     uix = obj.get_var('ui'+x)
     ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
     return ri * nu_ij * (ujx - uix)
@@ -602,7 +617,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
     x = var[-1] # axis; x= 'x', 'y', or 'z'.
     y, z = YZ_FROM_X[x]
-    Ex = obj.get_var('efx' + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
+    Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
     uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
     return ni * qi * (Ex + uxB__x)
 
@@ -619,6 +634,71 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     florentzx = obj.get_var('momflorentz'+x)
     rijsumx   = obj.get_var('rijsum'+x)
     return florentzx - gradpx + rijsumx
+
+  # --- "equilibrium velocity" terms --- #
+  elif var in ['_ueq_scr'+x for x in AXES]:
+    qi = obj.get_charge(obj.ifluid, units='simu')
+    mi = obj.get_mass(obj.ifluid, units='simu')
+    ifluid_orig = obj.ifluid
+    # make sure we get the interpolation correct:
+    ## We want a face-centered result to align with u.
+    ## E is edge-centered, so we must shift all three coords.
+    ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
+    ## Meanwhile, scalars are at (0,0,0), so we shift those by xdn to align with u.
+    x = var[-1] # axis; x= 'x', 'y', or 'z'.
+    y, z = YZ_FROM_X[x]
+    Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
+    sum_nu_u = 0
+    for jSL in obj.iter_fluid_SLs():
+      if jSL != ifluid_orig:
+        nu_sj = obj.get_var('nu_ij' + x+'dn', ifluid=ifluid_orig, jfluid=jSL)
+        uj    = obj.get_var('ui'+x, ifluid=jSL)
+        sum_nu_u += nu_sj * uj
+    return (qi / mi) * Ex + sum_nu_u
+
+  elif var in ['ueq'+x for x in AXES]:
+    qi = obj.get_charge(obj.ifluid, units='simu')
+    mi = obj.get_mass(obj.ifluid, units='simu')
+    # make sure we get the interpolation correct:
+    ## We want a face-centered result to align with u.
+    ## B and _ueq_scr are face-centered, so we use _facecrosstoface_ to get a face-centered cross product.
+    ## Meanwhile, E is edge-centered, so we must shift all three coords.
+    ## Finally, scalars are at (0,0,0), so we shift those by xdn to align with u.
+    x = var[-1] # axis; x= 'x', 'y', or 'z'.
+    y, z = YZ_FROM_X[x]
+    B2 = obj.get_var('b2' + x+'dn')
+    # begin calculations
+    ueq_scr_x_B__x = obj.get_var('_ueq_scr_facecrosstoface_b'+x)
+    ueq_scr__x     = obj.get_var('_ueq_scr'+x)
+    sumnu = 0
+    for jSL in obj.iter_fluid_SLs():
+      if jSL != obj.ifluid:
+        sumnu += obj.get_var('nu_ij' + x+'dn', jfluid=jSL)
+    numer = qi * ueq_scr_x_B__x + mi * sumnu * ueq_scr__x
+    denom = (qi**2/mi) * B2 + mi * sumnu**2
+    return numer / denom
+
+  elif var in ['ueqsimple'+x for x in AXES]:
+    qi = obj.get_charge(obj.ifluid, units='simu')
+    mi = obj.get_mass(obj.ifluid, units='simu')
+    # make sure we get the interpolation correct:
+    ## B and ui are face-centered vectors, and we want a face-centered result to align with u.
+    ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
+    ## Meanwhile, E is edge-centered, so we must shift all three coords.
+    ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
+    ## Finally, scalars are at (0,0,0), so we shift those by xdn to align with u.
+    x = var[-1] # axis; x= 'x', 'y', or 'z'.
+    y, z = YZ_FROM_X[x]
+    Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
+    B2 = obj.get_var('b2' + x+'dn')
+    ExB__x = obj.get_var('ef_edgefacecross_b'+x)
+    nu_ij = obj.get_var('nu_ij' + x+'dn')
+    # begin calculations
+    q_over_m_nu = (qi/mi) / nu_ij
+    q_over_m_nu__squared = q_over_m_nu**2
+    numer = q_over_m_nu__squared * ExB__x + q_over_m_nu * Ex
+    denom = q_over_m_nu__squared * B2 + 1
+    return numer / denom
 
 
 # default
