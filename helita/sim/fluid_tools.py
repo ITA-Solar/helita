@@ -236,7 +236,7 @@ def use_fluids(**kw__fluids):
     return decorator
 
 
-''' --------------------- iterators over fluid pairs --------------------- '''
+''' --------------------- iterators over fluids --------------------- '''
 
 def fluid_pairs(fluids, ordered=False, allow_same=False):
     '''returns an iterator over fluids of obj.
@@ -261,6 +261,16 @@ def fluid_pairs(fluids, ordered=False, allow_same=False):
     elif not ordered and not allow_same: return itertools.permutations(fluids, 2)
     elif not ordered and     allow_same: return itertools.product(fluids, repeat=2)
     assert False #we should never reach this line...
+
+def iter_fluid_SLs(dd, with_electrons=True):
+    '''returns an iterator over the fluids of dd, and electrons.
+    yields SL pairs; NOT at_tools.fluids.Fluid objects!
+    example: list(iter_fluids(dd)) = [(-1,0), (1,1), (1,2)].
+    '''
+    if with_electrons:
+        yield (-1,0)
+    for fluid in fl.Fluids(dd=dd):
+        yield fluid.SL
 
 ''' --------------------- compare fluids --------------------- '''
 
