@@ -1190,11 +1190,55 @@ class BifrostData(object):
 
     get_varmu = get_varum = get_varU  # aliases for get_varU
 
-    def get_varV(self, var, *args__get_var, mode='si', **kwargs__get_var):
-        '''returns get_varU('mod'+var, mode=mode), get_unit_vector(var, mean=True).'''
-        mod = self.get_varU('mod'+var, *args__get_var, **kwargs__get_var)
-        hat = self.get_unit_vector(var, mean=True, **kwargs__get_var)
-        return (mod, hat)
+    def get_varV(self, var, *args__get_var, mode='si', vmode='modhat', **kwargs__get_var):
+        '''returns get_varU info but for a vector.
+        Output format depends on vmode:
+            'modhat' ---> ((|var|,units), get_unit_vector(var, mean=True))
+            'modangle' -> ((|var|,units), (angle between +x and var, units of angle))
+            'xyz' ------> ([varx, vary, varz], units of var)
+        '''
+        VALIDMODES = ('modhat', 'modangle', 'xyz')
+        vmode = vmode.lower()
+        assert vmode in VALIDMODES, 'vmode {} invalid! Expected vmode in {}.'.format(repr(vmode), VALIDMODES)
+        if vmode in ('modhat', 'modangle'):
+            mod = self.get_varU('mod'+var, *args__get_var, mode=mode, **kwargs__get_var)
+            if vmode == 'modhat':
+                hat = self.get_unit_vector(var, mean=True, **kwargs__get_var)
+                return (mod, hat)
+            elif vmode == 'modangle':
+                angle = self.get_varU(var+'_anglexxy', *args__get_var, mode=mode, **kwargs__get_var)
+                return (mod, angle)
+        elif vmode == 'xyz':
+            varxyz = [self.get_varm(var + x, *args__get_var, **kwargs__get_var) for x in ('x', 'y', 'z')]
+            units  = self.get_units(mode=mode)
+            return (np.array(varxyz) * units.factor, units.name)
+        assert False  # if we made it to this line it means something is wrong with the code here.
+
+    def _varV_formatter(self, vmode, fmt_values='{: .2e}', fmt_units='{:^7s}'):
+        '''returns a format function for pretty formatting of the result of get_varV.'''
+        VALIDMODES = ('modhat', 'modangle', 'xyz')
+        vmode = vmode.lower()
+        assert vmode in VALIDMODES, 'vmode {} invalid! Expected vmode in {}.'.format(repr(vmode), VALIDMODES)
+        if vmode == 'modhat':
+            def fmt(x):
+                mag   = fmt_values.format(x[0][0])
+                units = fmt_units.format(x[0][1])
+                hat   = ('[ '+fmt_values+', '+fmt_values+', '+fmt_values+' ]').format(*x[1])
+                return 'magnitude = {} [{}];  unit vector = {}'.format(mag, units, hat)
+        elif vmode == 'modangle':
+            def fmt(x):
+                mag   = fmt_values.format(x[0][0])
+                units = fmt_units.format(x[0][1])
+                angle = fmt_values.format(x[1][0])
+                angle_units = fmt_units.format(x[1][1])
+                return 'magnitude = {} [{}];  angle (from +x) = {} [{}]'.format(mag, units, angle, angle_units)
+        elif vmode == 'xyz':
+            def fmt(x):
+                vec   = ('[ '+fmt_values+', '+fmt_values+', '+fmt_values+' ]').format(*x[0])
+                units = fmt_units.format(x[1])
+                return '{}  [{}]'.format(vec, units)
+        fmt.__doc__ = 'formats result of get_varV. I was made by helita.sim.bifrost._varV_formatter.'
+        return fmt
 
     def zero(self):
         '''return np.zeros_like(self.r, subok=False).
