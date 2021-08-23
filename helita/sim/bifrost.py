@@ -1246,6 +1246,57 @@ class BifrostData(object):
         '''
         return np.zeros_like(self.r, subok=False)
 
+    def get_snap_at_time(self, t, units='simu'):
+        '''get snap number which is closest to time t.
+        
+        units: 's', 'si', 'cgs', or 'simu' (default).
+            's', 'si', 'cgs' --> enter t in seconds; return time at snap in seconds.
+            'simu' (default) --> enter t in simulation units; return time at snap in simulation units.
+
+        Return (snap number, time at this snap).
+        '''
+        snaps = self.snap
+        try:
+            snaps[0]
+        except TypeError:
+            raise TypeError('expected self.snap (={}) to be a list. You can set it via self.set_snap()'.format(snaps))
+        units = units.lower()
+        VALIDUNITS = ('s', 'si', 'cgs', 'simu') 
+        assert units in VALIDUNITS, 'expected units (={}) to be one of {}'.format(repr(units), VALIDUNITS)
+        if units in ('s', 'si', 'cgs'):
+            u_t = self.uni.u_t   # == self.uni.usi_t.   time [simu units] * u_t = time [seconds].
+        else:
+            u_t = 1
+        t_get = t / u_t   # time [simu units]
+        idxmin = np.argmin(np.abs(self.time - t_get))
+        return snaps[idxmin], self.time[idxmin] * u_t
+
+    def set_snap_time(self, t, units='simu', snaps=None, snap=None):
+        '''set self.snap to the snap which is closest to time t.
+        
+        units: 's', 'si', 'cgs', or 'simu' (default).
+            's', 'si', 'cgs' --> enter t in seconds; return time at snap in seconds.
+            'simu' (default) --> enter t in simulation units; return time at snap in simulation units.
+        snaps: None (default) or list of snaps.
+            None --> use self.snap for list of snaps to choose from.
+            list --> use snaps for list of snaps to choose from.
+                self.set_snap_time(t, ..., snaps=SNAPLIST) is equivalent to:
+                self.set_snap(SNAPLIST); self.set_snap_time(t, ...)
+        snap: alias for snaps kwarg. (Ignore snap if snaps is also entered, though.)
+
+        Return (snap number, time at this snap).
+        '''
+
+        snaps = snaps if (snaps is not None) else snap
+        if snaps is not None:
+            self.set_snap(snaps)
+        try:
+            result_snap, result_time = self.get_snap_at_time(t, units=units)
+        except TypeError:
+            raise TypeError('expected self.snap to be a list, or snaps=list_of_snaps input to function.')
+        self.set_snap(result_snap)
+        return (result_snap, result_time)
+
     def get_lmin(self):
         '''return smallest length resolvable for each direction ['x', 'y', 'z'].
         result is in [simu. length units]. Multiply by self.uni.usi_l to convert to SI.
