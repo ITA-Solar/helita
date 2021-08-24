@@ -453,7 +453,12 @@ def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
     if icharge < 0 or jcharge < 0:
         implied_coll_key = 'CL' if (icharge != 0 and jcharge != 0) else 'EL'
         return ('EE', implied_coll_key)
-    coll_keys = obj.coll_keys[(iSL[0], jSL[0])]   # obj.coll_keys only knows about species.
+    try:
+        coll_keys = obj.coll_keys[(iSL[0], jSL[0])]   # obj.coll_keys only knows about species.
+    except KeyError:
+        errmsg_collkey_missing = 'coll key not found for (iS, jS) = ({}, {})! '.format(iSL[0], jSL[0]) +\
+                                 'Common cause: mistakes / missing keys in COLL KEYS in mf_param_file.'
+        raise KeyError(errmsg_collkey_missing)
     if icharge != 0 and jcharge != 0:    # two charged fluids --> return CL or None
         if 'CL' in coll_keys:
             return 'CL'
