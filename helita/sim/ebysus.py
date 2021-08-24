@@ -37,7 +37,6 @@ from .bifrost import (
     BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
     read_idl_ascii, subs2grph,
 )
-from . import cstagger
 from .load_mf_quantities         import load_mf_quantities
 from .load_quantities            import load_quantities
 from .load_arithmetic_quantities import load_arithmetic_quantities
@@ -52,6 +51,10 @@ from .units import (
     UNI_length, UNI_time, UNI_mass,
     UNI_speed, UNI_rho, UNI_nr, UNI_hz
 )
+try:
+  from . import cstagger
+except ImportError:
+  warnings.warn("failed to import helita.sim.cstagger; running stagger with stagger_kind='cstagger' will crash.")
 
 # import external public modules
 import numpy as np
