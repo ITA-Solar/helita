@@ -104,7 +104,6 @@ class BifrostData(object):
         self.root_name = file_root
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
-        self.cstagop = cstagop
         self.stagger_kind = stagger_kind
         self.sel_units = sel_units 
         self.numThreads = numThreads

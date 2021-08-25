@@ -66,6 +66,9 @@ except ImportError:
     warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
 
 # set defaults:
+from .load_arithmetic_quantities import (
+    DEFAULT_STAGGER_KIND,
+)
 from .load_mf_quantities import (
     MATCH_PHYSICS, MATCH_AUX
 )
@@ -90,7 +93,8 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, match_type=MATCH_TYPE_DEFAULT,
+    def __init__(self, *args, fast=True, match_type=MATCH_TYPE_DEFAULT,
+                 N_memmap=200, mm_persnap=True, 
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
                  _force_disable_memory=False,
                  **kwargs):
@@ -143,18 +147,19 @@ class EbysusData(BifrostData):
         *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
         # set values of some attrs (e.g. from args & kwargs passed to __init__)
+        self.match_type = match_type
+
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
 
-        self.match_type = match_type
         self.do_caching = do_caching and not _force_disable_memory
         self._force_disable_memory = _force_disable_memory
         if not _force_disable_memory:
             self.cache  = file_memory.Cache(obj=self, max_MB=cache_max_MB, max_Narr=cache_max_Narr)
         self.caching    = lambda: self.do_caching and not self.cache.is_NoneCache()  # (used by load_mf_quantities)
-        self.panic=False
-
         setattr(self, document_vars.LOADING_LEVEL, -1) # tells how deep we are into loading a quantity now.
+
+        self.panic=False
 
         # call BifrostData.__init__
         super(EbysusData, self).__init__(*args, fast=fast, **kwargs)

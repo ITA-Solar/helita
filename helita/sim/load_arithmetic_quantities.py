@@ -120,8 +120,7 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
 
   val = get_center(obj,quant)
   if val is None:
-    if obj.cstagop != False: # this is only for cstagger routines 
-      val = get_deriv(obj,quant)
+    val = get_deriv(obj,quant)
   if val is None:
     val = get_interp(obj,quant)
   if val is None:
@@ -131,8 +130,7 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   if val is None:
     val = get_gradients_vect(obj,quant)
   if val is None:
-    if obj.cstagop != False:  # this is only for cstagger routines 
-      val = get_gradients_scalar(obj,quant)
+    val = get_gradients_scalar(obj,quant)
   if val is None:
     val = get_square(obj,quant)
   if val is None:
