@@ -10,6 +10,16 @@ from .load_arithmetic_quantities import do_cstagger
 # import external public modules
 import numpy as np
 
+## import the potentially-relevant things from the internal module "units"
+from .units import (
+  UNI, USI, UCGS, UCONST,
+  Usym, Usyms, UsymD,
+  U_TUPLE,
+  DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
+  UNI_length, UNI_time, UNI_mass,
+  UNI_speed, UNI_rho, UNI_nr, UNI_hz
+)
+
 # set constants
 ELEMLIST = ['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni']
 CROSTAB_LIST =   ['e_'+elem for elem in ELEMLIST]   \
@@ -762,7 +772,7 @@ def get_flux(obj, quant, FLUX_QUANT=None, **kwargs):
 
 # default
 _PLASMA_QUANT = ('PLASMA_QUANT',
-                 ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+                 ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp', 'nr',
                   'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                  ]
                 )
@@ -785,6 +795,7 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
     docvar('mn', "mach number (using sound speed)")
     docvar('man', "mach number (using alfven speed)")
     docvar('hp', "Pressure scale height")
+    docvar('nr', "total number density (including neutrals) [simu. units].", uni=UNI_nr)
     for var in ['vax', 'vay', 'vaz']:
       docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
     for var in ['kx', 'ky', 'kz']:
@@ -837,6 +848,12 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
   if quant in ['ke']:
     var = obj.get_var('r')
     return obj.get_var('u2') * var * 0.5
+
+  if quant == 'nr':
+    r = obj.get_var('r')
+    r = r.astype('float64')  # if r close to 1, nr will be huge in simu units. use float64 to avoid infs.
+    nr_H = r / obj.uni.simu_amu   # nr [simu. units] if only species is H.
+    return nr_H * obj.uni.mu      # mu is correction factor since plasma isn't just H.
 
 
 # default
