@@ -533,7 +533,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   '''
   Sum of collision frequencies (cgs). 
   '''
-
+  print(quant) 
   if (COLFRI_QUANT == None):
     COLFRI_QUANT = _COLFRI_QUANT[1]
 
@@ -555,14 +555,14 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
         mag=''
 
       nelem_1 = 'n{elem}-1'.format(elem=ielem)
-      nuelem1_imag = '{nu}{elem}1_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
+      nuelem1_imag = 'nu{elem}_i{mag}'.format(elem=ielem, mag=mag)
       result += obj.uni.amu * obj.uni.weightdic[ielem] * \
               obj.get_var(nelem_1) * const * \
-              obj.get_var(nuelem1_imag, **kwargs)
+              obj.get_var(nuelem1_imag)
 
       if ((ielem in ELEMLIST[2:]) and ('_mag' in quant)): 
         nelem_2 = 'n{elem}-2'.format(elem=ielem)
-        nuelem2_imag = '{nu}{elem}2_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
+        nuelem2_imag = '{nu}{elem}_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
         result += obj.uni.amu * obj.uni.weightdic[ielem] * \
               obj.get_var(nelem_2) * const * \
               obj.get_var(nuelem2_imag, **kwargs)               
@@ -601,7 +601,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
         result += obj.get_var('%s_%s%s' %
                        ('nue', ielem, lvl), **kwargs)
 
-  elif quant[-2:] == '_i' or quant[-2:] == '_n' or quant[-6:] == '_i_mag' or quant[-6:] == '_n_mag':
+  elif (quant[0:2]=='nu' and (quant[-2:] == '_i' or quant[-2:] == '_n' or quant[-6:] == '_i_mag' or quant[-6:] == '_n_mag')):
     addtxt = ''
     if quant[-4:] == '_mag':
       addtxt = '_mag'
