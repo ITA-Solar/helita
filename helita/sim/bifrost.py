@@ -509,32 +509,13 @@ class BifrostData(object):
         iiz -- integer or array of integers, optional
             reads xy slices.
         """
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
-
         snap = np.array(snap, copy=False)
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
             self.variables={}
 
-        # lengths for dimensions of return array
-        self.xLength = 0
-        self.yLength = 0
-        self.zLength = 0
-
-        for dim in ('iix', 'iiy', 'iiz'):
-            if getattr(self, dim) is None:
-                if dim[2] == 'z':
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2] + 'b'))
-                else:
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2]))
-                setattr(self, dim, slice(None))
-            else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
+        # set iix,iiy,iiz; figure out dimensions of return array
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
@@ -550,44 +531,104 @@ class BifrostData(object):
                         
         return value
 
-    def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
+    def set_domain_iiaxis(self, iinum=None, iiaxis='x'):
         """
-        Sets length of each dimension for get_var based on iix/iiy/iiz
+        Sets iix=iinum and xLength=len(iinum). (x=iiaxis)
+        if iinum is a slice, use self.nx (or self.nzb, for x='z') to determine xLength.
+
+        Also, if we end up using a non-None slice, disable cstagop.
+        TODO: maybe we can leave cstagop=True if stagger_kind != 'cstagger' ?
 
         Parameters
         ----------
-        iinum - int, list, or array
+        iinum - slice, int, list, array, or None (default)
             Slice to be taken from get_var quantity in that axis (iiaxis)
+            int --> convert to slice(iinum, iinum+1) (to maintain dimensions of output)
+            None --> don't change existing self.iix (or iiy or iiz).
+                     if it doesn't exist, set it to slice(None).
+            To set existing self.iix to slice(None), use iinum=slice(None).
         iiaxis - string
             Axis from which the slice will be taken ('x', 'y', or 'z')
         """
+        iix = 'ii' + iiaxis
+        if hasattr(self, iix):
+            # if iinum is None or self.iix == iinum, do nothing and return nothing.
+            if (iinum is None):
+                return
+            elif np.all(iinum == getattr(self, iix)):
+                return
+
         if iinum is None:
             iinum = slice(None)
 
-        dim = 'ii' + iiaxis
-        setattr(self, dim, iinum)
-        setattr(self, iiaxis + 'Length', np.size(iinum))
+        if iinum != slice(None):
+            # smash self.variables. Necessary, since we will change the domain size.
+            self.variables={}
 
-        if np.size(getattr(self, dim)) == 1:
-            if getattr(self, dim) == slice(None):
-                if dim[2] == 'z':
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2] + 'b'))
-                else:
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2]))
+        if isinstance(iinum, int): # we convert to slice, to maintain dimensions of output.
+            iinum = slice(iinum, iinum+1)  # E.g. [0,1,2][slice(1,2)] --> [1]; [0,1,2][1] --> 1
+
+        # set self.iix
+        setattr(self, iix, iinum)
+        if self.verbose:
+            # convert iinum to string that wont be super long (in case iinum is a long list)
+            try:
+                assert len(iinum)>20
+            except (TypeError, AssertionError):
+                iinumprint = iinum
             else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
-                if indSize == 1:
-                    temp = np.asarray(getattr(self, dim))
-                    setattr(self, dim, temp.item())
+                iinumprint = 'list with length={:4d}, min={:4d}, max={:4d}, x[1]-x[0]={:2d}'
+                iinumprint = iinumprint.format(len(iinum), min(iinum), max(iinum), iinum[1]-iinum[0])
+            # print info.
+            print('(set_domain) {}: {}'.format(iix, iinumprint),
+                  whsp*4, end="\r",flush=True)
+
+        #set self.xLength
+        if isinstance(iinum, slice):
+            if iiaxis == 'z':
+                nx = getattr(self, 'nzb')
+            else:
+                nx = getattr(self, 'n'+iiaxis)
+            indSize = len(range(*iinum.indices(nx)))
         else:
-            indSize = np.size(getattr(self, dim))
-            setattr(self, dim[2] + 'Length', indSize)
-            if indSize == 1:
-                temp = np.asarray(getattr(self, dim))
-                setattr(self, dim, temp.item())
+            indSize = np.size(iinum)
+        setattr(self, iiaxis + 'Length', indSize)
+
+        #disable cstagop if necessary.
+        self._cstagop_disable_if_slicing(check_axis=iiaxis)
+
+    def _cstagop_disable_if_slicing(self, check_axis=None):
+        '''disable cstagop if we are slicing the domain at all.
+        if check_axis is None, check x,y,z. Otherwise only check check_axis.
+        returns 
+        '''
+        if self.cstagop:
+            if check_axis is None:
+                check_axes = ('x', 'y', 'z')
+            else:
+                check_axes = [check_axis]
+            for x in check_axes:
+                if getattr(self, 'ii'+x) == slice(None):
+                    self.cstagop = False
+                    if self.verbose:
+                        warnings.warn(('cstagger use has been turned off, '
+                                'due to slicing domain in any axis (at least in '+x+') '
+                                'Turn it back on with "dd.cstagop = True"'))
+                    break
+        return self.cstagop
+
+    def set_domain_iiaxes(self, iix=None, iiy=None, iiz=None):
+        '''sets iix, iiy, iiz, xLength, yLength, zLength.
+        iix: slice, int, list, array, or None (default)
+            Slice to be taken from get_var quantity in x axis
+            None --> don't change existing self.iix.
+                     if self.iix doesn't exist, set it to slice(None).
+            To set existing self.iix to slice(None), use iix=slice(None).
+        iiy, iiz: similar to iix.
+        '''
+        self.set_domain_iiaxis(iix, 'x')
+        self.set_domain_iiaxis(iiy, 'y')
+        self.set_domain_iiaxis(iiz, 'z')
 
     def genvar(self): 
         '''
@@ -606,8 +647,7 @@ class BifrostData(object):
         self.varn['bz'] = 'bz'
         
     @document_vars.quant_tracking_top_level
-    def get_var(self, var, snap=None, *args, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), **kwargs):
+    def get_var(self, var, snap=None, *args, iix=None, iiy=None, iiz=None, **kwargs):
         """
         Reads a variable from the relevant files.
 
@@ -625,37 +665,7 @@ class BifrostData(object):
         if self.verbose:
             print('(get_var): reading ', var, whsp*6, end="\r", flush=True)
 
-        if not hasattr(self, 'iix'):
-            self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-            self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-            self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-            self.variables={}
-        else:
-            if (iix != slice(None)) and np.any(iix != self.iix):
-                if self.verbose:
-                    print('(get_var): iix ', iix, self.iix,
-                        whsp*4, end="\r",flush=True)
-                self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-                self.variables={}
-            if (iiy != slice(None)) and np.any(iiy != self.iiy):
-                if self.verbose:
-                    print('(get_var): iiy ', iiy, self.iiy, whsp*4,
-                        end="\r",flush=True)
-                self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-                self.variables={}
-            if (iiz != slice(None)) and np.any(iiz != self.iiz):
-                if self.verbose:
-                    print('(get_var): iiz ', iiz, self.iiz, whsp*4,
-                        end="\r",flush=True)
-                self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-                self.variables={}
-
-        if self.cstagop and ((self.iix != slice(None)) or
-                             (self.iiy != slice(None)) or
-                             (self.iiz != slice(None))):
-            self.cstagop = False
-            print('WARNING: cstagger use has been turned off,',
-                  'turn it back on with "dd.cstagop = True"')
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
@@ -719,23 +729,15 @@ class BifrostData(object):
                 "see e.g. help(self.get_var) or get_var('')) for guidance.")
             raise ValueError(errmsg.format(var, repr(self.simple_vars)))
         
-        # reshape if necessary... (When it could be necessary?? -SE July 6 2021)
+        # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-            # at least one slice has more than one value
-            if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
-                # x axis may be squeezed out, axes for take()
-                axes = [0, -2, -1]
-                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                    if (np.size(getattr(self, dim)) > 1 or
-                            getattr(self, dim) != slice(None)):
-                        # slicing each dimension in turn
-                        val = val.take(getattr(self, dim), axis=axes[counter])
-            else:
-                # all of the slices are only one int or slice(None)
-                val = val[self.iix, self.iiy, self.iiz]
-
-            # ensuring that dimensions of size 1 are retained
-            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+            def isslice(x): return isinstance(x, slice)
+            if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
+                val = val[self.iix, self.iiy, self.iiz]  # we can index all together
+            else:  # we need to index separately due to numpy multidimensional index array rules.
+                val = val[self.iix,:,:]
+                val = val[:,self.iiy,:]
+                val = val[:,:,self.iiz]
         
         return val
 

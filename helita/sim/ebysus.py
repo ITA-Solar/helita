@@ -597,35 +597,8 @@ class EbysusData(BifrostData):
                           **kwargs)
         self.set_fluids(**kw__fluids)
 
-        # set iix, iiy, iiz appropriately (TODO: encapsulate in helper function)
-        if not hasattr(self, 'iix'):
-            self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-            self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-            self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-            self.variables={}
-        else:
-            if (iix != slice(None)) and np.any(iix != self.iix):
-                if self.verbose:
-                    print('(get_var): iix ', iix, self.iix)
-                self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-                self.variables={}
-            if (iiy != slice(None)) and np.any(iiy != self.iiy):
-                if self.verbose:
-                    print('(get_var): iiy ', iiy, self.iiy)
-                self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-                self.variables={}
-            if (iiz != slice(None)) and np.any(iiz != self.iiz):
-                if self.verbose:
-                    print('(get_var): iiz ', iiz, self.iiz)
-                self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-                self.variables={}
-        if self.cstagop and ((self.iix != slice(None)) or
-                             (self.iiy != slice(None)) or
-                             (self.iiz != slice(None))):
-            self.cstagop = False
-            print(
-                'WARNING: cstagger use has been turned off,',
-                'turn it back on with "dd.cstagop = True"')
+        # set iix, iiy, iiz appropriately
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         # set snapshot as needed
         if snap is not None:
@@ -660,24 +633,15 @@ class EbysusData(BifrostData):
                 "see e.g. help(self.get_var) or get_var('')) for guidance.")
             raise ValueError(errmsg.format(var, repr(self.simple_vars)))
 
-        # reshape if necessary... (? I don't understand when it could be necessary -SE May 21 2021)
+        # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-            # at least one slice has more than one value
-            if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
-                # x axis may be squeezed out, axes for take()
-                axes = [0, -2, -1]
-
-                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                    if (np.size(getattr(self, dim)) > 1 or
-                            getattr(self, dim) != slice(None)):
-                        # slicing each dimension in turn
-                        val = val.take(getattr(self, dim), axis=axes[counter])
-            else:
-                # all of the slices are only one int or slice(None)
-                val = val[self.iix, self.iiy, self.iiz]
-
-            # ensuring that dimensions of size 1 are retained
-            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+            def isslice(x): return isinstance(x, slice)
+            if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
+                val = val[self.iix, self.iiy, self.iiz]  # we can index all together
+            else:  # we need to index separately due to numpy multidimensional index array rules.
+                val = val[self.iix,:,:]
+                val = val[:,self.iiy,:]
+                val = val[:,:,self.iiz]
 
         return val
 
@@ -932,7 +896,7 @@ class EbysusData(BifrostData):
         else:
             return None
 
-    def get_varTime(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                     ifluid=None, jfluid=None, print_freq=None,
                     *args, **kwargs):
@@ -989,16 +953,8 @@ class EbysusData(BifrostData):
             self.set_snap(snap)
             self.variables={}
 
-        # lengths for dimensions of return array
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
-        self.xLength = self.r[iix,  0 ,  0 ].size
-        self.yLength = self.r[ 0 , iiy,  0 ].size
-        self.zLength = self.r[ 0 ,  0 , iiz].size
-        #   note it is ok to use self.r because many get_var methods already assume self.r exists.
-        #   note we cannot do xLength, yLength, zLength = self.r[iix, iiy, iiz].shape,
-        #       because any of the indices might be integers, e.g. iix=5, for single pixel in x.
+        # set iix,iiy,iiz; figure out dimensions of return array
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
@@ -1041,8 +997,7 @@ class EbysusData(BifrostData):
             self.set_snap(remembersnaps)             # restore snaps
             if printed_update:
                 _print_clearline()
-            
-                
+        
         return value
 
     def get_nspecies(self):
