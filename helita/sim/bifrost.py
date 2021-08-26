@@ -1295,11 +1295,9 @@ class BifrostData(object):
         fmt.__doc__ = 'formats result of get_varV. I was made by helita.sim.bifrost._varV_formatter.'
         return fmt
 
-    def zero(self):
-        '''return np.zeros_like(self.r, subok=False).
-        (an array of zeros with same shape and dtype like self.r but which is not a memmap.)
-        '''
-        return np.zeros_like(self.r, subok=False)
+    def zero(self, **kw__np_zeros):
+        '''return np.zeros() with shape equal to shape of result of get_var()'''
+        return np.zeros((self.xLength, self.yLength, self.zLength), **kw__np_zeros)
 
     def get_snap_at_time(self, t, units='simu'):
         '''get snap number which is closest to time t.
@@ -1387,6 +1385,8 @@ class BifrostData(object):
         '''writes mesh to meshfilename.
         mesh will be the mesh implied by self,
         using values for x, y, z, dx1d, dy1d, dz1d, indexed by iix, iiy, iiz.
+
+        TODO: handle dx, dy, dz for iix, iiy, iiz like slice(None, None, N).
 
         Returns abspath to generated meshfile.
         '''
