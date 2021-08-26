@@ -1383,6 +1383,24 @@ class BifrostData(object):
             varx, vary, varz, varmag = varx.mean(), vary.mean(), varz.mean(), varmag.mean()
         return np.array([varx, vary, varz]) / varmag
 
+    def write_mesh_file(self, meshfile='untitled_mesh.mesh'):
+        '''writes mesh to meshfilename.
+        mesh will be the mesh implied by self,
+        using values for x, y, z, dx1d, dy1d, dz1d, indexed by iix, iiy, iiz.
+
+        Returns abspath to generated meshfile.
+        '''
+        if not meshfile.endswith('.mesh'):
+            meshfile += '.mesh'
+        AXES = ('x', 'y', 'z')
+        kw_x    = {x : getattr(self, x)[getattr(self, 'ii'+x)] for x in AXES}
+        kw_nx   = {'n'+x : getattr(self, x+'Length') for x in AXES}
+        kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') for x in AXES}
+        kw_mesh = {**kw_x, **kw_nx, **kw_dx}
+        Create_new_br_files().write_mesh(**kw_mesh, meshfile=meshfile)
+        return os.path.abspath(meshfile)
+
+
     if file_memory.DEBUG_MEMORY_LEAK:
         def __del__(self):
             print('deleted {}'.format(self), flush=True)
