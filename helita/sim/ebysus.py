@@ -957,6 +957,8 @@ def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
         print('(WWW) levels should start with 1')
+    if not np.isfinite(inputdata).all():
+        warnings.warn('at least one non-finite value detected in write_mfr! for iSL={}'.format((mf_ispecies, mf_ilevel)))
     directory = '%s.io/mf_%02i_%02i/mfr' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -980,6 +982,8 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilev
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
         print('(WWW) levels should start with 1')
+    if not (np.isfinite(inputdatax).all() and np.isfinite(inputdatay).all() and np.isfinite(inputdataz).all()):
+        warnings.warn('at least one non-finite value detected in write_mfp! for iSL={}'.format((mf_ispecies, mf_ilevel)))
     directory = '%s.io/mf_%02i_%02i/mfp' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdatax.shape
     if not os.path.exists(directory):
@@ -1030,6 +1034,8 @@ def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
         print('(WWW) levels should start with 1')
+    if not np.isfinite(inputdata).all():
+        warnings.warn('at least one non-finite value detected in write_mfr! for iSL={}'.format((mf_ispecies, mf_ilevel)))
     directory = '%s.io/mf_%02i_%02i/mfe' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -1145,12 +1151,17 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
             fluids.py     = fluids.p[:, 1, ...]. y-component of momentum densities of fluids.
             fluids.pz     = fluids.p[:, 2, ...]. z-component of momentum densities of fluids.
 
+            fluids.stack  = True
+            fluids.stack_axis = -1
+
         Units for Outputs and Side Effects are [ebysus units] unless otherwise specified.
     '''
+    fluids.stack      = True
+    fluids.stack_axis = -1
     # global quantities
-    B                = np.array(B)/uni.u_b                   # [ebysus units] magnetic field
+    B                = np.asarray(B)/uni.u_b                 # [ebysus units] magnetic field
     # fluid (and global) quantities
-    fluids.assign_scalars('nr', (np.array(nr) / 1e6) )       # [cm^-3] number density of fluids
+    fluids.assign_scalars('nr', (np.asarray(nr) / 1e6) )     # [cm^-3] number density of fluids
     nre              = np.sum(fluids.nr * fluids.ionization) # [cm^-3] number density of electrons
     fluids.assign_scalars('tg', tg)                          # [K] temperature of fluids
     tge              = tge                                   # [K] temperature of electrons
@@ -1161,7 +1172,7 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     # fluid quantities
     fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
     fluids.assign_vectors('v', (np.array(v, copy=False) / uni.usi_u))          # [ebysus units] velocity
-    fluids.p         = fluids.v * fluids.rho[:, np.newaxis]                    # [ebysus units] momentum density
+    fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
     for x in AXES:
         setattr(fluids, 'p'+x, fluids.p[:, dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
     return dict(B=B, ee=energy_electrons)
