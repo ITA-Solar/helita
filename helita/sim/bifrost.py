@@ -662,7 +662,7 @@ class BifrostData(object):
             else:
                 check_axes = [check_axis]
             for x in check_axes:
-                if getattr(self, 'ii'+x) == slice(None):
+                if getattr(self, 'ii'+x) != slice(None):
                     self.cstagop = False
                     if self.verbose:
                         warnings.warn(('cstagger use has been turned off, '
@@ -1627,7 +1627,7 @@ class Bifrost_units(object):
                 units_to_set = {unit: DEFAULT_UNITS[unit] for unit in DEFAULT_UNITS.keys()
                                         if getattr(self, unit, None) is None}
                 if verbose:
-                    print("(WWW) selected file '{file}' is not available.".format(file=file),
+                    print("(WWW) selected file '{file}' is not available.".format(file=filename),
                           "Setting the following Default Solar Bifrost units: ", units_to_set)
                 for unit, value in units_to_set.items():
                     setattr(self, unit, value)
