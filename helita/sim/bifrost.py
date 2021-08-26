@@ -92,7 +92,8 @@ class BifrostData(object):
                  fast=False, verbose=True, dtype='f4', big_endian=False, 
                  cstagop=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
-                 use_relpath=False, stagger_kind = 'stagger'):
+                 use_relpath=False, stagger_kind = 'stagger',
+                 iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
         """
@@ -133,7 +134,9 @@ class BifrostData(object):
         self.uni = Bifrost_units(filename=tmp, fdir=fdir)
 
         self.set_snap(snap, True, params_only=params_only)
-        
+
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
+
         self.genvar()
         self.transunits = False
         self.cross_sect = cross_sect_for_obj(self)
