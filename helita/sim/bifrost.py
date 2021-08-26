@@ -8,6 +8,7 @@ import functools
 import weakref
 from glob import glob
 import warnings
+import time
 
 # import external public modules
 import numpy as np
@@ -490,8 +491,9 @@ class BifrostData(object):
         else: 
             self.cstagger_exists = True
 
-    def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None, 
-                    *args, **kwargs):
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
+                    print_freq=None, 
+                    *args__get_var, **kw__get_var):
         """
         Reads a given variable as a function of time.
 
@@ -508,8 +510,29 @@ class BifrostData(object):
             reads xz slices.
         iiz -- integer or array of integers, optional
             reads xy slices.
+        print_freq - number, default 2
+            print progress update every print_freq seconds.
+            Use print_freq < 0 to never print update.
+            Use print_freq ==0 to print all updates.
+
+        additional *args and **kwargs are passed to get_var.
         """
+        # set print_freq
+        if print_freq is None:
+            if not self.verbose:
+                print_freq = -1  # never print.
+            print_freq = getattr(self, 'print_freq', 2) # default 2
+        else:
+            setattr(self, 'print_freq', print_freq)
+
+        # set snap
+        if snap is None:
+            snap = kw__get_var.pop('snaps', None) # look for 'snaps' kwarg
+            if snap is None:
+                snap = self.snap
         snap = np.array(snap, copy=False)
+        if len(snap.shape)==0:
+            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
             self.variables={}
@@ -520,15 +543,43 @@ class BifrostData(object):
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-        for i in range(0, snapLen):
-            self.snapInd = i
-
-            value[..., i] = self.get_var(var, self.snap[i], iix=self.iix,
-                                         iiy=self.iiy, iiz=self.iiz)
-
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
-                        
+        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
+        if hasattr(self, 'recoverData'):
+            delattr(self, 'recoverData')            # smash any existing saved data
+        timestart = now = time.time()               # track timing, so we can make updates.
+        printed_update  = False
+        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
+            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
+        try:
+            for it in range(0, snapLen):
+                self.snapInd = it
+                # print update if it is time to print update
+                if (print_freq >= 0) and (time.time() - now > print_freq):
+                    _print_clearline()
+                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
+                                    var,     snap[it],         it,    snapLen        ), end='')
+                    now = time.time()
+                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                    printed_update=True
+                    
+                # actually get the values here:
+                value[..., it] = self.get_var(var, snap=snap[it],
+                                              iix=self.iix, iiy=self.iiy, iiz=self.iiz,
+                                              *args__get_var, **kw__get_var)
+        except:   # here it is ok to except all errors, because we always raise.
+            if it > 0:
+                self.recoverData = value[..., :it]   # save data 
+                if self.verbose:
+                    print(('Crashed during get_varTime, but managed to get data from {} '
+                           'snaps before crashing. Data was saved and can be recovered '
+                           'via self.recoverData.'.format(it)))
+            raise
+        finally:
+            self.set_snap(remembersnaps)             # restore snaps
+            if printed_update:
+                _print_clearline()
+                print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
+        
         return value
 
     def set_domain_iiaxis(self, iinum=None, iiaxis='x'):
