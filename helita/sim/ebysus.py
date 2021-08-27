@@ -31,6 +31,7 @@ TODO:
 import os
 import time
 import warnings
+import collections
 
 # import local modules
 from .bifrost import (
@@ -64,6 +65,10 @@ try:
     from at_tools import atom_tools as at
 except ImportError:
     warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
+try:
+    from at_tools import fluids as fl
+except ImportError:
+    warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.ebysus may crash')
 
 # set defaults:
 from .load_arithmetic_quantities import (
@@ -1277,6 +1282,7 @@ def get_numpy_memmap(filename, **kw__np_memmap):
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
+    This is most commonly used for reading mf_param_file such as mf_params.in.
     '''
     convert_to_ints = False   # True starting when we hit key=='COLLISIONS_MAP'
     colstartkeys = ['COLLISIONS_MAP', 'COLISIONS_MAP'] # or another key in colstartkeys.
@@ -1304,6 +1310,68 @@ def read_mftab_ascii(filename):
         params[key] = np.array(params[key])
 
     return params
+
+read_mf_param_file = read_mftab_ascii   # alias
+
+def coll_keys_generate(mf_param_file, as_str=True):
+    '''generates COLL_KEYS such that all collisions will be turned on.
+
+    COLL_KEYS look like:
+        II    JJ   TT
+    where II is ispecies, JJ is jspecies, TT is ('MX', 'EL', or 'CL'), and this line means:
+        turn on TT collisions between II ions and JJ (any level).
+    'EL' --> "elastic". This should only be used when we have the collisions tables.
+    'MX' --> "maxwell". Assume "maxwell molecules" (velocity-independent collision frequency).
+    'CL' --> "coulomb". For ion-ion collisions. (Only applies to ion-ion collisions).
+
+    if as_str, return a string which can be copy-pasted into an mf_param_file.
+    Otherwise, return an 2D array with result[i] = [AAi, BBi, TTi].
+    '''
+    x = read_mftab_ascii(mf_param_file)
+    def levels_ions_neutrals(atomfile):
+        '''returns (levels of ions in atomfile, levels of neutrals in atomfile)'''
+        fluids = fl.Fluids([atomfile])
+        return (fluids.ions().level_no, fluids.neutrals().level_no)
+
+    species = {iS: levels_ions_neutrals(file) for (iS, elem, file) in x['SPECIES']}
+    tables  = collections.defaultdict(list)
+    for (neuS, ionS, ionL, file) in x['CROSS_SECTIONS_TABLES']:
+        tables[(neuS, ionS)].append(ionL)   # tables keys (neuS, ionS); vals lists of ionL.
+    def table_exists(neuS, ionS, ion_levels):
+        '''tells whether a table exists between neutralSpecie and ionSpecie,
+        at at least one of the levels in ion_levels.
+        '''
+        for ionL in tables.get((neuS, ionS), []):
+            if int(ionL) in ion_levels:    # (note that ion_levels are ints).
+                return True
+        return False
+    coll_keys = []
+    for (iS, (ilevels_ion, ilevels_neu)) in species.items():
+        if len(ilevels_ion) == 0: # if there are no i ions,
+            continue   # continue, because no coll_keys start with iS in this case.
+        for (jS, (jlevels_ion, jlevels_neu)) in species.items():
+            # ion-neutral collisions:
+            if len(jlevels_neu) >= 1:
+                if table_exists(jS, iS, ilevels_ion):
+                    coll_keys.append((iS, jS, 'EL'))
+                else:
+                    coll_keys.append((iS, jS, 'MX'))
+            # ion-ion collisions:
+            make_CL = False
+            if iS == jS:
+                if len(ilevels_ion) >= 2:   # ilevels_ion == jlevels_ion
+                    make_CL = True
+            else:
+                if len(jlevels_ion) >= 1:
+                    make_CL = True
+            if make_CL:
+                coll_keys.append((iS, jS, 'CL'))
+    if not as_str:
+        return np.array(coll_keys)
+    else:
+        fmtstr = '        {}        {}   {}'
+        return '\n'.join([fmtstr.format(*collkey_row) for collkey_row in coll_keys])
+
 
 def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
     '''Write default .idl file'''
