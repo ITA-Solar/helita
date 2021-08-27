@@ -45,7 +45,7 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
                        ONEFLUID_QUANT=None, ELECTRON_QUANT=None, MOMENTUM_QUANT=None,
                        HEATING_QUANT=None, SPITZERTERM_QUANT=None,
                        COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
-                       DRIFT_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
+                       DRIFT_QUANT=None, MEAN_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
                        WAVE_QUANT=None, FB_INSTAB_QUANT=None, THERMAL_INSTAB_QUANT=None,
                        **kwargs):
   __tracebackhide__ = True  # hide this func from error traceback stack.
@@ -79,6 +79,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
     val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
   if val is None:
     val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
+  if val is None:
+    val = get_mean_quant(obj, quant, MEAN_QUANT=MEAN_QUANT)
   if val is None:
     val = get_cfl_quant(obj, quant, CFL_QUANT=CFL_QUANT)
   if val is None: 
@@ -1328,6 +1330,50 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
     q_i = obj.get_var(quant, ifluid=obj.ifluid)
     q_j = obj.get_var(quant, ifluid=obj.jfluid)
     return q_i - q_j
+
+
+# default
+_MEAN_QUANT = ('MEAN_QUANT',
+               ['neu_meannr_mass', 'ion_meannr_mass',
+                ]
+              )
+# get value
+@document_vars.quant_tracking_simple(_MEAN_QUANT[0])
+def get_mean_quant(obj, var, MEAN_QUANT=None):
+  '''weighted means of quantities.'''
+  if MEAN_QUANT is None:
+    MEAN_QUANT = _MEAN_QUANT[1]
+
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, _MEAN_QUANT[0], MEAN_QUANT, get_mean_quant.__doc__)
+    docvar('neu_meannr_mass', 'number density weighted mean mass of neutrals.'
+                              ' == sum_n(mass_n * nr_n) / sum_n(nr_n). [simu mass units]',
+                              nfluid=0, uni_name=UsymD(usi='kg', ucgs='g'), uni_f=UNI.m)
+    docvar('ion_meannr_mass', 'number density weighted mean mass of ions.'
+                              ' == sum_i(mass_i * nr_i) / sum_i(nr_i). [simu mass units]',
+                              nfluid=0, uni_name=UsymD(usi='kg', ucgs='g'), uni_f=UNI.m)
+    return None
+
+  if var not in MEAN_QUANT:
+    return None
+
+  if var.endswith('_meannr_mass'):
+    neu = var[:-len('_meannr_mass')]
+    fluids = fl.Fluids(dd=obj)
+    if neu == 'neu':
+      fluids = fluids.neutrals()
+    elif neu == 'ion':
+      fluids = fluids.ions()
+    else:
+      raise NotImplementedError('only know _meannr_mass for neu or ion but got {}'.format(neu))
+    numer = obj.zero()
+    denom = obj.zero()
+    for fluid in fluids:
+      r = obj.get_var('r', ifluid=fluid)
+      m = obj.get_mass(fluid, units='simu')
+      numer += r
+      denom += r / m
+    return numer / denom
 
 
 # default
