@@ -1313,7 +1313,7 @@ def read_mftab_ascii(filename):
 
 read_mf_param_file = read_mftab_ascii   # alias
 
-def coll_keys_generate(mf_param_file, as_str=True):
+def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
     '''generates COLL_KEYS such that all collisions will be turned on.
 
     COLL_KEYS look like:
