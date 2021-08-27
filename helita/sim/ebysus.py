@@ -1369,8 +1369,10 @@ def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
     if not as_str:
         return np.array(coll_keys)
     else:
-        fmtstr = '        {}        {}   {}'
-        return '\n'.join([fmtstr.format(*collkey_row) for collkey_row in coll_keys])
+        fmtstr = '        {}      {}   {}'
+        result = 'COLL_KEYS\n'
+        result += '\n'.join([fmtstr.format(*collkey_row) for collkey_row in coll_keys])
+        return result
 
 
 def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
