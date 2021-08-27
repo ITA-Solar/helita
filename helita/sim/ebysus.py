@@ -534,7 +534,7 @@ class EbysusData(BifrostData):
             val = load_arithmetic_quantities(self,var)
         return val
 
-    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
+    def get_var(self, var, snap=None, iix=None, iiy=None, iiz=None,
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                 ifluid=None, jfluid=None, panic=False, 
                 match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
