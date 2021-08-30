@@ -782,9 +782,9 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     if obj.match_physics():
       return False
     if obj.mf_ispecies < 0 or obj.mf_jspecies < 0:  # electrons
-      return (obj.get_param('do_ohm_ecol', True) and obj.get_param('do_qohm', True))
+      return not (obj.get_param('do_ohm_ecol', True) and obj.get_param('do_qohm', True))
     else: # not electrons
-      return (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
+      return not (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
 
   # qcol terms
   if var == 'qcol_coeffj':
@@ -1038,13 +1038,16 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
             return nu_ij(const_nu_en)
           elif (not non_elec_neutral) and const_nu_ei >= 0:
             return nu_ij(const_nu_ei)
-    # << if we reach this line, constant colfreq is off for this i,j; so now calculate colfreq.
+    # << if we reach this line, we don't have to worry about constant electron colfreq.
     coll_type = obj.get_coll_type()   # gets 'EL', 'MX', 'CL', or None
     if coll_type is not None:
       if coll_type[0] == 'EE':     # electrons --> use "implied" coll type.
         coll_type = coll_type[1]   # TODO: add coll_keys to mf_eparams.in??
       nu_ij_varname = 'nu_ij_{}'.format(coll_type.lower())  # nu_ij_el, nu_ij_mx, or nu_ij_cl
       return obj.get_var(nu_ij_varname)
+    elif obj.match_aux() and (obj.get_charge(obj.ifluid) > 0) and (obj.get_charge(obj.jfluid) > 0):
+      # here, we want to match aux, i and j are ions, and coulomb collisions are turned off.
+      return obj.zero()   ## so we return zero (instead of making a crash)
     else:
       errmsg = ("Found no valid coll_keys for ifluid={}, jfluid={}. "
         "looked for 'CL' for coulomb collisions, or 'EL' or 'MX' for other collisions. "
