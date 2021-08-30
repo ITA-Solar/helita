@@ -1156,11 +1156,9 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
             fluids.py     = fluids.p[:, 1, ...]. y-component of momentum densities of fluids.
             fluids.pz     = fluids.p[:, 2, ...]. z-component of momentum densities of fluids.
 
-            fluids.stack  = True
-            fluids.stack_axis = -1
-
         Units for Outputs and Side Effects are [ebysus units] unless otherwise specified.
     '''
+    orig_stack, orig_stack_axis = getattr(fluids, 'stack', None), getattr(fluids, 'stack_axis', None)
     fluids.stack      = True
     fluids.stack_axis = -1
     # global quantities
@@ -1176,10 +1174,15 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     energy_electrons = _energy(nre, tge)                     # [ebysus units] energy density of electrons
     # fluid quantities
     fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
-    fluids.assign_vectors('v', (np.array(v, copy=False) / uni.usi_u))          # [ebysus units] velocity
+    fluids.assign_vectors('v', (np.asarray(v) / uni.usi_u))                    # [ebysus units] velocity
     fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
     for x in AXES:
-        setattr(fluids, 'p'+x, fluids.p[:, dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
+        setattr(fluids, 'p'+x, fluids.p[dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
+    # restore original stack, stack_axis of fluids object.
+    if orig_stack is not None:
+        fluids.stack      = orig_stack
+    if orig_stack_axis is not None:
+        fluids.stack_axis = orig_stack_axis
     return dict(B=B, ee=energy_electrons)
 
 def write_fundamentals(rootname, fluids, B, ee, zero=0):
