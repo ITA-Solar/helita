@@ -1024,8 +1024,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       i_elec, j_elec = (obj.mf_ispecies < 0, obj.mf_jspecies < 0)
       if i_elec or j_elec:
         const_nu_en = obj.get_param('ec_const_nu_en', default= -1.0)
-        const_nu_in = obj.get_param('ec_const_nu_in', default= -1.0)
-        if const_nu_en>=0 or const_nu_in>=0:  # at least one constant collision frequency is turned on.
+        const_nu_ei = obj.get_param('ec_const_nu_ei', default= -1.0)
+        if const_nu_en>=0 or const_nu_ei>=0:  # at least one constant collision frequency is turned on.
           non_elec_fluid   = getattr(obj, '{}fluid'.format('j' if i_elec else 'i'))
           non_elec_neutral = obj.get_charge( non_elec_fluid ) == 0   # whether the non-electrons are neutral.
           def nu_ij(const_nu):
@@ -1033,11 +1033,11 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
             if i_elec:
               return result
             else:
-              return result * obj.get_var('nu_ij_to_ji', ifluid=jfluid, jfluid=ifluid)
+              return result * obj.get_var('nu_ij_to_ji', ifluid=obj.jfluid, jfluid=obj.ifluid)
           if non_elec_neutral and const_nu_en >= 0:
             return nu_ij(const_nu_en)
-          elif (not non_elec_neutral) and const_nu_in >= 0:
-            return nu_ij(const_nu_in)
+          elif (not non_elec_neutral) and const_nu_ei >= 0:
+            return nu_ij(const_nu_ei)
     # << if we reach this line, constant colfreq is off for this i,j; so now calculate colfreq.
     coll_type = obj.get_coll_type()   # gets 'EL', 'MX', 'CL', or None
     if coll_type is not None:
