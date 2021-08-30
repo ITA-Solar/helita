@@ -1165,7 +1165,7 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     B                = np.asarray(B)/uni.u_b                 # [ebysus units] magnetic field
     # fluid (and global) quantities
     fluids.assign_scalars('nr', (np.asarray(nr) / 1e6) )     # [cm^-3] number density of fluids
-    nre              = np.sum(fluids.nr * fluids.ionization) # [cm^-3] number density of electrons
+    nre              = np.sum(fluids.nr * fluids.ionization, axis=-1) # [cm^-3] number density of electrons
     fluids.assign_scalars('tg', tg)                          # [K] temperature of fluids
     tge              = tge                                   # [K] temperature of electrons
     def _energy(ndens, tg): #returns energy density [ebysus units]
