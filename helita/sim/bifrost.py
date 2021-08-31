@@ -2489,7 +2489,6 @@ def read_idl_ascii(filename,firstime=False):
                 try:
                     value = ast.literal_eval(value)
                 except Exception:
-                    print('failed to evaluate value = ', value)
                     pass # leave value as string if we fail to evaluate it.
 
             params[key] = value
