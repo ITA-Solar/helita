@@ -93,6 +93,7 @@ class EbysusData(BifrostData):
     def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, match_type=MATCH_TYPE_DEFAULT,
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
                  _force_disable_memory=False,
+                 ELEMLIST=['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni'],
                  **kwargs):
         ''' initialize EbysusData object.
 
@@ -143,6 +144,11 @@ class EbysusData(BifrostData):
         *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
         # set values of some attrs (e.g. from args & kwargs passed to __init__)
+        self.ELEMLIST = ELEMLIST
+        self.CROSTAB_LIST =   ['e_'+elem for elem in self.ELEMLIST]   \
+                + [elem+'_e' for elem in self.ELEMLIST]   \
+                + [ e1 +'_'+ e2  for e1 in self.ELEMLIST for e2 in self.ELEMLIST]
+
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
 
@@ -173,6 +179,8 @@ class EbysusData(BifrostData):
         # read minimal amounts of data, to finish initializing.
         self._init_vars_get(firstime=True)
         self._init_coll_keys()
+
+
 
     def _init_coll_keys(self):
         '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
@@ -576,7 +584,8 @@ class EbysusData(BifrostData):
             jS, jL - alias for jfluid[0], jfluid[1]
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
-        """
+        """     
+
         if var == '' and not document_vars.creating_vardict(self):
             help(self.get_var)
 
