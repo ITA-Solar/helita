@@ -120,8 +120,7 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
 
   val = get_center(obj,quant)
   if val is None:
-    if obj.cstagop != False: # this is only for cstagger routines 
-      val = get_deriv(obj,quant)
+    val = get_deriv(obj,quant)
   if val is None:
     val = get_interp(obj,quant)
   if val is None:
@@ -131,8 +130,7 @@ def load_arithmetic_quantities(obj,quant, *args, **kwargs):
   if val is None:
     val = get_gradients_vect(obj,quant)
   if val is None:
-    if obj.cstagop != False:  # this is only for cstagger routines 
-      val = get_gradients_scalar(obj,quant)
+    val = get_gradients_scalar(obj,quant)
   if val is None:
     val = get_square(obj,quant)
   if val is None:
@@ -191,6 +189,7 @@ def get_deriv(obj,quant):
       return np.zeros_like(var)
     dvar = np.gradient(var, axis=xidx)  # 3D
     dx   = getattr(obj, 'd'+axis+'1d')  # 1D; needs dims to be added. add dims below.
+    dx   = dx[getattr(obj, 'ii'+axis)]  # slice properly.
     dx   = np.expand_dims(dx, axis=tuple(set((0,1,2)) - set([xidx])))
     dvardx = dvar / dx
     return dvardx

@@ -45,7 +45,7 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
                        ONEFLUID_QUANT=None, ELECTRON_QUANT=None, MOMENTUM_QUANT=None,
                        HEATING_QUANT=None, SPITZERTERM_QUANT=None,
                        COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
-                       DRIFT_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
+                       DRIFT_QUANT=None, MEAN_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
                        WAVE_QUANT=None, FB_INSTAB_QUANT=None, THERMAL_INSTAB_QUANT=None,
                        **kwargs):
   __tracebackhide__ = True  # hide this func from error traceback stack.
@@ -79,6 +79,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
     val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
   if val is None:
     val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
+  if val is None:
+    val = get_mean_quant(obj, quant, MEAN_QUANT=MEAN_QUANT)
   if val is None:
     val = get_cfl_quant(obj, quant, CFL_QUANT=CFL_QUANT)
   if val is None: 
@@ -780,9 +782,9 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     if obj.match_physics():
       return False
     if obj.mf_ispecies < 0 or obj.mf_jspecies < 0:  # electrons
-      return (obj.get_param('do_ohm_ecol', True) and obj.get_param('do_qohm', True))
+      return not (obj.get_param('do_ohm_ecol', True) and obj.get_param('do_qohm', True))
     else: # not electrons
-      return (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
+      return not (obj.get_param('do_col', True) and obj.get_param('do_qcol', True))
 
   # qcol terms
   if var == 'qcol_coeffj':
@@ -1022,8 +1024,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       i_elec, j_elec = (obj.mf_ispecies < 0, obj.mf_jspecies < 0)
       if i_elec or j_elec:
         const_nu_en = obj.get_param('ec_const_nu_en', default= -1.0)
-        const_nu_in = obj.get_param('ec_const_nu_in', default= -1.0)
-        if const_nu_en>=0 or const_nu_in>=0:  # at least one constant collision frequency is turned on.
+        const_nu_ei = obj.get_param('ec_const_nu_ei', default= -1.0)
+        if const_nu_en>=0 or const_nu_ei>=0:  # at least one constant collision frequency is turned on.
           non_elec_fluid   = getattr(obj, '{}fluid'.format('j' if i_elec else 'i'))
           non_elec_neutral = obj.get_charge( non_elec_fluid ) == 0   # whether the non-electrons are neutral.
           def nu_ij(const_nu):
@@ -1031,18 +1033,21 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
             if i_elec:
               return result
             else:
-              return result * obj.get_var('nu_ij_to_ji', ifluid=jfluid, jfluid=ifluid)
+              return result * obj.get_var('nu_ij_to_ji', ifluid=obj.jfluid, jfluid=obj.ifluid)
           if non_elec_neutral and const_nu_en >= 0:
             return nu_ij(const_nu_en)
-          elif (not non_elec_neutral) and const_nu_in >= 0:
-            return nu_ij(const_nu_in)
-    # << if we reach this line, constant colfreq is off for this i,j; so now calculate colfreq.
+          elif (not non_elec_neutral) and const_nu_ei >= 0:
+            return nu_ij(const_nu_ei)
+    # << if we reach this line, we don't have to worry about constant electron colfreq.
     coll_type = obj.get_coll_type()   # gets 'EL', 'MX', 'CL', or None
     if coll_type is not None:
       if coll_type[0] == 'EE':     # electrons --> use "implied" coll type.
         coll_type = coll_type[1]   # TODO: add coll_keys to mf_eparams.in??
       nu_ij_varname = 'nu_ij_{}'.format(coll_type.lower())  # nu_ij_el, nu_ij_mx, or nu_ij_cl
       return obj.get_var(nu_ij_varname)
+    elif obj.match_aux() and (obj.get_charge(obj.ifluid) > 0) and (obj.get_charge(obj.jfluid) > 0):
+      # here, we want to match aux, i and j are ions, and coulomb collisions are turned off.
+      return obj.zero()   ## so we return zero (instead of making a crash)
     else:
       errmsg = ("Found no valid coll_keys for ifluid={}, jfluid={}. "
         "looked for 'CL' for coulomb collisions, or 'EL' or 'MX' for other collisions. "
@@ -1328,6 +1333,50 @@ def get_mf_driftvar(obj, var, DRIFT_QUANT=None):
     q_i = obj.get_var(quant, ifluid=obj.ifluid)
     q_j = obj.get_var(quant, ifluid=obj.jfluid)
     return q_i - q_j
+
+
+# default
+_MEAN_QUANT = ('MEAN_QUANT',
+               ['neu_meannr_mass', 'ion_meannr_mass',
+                ]
+              )
+# get value
+@document_vars.quant_tracking_simple(_MEAN_QUANT[0])
+def get_mean_quant(obj, var, MEAN_QUANT=None):
+  '''weighted means of quantities.'''
+  if MEAN_QUANT is None:
+    MEAN_QUANT = _MEAN_QUANT[1]
+
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, _MEAN_QUANT[0], MEAN_QUANT, get_mean_quant.__doc__)
+    docvar('neu_meannr_mass', 'number density weighted mean mass of neutrals.'
+                              ' == sum_n(mass_n * nr_n) / sum_n(nr_n). [simu mass units]',
+                              nfluid=0, uni_name=UsymD(usi='kg', ucgs='g'), uni_f=UNI.m)
+    docvar('ion_meannr_mass', 'number density weighted mean mass of ions.'
+                              ' == sum_i(mass_i * nr_i) / sum_i(nr_i). [simu mass units]',
+                              nfluid=0, uni_name=UsymD(usi='kg', ucgs='g'), uni_f=UNI.m)
+    return None
+
+  if var not in MEAN_QUANT:
+    return None
+
+  if var.endswith('_meannr_mass'):
+    neu = var[:-len('_meannr_mass')]
+    fluids = fl.Fluids(dd=obj)
+    if neu == 'neu':
+      fluids = fluids.neutrals()
+    elif neu == 'ion':
+      fluids = fluids.ions()
+    else:
+      raise NotImplementedError('only know _meannr_mass for neu or ion but got {}'.format(neu))
+    numer = obj.zero()
+    denom = obj.zero()
+    for fluid in fluids:
+      r = obj.get_var('r', ifluid=fluid)
+      m = obj.get_mass(fluid, units='simu')
+      numer += r
+      denom += r / m
+    return numer / denom
 
 
 # default

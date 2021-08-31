@@ -10,6 +10,16 @@ from .load_arithmetic_quantities import do_cstagger
 # import external public modules
 import numpy as np
 
+## import the potentially-relevant things from the internal module "units"
+from .units import (
+  UNI, USI, UCGS, UCONST,
+  Usym, Usyms, UsymD,
+  U_TUPLE,
+  DIMENSIONLESS, UNITS_FACTOR_1, NO_NAME,
+  UNI_length, UNI_time, UNI_mass,
+  UNI_speed, UNI_rho, UNI_nr, UNI_hz
+)
+
 # set constants
 
 POLARIZABILITY_DICT = {  # polarizability (used in maxwell collisions)
@@ -500,7 +510,7 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
 
 
   if (quant == 'nucou_ii'):
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     for ielem in obj.ELEMLIST: 
 
       result += obj.uni.amu * obj.uni.weightdic[ielem] * \
@@ -515,7 +525,7 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
     lvl = '2'
 
     elem = quant.split('_')
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     for ielem in obj.ELEMLIST:
       if elem[0][5:] != '%s%s' % (ielem, lvl):
         result += obj.get_var('%s_%s%s' %
@@ -558,7 +568,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
     return None
 
   elif quant in ('nu_ni_mag', 'nu_ni', 'numx_ni_mag', 'numx_ni'):
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     s_nu, _, ni_mag = quant.partition('_')  # s_numx = nu or numx
     for ielem in obj.ELEMLIST: 
       if ielem in obj.ELEMLIST[2:] and '_mag' in quant: 
@@ -582,7 +592,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
               obj.get_var(nuelem2_imag, **kwargs)               
 
   elif ((quant == 'nu_in_mag') or (quant == 'nu_in')):
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     for ielem in obj.ELEMLIST:
       if (ielem in obj.ELEMLIST[2:] and '_mag' in quant): 
         const = (1 - obj.get_var('kappanorm_%s' % ielem)) 
@@ -608,7 +618,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
 
   elif quant == 'nu_en':
     elem = quant.split('_')
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     lvl = 1
     for ielem in obj.ELEMLIST:
       if ielem in ['h', 'he']:
@@ -624,7 +634,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
     else:
       lvl = '1'
     elem = quant.split('_')
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     for ielem in obj.ELEMLIST:
       if elem[0][2:] != '%s%s' % (ielem, lvl):
         result += obj.get_var('%s_%s%s%s' %
@@ -717,7 +727,7 @@ def get_current(obj, quant, CURRENT_QUANT=None, **kwargs):
 
   # 2D or close
   if (getattr(obj, 'n' + varsn[0]) < 5) or (getattr(obj, 'n' + varsn[1]) < 5):
-    return np.zeros_like(obj.r)
+    return obj.zero()
   else:
     return (obj.get_var('d' + q + varsn[0] + derv[0]) -
             obj.get_var('d' + q + varsn[1] + derv[1]))
@@ -767,7 +777,7 @@ def get_flux(obj, quant, FLUX_QUANT=None, **kwargs):
       obj.get_var('u' + varsn[1] + 'c') *
       obj.get_var('b' + varsn[1] + 'c'))
   else:
-    var = np.zeros_like(obj.r)
+    var = obj.zero()
   if 'pfe' in quant or len(quant) == 3:
     var += obj.get_var('u' + axis + 'c') * (
       obj.get_var('b' + varsn[0] + 'c')**2 +
@@ -777,7 +787,7 @@ def get_flux(obj, quant, FLUX_QUANT=None, **kwargs):
 
 # default
 _PLASMA_QUANT = ('PLASMA_QUANT',
-                 ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+                 ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp', 'nr',
                   'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                  ]
                 )
@@ -800,6 +810,7 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
     docvar('mn', "mach number (using sound speed)")
     docvar('man', "mach number (using alfven speed)")
     docvar('hp', "Pressure scale height")
+    docvar('nr', "total number density (including neutrals) [simu. units].", uni=UNI_nr)
     for var in ['vax', 'vay', 'vaz']:
       docvar(var, "{axis} component of alfven velocity [simu. units]".format(axis=var[-1]))
     for var in ['kx', 'ky', 'kz']:
@@ -813,7 +824,7 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
     var = obj.get_var('p')
     if quant == 'hp':
       if getattr(obj, 'nx') < 5:
-        return np.zeros_like(var)
+        return obj.zero()
       else:
         return 1. / (do_cstagger(var, 'ddzup',obj=obj) + 1e-12)
     elif quant == 'cs':
@@ -852,6 +863,12 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
   if quant in ['ke']:
     var = obj.get_var('r')
     return obj.get_var('u2') * var * 0.5
+
+  if quant == 'nr':
+    r = obj.get_var('r')
+    r = r.astype('float64')  # if r close to 1, nr will be huge in simu units. use float64 to avoid infs.
+    nr_H = r / obj.uni.simu_amu   # nr [simu. units] if only species is H.
+    return nr_H * obj.uni.mu      # mu is correction factor since plasma isn't just H.
 
 
 # default
@@ -1090,7 +1107,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
         lvl = '2'
     else:
         lvl = '1'
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     for ielem in obj.ELEMLIST:
         result += obj.get_var(quant[0]+ielem+'-'+lvl)
     return result
@@ -1101,7 +1118,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
         lvl = '2'
     else:
         lvl = '1'
-    result = np.zeros(np.shape(obj.r))
+    result = obj.zero()
     if quant[-7:] == 'ion_nomag':
       for ielem in obj.ELEMLIST[2:]:
         result += obj.get_var(quant[0]+ielem+'-'+lvl) * \
@@ -1114,8 +1131,8 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
 
 
   elif (quant == 'nelc'):
-  
-    result = np.zeros(np.shape(obj.r))  
+
+    result = obj.zero()
     for ielem in obj.ELEMLIST:
       result += obj.get_var('n'+ielem+'-2')
     
@@ -1583,8 +1600,8 @@ def calc_tau(obj):
   tg = obj.trans2comm('tg')
   rho = obj.trans2comm('rho') 
 
-  tau = np.zeros((obj.nx, obj.ny, obj.nz)) + 1.e-16
-  xhmbf = np.zeros((obj.nz))
+  tau = obj.zero() + 1.e-16
+  xhmbf = np.zeros((obj.zLength))
   const = (1.03526e-16 / obj.uni.grph) * 2.9256e-17 
   for iix in range(obj.nx):
       for iiy in range(obj.ny):

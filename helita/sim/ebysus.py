@@ -31,6 +31,7 @@ TODO:
 import os
 import time
 import warnings
+import collections
 
 # import local modules
 from .bifrost import (
@@ -64,8 +65,15 @@ try:
     from at_tools import atom_tools as at
 except ImportError:
     warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
+try:
+    from at_tools import fluids as fl
+except ImportError:
+    warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.ebysus may crash')
 
 # set defaults:
+from .load_arithmetic_quantities import (
+    DEFAULT_STAGGER_KIND,
+)
 from .load_mf_quantities import (
     MATCH_PHYSICS, MATCH_AUX
 )
@@ -90,7 +98,8 @@ class EbysusData(BifrostData):
     in native format.
     """
 
-    def __init__(self, *args, N_memmap=200, mm_persnap=True, fast=True, match_type=MATCH_TYPE_DEFAULT,
+    def __init__(self, *args, fast=True, match_type=MATCH_TYPE_DEFAULT,
+                 N_memmap=200, mm_persnap=True, 
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
                  _force_disable_memory=False,
                  ELEMLIST=['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni'],
@@ -148,19 +157,19 @@ class EbysusData(BifrostData):
         self.CROSTAB_LIST =   ['e_'+elem for elem in self.ELEMLIST]   \
                 + [elem+'_e' for elem in self.ELEMLIST]   \
                 + [ e1 +'_'+ e2  for e1 in self.ELEMLIST for e2 in self.ELEMLIST]
+        self.match_type = match_type
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
 
-        self.match_type = match_type
         self.do_caching = do_caching and not _force_disable_memory
         self._force_disable_memory = _force_disable_memory
         if not _force_disable_memory:
             self.cache  = file_memory.Cache(obj=self, max_MB=cache_max_MB, max_Narr=cache_max_Narr)
         self.caching    = lambda: self.do_caching and not self.cache.is_NoneCache()  # (used by load_mf_quantities)
-        self.panic=False
-
         setattr(self, document_vars.LOADING_LEVEL, -1) # tells how deep we are into loading a quantity now.
+
+        self.panic=False
 
         # call BifrostData.__init__
         super(EbysusData, self).__init__(*args, fast=fast, **kwargs)
@@ -532,7 +541,7 @@ class EbysusData(BifrostData):
             val = load_arithmetic_quantities(self,var)
         return val
 
-    def get_var(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
+    def get_var(self, var, snap=None, iix=None, iiy=None, iiz=None,
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                 ifluid=None, jfluid=None, panic=False, 
                 match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
@@ -601,35 +610,8 @@ class EbysusData(BifrostData):
                           **kwargs)
         self.set_fluids(**kw__fluids)
 
-        # set iix, iiy, iiz appropriately (TODO: encapsulate in helper function)
-        if not hasattr(self, 'iix'):
-            self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-            self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-            self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-            self.variables={}
-        else:
-            if (iix != slice(None)) and np.any(iix != self.iix):
-                if self.verbose:
-                    print('(get_var): iix ', iix, self.iix)
-                self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-                self.variables={}
-            if (iiy != slice(None)) and np.any(iiy != self.iiy):
-                if self.verbose:
-                    print('(get_var): iiy ', iiy, self.iiy)
-                self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-                self.variables={}
-            if (iiz != slice(None)) and np.any(iiz != self.iiz):
-                if self.verbose:
-                    print('(get_var): iiz ', iiz, self.iiz)
-                self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-                self.variables={}
-        if self.cstagop and ((self.iix != slice(None)) or
-                             (self.iiy != slice(None)) or
-                             (self.iiz != slice(None))):
-            self.cstagop = False
-            print(
-                'WARNING: cstagger use has been turned off,',
-                'turn it back on with "dd.cstagop = True"')
+        # set iix, iiy, iiz appropriately
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         # set snapshot as needed
         if snap is not None:
@@ -664,24 +646,15 @@ class EbysusData(BifrostData):
                 "see e.g. help(self.get_var) or get_var('')) for guidance.")
             raise ValueError(errmsg.format(var, repr(self.simple_vars)))
 
-        # reshape if necessary... (? I don't understand when it could be necessary -SE May 21 2021)
+        # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-            # at least one slice has more than one value
-            if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
-                # x axis may be squeezed out, axes for take()
-                axes = [0, -2, -1]
-
-                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                    if (np.size(getattr(self, dim)) > 1 or
-                            getattr(self, dim) != slice(None)):
-                        # slicing each dimension in turn
-                        val = val.take(getattr(self, dim), axis=axes[counter])
-            else:
-                # all of the slices are only one int or slice(None)
-                val = val[self.iix, self.iiy, self.iiz]
-
-            # ensuring that dimensions of size 1 are retained
-            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+            def isslice(x): return isinstance(x, slice)
+            if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
+                val = val[self.iix, self.iiy, self.iiz]  # we can index all together
+            else:  # we need to index separately due to numpy multidimensional index array rules.
+                val = val[self.iix,:,:]
+                val = val[:,self.iiy,:]
+                val = val[:,:,self.iiz]
 
         return val
 
@@ -934,120 +907,7 @@ class EbysusData(BifrostData):
         if var in self.params['aux'][self.snapInd].split():
             return self.get_var(var, *args__get_var, **kw__get_var)
         else:
-            return None
-
-    def get_varTime(self, var, snap=None, iix=slice(None), iiy=slice(None), iiz=slice(None),
-                    mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                    ifluid=None, jfluid=None, print_freq=None,
-                    *args, **kwargs):
-        """ Gets and returns the value of var over multiple snaps.
-
-        returns the data for the variable (as a 4D array with axes 0,1,2,3 <-> x,y,z,t).
-
-        Parameters
-        ----------
-        var - string
-            Name of the variable to read.
-        snap - list of snapshots, or None (default)
-            Snapshot numbers to read.
-            if None, use self.snap.
-        mf_ispecies - integer, or None (default)
-            Species ID
-            if None, set using other fluid kwargs (see ifluid, iSL, iS).
-            if still None, use self.mf_ispecies
-        mf_ilevel - integer, or None (default)
-            Ionization level
-            if None, set using other fluid kwargs (see ifluid, iSL, iL).
-            if still None, use self.mf_ilevel
-        ifluid - tuple of integers, or None (default)
-            if not None: (mf_ispecies, mf_ilevel) = ifluid
-        print_freq - number, default 2
-            print progress update every print_freq seconds.
-            Use print_freq <= 0 to never print update.
-        **kwargs may contain the following:
-            snaps  - alias for snap
-            iSL    - alias for ifluid
-            jSL    - alias for jfluid
-            iS, iL - alias for ifluid[0], ifluid[1]
-            jS, jL - alias for jfluid[0], jfluid[1]
-        extra **kwargs are passed to get_var, then NOWHERE.
-        extra *args are passed to NOWHERE.
-        """
-
-        # set print_freq
-        if print_freq is None:
-            print_freq = getattr(self, 'print_freq', 2) # default 2
-        else:
-            setattr(self, 'print_freq', print_freq)
-
-        # set snap
-        if snap is None:
-            if 'snaps' in kwargs:
-                snap = kwargs['snaps']
-            if snap is None:
-                snap = self.snap
-        snap = np.array(snap, copy=False)
-        if len(snap.shape)==0:
-            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
-            self.variables={}
-
-        # lengths for dimensions of return array
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
-        self.xLength = self.r[iix,  0 ,  0 ].size
-        self.yLength = self.r[ 0 , iiy,  0 ].size
-        self.zLength = self.r[ 0 ,  0 , iiz].size
-        #   note it is ok to use self.r because many get_var methods already assume self.r exists.
-        #   note we cannot do xLength, yLength, zLength = self.r[iix, iiy, iiz].shape,
-        #       because any of the indices might be integers, e.g. iix=5, for single pixel in x.
-
-        snapLen = np.size(self.snap)
-        value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
-
-        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
-        if hasattr(self, 'recoverData'):
-            delattr(self, 'recoverData')            # smash any existing saved data
-        timestart = now = time.time()               # track timing, so we can make updates.
-        printed_update  = False
-        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
-            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
-        try:
-            for it in range(0, snapLen):
-                self.snapInd = it
-                # print update if it is time to print update
-                if self.verbose: 
-                    if (print_freq > 0) and (time.time() - now > print_freq):
-                        _print_clearline()
-                        print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
-                                        var,     snap[it],         it,    snapLen        ), end='')
-                        now = time.time()
-                        print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
-                        printed_update=True
-                    
-                # actually get the values here:
-                value[..., it] = self.get_var(var, snap=snap[it],
-                    iix=self.iix, iiy=self.iiy, iiz=self.iiz,
-                    mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
-                    mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
-                    **kwargs)
-        except:   # here it is ok to except all errors, because we always raise.
-            if it > 0:
-                self.recoverData = value[..., :it]   # save data 
-                if self.verbose:
-                    print(('Crashed during get_varTime, but managed to get data from {} '
-                           'snaps before crashing. Data was saved and can be recovered '
-                           'via self.recoverData.'.format(it)))
-            raise
-        finally:
-            self.set_snap(remembersnaps)             # restore snaps
-            if printed_update:
-                _print_clearline()
-            
-                
-        return value
+            return None  
 
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
@@ -1110,6 +970,8 @@ def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
         print('(WWW) levels should start with 1')
+    if not np.isfinite(inputdata).all():
+        warnings.warn('at least one non-finite value detected in write_mfr! for iSL={}'.format((mf_ispecies, mf_ilevel)))
     directory = '%s.io/mf_%02i_%02i/mfr' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -1133,6 +995,8 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilev
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
         print('(WWW) levels should start with 1')
+    if not (np.isfinite(inputdatax).all() and np.isfinite(inputdatay).all() and np.isfinite(inputdataz).all()):
+        warnings.warn('at least one non-finite value detected in write_mfp! for iSL={}'.format((mf_ispecies, mf_ilevel)))
     directory = '%s.io/mf_%02i_%02i/mfp' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdatax.shape
     if not os.path.exists(directory):
@@ -1183,6 +1047,8 @@ def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
         print('(WWW) levels should start with 1')
+    if not np.isfinite(inputdata).all():
+        warnings.warn('at least one non-finite value detected in write_mfr! for iSL={}'.format((mf_ispecies, mf_ilevel)))
     directory = '%s.io/mf_%02i_%02i/mfe' % (rootname,mf_ispecies,mf_ilevel)
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
@@ -1300,11 +1166,14 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
 
         Units for Outputs and Side Effects are [ebysus units] unless otherwise specified.
     '''
+    orig_stack, orig_stack_axis = getattr(fluids, 'stack', None), getattr(fluids, 'stack_axis', None)
+    fluids.stack      = True
+    fluids.stack_axis = -1
     # global quantities
-    B                = np.array(B)/uni.u_b                   # [ebysus units] magnetic field
+    B                = np.asarray(B)/uni.u_b                 # [ebysus units] magnetic field
     # fluid (and global) quantities
-    fluids.assign_scalars('nr', (np.array(nr) / 1e6) )       # [cm^-3] number density of fluids
-    nre              = np.sum(fluids.nr * fluids.ionization) # [cm^-3] number density of electrons
+    fluids.assign_scalars('nr', (np.asarray(nr) / 1e6) )     # [cm^-3] number density of fluids
+    nre              = np.sum(fluids.nr * fluids.ionization, axis=-1) # [cm^-3] number density of electrons
     fluids.assign_scalars('tg', tg)                          # [K] temperature of fluids
     tge              = tge                                   # [K] temperature of electrons
     def _energy(ndens, tg): #returns energy density [ebysus units]
@@ -1313,10 +1182,15 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     energy_electrons = _energy(nre, tge)                     # [ebysus units] energy density of electrons
     # fluid quantities
     fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
-    fluids.assign_vectors('v', (np.array(v, copy=False) / uni.usi_u))          # [ebysus units] velocity
-    fluids.p         = fluids.v * fluids.rho[:, np.newaxis]                    # [ebysus units] momentum density
+    fluids.assign_vectors('v', (np.asarray(v) / uni.usi_u))                    # [ebysus units] velocity
+    fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
     for x in AXES:
-        setattr(fluids, 'p'+x, fluids.p[:, dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
+        setattr(fluids, 'p'+x, fluids.p[dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
+    # restore original stack, stack_axis of fluids object.
+    if orig_stack is not None:
+        fluids.stack      = orig_stack
+    if orig_stack_axis is not None:
+        fluids.stack_axis = orig_stack_axis
     return dict(B=B, ee=energy_electrons)
 
 def write_fundamentals(rootname, fluids, B, ee, zero=0):
@@ -1419,6 +1293,7 @@ def get_numpy_memmap(filename, **kw__np_memmap):
 def read_mftab_ascii(filename):
     '''
     Reads mf_tabparam.in-formatted (command style) ascii file into dictionary.
+    This is most commonly used for reading mf_param_file such as mf_params.in.
     '''
     convert_to_ints = False   # True starting when we hit key=='COLLISIONS_MAP'
     colstartkeys = ['COLLISIONS_MAP', 'COLISIONS_MAP'] # or another key in colstartkeys.
@@ -1446,6 +1321,70 @@ def read_mftab_ascii(filename):
         params[key] = np.array(params[key])
 
     return params
+
+read_mf_param_file = read_mftab_ascii   # alias
+
+def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
+    '''generates COLL_KEYS such that all collisions will be turned on.
+
+    COLL_KEYS look like:
+        II    JJ   TT
+    where II is ispecies, JJ is jspecies, TT is ('MX', 'EL', or 'CL'), and this line means:
+        turn on TT collisions between II ions and JJ (any level).
+    'EL' --> "elastic". This should only be used when we have the collisions tables.
+    'MX' --> "maxwell". Assume "maxwell molecules" (velocity-independent collision frequency).
+    'CL' --> "coulomb". For ion-ion collisions. (Only applies to ion-ion collisions).
+
+    if as_str, return a string which can be copy-pasted into an mf_param_file.
+    Otherwise, return an 2D array with result[i] = [AAi, BBi, TTi].
+    '''
+    x = read_mftab_ascii(mf_param_file)
+    def levels_ions_neutrals(atomfile):
+        '''returns (levels of ions in atomfile, levels of neutrals in atomfile)'''
+        fluids = fl.Fluids([atomfile])
+        return (fluids.ions().level_no, fluids.neutrals().level_no)
+
+    species = {iS: levels_ions_neutrals(file) for (iS, elem, file) in x['SPECIES']}
+    tables  = collections.defaultdict(list)
+    for (neuS, ionS, ionL, file) in x['CROSS_SECTIONS_TABLES']:
+        tables[(neuS, ionS)].append(ionL)   # tables keys (neuS, ionS); vals lists of ionL.
+    def table_exists(neuS, ionS, ion_levels):
+        '''tells whether a table exists between neutralSpecie and ionSpecie,
+        at at least one of the levels in ion_levels.
+        '''
+        for ionL in tables.get((neuS, ionS), []):
+            if int(ionL) in ion_levels:    # (note that ion_levels are ints).
+                return True
+        return False
+    coll_keys = []
+    for (iS, (ilevels_ion, ilevels_neu)) in species.items():
+        if len(ilevels_ion) == 0: # if there are no i ions,
+            continue   # continue, because no coll_keys start with iS in this case.
+        for (jS, (jlevels_ion, jlevels_neu)) in species.items():
+            # ion-neutral collisions:
+            if len(jlevels_neu) >= 1:
+                if table_exists(jS, iS, ilevels_ion):
+                    coll_keys.append((iS, jS, 'EL'))
+                else:
+                    coll_keys.append((iS, jS, 'MX'))
+            # ion-ion collisions:
+            make_CL = False
+            if iS == jS:
+                if len(ilevels_ion) >= 2:   # ilevels_ion == jlevels_ion
+                    make_CL = True
+            else:
+                if len(jlevels_ion) >= 1:
+                    make_CL = True
+            if make_CL:
+                coll_keys.append((iS, jS, 'CL'))
+    if not as_str:
+        return np.array(coll_keys)
+    else:
+        fmtstr = '        {}      {}   {}'
+        result = 'COLL_KEYS\n'
+        result += '\n'.join([fmtstr.format(*collkey_row) for collkey_row in coll_keys])
+        return result
+
 
 def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
     '''Write default .idl file'''

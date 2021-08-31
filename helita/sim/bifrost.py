@@ -8,6 +8,7 @@ import functools
 import weakref
 from glob import glob
 import warnings
+import time
 
 # import external public modules
 import numpy as np
@@ -91,7 +92,8 @@ class BifrostData(object):
                  fast=False, verbose=True, dtype='f4', big_endian=False, 
                  cstagop=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
-                 use_relpath=False, stagger_kind = 'stagger'):
+                 use_relpath=False, stagger_kind = 'stagger',
+                 iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
         """
@@ -104,7 +106,6 @@ class BifrostData(object):
         self.root_name = file_root
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
-        self.cstagop = cstagop
         self.stagger_kind = stagger_kind
         self.sel_units = sel_units 
         self.numThreads = numThreads
@@ -133,7 +134,9 @@ class BifrostData(object):
         self.uni = Bifrost_units(filename=tmp, fdir=fdir)
 
         self.set_snap(snap, True, params_only=params_only)
-        
+
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
+
         self.genvar()
         self.transunits = False
         self.cross_sect = cross_sect_for_obj(self)
@@ -491,8 +494,9 @@ class BifrostData(object):
         else: 
             self.cstagger_exists = True
 
-    def get_varTime(self, var, snap, iix=None, iiy=None, iiz=None, 
-                    *args, **kwargs):
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
+                    print_freq=None, 
+                    *args__get_var, **kw__get_var):
         """
         Reads a given variable as a function of time.
 
@@ -509,86 +513,176 @@ class BifrostData(object):
             reads xz slices.
         iiz -- integer or array of integers, optional
             reads xy slices.
-        """
-        self.iix = iix
-        self.iiy = iiy
-        self.iiz = iiz
+        print_freq - number, default 2
+            print progress update every print_freq seconds.
+            Use print_freq < 0 to never print update.
+            Use print_freq ==0 to print all updates.
 
+        additional *args and **kwargs are passed to get_var.
+        """
+        # set print_freq
+        if print_freq is None:
+            if not self.verbose:
+                print_freq = -1  # never print.
+            print_freq = getattr(self, 'print_freq', 2) # default 2
+        else:
+            setattr(self, 'print_freq', print_freq)
+
+        # set snap
+        if snap is None:
+            snap = kw__get_var.pop('snaps', None) # look for 'snaps' kwarg
+            if snap is None:
+                snap = self.snap
         snap = np.array(snap, copy=False)
+        if len(snap.shape)==0:
+            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
             self.variables={}
 
-        # lengths for dimensions of return array
-        self.xLength = 0
-        self.yLength = 0
-        self.zLength = 0
-
-        for dim in ('iix', 'iiy', 'iiz'):
-            if getattr(self, dim) is None:
-                if dim[2] == 'z':
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2] + 'b'))
-                else:
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2]))
-                setattr(self, dim, slice(None))
-            else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
+        # set iix,iiy,iiz; figure out dimensions of return array
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
-        for i in range(0, snapLen):
-            self.snapInd = i
-
-            value[..., i] = self.get_var(var, self.snap[i], iix=self.iix,
-                                         iiy=self.iiy, iiz=self.iiz)
-
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
-                        
+        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
+        if hasattr(self, 'recoverData'):
+            delattr(self, 'recoverData')            # smash any existing saved data
+        timestart = now = time.time()               # track timing, so we can make updates.
+        printed_update  = False
+        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
+            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
+        try:
+            for it in range(0, snapLen):
+                self.snapInd = it
+                # print update if it is time to print update
+                if (print_freq >= 0) and (time.time() - now > print_freq):
+                    _print_clearline()
+                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
+                                    var,     snap[it],         it,    snapLen        ), end='')
+                    now = time.time()
+                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                    printed_update=True
+                    
+                # actually get the values here:
+                value[..., it] = self.get_var(var, snap=snap[it],
+                                              iix=self.iix, iiy=self.iiy, iiz=self.iiz,
+                                              *args__get_var, **kw__get_var)
+        except:   # here it is ok to except all errors, because we always raise.
+            if it > 0:
+                self.recoverData = value[..., :it]   # save data 
+                if self.verbose:
+                    print(('Crashed during get_varTime, but managed to get data from {} '
+                           'snaps before crashing. Data was saved and can be recovered '
+                           'via self.recoverData.'.format(it)))
+            raise
+        finally:
+            self.set_snap(remembersnaps)             # restore snaps
+            if printed_update:
+                _print_clearline()
+                print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
+        
         return value
 
-    def set_domain_iiaxis(self, iinum=slice(None), iiaxis='x'):
+    def set_domain_iiaxis(self, iinum=None, iiaxis='x'):
         """
-        Sets length of each dimension for get_var based on iix/iiy/iiz
+        Sets iix=iinum and xLength=len(iinum). (x=iiaxis)
+        if iinum is a slice, use self.nx (or self.nzb, for x='z') to determine xLength.
+
+        Also, if we end up using a non-None slice, disable cstagop.
+        TODO: maybe we can leave cstagop=True if stagger_kind != 'cstagger' ?
 
         Parameters
         ----------
-        iinum - int, list, or array
+        iinum - slice, int, list, array, or None (default)
             Slice to be taken from get_var quantity in that axis (iiaxis)
+            int --> convert to slice(iinum, iinum+1) (to maintain dimensions of output)
+            None --> don't change existing self.iix (or iiy or iiz).
+                     if it doesn't exist, set it to slice(None).
+            To set existing self.iix to slice(None), use iinum=slice(None).
         iiaxis - string
             Axis from which the slice will be taken ('x', 'y', or 'z')
         """
+        iix = 'ii' + iiaxis
+        if hasattr(self, iix):
+            # if iinum is None or self.iix == iinum, do nothing and return nothing.
+            if (iinum is None):
+                return
+            elif np.all(iinum == getattr(self, iix)):
+                return
+
         if iinum is None:
             iinum = slice(None)
 
-        dim = 'ii' + iiaxis
-        setattr(self, dim, iinum)
-        setattr(self, iiaxis + 'Length', np.size(iinum))
+        if iinum != slice(None):
+            # smash self.variables. Necessary, since we will change the domain size.
+            self.variables={}
 
-        if np.size(getattr(self, dim)) == 1:
-            if getattr(self, dim) == slice(None):
-                if dim[2] == 'z':
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2] + 'b'))
-                else:
-                    setattr(self, dim[2] + 'Length',
-                            getattr(self, 'n' + dim[2]))
+        if isinstance(iinum, int): # we convert to slice, to maintain dimensions of output.
+            iinum = slice(iinum, iinum+1)  # E.g. [0,1,2][slice(1,2)] --> [1]; [0,1,2][1] --> 1
+
+        # set self.iix
+        setattr(self, iix, iinum)
+        if self.verbose:
+            # convert iinum to string that wont be super long (in case iinum is a long list)
+            try:
+                assert len(iinum)>20
+            except (TypeError, AssertionError):
+                iinumprint = iinum
             else:
-                indSize = np.size(getattr(self, dim))
-                setattr(self, dim[2] + 'Length', indSize)
-                if indSize == 1:
-                    temp = np.asarray(getattr(self, dim))
-                    setattr(self, dim, temp.item())
+                iinumprint = 'list with length={:4d}, min={:4d}, max={:4d}, x[1]-x[0]={:2d}'
+                iinumprint = iinumprint.format(len(iinum), min(iinum), max(iinum), iinum[1]-iinum[0])
+            # print info.
+            print('(set_domain) {}: {}'.format(iix, iinumprint),
+                  whsp*4, end="\r",flush=True)
+
+        #set self.xLength
+        if isinstance(iinum, slice):
+            if iiaxis == 'z':
+                nx = getattr(self, 'nzb')
+            else:
+                nx = getattr(self, 'n'+iiaxis)
+            indSize = len(range(*iinum.indices(nx)))
         else:
-            indSize = np.size(getattr(self, dim))
-            setattr(self, dim[2] + 'Length', indSize)
-            if indSize == 1:
-                temp = np.asarray(getattr(self, dim))
-                setattr(self, dim, temp.item())
+            indSize = np.size(iinum)
+        setattr(self, iiaxis + 'Length', indSize)
+
+        #disable cstagop if necessary.
+        self._cstagop_disable_if_slicing(check_axis=iiaxis)
+
+    def _cstagop_disable_if_slicing(self, check_axis=None):
+        '''disable cstagop if we are slicing the domain at all.
+        if check_axis is None, check x,y,z. Otherwise only check check_axis.
+        returns 
+        '''
+        if self.cstagop:
+            if check_axis is None:
+                check_axes = ('x', 'y', 'z')
+            else:
+                check_axes = [check_axis]
+            for x in check_axes:
+                if getattr(self, 'ii'+x) != slice(None):
+                    self.cstagop = False
+                    if self.verbose:
+                        warnings.warn(('cstagger use has been turned off, '
+                                'due to slicing domain in any axis (at least in '+x+') '
+                                'Turn it back on with "dd.cstagop = True"'))
+                    break
+        return self.cstagop
+
+    def set_domain_iiaxes(self, iix=None, iiy=None, iiz=None):
+        '''sets iix, iiy, iiz, xLength, yLength, zLength.
+        iix: slice, int, list, array, or None (default)
+            Slice to be taken from get_var quantity in x axis
+            None --> don't change existing self.iix.
+                     if self.iix doesn't exist, set it to slice(None).
+            To set existing self.iix to slice(None), use iix=slice(None).
+        iiy, iiz: similar to iix.
+        '''
+        self.set_domain_iiaxis(iix, 'x')
+        self.set_domain_iiaxis(iiy, 'y')
+        self.set_domain_iiaxis(iiz, 'z')
 
     def genvar(self): 
         '''
@@ -607,8 +701,7 @@ class BifrostData(object):
         self.varn['bz'] = 'bz'
         
     @document_vars.quant_tracking_top_level
-    def get_var(self, var, snap=None, *args, iix=slice(None), iiy=slice(None),
-                iiz=slice(None), **kwargs):
+    def get_var(self, var, snap=None, *args, iix=None, iiy=None, iiz=None, **kwargs):
         """
         Reads a variable from the relevant files.
 
@@ -626,37 +719,7 @@ class BifrostData(object):
         if self.verbose:
             print('(get_var): reading ', var, whsp*6, end="\r", flush=True)
 
-        if not hasattr(self, 'iix'):
-            self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-            self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-            self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-            self.variables={}
-        else:
-            if (iix != slice(None)) and np.any(iix != self.iix):
-                if self.verbose:
-                    print('(get_var): iix ', iix, self.iix,
-                        whsp*4, end="\r",flush=True)
-                self.set_domain_iiaxis(iinum=iix, iiaxis='x')
-                self.variables={}
-            if (iiy != slice(None)) and np.any(iiy != self.iiy):
-                if self.verbose:
-                    print('(get_var): iiy ', iiy, self.iiy, whsp*4,
-                        end="\r",flush=True)
-                self.set_domain_iiaxis(iinum=iiy, iiaxis='y')
-                self.variables={}
-            if (iiz != slice(None)) and np.any(iiz != self.iiz):
-                if self.verbose:
-                    print('(get_var): iiz ', iiz, self.iiz, whsp*4,
-                        end="\r",flush=True)
-                self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-                self.variables={}
-
-        if self.cstagop and ((self.iix != slice(None)) or
-                             (self.iiy != slice(None)) or
-                             (self.iiz != slice(None))):
-            self.cstagop = False
-            print('WARNING: cstagger use has been turned off,',
-                  'turn it back on with "dd.cstagop = True"')
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
@@ -720,23 +783,15 @@ class BifrostData(object):
                 "see e.g. help(self.get_var) or get_var('')) for guidance.")
             raise ValueError(errmsg.format(var, repr(self.simple_vars)))
         
-        # reshape if necessary... (When it could be necessary?? -SE July 6 2021)
+        # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-            # at least one slice has more than one value
-            if np.size(self.iix) + np.size(self.iiy) + np.size(self.iiz) > 3:
-                # x axis may be squeezed out, axes for take()
-                axes = [0, -2, -1]
-                for counter, dim in enumerate(['iix', 'iiy', 'iiz']):
-                    if (np.size(getattr(self, dim)) > 1 or
-                            getattr(self, dim) != slice(None)):
-                        # slicing each dimension in turn
-                        val = val.take(getattr(self, dim), axis=axes[counter])
-            else:
-                # all of the slices are only one int or slice(None)
-                val = val[self.iix, self.iiy, self.iiz]
-
-            # ensuring that dimensions of size 1 are retained
-            val = np.reshape(val, (self.xLength, self.yLength, self.zLength))
+            def isslice(x): return isinstance(x, slice)
+            if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
+                val = val[self.iix, self.iiy, self.iiz]  # we can index all together
+            else:  # we need to index separately due to numpy multidimensional index array rules.
+                val = val[self.iix,:,:]
+                val = val[:,self.iiy,:]
+                val = val[:,:,self.iiz]
         
         return val
 
@@ -1240,11 +1295,9 @@ class BifrostData(object):
         fmt.__doc__ = 'formats result of get_varV. I was made by helita.sim.bifrost._varV_formatter.'
         return fmt
 
-    def zero(self):
-        '''return np.zeros_like(self.r, subok=False).
-        (an array of zeros with same shape and dtype like self.r but which is not a memmap.)
-        '''
-        return np.zeros_like(self.r, subok=False)
+    def zero(self, **kw__np_zeros):
+        '''return np.zeros() with shape equal to shape of result of get_var()'''
+        return np.zeros((self.xLength, self.yLength, self.zLength), **kw__np_zeros)
 
     def get_snap_at_time(self, t, units='simu'):
         '''get snap number which is closest to time t.
@@ -1327,6 +1380,26 @@ class BifrostData(object):
         if mean:
             varx, vary, varz, varmag = varx.mean(), vary.mean(), varz.mean(), varmag.mean()
         return np.array([varx, vary, varz]) / varmag
+
+    def write_mesh_file(self, meshfile='untitled_mesh.mesh'):
+        '''writes mesh to meshfilename.
+        mesh will be the mesh implied by self,
+        using values for x, y, z, dx1d, dy1d, dz1d, indexed by iix, iiy, iiz.
+
+        TODO: handle dx, dy, dz for iix, iiy, iiz like slice(None, None, N).
+
+        Returns abspath to generated meshfile.
+        '''
+        if not meshfile.endswith('.mesh'):
+            meshfile += '.mesh'
+        AXES = ('x', 'y', 'z')
+        kw_x    = {x : getattr(self, x)[getattr(self, 'ii'+x)] for x in AXES}
+        kw_nx   = {'n'+x : getattr(self, x+'Length') for x in AXES}
+        kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') for x in AXES}
+        kw_mesh = {**kw_x, **kw_nx, **kw_dx}
+        Create_new_br_files().write_mesh(**kw_mesh, meshfile=meshfile)
+        return os.path.abspath(meshfile)
+
 
     if file_memory.DEBUG_MEMORY_LEAK:
         def __del__(self):
@@ -1554,7 +1627,7 @@ class Bifrost_units(object):
                 units_to_set = {unit: DEFAULT_UNITS[unit] for unit in DEFAULT_UNITS.keys()
                                         if getattr(self, unit, None) is None}
                 if verbose:
-                    print("(WWW) selected file '{file}' is not available.".format(file=file),
+                    print("(WWW) selected file '{file}' is not available.".format(file=filename),
                           "Setting the following Default Solar Bifrost units: ", units_to_set)
                 for unit, value in units_to_set.items():
                     setattr(self, unit, value)

@@ -181,7 +181,7 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
         return document_var
     else:
         # do nothing and return a function which does nothing.
-        def dont_document_var(varname, vardoc, nfluid=None):
+        def dont_document_var(varname, vardoc, nfluid=None, **kw):
             '''does nothing.
             (because obj.vardict[TYPE_QUANT] already existed when vars_documenter was called).
             '''
