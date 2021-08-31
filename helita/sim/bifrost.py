@@ -9,6 +9,7 @@ import weakref
 from glob import glob
 import warnings
 import time
+import ast
 
 # import external public modules
 import numpy as np
@@ -2460,72 +2461,36 @@ def read_idl_ascii(filename,firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary.
     if obj is not None, remember the result and restore it if ever reading the same exact file again.
     '''
-    li = 0
+    li = -1
     params = {}
     # go through the file, add stuff to dictionary
 
     with open(filename) as fp:
         for line in fp:
+            li += 1
             # ignore empty lines and comments
             line = line.strip()
-            if not line:
-                li += 1
-                continue
-            if line[0] == ';':
-                li += 1
+            if len(line)==0 or line[0]==';':
                 continue
             line = line.split(';')[0].split('=')
             if len(line) != 2:
                 if firstime:
                     print('(WWW) read_params: line %i is invalid, skipping' % li)
-                li += 1
                 continue
             # force lowercase because IDL is case-insensitive
             key = line[0].strip().lower()
             value = line[1].strip()
-            # instead of the insecure 'exec', find out the datatypes
-            if value.find('"') >= 0:
-                # string type
-                value = value.strip('"')
-                try:
-                    if (value.find(' ') >= 0):
-                        value2 = np.array(value.split())
-                        if ((value2[0].upper().find('E') >= 0) or (
-                                value2[0].find('.') >= 0)):
-                            value = value2.astype(np.float)
-
-                except Exception:
-                    value = value
-            elif (value.find("'") >= 0):
-                value = value.strip("'")
-                try:
-                    if (value.find(' ') >= 0):
-                        value2 = np.array(value.split())
-                        if ((value2[0].upper().find('E') >= 0) or (
-                                value2[0].find('.') >= 0)):
-                            value = value2.astype(np.float)
-                except Exception:
-                    value = value
-            elif (value.lower() in ['.false.', '.true.']):
-                # bool type
+            # --- evaluate value --- #
+            ## allow '.false.' or '.true.' for bools
+            if (value.lower() in ['.false.', '.true.']):
                 value = False if value.lower() == '.false.' else True
-            elif (value.find('[') >= 0) and (value.find(']') >= 0):
-                # list type
-                value = eval(value)
-            elif (value.upper().find('E') >= 0) or (value.find('.') >= 0):
-                # float type
-                value = float(value)
+            ## otherwise, use ast.literal_eval
             else:
-                # int type
                 try:
-                    value = int(value)
+                    value = ast.literal_eval(value)
                 except Exception:
-                    if (firstime):
-                        print('(WWW) read_idl_ascii: could not find datatype in'
-                            ' line %i in file %s, %s, skipping %s' % (li,
-                            filename, value, 4*whsp))
-                    li += 1
-                    continue
+                    print('failed to evaluate value = ', value)
+                    pass # leave value as string if we fail to evaluate it.
 
             params[key] = value
 
