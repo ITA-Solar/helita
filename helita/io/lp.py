@@ -108,8 +108,16 @@ def getheader(filename):
     """
     Reads header from La Palma format cube.
 
-    Returns a list with the following:
-    shape tuple (nx, ny [, nt], datatype (with endianness), header string.
+    Parameters
+    ----------
+    filename : str
+        File to read header from.
+
+    Returns
+    -------
+    result : list
+        List with shape tuple (nx, ny [, nt]),
+        datatype (with endianness), header string.
     """
     # read header and convert to string
     h = np.fromfile(filename, dtype='uint8', count=512)
@@ -178,8 +186,23 @@ def getheader(filename):
 
 
 def getdata(filename, rw=False, verbose=False):
-    ''' Reads La Palma format cube (into a memmap object). If rw is True, then
-        any change on the data will be written to the file.'''
+    """
+    Reads La Palma format cube into a memmap object.
+
+    Parameters
+    ----------
+    filename : str
+        File to read.
+    rw : bool, optional
+        If True, then any change to the data will be written to file.
+    verbose : bool, optional
+        If True, will print out additional information.
+
+    Returns
+    -------
+    data : ndarray
+        Numpy memmap object with data.
+    """
     sh, dt, header = getheader(filename)
     if verbose:
         print(('Reading %s...\n%s' % (filename, header)))

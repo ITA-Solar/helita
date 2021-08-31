@@ -712,3 +712,60 @@ cpdef stat2d_idx(np.ndarray[DTYPEf_t, ndim=3] x,
             else:
                 res[:, i, j] = np.nan
     return res
+
+@cython.boundscheck(False) # turn of bounds-checking for entire function
+@cython.wraparound(False)  # turn of bounds-checking for entire function
+cpdef fwhm_gen(np.ndarray[DTYPEf_t, ndim=1] x,
+               np.ndarray[DTYPEf_t, ndim=3] spec):
+    """
+    fwhm_gen(x, spec)
+    
+    Calculates the FWHM of a generic line profile. This is done by first
+    calculating the line maximum, and then linearly interpolating the widest
+    wings for half of that value. (Local maxima/minima are therefore ignored).
+    
+    Parameters
+    ----------
+    x    : 1-D ndarray (double type)
+        Array containg the x (abcissa) values. Typically wavelength.
+    spec : 3-D ndarray (double type)
+        Array containing the spectra to calculate FWHM. Index order is
+        (x, y, wave).
+
+    Returns
+    -------
+    blue_wing, red_wing : 3-D ndarrays
+        Arrays with blue and red wing. Same units as x. 
+    """
+    cdef int nx = spec.shape[0]
+    cdef int ny = spec.shape[1]
+    cdef int nw = spec.shape[2]
+    cdef int i, j, k, midw = nw // 2
+    cdef float local_max 
+    cdef float local_min
+    cdef float hm
+    cdef np.ndarray[DTYPEf_t, ndim=2] blue_wing = np.zeros((nx,ny), dtype=DTYPEf)
+    cdef np.ndarray[DTYPEf_t, ndim=2] red_wing = np.zeros((nx, ny), dtype=DTYPEf)
+    for i in range(nx):
+        for j in range(ny):
+            local_max = 0.
+            local_min = 1.e50
+            for k in range(nw):
+                 local_min = f_min(local_min, spec[i, j, k])
+                 local_max = f_max(local_max, spec[i, j, k])
+            hm = local_min + (local_max - local_min) / 2.
+            for k in range(1, midw):
+                 if ((spec[i, j, k] > hm and spec[i, j, k - 1] <= hm) or
+                     (spec[i, j, k] < hm and spec[i, j, k - 1] >= hm)):
+                     blue_wing[i, j] = x[k - 1] + (x[k] - x[k - 1]) * \
+                                          (hm - spec[i, j, k - 1]) / \
+                                          (spec[i, j, k] - spec[i, j, k - 1])
+                     break
+            for k in range(midw, nw):
+                 if ((spec[i, j, k] > hm and spec[i, j, k - 1] <= hm) or
+                     (spec[i, j, k] < hm and spec[i, j, k - 1] >= hm)):
+                     red_wing[i, j] = x[k - 1] + (x[k] - x[k - 1]) * \
+                                           (hm - spec[i, j, k - 1]) / \
+                                           (spec[i, j, k] - spec[i, j, k - 1])
+                     break
+    return blue_wing, red_wing
