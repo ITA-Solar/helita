@@ -336,8 +336,6 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
   It will assume Maxwell molecular collisions if crossection 
   tables does not exist. 
   '''
-  # _COLFRE_QUANT[1] = [  'nu'   +  clist  for clist in CROSTAB_LIST] \
-  #                    + ['nu%s_mag' % clist for clist in CROSTAB_LIST]
 
   if COLFRE_QUANT is None:
     COLFRE_QUANT = [  'nu'   +  clist  for clist in obj.CROSTAB_LIST] \
@@ -391,8 +389,6 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
   '''
   Maxwell molecular collision frequency 
   '''
-  #_COLFREMX_QUANT[1] = [  'numx'   +  clist  for clist in CROSTAB_LIST] \
-  #                   + ['numx%s_mag' % clist for clist in CROSTAB_LIST]
   if COLFREMX_QUANT is None:
     COLFREMX_QUANT = [  'numx'   +  clist  for clist in obj.CROSTAB_LIST] \
                      + ['numx%s_mag' % clist for clist in obj.CROSTAB_LIST]#_COLFREMX_QUANT[1]
@@ -456,7 +452,6 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
   Coulomb Collision frequency between different ionized species (cgs)
   (Hansteen et al. 1997)
   '''
- #_COLCOU_QUANT[1] = ['nucou' + clist for clist in CROSTAB_LIST]
   if COLCOU_QUANT is None:
     COLCOU_QUANT = ['nucou' + clist for clist in obj.CROSTAB_LIST]#_COLCOU_QUANT[1]
 
@@ -548,11 +543,6 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   '''
   Sum of collision frequencies (cgs). 
   '''
-  # _COLFRI_QUANT[1] = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']
-  # _COLFRI_QUANT[1]+= [nu + elem + '_' + i                          \
-  #                     for i    in ('i', 'i_mag', 'n', 'n_mag') \
-  #                     for nu   in ('nu', 'numx')               \
-  #                     for elem in ELEMLIST]
 
   if (COLFRI_QUANT == None):
     COLFRI_QUANT = ['nu_ni', 'numx_ni', 'nu_en', 'nu_ei', 'nu_in', 'nu_ni_mag', 'nu_in_mag']#_COLFRI_QUANT[1]
@@ -977,7 +967,6 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
   gyro freqency are (Hz)
   gf+ ionization state
   '''
-  #_GYROF_QUANT[1] = ['gfe'] + ['gf' + elem for elem in ELEMLIST]
 
   if (GYROF_QUANT is None):
     GYROF_QUANT = ['gfe'] + ['gf' + elem for elem in obj.ELEMLIST]#_GYROF_QUANT[1]
@@ -1011,8 +1000,6 @@ def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
   kappa, i.e., magnetization (adimensional)
   at the end it must have the ionization
   '''
-  #_KAPPA_QUANT[1] = ['kappa' + elem for elem in ELEMLIST]
-  #_KAPPA_QUANT[1] +=  ['kappanorm_', 'kappae'] 
 
   if (KAPPA_QUANT is None):
     KAPPA_QUANT = ['kappa' + elem for elem in obj.ELEMLIST]#_KAPPA_QUANT[1]
@@ -1086,10 +1073,6 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   densities for specific ionized species.
   For example, nc-1 gives number density of neutral carbon, in cm^-3. nc-2 is for once-ionized carbon.
   '''
-  #_IONP_QUANT[1] =   ['n' + elem + '-' for elem in ELEMLIST]  \
-  #           + ['r' + elem + '-' for elem in ELEMLIST]  \
-  #            + ['rneu', 'rion', 'nion', 'nneu', 'nelc'] \
-  #            + ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']
   if (IONP_QUANT is None):
     IONP_QUANT = ['n' + elem + '-' for elem in obj.ELEMLIST]  \
                + ['r' + elem + '-' for elem in obj.ELEMLIST]  \
