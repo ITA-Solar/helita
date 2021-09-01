@@ -102,7 +102,6 @@ class EbysusData(BifrostData):
                  N_memmap=200, mm_persnap=True, 
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
                  _force_disable_memory=False,
-                 ELEMLIST=['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni'],
                  **kwargs):
         ''' initialize EbysusData object.
 
@@ -153,10 +152,6 @@ class EbysusData(BifrostData):
         *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
         # set values of some attrs (e.g. from args & kwargs passed to __init__)
-        self.ELEMLIST = ELEMLIST
-        self.CROSTAB_LIST =   ['e_'+elem for elem in self.ELEMLIST]   \
-                + [elem+'_e' for elem in self.ELEMLIST]   \
-                + [ e1 +'_'+ e2  for e1 in self.ELEMLIST for e2 in self.ELEMLIST]
         self.match_type = match_type
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
