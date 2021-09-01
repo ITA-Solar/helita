@@ -233,9 +233,19 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
 _CROSTAB_QUANT = ('CROSTAB_QUANT')
 # get value
 @document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
-def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
+def get_crossections(obj, quant, CROSTAB_QUANT=None, cross_dict=None, **kwargs):
   '''
   Computes cross section between species in cgs
+
+  optional kwarg: cross_dict
+    (can pass it to get_var. E.g. get_var(..., cross_dict=mycrossdict))
+    tells which cross sections to use.
+    If not entered, use:
+      cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
+      cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
+      cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
+      cross_dict['e','he1']  = cross_dict['he1','e']  = 'e-he.txt'
+      cross_dict['e','h1']   = cross_dict['h1','e']   = 'e-h.txt'
   '''
   if CROSTAB_QUANT is None:
     CROSTAB_QUANT = obj.CROSTAB_LIST
@@ -259,12 +269,13 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   spic2_ele = ''.join([i for i in spic2 if not i.isdigit()])
 
   cross_tab=None
-  cross_dict = {}
-  cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
-  cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
-  cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
-  cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
-  cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
+  if cross_dict is None:
+    cross_dict = {}
+    cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
+    cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
+    cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
+    cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
+    cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
   maxwell = False
 
   for key, value in kwargs.items():
