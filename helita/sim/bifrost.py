@@ -2481,17 +2481,16 @@ def read_idl_ascii(filename,firstime=False):
         for line in fp:
             li += 1
             # ignore empty lines and comments
-            line = line.strip()
-            if len(line)==0 or line[0]==';':
-                continue
-            line = line.split(';')[0].split('=')
-            if len(line) != 2:
+            line, _, comment = line.partition(';')
+            key, _, value    = line.partition('=')
+            key   = key.strip().lower()
+            value = value.strip()
+            if len(key) == 0:
+                continue    # this was a blank line.
+            elif len(value) == 0:
                 if firstime:
                     print('(WWW) read_params: line %i is invalid, skipping' % li)
                 continue
-            # force lowercase because IDL is case-insensitive
-            key = line[0].strip().lower()
-            value = line[1].strip()
             # --- evaluate value --- #
             ## allow '.false.' or '.true.' for bools
             if (value.lower() in ['.false.', '.true.']):
