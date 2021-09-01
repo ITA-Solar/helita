@@ -2499,6 +2499,7 @@ def read_idl_ascii(filename,firstime=False):
             ## otherwise, use ast.literal_eval
             else:
                 try:
+                    value = value.lstrip('0')  # ast doesn't like ints starting with 0.
                     value = ast.literal_eval(value)
                 except Exception:
                     pass # leave value as string if we fail to evaluate it.
