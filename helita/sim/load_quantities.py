@@ -258,63 +258,53 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   if (quant == '') or not quant_elem in CROSTAB_QUANT:
     return None
 
-  tg = obj.get_var('tg')
-  elem = quant.split('_')
+  # -- initial processing, and reading options from kwargs -- #
+  cross_tab  = kwargs.pop('cross_tab', None)
+  cross_dict = kwargs.pop('cross_dict', None)
+  maxwell    = kwargs.pop('maxwell', False)
 
-  #spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
-  #spic2 = ''.join([i for i in elem[1] if not i.isdigit()])
-  spic1 = elem[0]
-  spic2 = elem[1]
-  spic1_ele = ''.join([i for i in spic1 if not i.isdigit()])
-  spic2_ele = ''.join([i for i in spic2 if not i.isdigit()])
-
-  cross_tab=None
-  cross_dict=None
   if cross_dict is None:
-    # It looks like it is not supported to read the name of the files in the mf_params or params.in files
-    cross_dict = {}
+    cross_dict = dict()
     cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
     cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
     cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
     cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
     cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
 
-  maxwell = False
-
-  for key, value in kwargs.items():
-    if key == 'cross_tab':
-      cross_tab = value
-    if key == 'cross_dict': 
-      cross_dict = value 
-    if key == 'maxwell':
-      maxwell = value
-
-  if cross_tab == None: 
+  elem  = quant.split('_')
+  spic1 = elem[0]
+  spic2 = elem[1]
+  spic1_ele = ''.join([i for i in spic1 if not i.isdigit()])
+  spic2_ele = ''.join([i for i in spic2 if not i.isdigit()])
+  
+  # -- try to read cross tab (unless it was entered in kwargs) -- #
+  if cross_tab is None: 
     try: 
       cross_tab = cross_dict[spic1,spic2]
-    except Exception:  
-      if not(maxwell): 
+    except Exception:
+      if not(maxwell):
+        ## use a guess. (Might be a bad guess...)
+        ww = obj.uni.weightdic
         if (spic1_ele == 'h'):
-          cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['h'] * \
-              obj.uni.cross_p * np.ones(np.shape(tg))
+          cross = ww[spic2_ele] / ww['h'] * obj.uni.cross_p
         elif (spic2_ele == 'h'):
-          cross = obj.uni.weightdic[spic1_ele] / obj.uni.weightdic['h'] * \
-              obj.uni.cross_p * np.ones(np.shape(tg))
+          cross = ww[spic1_ele] / ww['h'] * obj.uni.cross_p
         elif (spic1_ele == 'he'):
-          cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['he'] * \
-              obj.uni.cross_he * np.ones(np.shape(tg))
+          cross = ww[spic2_ele] / ww['he'] * obj.uni.cross_he
         elif (spic2_ele == 'he'):
-          cross = obj.uni.weightdic[spic1_ele] / obj.uni.weightdic['he'] * \
-              obj.uni.cross_he * np.ones(np.shape(tg))
+          cross = ww[spic1_ele] / ww['he'] * obj.uni.cross_he
         else: 
-          cross = obj.uni.weightdic[spic2_ele] / obj.uni.weightdic['h'] * \
-              obj.uni.cross_p / (np.pi*obj.uni.weightdic[spic2_ele])**2 * \
-              np.ones(np.shape(tg))
+          cross = ww[spic2_ele] / ww['h'] * obj.uni.cross_p / (np.pi*ww[spic2_ele])**2
+        # make sure the guess has the right shape.
+        cross = obj.zero() + cross
 
-  if cross_tab != None:
+  # -- use cross_tab to read cross at tg -- #
+  if cross_tab is not None:
+    tg = obj.get_var('tg')
     crossobj = obj.cross_sect(cross_tab=[cross_tab])
     cross = crossobj.cross_tab[0]['crossunits'] * crossobj.tab_interp(tg)
 
+  # -- return result -- #
   try:
     return cross
   except Exception:
