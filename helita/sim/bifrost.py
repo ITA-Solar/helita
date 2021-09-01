@@ -2496,6 +2496,8 @@ def read_idl_ascii(filename,firstime=False):
             if (value.lower() in ['.false.', '.true.']):
                 value = False if value.lower() == '.false.' else True
             ## otherwise, use ast.literal_eval
+            elif value == '0': 
+                value = 0 
             else:
                 try:
                     value = value.lstrip('0')  # ast doesn't like ints starting with 0.
