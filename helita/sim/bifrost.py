@@ -2495,15 +2495,17 @@ def read_idl_ascii(filename,firstime=False):
             ## allow '.false.' or '.true.' for bools
             if (value.lower() in ['.false.', '.true.']):
                 value = False if value.lower() == '.false.' else True
-            ## otherwise, use ast.literal_eval
-            elif value == '0': 
-                value = 0 
             else:
+                ## safely evaluate any other type of value
                 try:
-                    value = value.lstrip('0')  # ast doesn't like ints starting with 0.
                     value = ast.literal_eval(value)
                 except Exception:
-                    pass # leave value as string if we fail to evaluate it.
+                    ## failed to evaluate. Might be string, or might be int with leading 0's.
+                    try:
+                        value = int(value)
+                    except ValueError:
+                        ## failed to convert to int; interpret value as string.
+                        pass  # leave value as string without evaluating it.
 
             params[key] = value
 
