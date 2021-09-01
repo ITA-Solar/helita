@@ -233,7 +233,7 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
 _CROSTAB_QUANT = ('CROSTAB_QUANT')
 # get value
 @document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
-def get_crossections(obj, quant, CROSTAB_QUANT=None, cross_dict=None, **kwargs):
+def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   '''
   Computes cross section between species in cgs
 
@@ -269,13 +269,16 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, cross_dict=None, **kwargs):
   spic2_ele = ''.join([i for i in spic2 if not i.isdigit()])
 
   cross_tab=None
+  cross_dict=None
   if cross_dict is None:
+    # It looks like it is not supported to read the name of the files in the mf_params or params.in files
     cross_dict = {}
     cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
     cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
     cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
     cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
     cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
+
   maxwell = False
 
   for key, value in kwargs.items():
@@ -602,7 +605,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
       nuelem1_imag = 'nu{elem}_i{mag}'.format(elem=ielem, mag=mag)
       result += obj.uni.amu * obj.uni.weightdic[ielem] * \
               obj.get_var(nelem_1) * const * \
-              obj.get_var(nuelem1_imag)
+              obj.get_var(nuelem1_imag, **kwargs)
 
       if ((ielem in obj.ELEMLIST[2:]) and ('_mag' in quant)): 
         nelem_2 = 'n{elem}-2'.format(elem=ielem)
