@@ -408,6 +408,9 @@ class BifrostData(object):
             self.dzidzup = np.zeros(self.nz) + 1. / self.dz
             self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
 
+        for x in ('x', 'y', 'z'):
+            setattr(self, x, getattr(self, x)[getattr(self, 'ii'+x, slice(None))])
+
         if self.nx > 1:
             self.dx1d = np.gradient(self.x) 
         else: 
@@ -680,10 +683,17 @@ class BifrostData(object):
                      if self.iix doesn't exist, set it to slice(None).
             To set existing self.iix to slice(None), use iix=slice(None).
         iiy, iiz: similar to iix.
+
+        updates x, y, z, dx1d, dy1d, dz1d afterwards, unless iix, iiy, AND iiz are all None.
         '''
+        # set domains for x, y, z
         self.set_domain_iiaxis(iix, 'x')
         self.set_domain_iiaxis(iiy, 'y')
         self.set_domain_iiaxis(iiz, 'z')
+        # update x, y, z, dx1d, dy1d, dz1d appropriately.
+        if not ((iix is None) and (iiy is None) and (iiz is None)):
+            self.__read_mesh(self.meshfile, firstime=False)
+
 
     def genvar(self): 
         '''
