@@ -88,13 +88,19 @@ whsp = '  '
 
 def set_elemlist_as_needed(obj, elemlist=None, ELEMLIST=None, **kwargs):
   ''' set_elemlist if appropriate. Accepts 'elemlist' or 'ELEMLIST' kwargs. '''
+  # -- get elemlist. Could be entered as 'elemlist' or 'ELEMLIST' -- #
   if elemlist is None:
     elemlist = ELEMLIST  # ELEMLIST is alias for elemlist.
+  # -- if obj.ELEMLIST doesn't exist (first time setting ELEMLIST) -- #
   if not hasattr(obj, 'ELEMLIST'):
     if elemlist is None:
-      elemlist = DEFAULT_ELEMLIST
+      # << if we reach this line it means elemlist wasn't entered as a kwarg.
+      elemlist = DEFAULT_ELEMLIST    # so, use the default.
 
   if elemlist is None:
+    # << if we reach this line, elemlist wasn't entered,
+    ## AND obj.ELEMLIST exists (so elemlist has been set previously).
+    ## So, do nothing and return None.
     return None
   else:
     return set_elemlist(obj, elemlist)
