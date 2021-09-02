@@ -22,6 +22,16 @@ from .units import (
 
 DEFAULT_ELEMLIST=['h', 'he', 'c', 'o', 'ne', 'na', 'mg', 'al', 'si', 's', 'k', 'ca', 'cr', 'fe', 'ni']
 
+# setup DEFAULT_CROSS_DICT
+cross_dict = dict()
+cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
+cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
+cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
+cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
+cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
+DEFAULT_CROSS_DICT = cross_dict
+del cross_dict
+
 # set constants
 
 POLARIZABILITY_DICT = {  # polarizability (used in maxwell collisions)
@@ -76,6 +86,19 @@ POLARIZABILITY_DICT = {  # polarizability (used in maxwell collisions)
 
 whsp = '  '
 
+def set_elemlist_as_needed(obj, elemlist=None, ELEMLIST=None, **kwargs):
+  ''' set_elemlist if appropriate. Accepts 'elemlist' or 'ELEMLIST' kwargs. '''
+  if elemlist is None:
+    elemlist = ELEMLIST  # ELEMLIST is alias for elemlist.
+  if not hasattr(obj, 'ELEMLIST'):
+    if elemlist is None:
+      elemlist = DEFAULT_ELEMLIST
+
+  if elemlist is None:
+    return None
+  else:
+    return set_elemlist(obj, elemlist)
+
 def set_elemlist(obj, elemlist):
   ''' sets all things which depend on elemlist, as attrs of data_object. '''
   obj.ELEMLIST = elemlist
@@ -105,7 +128,36 @@ def set_elemlist(obj, elemlist):
                + ['rneu', 'rion', 'nion', 'nneu', 'nelc'] \
                + ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']         
 
-  
+def set_crossdict_as_needed(obj, **kwargs):
+  '''sets all things related to cross_dict.
+  Use None to restore default values.
+
+  e.g. get_var(..., maxwell=None) retores to using default value for maxwell (False).
+  Defaults:
+    maxwell: False
+    cross_tab: None
+    cross_dict:
+      cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
+      cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
+      cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
+      cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
+      cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
+  '''
+  if not hasattr(obj, 'CROSS_SECTION_INFO'):
+    obj.CROSS_SECTION_INFO = dict()
+
+  CSI = obj.CROSS_SECTION_INFO  # alias
+
+  DEFAULTS = dict(cross_tab=None, cross_dict=DEFAULT_CROSS_DICT, maxwell=False)
+
+  for key in ('cross_tab', 'cross_dict', 'maxwell'):
+    if key in kwargs:
+      if kwargs[key] is None:
+        CSI[key] = DEFAULTS[key]
+      else:
+        CSI[key] = kwargs[key]
+    elif key not in CSI:
+      CSI[key] = DEFAULTS[key]
 
 
 
@@ -122,11 +174,9 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
   #             HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   __tracebackhide__ = True  # hide this func from error traceback stack.
 
-  if 'ELEMLIST' in kwargs:                  # user entered elemlist=[...] as kwarg to get_var
-    # so, we will "permanently" set elemlist of obj to the elemlist they entered
-    set_elemlist(obj, kwargs['ELEMLIST'])   # this sets elemlist and all dependencies such as crostab_list
-  elif not hasattr(obj, 'ELEMLIST'):        # we have never set elemlist before in object
-    set_elemlist(obj, DEFAULT_ELEMLIST)
+  set_elemlist_as_needed(obj, **kwargs)
+  set_crossdict_as_needed(obj, **kwargs)
+
   quant = quant.lower()
 
   document_vars.set_meta_quant(obj, 'quantities', 'These are the single-fluid quantities')
@@ -258,18 +308,9 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   if (quant == '') or not quant_elem in CROSTAB_QUANT:
     return None
 
-  # -- initial processing, and reading options from kwargs -- #
-  cross_tab  = kwargs.pop('cross_tab', None)
-  cross_dict = kwargs.pop('cross_dict', None)
-  maxwell    = kwargs.pop('maxwell', False)
-
-  if cross_dict is None:
-    cross_dict = dict()
-    cross_dict['h1','h2']  = cross_dict['h2','h1']  = 'p-h-elast.txt'
-    cross_dict['h2','h22'] = cross_dict['h22','h2'] = 'h-h2-data.txt'
-    cross_dict['h2','he1'] = cross_dict['he1','h2'] = 'p-he.txt'
-    cross_dict['e','he1'] = cross_dict['he1','e'] = 'e-he.txt'
-    cross_dict['e','h1']  = cross_dict['h1','e']  = 'e-h.txt'
+  cross_tab  = obj.CROSS_SECTION_INFO['cross_tab']
+  cross_dict = obj.CROSS_SECTION_INFO['cross_dict']
+  maxwell    = obj.CROSS_SECTION_INFO['maxwell']
 
   elem  = quant.split('_')
   spic1 = elem[0]
