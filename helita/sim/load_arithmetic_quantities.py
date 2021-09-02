@@ -189,7 +189,6 @@ def get_deriv(obj,quant):
       return np.zeros_like(var)
     dvar = np.gradient(var, axis=xidx)  # 3D
     dx   = getattr(obj, 'd'+axis+'1d')  # 1D; needs dims to be added. add dims below.
-    dx   = dx[getattr(obj, 'ii'+axis)]  # slice properly.
     dx   = np.expand_dims(dx, axis=tuple(set((0,1,2)) - set([xidx])))
     dvardx = dvar / dx
     return dvardx
@@ -839,6 +838,8 @@ def get_angle(obj,quant):
 
   call via <var><anglequant>.
   Example: b_angleyyz --> angle off of the positive y axis in the yz plane, for b (magnetic field).
+
+  TODO: interpolation
   '''
   if quant=='':
     docvar = document_vars.vars_documenter(obj, *_ANGLE_QUANT, get_angle.__doc__)
