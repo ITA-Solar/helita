@@ -591,8 +591,9 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
         const = 1.0
         mag=''
 
+      #S
       nelem_1 = 'n{elem}-1'.format(elem=ielem)
-      nuelem1_imag = 'nu{elem}_i{mag}'.format(elem=ielem, mag=mag)
+      nuelem1_imag = '{nu}{elem}_i{mag}'.format(nu=s_nu, elem=ielem, mag=mag)
       result += obj.uni.amu * obj.uni.weightdic[ielem] * \
               obj.get_var(nelem_1) * const * \
               obj.get_var(nuelem1_imag, **kwargs)
@@ -644,14 +645,16 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
       addtxt = '_mag'
     if '_i' in quant:
       lvl = '2'
+      lvl_a = '1'
     else:
       lvl = '1'
+      lvl_a = '2'
     elem = quant.split('_')
     result = obj.zero()
     for ielem in obj.ELEMLIST:
       if elem[0][2:] != '%s%s' % (ielem, lvl):
-        result += obj.get_var('%s_%s%s%s' %
-                (elem[0], ielem, lvl, addtxt), **kwargs) #* obj.uni.weightdic[ielem] /\
+        result += obj.get_var('%s%s_%s%s%s' %
+                (elem[0], lvl_a, ielem, lvl, addtxt), **kwargs) #* obj.uni.weightdic[ielem] /\
                 #(obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
     #if obj.heion and quant[-3:] == '_i':
       #result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) * obj.uni.weightdic['he'] /\
