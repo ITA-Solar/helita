@@ -619,7 +619,7 @@ class BifrostData(object):
         if iinum is None:
             iinum = slice(None)
 
-        if iinum != slice(None):
+        if not np.array_equal(iinum, slice(None)):
             # smash self.variables. Necessary, since we will change the domain size.
             self.variables={}
 
@@ -666,7 +666,7 @@ class BifrostData(object):
             else:
                 check_axes = [check_axis]
             for x in check_axes:
-                if getattr(self, 'ii'+x) != slice(None):
+                if not np.array_equal(getattr(self, 'ii'+x), slice(None)):
                     self.cstagop = False
                     if self.verbose:
                         warnings.warn(('cstagger use has been turned off, '
@@ -1416,7 +1416,7 @@ class BifrostData(object):
         if not meshfile.endswith('.mesh'):
             meshfile += '.mesh'
         AXES = ('x', 'y', 'z')
-        kw_x    = {x : getattr(self, x)[getattr(self, 'ii'+x)] for x in AXES}
+        kw_x    = {x : getattr(self, x) for x in AXES}
         kw_nx   = {'n'+x : getattr(self, x+'Length') for x in AXES}
         kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') for x in AXES}
         kw_mesh = {**kw_x, **kw_nx, **kw_dx}
