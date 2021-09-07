@@ -571,7 +571,6 @@ class BifrostData(object):
                     
                 # actually get the values here:
                 value[..., it] = self.get_var(var, snap=snap[it],
-                                              iix=self.iix, iiy=self.iiy, iiz=self.iiz,
                                               *args__get_var, **kw__get_var)
         except:   # here it is ok to except all errors, because we always raise.
             if it > 0:
