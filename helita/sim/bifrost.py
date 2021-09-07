@@ -729,8 +729,6 @@ class BifrostData(object):
         if self.verbose:
             print('(get_var): reading ', var, whsp*6, end="\r", flush=True)
 
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
-
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
 
@@ -740,6 +738,8 @@ class BifrostData(object):
                     end="\r",flush=True)
             self.set_snap(snap)
             self.variables={}
+
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
         
         if var in self.varn.keys(): 
             var=self.varn[var]

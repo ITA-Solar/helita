@@ -605,14 +605,14 @@ class EbysusData(BifrostData):
                           **kwargs)
         self.set_fluids(**kw__fluids)
 
-        # set iix, iiy, iiz appropriately
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
-
         # set snapshot as needed
         if snap is not None:
             if not np.array_equal(snap, self.snap):
                 self.set_snap(snap)
         self.panic=panic
+
+        # set iix, iiy, iiz appropriately
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
         kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid)
