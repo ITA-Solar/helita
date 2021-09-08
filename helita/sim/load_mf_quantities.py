@@ -756,7 +756,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
                        'e_ifluid * e_to_tg = tg_ifluid', nfluid=1, **units_e_to_tg)
     tg_heati = 'heating of ifluid [Kelvin per simu. time]'
     units_tg = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
-    docvar('tg_qcol',  'total '+tg_heati+'.', nfluid=1, **units_tg)
+    docvar('tg_qcol',  'total '+tg_heati+'.', nfluid=1, uni_f=UNI.hz, uni_name=Usym('K') / Usym('s'))
     # "simple equilibrium" vars
     equili = '"simple equilibrium" temperature [K] of ifluid (setting sum_j Qcol_ij=0 and solving for Ti)'
     ## note: these all involve setting sum_j Qcol_ij = 0 and solving for Ti.
