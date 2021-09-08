@@ -947,9 +947,9 @@ for func in FLUIDTOOLS_EBYSUSDATA_FUNCS:
 del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
 
 
-###########
-#  TOOLS  #
-###########
+#############################
+#  MAKING INITIAL SNAPSHOT  #
+#############################
 
 def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
     '''write density. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
@@ -1026,7 +1026,6 @@ def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,xyz):
     #data[...,1] = inputdatay
     #data[...,2] = inputdataz
     data.flush()
-
 
 def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
     '''write energy. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
@@ -1276,13 +1275,15 @@ def printi(fdir='./',rootname='',it=1):
     va=dd.get_var('va',it) * dd.params['u_u'] / 1e5
     print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
 
+###################
+#  READING FILES  #
+###################
 
 @file_memory.manage_memmaps(file_memory.MEMORY_MEMMAP)
 @file_memory.remember_and_recall(file_memory.MEMORY_MEMMAP, ORDERED=True)
 def get_numpy_memmap(filename, **kw__np_memmap):
     '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
     return np.memmap(filename, **kw__np_memmap)
-
 
 @file_memory.remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
@@ -1318,6 +1319,10 @@ def read_mftab_ascii(filename):
     return params
 
 read_mf_param_file = read_mftab_ascii   # alias
+
+#############################
+#  WRITING PARAMETER FILES  #
+#############################
 
 def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
     '''generates COLL_KEYS such that all collisions will be turned on.
@@ -1379,7 +1384,6 @@ def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
         result = 'COLL_KEYS\n'
         result += '\n'.join([fmtstr.format(*collkey_row) for collkey_row in coll_keys])
         return result
-
 
 def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
     '''Write default .idl file'''
@@ -1635,7 +1639,6 @@ def keyword_update(inoutfile,new_values):
    with open(inoutfile,"w") as f:
      f.writelines(lines)
       
-
 def write_mftab_ascii(filename, NSPECIES_MAX=28,
                       SPECIES=None, EOS_TABLES=None, REC_TABLES=None,
                       ION_TABLES=None, CROSS_SECTIONS_TABLES=None,
