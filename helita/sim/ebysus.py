@@ -1056,6 +1056,44 @@ EbysusData.get_snaps       = available_snaps
 #  MAKING INITIAL SNAPSHOT  #
 #############################
 
+def write_mf_data(rootname, inputs, mfstr, **kw_ifluid):
+    '''write density, momentum, or energy for fluid indicated by kw_ifluid.
+    rootname = (should be set equal to the value of parameter 'snapname' in mhd.in)
+    inputs = list of arrays, each having shape (nx, ny, nz). This is the data to write.
+    mfstr = string indicating type of data. 'mfr', 'mfp', or 'mfe'.
+    **kw_ifluid: kwargs indicating fluid.
+    '''
+    # interpret fluid kwargs
+    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(**kw_ifluid, None_ok=False)
+    if mf_ispecies < 1:
+        print('(WWW) species should start with 1')
+    if mf_ilevel < 1:
+        print('(WWW) levels should start with 1')
+    # check that all arrays are finite; warn if one is not.
+    for arr in inputs:
+        if not np.isfinite(arr).all():
+            nonfinite_errmsg = 'at least one non-finite value detected in write_mfr! for iSL={}'
+            warnings.warn(nonfinite_errmsg.format((mf_ispecies, mf_ilevel)))
+    # calculate names of directory and saveloc.
+    directory = os.path.join(
+                    '{}.io'.format(rootname),
+                    'mf_%02i_%02i' % (mf_ispecies,mf_ilevel),
+                    mfstr
+                )
+    saveloc   = os.path.join(
+                    directory,
+                    '%s_%s_%02i_%02i.snap' % (rootname, mfstr, mf_ispecies, mf_ilevel)
+                )
+    # calculate shape for memmap
+    shape = (*(inputs[0].shape), len(inputs))   # (nx, ny, nz, (1 or 3))
+    # save memmap
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    data = np.memmap(saveloc, dtype='float32', mode='w+', order='f', shape=shape)
+    for i, arr in enumerate(inputs):
+        data[...,i] = arr
+    data.flush()
+
 def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
     '''write density. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
@@ -1065,20 +1103,8 @@ def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
         - (mf_ispecies and mf_ilevel)
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
-    if mf_ispecies < 1:
-        print('(WWW) species should start with 1')
-    if mf_ilevel < 1:
-        print('(WWW) levels should start with 1')
-    if not np.isfinite(inputdata).all():
-        warnings.warn('at least one non-finite value detected in write_mfr! for iSL={}'.format((mf_ispecies, mf_ilevel)))
-    directory = '%s.io/mf_%02i_%02i/mfr' % (rootname,mf_ispecies,mf_ilevel)
-    nx, ny, nz = inputdata.shape
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    data = np.memmap(directory+'/%s_mfr_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,1))
-    data[...,0] = inputdata
-    data.flush()
+    return write_mf_data(rootname, [inputdata], 'mfr',
+                         mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, **kw_ifluid)
 
 def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
     '''write momentum. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
@@ -1090,25 +1116,11 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilev
         - (mf_ispecies and mf_ilevel)
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
-    if mf_ispecies < 1:
-        print('(WWW) species should start with 1')
-    if mf_ilevel < 1:
-        print('(WWW) levels should start with 1')
-    if not (np.isfinite(inputdatax).all() and np.isfinite(inputdatay).all() and np.isfinite(inputdataz).all()):
-        warnings.warn('at least one non-finite value detected in write_mfp! for iSL={}'.format((mf_ispecies, mf_ilevel)))
-    directory = '%s.io/mf_%02i_%02i/mfp' % (rootname,mf_ispecies,mf_ilevel)
-    nx, ny, nz = inputdatax.shape
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    data = np.memmap(directory+'/%s_mfp_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
-    data[...,0] = inputdatax
-    data[...,1] = inputdatay
-    data[...,2] = inputdataz
-    data.flush()
+    return write_mf_data(rootname, [inputdatax, inputdatay, inputdataz], 'mfp',
+                         mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, **kw_ifluid)
 
 def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,xyz):
-    '''write momentum. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
+    '''write component of momentum. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdataxyz = array of shape (nx, ny, nz)
         momentum [in ebysus units] of ifluid, in x, y, OR z direction
@@ -1128,8 +1140,6 @@ def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,xyz):
         os.makedirs(directory)
     data = np.memmap(directory+'/%s_mfp_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
     data[...,xyz] = inputdataxyz
-    #data[...,1] = inputdatay
-    #data[...,2] = inputdataz
     data.flush()
 
 def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
@@ -1141,20 +1151,8 @@ def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
         - mf_ispecies and mf_ilevel
         - **kw_ifluid, via the kwargs (ifluid), (iSL), or (iS and iL)
     '''
-    mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(mf_ispecies, mf_ilevel, **kw_ifluid, None_ok=False)
-    if mf_ispecies < 1:
-        print('(WWW) species should start with 1')
-    if mf_ilevel < 1:
-        print('(WWW) levels should start with 1')
-    if not np.isfinite(inputdata).all():
-        warnings.warn('at least one non-finite value detected in write_mfr! for iSL={}'.format((mf_ispecies, mf_ilevel)))
-    directory = '%s.io/mf_%02i_%02i/mfe' % (rootname,mf_ispecies,mf_ilevel)
-    nx, ny, nz = inputdata.shape
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    data = np.memmap(directory+'/%s_mfe_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,1))
-    data[...,0] = inputdata
-    data.flush()
+    return write_mf_data(rootname, [inputdata], 'mfe',
+                         mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, **kw_ifluid)
 
 def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
     '''write common (?? what is this ??). (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
