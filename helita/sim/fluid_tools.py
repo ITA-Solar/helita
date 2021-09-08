@@ -369,7 +369,7 @@ def get_charge(obj, SL, units='e'):
     VALID_UNITS = ['e', 'elementary', 'esu', 'c', 'cgs', 'si', 'simu']
     assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
     # get charge, in 'elementary charge' units:
-    if SL[0] < 0:
+    if (SL==-1) or (SL[0] < 0):
         # electron
         charge = -1.
     else:
@@ -402,7 +402,7 @@ def get_cross_tab(obj, iSL=None, jSL=None, **kw__fluids):
     # now, ispecies is the neutral one.
     # now we will actually get the filename.
     CTK = 'CROSS_SECTIONS_TABLES'
-    if jSL[0] < 0: 
+    if (jSL==-1) or (jSL[0] < 0): 
         # electrons
         cross_tab_table = obj.mf_etabparam[CTK]
         for row in cross_tab_table:
