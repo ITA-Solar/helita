@@ -1422,6 +1422,28 @@ class BifrostData(object):
         Create_new_br_files().write_mesh(**kw_mesh, meshfile=meshfile)
         return os.path.abspath(meshfile)
 
+    def get_coords(self, mode='si'):
+        '''returns dict of coords, with keys ['x', 'y', 'z', 't'].
+        coords units are based on mode.
+            'si' (default) -> [meters] for x,y,z; [seconds] for t.
+            'cgs'     ->      [cm] for x,y,z;  [seconds] for t.
+            'simu'    ->      [simulation units] for all coords.
+        '''
+        mode = mode.lower()
+        VALIDMODES = ('si', 'cgs', 'simu')
+        assert mode in VALIDMODES, "Invalid mode ({})! Expected one of {}".format(repr(mode), VALIDMODES)
+        if mode=='si':
+            u_l = self.uni.usi_l
+            u_t = self.uni.usi_t
+        elif mode == 'cgs':
+            u_l = self.uni.u_l
+            u_t = self.uni.u_t
+        else: # mode == 'simu'
+            u_l = 1
+            u_t = 1
+        x, y, z = (self_x * u_l for self_x in (self.x, self.y, self.z))
+        return dict(x=x, y=y, z=z, t=self.params['t'] * u_t)
+
 
     if file_memory.DEBUG_MEMORY_LEAK:
         def __del__(self):
