@@ -1000,6 +1000,11 @@ snaps      = available_snaps   # alias
 get_snaps  = available_snaps   # alias
 list_snaps = available_snaps   # alias
 
+def snaps_info(dd=None, snapname=None):
+    '''returns string with length of snaps, as well as min and max.'''
+    snaps = get_snaps(dd=dd, snapname=snapname)
+    return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
+
 class EnterDir:
     '''context manager for remembering directory.
     upon enter, cd to directory. upon exit, restore original working directory.
@@ -1051,6 +1056,7 @@ EbysusData.get_snapstuff   = get_snapstuff
 EbysusData.get_snapname    = get_snapname
 EbysusData.available_snaps = available_snaps
 EbysusData.get_snaps       = available_snaps
+EbysusData.snaps_info      = snaps_info
 
 #############################
 #  MAKING INITIAL SNAPSHOT  #
