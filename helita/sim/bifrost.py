@@ -113,6 +113,8 @@ class BifrostData(object):
         self.fast = fast
         self._fast_skip_flag = False if fast else None  # None-> never skip
 
+        setattr(self, document_vars.LOADING_LEVEL, -1) # tells how deep we are into loading a quantity now.
+
         # endianness and data type
         if big_endian:
             self.dtype = '>' + dtype
@@ -411,20 +413,13 @@ class BifrostData(object):
         for x in ('x', 'y', 'z'):
             setattr(self, x, getattr(self, x)[getattr(self, 'ii'+x, slice(None))])
 
-        if self.nx > 1:
-            self.dx1d = np.gradient(self.x) 
-        else: 
-            self.dx1d = np.zeros(self.nx)
-            
-        if self.ny > 1:            
-            self.dy1d = np.gradient(self.y) 
-        else:
-            self.dy1d = np.zeros(self.ny)
-
-        if self.nz > 1:            
-            self.dz1d = np.gradient(self.z) 
-        else:
-            self.dz1d = np.zeros(self.nz)
+        for x in ('x', 'y', 'z'):
+            xcoords = getattr(self, x)
+            if len(xcoords) > 1:
+                dx1d = np.gradient(xcoords)
+            else:
+                dx1d = np.zeros(len(xcoords))
+            setattr(self, 'd'+x+'1d', dx1d)
         
         if self.sel_units=='cgs': 
             self.x *= self.uni.uni['l']
@@ -606,14 +601,16 @@ class BifrostData(object):
             To set existing self.iix to slice(None), use iinum=slice(None).
         iiaxis - string
             Axis from which the slice will be taken ('x', 'y', or 'z')
+
+        Returns True if any changes were made, else None.
         """
         iix = 'ii' + iiaxis
         if hasattr(self, iix):
             # if iinum is None or self.iix == iinum, do nothing and return nothing.
             if (iinum is None):
-                return
+                return None
             elif np.all(iinum == getattr(self, iix)):
-                return
+                return None
 
         if iinum is None:
             iinum = slice(None)
@@ -651,30 +648,9 @@ class BifrostData(object):
             indSize = np.size(iinum)
         setattr(self, iiaxis + 'Length', indSize)
 
-        #disable cstagop if necessary.
-        self._cstagop_disable_if_slicing(check_axis=iiaxis)
+        return True
 
-    def _cstagop_disable_if_slicing(self, check_axis=None):
-        '''disable cstagop if we are slicing the domain at all.
-        if check_axis is None, check x,y,z. Otherwise only check check_axis.
-        returns 
-        '''
-        if self.cstagop:
-            if check_axis is None:
-                check_axes = ('x', 'y', 'z')
-            else:
-                check_axes = [check_axis]
-            for x in check_axes:
-                if not np.array_equal(getattr(self, 'ii'+x), slice(None)):
-                    self.cstagop = False
-                    if self.verbose:
-                        warnings.warn(('cstagger use has been turned off, '
-                                'due to slicing domain in any axis (at least in '+x+') '
-                                'Turn it back on with "dd.cstagop = True"'))
-                    break
-        return self.cstagop
-
-    def set_domain_iiaxes(self, iix=None, iiy=None, iiz=None):
+    def set_domain_iiaxes(self, iix=None, iiy=None, iiz=None, force=False):
         '''sets iix, iiy, iiz, xLength, yLength, zLength.
         iix: slice, int, list, array, or None (default)
             Slice to be taken from get_var quantity in x axis
@@ -683,16 +659,23 @@ class BifrostData(object):
             To set existing self.iix to slice(None), use iix=slice(None).
         iiy, iiz: similar to iix.
 
-        updates x, y, z, dx1d, dy1d, dz1d afterwards, unless iix, iiy, AND iiz are all None.
+        updates x, y, z, dx1d, dy1d, dz1d afterwards, if any domains were changed.
         '''
-        # set domains for x, y, z
-        self.set_domain_iiaxis(iix, 'x')
-        self.set_domain_iiaxis(iiy, 'y')
-        self.set_domain_iiaxis(iiz, 'z')
-        # update x, y, z, dx1d, dy1d, dz1d appropriately.
-        if not ((iix is None) and (iiy is None) and (iiz is None)):
-            self.__read_mesh(self.meshfile, firstime=False)
+        AXES = ('x', 'y', 'z')
+        if self.cstagop and (not force):
+            # we slice at the end, only. For now, set all to slice(None)
+            slices = (slice(None), slice(None), slice(None))
+        else:
+            slices = (iix, iiy, iiz)
 
+        any_domain_changes = False
+        for x, iix in zip(AXES, slices):
+            domain_changed     = self.set_domain_iiaxis(iix, x)
+            any_domain_changes = any_domain_changes or domain_changed
+
+        # update x, y, z, dx1d, dy1d, dz1d appropriately.
+        if any_domain_changes:
+            self.__read_mesh(self.meshfile, firstime=False)
 
     def genvar(self): 
         '''
@@ -709,8 +692,26 @@ class BifrostData(object):
         self.varn['bx'] = 'bx'
         self.varn['by'] = 'by'
         self.varn['bz'] = 'bz'
-        
+    
     @document_vars.quant_tracking_top_level
+    def _load_quantity(self, var, cgsunits=1.0, **kwargs):
+        '''helper function for get_var; actually calls load_quantities for var.'''
+        __tracebackhide__ = True  # hide this func from error traceback stack
+        # look for var in self.variables
+        if var in self.variables:                 # if var is still in memory,
+            return self.variables[var] * cgsunits  # load from memory instead of re-reading.
+        # Try to load simple quantities.
+        val = load_fromfile_quantities.load_fromfile_quantities(self, var,
+                                                save_if_composite=True, **kwargs)
+        if val is None:
+            # Try to load "regular" quantities
+            val = load_quantities(self, var, **kwargs)
+        if val is None:
+            # Try to load "arithmetic" quantities.
+            val = load_arithmetic_quantities(self, var, **kwargs) 
+
+        return val
+
     def get_var(self, var, snap=None, *args, iix=None, iiy=None, iiz=None, **kwargs):
         """
         Reads a variable from the relevant files.
@@ -739,6 +740,10 @@ class BifrostData(object):
             self.set_snap(snap)
             self.variables={}
 
+        # set iix, iiy, iiz appropriately
+        slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
+        original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
+                           for slicename, iix in slices_names_and_vals]
         self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
         
         if var in self.varn.keys(): 
@@ -758,24 +763,24 @@ class BifrostData(object):
             cgsunits = 1.0
                 
         # get value of variable.
-        if var in self.variables:                 # if var is still in memory,
-            val = self.variables[var] * cgsunits  #   load from memory instead of re-reading.
-        else:
-            # Try to load simple quantities.
-            val = load_fromfile_quantities.load_fromfile_quantities(self, var,
-                                                    save_if_composite=True, **kwargs)
-            if val is None:
-                # Try to load "regular" quantities
-                val = load_quantities(self, var, **kwargs)
-            if val is None:
-                # Try to load "arithmetic" quantities.
-                val = load_arithmetic_quantities(self, var, **kwargs) 
+        val = self._load_quantity(var, cgsunits, **kwargs)
 
+        # do post-processing
+        val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
+        return val
+
+    def _get_var_postprocess(self, val, var='', original_slice=[slice(None) for x in ('x', 'y', 'z')]):
+        '''does post-processing for get_var.
+        This includes:
+            - handle "creating documentation" or "var==''" case
+            - handle "don't know how to get this var" case
+            - reshape result as appropriate (based on iix,iiy,iiz)
+        returns val after the processing is complete.
+        '''
         # handle documentation case
         if document_vars.creating_vardict(self):
             return None
         elif var == '':
-            print(help(self.get_var))
             print('Variables from snap or aux files:')
             print(self.simple_vars)
             print('Variables from xy aux files:')
@@ -791,7 +796,11 @@ class BifrostData(object):
                 'Note that simple_var available variables are: {}. '
                 '\nIn addition, get_quantity can read others computed variables; '
                 "see e.g. help(self.get_var) or get_var('')) for guidance.")
-            raise ValueError(errmsg.format(var, repr(self.simple_vars)))
+            raise ValueError(errmsg.format(repr(var), repr(self.simple_vars)))
+
+        # set original_slice if cstagop is enabled and we are at the outermost layer.
+        if self.cstagop and not self._getting_internal_var():
+            self.set_domain_iiaxes(*original_slice, force=True)
         
         # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
@@ -802,9 +811,34 @@ class BifrostData(object):
                 val = val[self.iix,:,:]
                 val = val[:,self.iiy,:]
                 val = val[:,:,self.iiz]
-        
+
         return val
 
+    def _getting_internal_var(self):
+        '''returns whether we are currently inside of an internal call to _load_quantity.
+        (_load_quantity is called inside of get_var.)
+
+        Here is an example, with the comments telling self._getting_internal_var() at that line:
+            # False
+            get_var('ux') -->
+                # False
+                px = get_var('px') -->
+                    # True
+                    returns the value of px
+                # False
+                rxdn = get_var('rxdn') -->
+                    # True
+                    r = get_var('r') -->
+                        # True
+                        returns the value of r
+                    # True
+                    returns apply_xdn_to(r)
+                # False
+                return px / rxdn
+            # False
+        (Of course, this example assumes get_var('ux') was called externally.)
+        '''
+        return getattr(self, document_vars.LOADING_LEVEL) >= 0
 
     def trans2comm(self, varname, snap=None, *args, **kwargs): 
         '''

@@ -620,6 +620,9 @@ class EbysusData(BifrostData):
         self.panic=panic
 
         # set iix, iiy, iiz appropriately
+        slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
+        original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
+                           for slicename, iix in slices_names_and_vals]
         self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
 
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
@@ -628,37 +631,8 @@ class EbysusData(BifrostData):
         # >>>>> actually get the value of var <<<<<
         val = self._load_quantity(var, panic=panic, **kw__caching)
 
-        # handle documentation case
-        if document_vars.creating_vardict(self):
-            return None
-        elif var == '':
-            print('Variables from snap or aux files:')
-            print(self.simple_vars)
-            print('Variables from xy aux files:')
-            print(self.auxxyvars)
-            if hasattr(self,'vardict'):
-                self.vardocs()
-            return None
-
-        # handle "don't know how to get this var" case
-        if val is None:
-            errmsg = ('get_var: do not know (yet) how to calculate quantity {}. '
-                '(Got None while trying to calculate it.) '
-                'Note that simple_var available variables are: {}. '
-                '\nIn addition, get_quantity can read others computed variables; '
-                "see e.g. help(self.get_var) or get_var('')) for guidance.")
-            raise ValueError(errmsg.format(var, repr(self.simple_vars)))
-
-        # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
-        if np.shape(val) != (self.xLength, self.yLength, self.zLength):
-            def isslice(x): return isinstance(x, slice)
-            if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
-                val = val[self.iix, self.iiy, self.iiz]  # we can index all together
-            else:  # we need to index separately due to numpy multidimensional index array rules.
-                val = val[self.iix,:,:]
-                val = val[:,self.iiy,:]
-                val = val[:,:,self.iiz]
-
+        # do post-processing (function is defined in bifrost.py)
+        val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
         return val
 
     @document_vars.quant_tracking_simple('SIMPLE_VARS')
