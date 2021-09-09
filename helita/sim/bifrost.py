@@ -645,7 +645,11 @@ class BifrostData(object):
                 nx = getattr(self, 'n'+iiaxis)
             indSize = len(range(*iinum.indices(nx)))
         else:
-            indSize = np.size(iinum)
+            iinum = np.asarray(iinum)
+            if iinum.dtype == 'bool':
+                indSize = np.sum(iinum)
+            else:
+                indSize = np.size(iinum)
         setattr(self, iiaxis + 'Length', indSize)
 
         return True
