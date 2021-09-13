@@ -623,7 +623,7 @@ class EbysusData(BifrostData):
         slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
         original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
                            for slicename, iix in slices_names_and_vals]
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=True)
 
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
         kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid)

@@ -138,7 +138,7 @@ class BifrostData(object):
 
         self.set_snap(snap, True, params_only=params_only)
 
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
 
         self.genvar()
         self.transunits = False
@@ -540,7 +540,7 @@ class BifrostData(object):
             self.variables={}
 
         # set iix,iiy,iiz; figure out dimensions of return array
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
 
         snapLen = np.size(self.snap)
         value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
@@ -631,8 +631,8 @@ class BifrostData(object):
             except (TypeError, AssertionError):
                 iinumprint = iinum
             else:
-                iinumprint = 'list with length={:4d}, min={:4d}, max={:4d}, x[1]-x[0]={:2d}'
-                iinumprint = iinumprint.format(len(iinum), min(iinum), max(iinum), iinum[1]-iinum[0])
+                iinumprint = 'list with length={:4d}, min={:4d}, max={:4d}, x[1]={:2d}'
+                iinumprint = iinumprint.format(len(iinum), min(iinum), max(iinum), iinum[1])
             # print info.
             print('(set_domain) {}: {}'.format(iix, iinumprint),
                   whsp*4, end="\r",flush=True)
@@ -654,7 +654,7 @@ class BifrostData(object):
 
         return True
 
-    def set_domain_iiaxes(self, iix=None, iiy=None, iiz=None, force=False):
+    def set_domain_iiaxes(self, iix=None, iiy=None, iiz=None, internal=False):
         '''sets iix, iiy, iiz, xLength, yLength, zLength.
         iix: slice, int, list, array, or None (default)
             Slice to be taken from get_var quantity in x axis
@@ -662,11 +662,14 @@ class BifrostData(object):
                      if self.iix doesn't exist, set it to slice(None).
             To set existing self.iix to slice(None), use iix=slice(None).
         iiy, iiz: similar to iix.
+        internal: bool (default: False)
+            if internal and self.cstagop, don't change slices.
+            internal=True inside get_var.
 
         updates x, y, z, dx1d, dy1d, dz1d afterwards, if any domains were changed.
         '''
         AXES = ('x', 'y', 'z')
-        if self.cstagop and (not force):
+        if internal and self.cstagop:
             # we slice at the end, only. For now, set all to slice(None)
             slices = (slice(None), slice(None), slice(None))
         else:
@@ -748,7 +751,7 @@ class BifrostData(object):
         slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
         original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
                            for slicename, iix in slices_names_and_vals]
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz)
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=True)
         
         if var in self.varn.keys(): 
             var=self.varn[var]
@@ -804,7 +807,7 @@ class BifrostData(object):
 
         # set original_slice if cstagop is enabled and we are at the outermost layer.
         if self.cstagop and not self._getting_internal_var():
-            self.set_domain_iiaxes(*original_slice, force=True)
+            self.set_domain_iiaxes(*original_slice, internal=False)
         
         # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
         if np.shape(val) != (self.xLength, self.yLength, self.zLength):
