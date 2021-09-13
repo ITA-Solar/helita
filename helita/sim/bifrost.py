@@ -1358,9 +1358,14 @@ class BifrostData(object):
         fmt.__doc__ = 'formats result of get_varV. I was made by helita.sim.bifrost._varV_formatter.'
         return fmt
 
+    @property
+    def shape(self):
+        '''returns (xLength, yLength, zLength). Use self.shape to see this value.'''
+        return (self.xLength, self.yLength, self.zLength)
+
     def zero(self, **kw__np_zeros):
         '''return np.zeros() with shape equal to shape of result of get_var()'''
-        return np.zeros((self.xLength, self.yLength, self.zLength), **kw__np_zeros)
+        return np.zeros(self.shape, **kw__np_zeros)
 
     def get_snap_at_time(self, t, units='simu'):
         '''get snap number which is closest to time t.
