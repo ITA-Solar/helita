@@ -1449,24 +1449,33 @@ class BifrostData(object):
             varx, vary, varz, varmag = varx.mean(), vary.mean(), varz.mean(), varmag.mean()
         return np.array([varx, vary, varz]) / varmag
 
-    def write_mesh_file(self, meshfile='untitled_mesh.mesh'):
+    def write_mesh_file(self, meshfile='untitled_mesh.mesh', u_l=None):
         '''writes mesh to meshfilename.
         mesh will be the mesh implied by self,
         using values for x, y, z, dx1d, dy1d, dz1d, indexed by iix, iiy, iiz.
 
-        TODO: handle dx, dy, dz for iix, iiy, iiz like slice(None, None, N).
+        u_l: None, or a number
+            cgs length units (length [simulation units] * u_l = length [cm]),
+                for whoever will be reading the meshfile.
+            None -> use length units of self.
 
         Returns abspath to generated meshfile.
         '''
         if not meshfile.endswith('.mesh'):
             meshfile += '.mesh'
+        if u_l is None:
+            scaling = 1.0
+        else:
+            scaling = self.uni.u_l / u_l
         AXES = ('x', 'y', 'z')
-        kw_x    = {x : getattr(self, x) for x in AXES}
-        kw_nx   = {'n'+x : getattr(self, x+'Length') for x in AXES}
-        kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') for x in AXES}
+        kw_x    = {  x   : getattr(self,    x      ) * scaling for x in AXES}
+        kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') / scaling for x in AXES}
+        kw_nx   = {'n'+x : getattr(self, x+'Length')           for x in AXES}
         kw_mesh = {**kw_x, **kw_nx, **kw_dx}
         Create_new_br_files().write_mesh(**kw_mesh, meshfile=meshfile)
         return os.path.abspath(meshfile)
+
+    write_meshfile = write_mesh_file  # alias
 
     def get_coords(self, mode='si'):
         '''returns dict of coords, with keys ['x', 'y', 'z', 't'].
@@ -1536,6 +1545,8 @@ class Create_new_br_files:
                    dx=None, dy=None, dz=None, meshfile="newmesh.mesh"):
         """
         Writes mesh to ascii file.
+
+        The meshfile units are simulation units for length (or 1/length, for derivatives).
         """
         def __xxdn(f):
             '''
