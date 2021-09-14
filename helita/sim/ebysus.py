@@ -172,10 +172,14 @@ class EbysusData(BifrostData):
         if len(args) >= 1:
             if args[0] != snapname:
                 snapname_errmsg = "snapname from args ('{}') disagrees with snapname from mhd.in ('{}')!"
-                raise ValueError(snapname_errmsg.format(args[0], snapname))
+                # it will read from arg and won't raise error if mhd.in does not match args. 
+                warnings.warn(snapname_errmsg.format(args[0], snapname))
+                snapname = args[0]
+                #raise ValueError(snapname_errmsg.format(args[0], snapname))
+
 
         # call BifrostData.__init__
-        super(EbysusData, self).__init__(snapname, *args[1:], fast=fast, **kwargs)
+        super(EbysusData, self).__init__(snapname,*args[1:], fast=fast, **kwargs)
 
         # set up self.att
         self.att = {}
