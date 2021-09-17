@@ -325,7 +325,7 @@ class BifrostData(object):
         try:
             p = self.params[param]
         except KeyError as err_triggered:
-            if warning is not None:
+            if (warning is not None) and (self.verbose is True):
                 warnings.warn(warning)
             if error_prop is not None:
                 if isinstance(error_prop, BaseException):
