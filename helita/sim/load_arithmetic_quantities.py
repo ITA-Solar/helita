@@ -98,14 +98,16 @@ def _can_interp(obj, axis, warn=True):
   if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
     return False       # intentionally turned off interpolation. So we don't make warning.
   if not getattr(obj, 'cstagger_exists', False):
-    warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
+    if obj.verbose:
+      warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
               'We will skip the interpolation, and instead return the original value.'
-    warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
+      warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
     return False
   if not getattr(obj, 'n'+axis, 0) >=5:
-    warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\
+    if obj.verbose:
+      warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\
               'We will skip this interpolation, and instead return the original value.'
-    warnings.warn(warnmsg) # warn user we will not be interpolating! (dimension is too small)
+      warnings.warn(warnmsg) # warn user we will not be interpolating! (dimension is too small)
     return False
   return True
 
@@ -183,7 +185,8 @@ def get_deriv(obj,quant):
 
   # handle "cant interpolate" case
   if not _can_interp(obj, axis):
-    warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
+    if obj.verbose:
+      warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
     xidx = dict(x=0, y=1, z=2)[axis]  # axis; 0, 1, or 2.
     if var.shape[xidx] <= 1:
       return np.zeros_like(var)

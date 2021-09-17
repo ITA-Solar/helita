@@ -1625,7 +1625,8 @@ def calc_tau(obj):
   Calculates optical depth.
 
   """
-  warnings.warn("Use of calc_tau is discouraged. It is model-dependent, "
+  if obj.verbose:
+    warnings.warn("Use of calc_tau is discouraged. It is model-dependent, "
                 "inefficient and slow.")
 
   # grph = 2.38049d-24 uni.GRPH

@@ -270,7 +270,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       ## from current to ue to enter in to the B x ue for electric field.
       if obj.match_aux() and obj.get_param('do_hall', default="false")=="false":
         ue = 'uep'  # include only the momentum contribution in ue, in our ef calculation.
-        warnings.warn('do_hall=="false", so we are dropping the j (current) contribution to ef (E-field)')
+        if obj.verbose:
+          warnings.warn('do_hall=="false", so we are dropping the j (current) contribution to ef (E-field)')
       else:
         ue = 'ue'   # include the full ue term, in our ef calculation.
       # we will need to do a cross product, with extra care to interpolate correctly.
@@ -290,7 +291,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       gradPe_x = obj.get_var('dpd'+x+'up'+interp, mf_ispecies=-1) # [simu. energy density units]
       # ----- calculate ionization & recombination effects ----- #
       if obj.get_param('do_recion', default=False):
-        warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
+        if obj.verbose:
+          warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
       # ----- calculate collisional effects (only if do_ohm_ecol) ----- #
       if obj.params['do_ohm_ecol'][obj.snapInd]:
         # efx is at (0, -1/2, -1/2)
@@ -631,7 +633,8 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
   elif var in ['momratex', 'momratey', 'momratez']:
     x = var[-1]
     if obj.get_param('do_recion', default=False):
-      warnings.warn('momentum contribution from ionization & recombination have not yet been added.')
+      if obj.verbose:
+        warnings.warn('momentum contribution from ionization & recombination have not yet been added.')
     gradpx    = obj.get_var('gradp'+x)
     florentzx = obj.get_var('momflorentz'+x)
     rijsumx   = obj.get_var('rijsum'+x)
@@ -1223,7 +1226,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     return obj.get_var("nr", ifluid=obj.jfluid) * obj.get_var("nu_ij") / (m_j / (m_i + m_j))
 
   elif var == "1dcolslope":
-    warnings.warn(DeprecationWarning('1dcolslope will be removed at some point in the future.'))
+    if obj.verbose:
+      warnings.warn(DeprecationWarning('1dcolslope will be removed at some point in the future.'))
     return -1 * obj.get_var("nu_ij") * (1 + obj.get_var('nu_ij_to_ji'))
 
 
@@ -1502,7 +1506,8 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       warnmsg = ('get_var(hx) (or hy or hz) uses get_var(p), and used it since before get_var(p) was implemented. '
                  'Maybe should be using get_var(mfe_p) instead? '
                  'You should not trust results until you check this.  - SE Apr 19 2021.')
-      warnings.warn(warnmsg)
+      if obj.verbose:
+        warnings.warn(warnmsg)
       return ((obj.get_var('e') + obj.get_var('p')) /
               obj.get_var('r') * var)
     else:
