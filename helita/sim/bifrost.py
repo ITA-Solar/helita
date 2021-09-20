@@ -325,7 +325,7 @@ class BifrostData(object):
         try:
             p = self.params[param]
         except KeyError as err_triggered:
-            if (warning is not None) and (self.verbose is True):
+            if (warning is not None) and (self.verbose):
                 warnings.warn(warning)
             if error_prop is not None:
                 if isinstance(error_prop, BaseException):
@@ -619,7 +619,7 @@ class BifrostData(object):
             # smash self.variables. Necessary, since we will change the domain size.
             self.variables={}
 
-        if isinstance(iinum, int): # we convert to slice, to maintain dimensions of output.
+        if isinstance(iinum, (int, np.integer)): # we convert to slice, to maintain dimensions of output.
             iinum = slice(iinum, iinum+1)  # E.g. [0,1,2][slice(1,2)] --> [1]; [0,1,2][1] --> 1
 
         # set self.iix
