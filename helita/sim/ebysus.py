@@ -851,7 +851,7 @@ class EbysusData(BifrostData):
 
         if panic:
             _suffix_panic = '.panic' if _reading_snap_not_aux else '.aux.panic'
-            filename = filename + _fsuffix_panic
+            filename = filename + _suffix_panic
         else: 
             _suffix_dotsnap = '.snap' if _reading_snap_not_aux else '.aux'
             _suffix_dotscr  = '.scr'  if _reading_scr else ''
