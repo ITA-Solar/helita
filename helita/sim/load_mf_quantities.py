@@ -264,7 +264,8 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 
   elif var in ['efx', 'efy', 'efz']:
     with Caching(obj, nfluid=0) as cache:
-      # E = - ue x B + (ne |qe|)^-1 * ( grad(pressure_e) + (ion & rec terms) + sum_j(R_e^(ej)) )
+      # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) - (ion & rec terms) - sum_j(R_e^(ej)) )
+      #   (where the convention used is qe < 0.)
       # ----- calculate the necessary component of -ue x B (== B x ue) ----- #
       # There is a flag, "do_hall", when "false", we don't let the contribution
       ## from current to ue to enter in to the B x ue for electric field.
@@ -308,12 +309,11 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       ## ne is at (0, 0, 0)
       ## to align with efx, we shift ne by ydn zdn
       interp = y+'dn'+z+'dn'
-      ne = obj.get_var('nr'+interp, mf_ispecies=-1)   # [simu. number density units]
-      neqe = ne * obj.uni.simu_qsi_e                  # [simu. charge density units]
+      neqe = obj.get_var('nq'+interp, iS=-1)   # [simu. charge density units]  (Note: 'nq' < 0 for electrons)
       ## we used simu_qsi_e because we are using here the SI equation for E-field.
       ## if we wanted to use simu_q_e we would have to use the cgs equation instead.
       # ----- calculate efx ----- #
-      efx = B_cross_ue__x + (gradPe_x + sum_rejx) / neqe # [simu. E-field units] 
+      efx = B_cross_ue__x + (gradPe_x - sum_rejx) / neqe # [simu. E-field units] 
       output = efx
       cache(var, output)
   return output
