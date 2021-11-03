@@ -271,7 +271,7 @@ _EFIELD_QUANT = ('EFIELD_QUANT',
                    'efneqex', 'efneqey', 'efneqez']
                   )
 # get value
-@document_vars.quant_tracking_simple(_ONEFLUID_QUANT[0])
+@document_vars.quant_tracking_simple(_EFIELD_QUANT[0])
 def get_efield_var(obj, var, EFIELD_QUANT=None):
   '''variables related to electric field.'''
   if EFIELD_QUANT is None:
