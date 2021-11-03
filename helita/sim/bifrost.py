@@ -150,6 +150,10 @@ class BifrostData(object):
 
         document_vars.create_vardict(self)
         document_vars.set_vardocs(self)
+
+    def __call__(self, var, *args, **kwargs):
+        '''equivalent to self.get_var(var, *args, **kwargs)'''
+        return self.get_var(var, *args, **kwargs)
     
     def _set_snapvars(self, firstime=False):
         """
