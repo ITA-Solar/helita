@@ -41,7 +41,7 @@ units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
 
 
 
-def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
+def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, EFIELD_QUANT=None,
                        ONEFLUID_QUANT=None, ELECTRON_QUANT=None, MOMENTUM_QUANT=None,
                        HEATING_QUANT=None, SPITZERTERM_QUANT=None,
                        COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
@@ -61,6 +61,8 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None,
                               )
 
   val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
+  if val is None:
+    val = get_efield_var(obj, quant, EFIELD_QUANT=EFIELD_QUANT)
   if val is None:
     val = get_onefluid_var(obj, quant, ONEFLUID_QUANT=ONEFLUID_QUANT)
   if val is None:
@@ -100,7 +102,7 @@ _GLOBAL_QUANT = ('GLOBAL_QUANT',
                   'tot_e', 'tot_ke', 'e_ef', 'e_b', 'total_energy',
                   'tot_px', 'tot_py', 'tot_pz',
                   'grph', 'tot_part', 'mu',
-                  'jx', 'jy', 'jz', 'efx', 'efy', 'efz','resistivity'
+                  'jx', 'jy', 'jz', 'resistivity'
                   ]
                 )
 # get value
@@ -134,10 +136,6 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     for axis in AXES:
       docvar('j'+axis, 'sum of '+axis+'-component of current per unit area [simu. current per area units]',
                         uni_f=UNI.i, usi_name=Usym('A')/Usym('m')**2)  # ucgs_name= ???
-    for axis in AXES:
-      docvar('ef'+axis, axis+'-component of electric field [simu. E-field units] ' +\
-                          '== [simu. B-field units * simu. velocity units]',
-                        uni_f=UNI.ef, usi_name=Usym('V')/Usym('m')) # ucgs_name= ???
     return None
 
   if var not in GLOBAL_QUANT:
@@ -262,11 +260,57 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     jx = jx / obj.uni.usi_i        # j [simu. units]
     return ic_ix + jx              # j [simu. units]
 
-  elif var in ['efx', 'efy', 'efz']:
+
+# default
+_EFIELD_QUANT = ('EFIELD_QUANT',
+                   ['efx', 'efy', 'efz',
+                   'uexbx', 'uexby', 'uexbz',
+                   'uepxbx', 'uepxby', 'uepxbz',
+                   'batx', 'baty', 'batz',
+                   'emomx', 'emomy', 'emomz',
+                   'efneqex', 'efneqey', 'efneqez']
+                  )
+# get value
+@document_vars.quant_tracking_simple(_ONEFLUID_QUANT[0])
+def get_efield_var(obj, var, EFIELD_QUANT=None):
+  '''variables related to electric field.'''
+  if EFIELD_QUANT is None:
+    EFIELD_QUANT = _EFIELD_QUANT[1]
+
+  if var=='':
+    docvar = document_vars.vars_documenter(obj, _EFIELD_QUANT[0], EFIELD_QUANT, get_efield_var.__doc__, nfluid=0)
+    EF_UNITS = dict(uni_f=UNI.ef, usi_name=Usym('V')/Usym('m')) # ucgs_name= ???
+    for x in AXES:
+      docvar('ef'+x, x+'-component of electric field [simu. E-field units] ', **EF_UNITS)          
+    for x in AXES:
+      docvar('uexb'+x, x+'-component of u_e cross B [simu. E-field units]. Note efx = - uexbx + ...', **EF_UNITS)
+    for x in AXES:
+      docvar('uepxb'+x, x+'-component of uep cross B [simu. E-field units]. Note efx = - uexbx + ... . ' +\
+                        ' uep is the electron velocity assuming current = 0.', **EF_UNITS)
+    for x in AXES:
+      docvar('bat'+x, x+'-component of "battery term" (contribution to electric field) [simu. E-field units]. ' +\
+                      '== grad(P_e) / (n_e q_e), where q_e < 0. ', **EF_UNITS)
+    for x in AXES:
+      docvar('emom'+x, x+'-component of collisions contribution to electric field [simu. E-field units]. ' +\
+                       '== sum_j R_e^(ej) / (n_e q_e)', **EF_UNITS)
+    for x in AXES:
+      docvar('efneqe'+x, 'value of n_e * q_e, interpolated to align with the {}-component of E '.format(x) +\
+                       '[simu. charge density units]. Note q_e < 0, so efneqe{} < 0.'.format(x),
+                       uni_f=UNI.nq, usi_name=Usym('C')/Usym('m')**3)
+    return None
+
+  if var not in EFIELD_QUANT:
+    return None
+
+  x = var[-1]  # axis; 'x', 'y', or 'z'
+  y, z = YZ_FROM_X[x]
+  base = var[:-1]   # var without axis. E.g. 'ef', 'uexb', 'emom'.
+
+  if base == 'ef':   # electric field    # efx
     with Caching(obj, nfluid=0) as cache:
       # E = - ue x B + (ne qe)^-1 * ( grad(pressure_e) - (ion & rec terms) - sum_j(R_e^(ej)) )
       #   (where the convention used is qe < 0.)
-      # ----- calculate the necessary component of -ue x B (== B x ue) ----- #
+      # ----- -ue x B contribution ----- #
       # There is a flag, "do_hall", when "false", we don't let the contribution
       ## from current to ue to enter in to the B x ue for electric field.
       if obj.match_aux() and obj.get_param('do_hall', default="false")=="false":
@@ -275,48 +319,59 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
           warnings.warn('do_hall=="false", so we are dropping the j (current) contribution to ef (E-field)')
       else:
         ue = 'ue'   # include the full ue term, in our ef calculation.
-      # we will need to do a cross product, with extra care to interpolate correctly.
-      ## we name the axes variables x,y,z to make it easier to understand the code.
-      x    = var[-1]  # axis; 'x', 'y', or 'z'
-      y, z = YZ_FROM_X[x]
-      # make sure we get the interpolation correct:
-      ## B and ue are face-centered vectors.
-      ## Thus we use _facecross_ from load_arithmetic_quantities.
-      B_cross_ue__x = obj.get_var('b_facecross_'+ue+x)
-      # ----- calculate grad pressure ----- #
-      ## efx is at (0, -1/2, -1/2).
-      ## P is at (0,0,0).
-      ## dpdxup is at (1/2, 0, 0).
-      ## dpdxup xdn ydn zdn is at (0, -1/2, -1/2) --> aligned with efx.
-      interp = 'xdnydnzdn'
-      gradPe_x = obj.get_var('dpd'+x+'up'+interp, mf_ispecies=-1) # [simu. energy density units]
+      B_cross_ue__x = -1 * obj.get_var(ue+'xb'+x)
+      # ----- grad Pe contribution ----- #
+      battery_x = obj.get_var('bat'+x)
       # ----- calculate ionization & recombination effects ----- #
       if obj.get_param('do_recion', default=False):
         if obj.verbose:
           warnings.warn('E-field contribution from ionization & recombination have not yet been added.')
-      # ----- calculate collisional effects (only if do_ohm_ecol) ----- #
-      if obj.params['do_ohm_ecol'][obj.snapInd]:
-        # efx is at (0, -1/2, -1/2)
-        ## rijx is at (-1/2, 0, 0)    (same as ux)
-        ## --> to align with efx, we shift rijx by xup ydn zdn
-        interp = x+'up'+y+'dn'+z+'dn'
-        sum_rejx = obj.get_var('rijsum'+x + interp, iS=-1)
-        ## sum_rejx has units [simu. momentum density units / simu. time units]
-      else:
-        sum_rejx = obj.zero()
-      # ----- calculate ne qe ----- #
-      ## efx is at (0, -1/2, -1/2)
-      ## ne is at (0, 0, 0)
-      ## to align with efx, we shift ne by ydn zdn
-      interp = y+'dn'+z+'dn'
-      neqe = obj.get_var('nq'+interp, iS=-1)   # [simu. charge density units]  (Note: 'nq' < 0 for electrons)
-      ## we used simu_qsi_e because we are using here the SI equation for E-field.
-      ## if we wanted to use simu_q_e we would have to use the cgs equation instead.
+      # ----- calculate collisional effects ----- #
+      emom_x = obj.get_var('emom'+x)
       # ----- calculate efx ----- #
-      efx = B_cross_ue__x + (gradPe_x - sum_rejx) / neqe # [simu. E-field units] 
-      output = efx
-      cache(var, output)
-  return output
+      result = B_cross_ue__x + battery_x + emom_x   # [simu. E-field units] 
+      cache(var, result)
+
+  elif base in ('uexb', 'uepxb'):   # ue x B    # (aligned with efx)
+    ue = 'ue' if (base == 'uexb') else 'uep'
+    # interpolation:
+    ## B and ue are face-centered vectors.
+    ## Thus we use _facecross_ from load_arithmetic_quantities.
+    result = obj.get_var(ue+'_facecross_b'+x)
+
+  elif base == 'bat':  # grad(P_e) / (ne qe)
+    # interpolation:
+    ## efx is at (0, -1/2, -1/2).
+    ## P is at (0,0,0).
+    ## dpdxup is at (1/2, 0, 0).
+    ## dpdxup xdn ydn zdn is at (0, -1/2, -1/2) --> aligned with efx.
+    interp   = 'xdnydnzdn'
+    gradPe_x = obj.get_var('dpd'+x+'up'+interp, iS=-1) # [simu. energy density units]
+    neqe     = obj.get_var('efneqe'+x)   # ne qe, aligned with efx
+    result = gradPe_x / neqe
+
+  elif base == 'emom':  # -1 * sum_j R_e^(ej) / (ne qe)     (aligned with efx)
+    if obj.match_aux() and (not obj.get_param('do_ohm_ecol', default=False)):
+      return obj.zero()
+    # interpolation:
+    ## efx is at (0, -1/2, -1/2)
+    ## rijx is at (-1/2, 0, 0)    (same as ux)
+    ## --> to align with efx, we shift rijx by xup ydn zdn
+    interp = x+'up'+y+'dn'+z+'dn'
+    sum_rejx = obj.get_var('rijsum'+x + interp, iS=-1)   # [simu. momentum density units / simu. time units]
+    neqe     = obj.get_var('efneqe'+x)   # ne qe, aligned with efx
+    result = -1 * sum_rejx / neqe
+
+  elif base == 'efneqe':   # ne qe   (aligned with efx)
+    # interpolation:
+    ## efx is at (0, -1/2, -1/2)
+    ## ne is at (0, 0, 0)
+    ## to align with efx, we shift ne by ydn zdn
+    interp = y+'dn'+z+'dn'
+    result = obj.get_var('nq'+interp, iS=-1)   # [simu. charge density units]  (Note: 'nq' < 0 for electrons)
+
+  return result
+
 
 
 # default
