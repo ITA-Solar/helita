@@ -80,18 +80,11 @@ from .load_mf_quantities import (
 MATCH_TYPE_DEFAULT = MATCH_PHYSICS  # can change this one. Tells whether to match physics or aux.
                                # match physics -> try to return physical value.
                                # match aux     -> try to return value matching aux.
-## list of functions from fluid_tools which will be set as methods of the EbysusData class.
-## for example, for dd=EbysusData(...),
-### dd.get_mass(*args, **kw) == fluid_tools.get_mass(dd, *args, **kw).
-FLUIDTOOLS_EBYSUSDATA_FUNCS = \
-    ['get_species_name', 'get_fluid_name', 'get_mass', 'get_charge',
-    'get_cross_tab', 'get_cross_sect', 'get_coll_type',
-    'i_j_same_fluid', 'iter_fluid_SLs']
 
 AXES = ('x', 'y', 'z')
 
 
-class EbysusData(BifrostData):
+class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     """
     Class to hold data from Multifluid/multispecies simulations
@@ -166,7 +159,7 @@ class EbysusData(BifrostData):
 
         self.panic=False
 
-        # figure out snapname. If it doesn't agree with snapname (optionally) entered in args, crash.
+        # figure out snapname. If it doesn't agree with snapname (optionally) entered in args, make warning.
         with EnterDirectory(kwargs.get('fdir', os.curdir)):
             snapname = get_snapname()
         if len(args) >= 1:
@@ -175,11 +168,13 @@ class EbysusData(BifrostData):
                 # it will read from arg and won't raise error if mhd.in does not match args. 
                 warnings.warn(snapname_errmsg.format(args[0], snapname))
                 snapname = args[0]
-                #raise ValueError(snapname_errmsg.format(args[0], snapname))
-
 
         # call BifrostData.__init__
-        super(EbysusData, self).__init__(snapname,*args[1:], fast=fast, **kwargs)
+        BifrostData.__init__(self, snapname,*args[1:], fast=fast, **kwargs)
+
+        # call Multifluid.__init__
+        fluid_tools.Multifluid.__init__(self, ifluid=kwargs.pop('ifluid', (1,1)),   # default (1,1)
+                                              jfluid=kwargs.pop('jfluid', (1,1)))   # default (1,1)
 
         # set up self.att
         self.att = {}
@@ -196,8 +191,7 @@ class EbysusData(BifrostData):
         self._init_vars_get(firstime=True)
         self._init_coll_keys()
 
-
-
+    ## INITIALIZING ##
     def _init_coll_keys(self):
         '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
         self.coll_keys will be a dict with keys (ispecies, jspecies) values (collision type).
@@ -446,17 +440,7 @@ class EbysusData(BifrostData):
         else: 
             self.cstagger_exists = True
 
-    # fluid-setting functions
-    set_mf_fluid = fluid_tools.set_mf_fluid
-    set_mfi      = fluid_tools.set_mfi
-    set_mfj      = fluid_tools.set_mfj
-    set_fluids   = fluid_tools.set_fluids
-    # docstrings for fluid-setting functions
-    for func in [set_mf_fluid, set_mfi, set_mfj]:
-        func.__doc__ = func.__doc__.replace('obj', 'self')
-
-    del func # (we don't want func to remain in the EbysusData namespace beyond this point.)
-
+    ## INTROSPECTION ##
     def _metadata(self, none=None, with_nfluid=2):
         '''returns dict of metadata for self. Including snap, ifluid, jfluid, and more.
         if self.snap is an array, set result['snaps']=snap and result['snap']=snaps[self.snapInd].
@@ -520,6 +504,27 @@ class EbysusData(BifrostData):
         # << if we reached this line, then we know ifluid and jfluid "match" between alt and self.
         return file_memory._dict_equals(alt_metadata, self_metadata, ignore_keys=['ifluid', 'jfluid'])
 
+    ## MATCH TYPE ##  # (MATCH_AUX --> match simulation values; MATCH_PHYSICS --> match physical values)
+    @property 
+    def match_type(self):
+        '''whether to match aux or physics. see self.match_aux and self.match_physics.'''
+        return getattr(self, '_match_type', MATCH_TYPE_DEFAULT)
+
+    @match_type.setter
+    def match_type(self, value):
+        VALID_MATCH_TYPES = (MATCH_PHYSICS, MATCH_AUX)
+        assert value in VALID_MATCH_TYPES, 'Invalid match_type {}; not in {}.'.format(m, VALID_MATCH_TYPES)
+        self._match_type = value
+
+    def match_physics(self):
+        '''return whether self.match_type == MATCH_PHYSICS'''
+        return self.match_type == MATCH_PHYSICS
+
+    def match_aux(self):
+        '''return whether self.match_type == MATCH_AUX'''
+        return self._get_match_type() == MATCH_AUX
+
+    ## READING DATA / DOING CALCULATIONS ##
     @fluid_tools.maintain_fluids
     @file_memory.maintain_attrs('match_type')
     @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
@@ -877,8 +882,6 @@ class EbysusData(BifrostData):
 
         return (filename, kw__get_mmap)
 
-
-
     def get_var_if_in_aux(self, var, *args__get_var, **kw__get_var):
         """ get_var but only if it appears in aux (i.e. self.params['aux'][self.snapInd])
         
@@ -893,44 +896,7 @@ class EbysusData(BifrostData):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
-    def _get_match_type(self):
-        if not hasattr(self, 'match_type'):
-            setattr(self, 'match_type', MATCH_TYPE_DEFAULT)
-        m = self.match_type
-        if m not in [0,1]:
-            raise ValueError('Expected self.match_type == 0 or 1 but got {}'.format(m))
-        else:
-            return m
-
-    def match_physics(self):
-        '''return whether self.match_type == MATCH_PHYSICS'''
-        return self._get_match_type() == MATCH_PHYSICS
-
-    def match_aux(self):
-        '''return whether self.match_type == MATCH_AUX'''
-        return self._get_match_type() == MATCH_AUX
-
-    # ---  include methods from fluid_tools --- #
-
-    def MaintainingFluids(self):
-        return fluid_tools._MaintainingFluids(self)
-
-    MaintainingFluids.__doc__ = fluid_tools._MaintainingFluids.__doc__.replace(
-                                '_MaintainingFluids(dd', 'dd.MaintainingFluids(')  # set docstring
-    MaintainFluids = MaintainingFluids  # alias
-
-    def UsingFluids(self, **kw__fluids):
-        return fluid_tools._UsingFluids(self, **kw__fluids)
-
-    UsingFluids.__doc__ = fluid_tools._UsingFluids.__doc__.replace(
-                                '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
-    UseFluids = UsingFluids  # alias
-
-# include methods from fluid_tools in EbysusData object.
-for func in FLUIDTOOLS_EBYSUSDATA_FUNCS:
-    setattr(EbysusData, func, getattr(fluid_tools, func, None))
-
-del func   # (we don't want func to remain in the ebysus.py namespace beyond this point.)
+    
 
 
 ####################
