@@ -376,7 +376,7 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
 
 # default
 _ONEFLUID_QUANT = ('ONEFLUID_QUANT',
-                   ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 'vtherm',
+                   ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 'vtherm', 'vtherm_simple',
                     'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
                   )
 # get value
@@ -409,6 +409,8 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     _equivstr = " Equivalent to obj.get_var('{ve:}') when obj.mf_ispecies < 0; obj.get_var('{vf:}'), otherwise."
     equivstr = lambda v: _equivstr.format(ve=v.replace('i', 'e'), vf=v.replace('i', ''))
     docvar('vtherm', 'thermal speed of ifluid [simu. velocity units]. = sqrt (8 * k_b * T_i / (pi * m_i) )', uni=UNI_speed)
+    docvar('vtherm_simple', '"simple" thermal speed of ifluid [simu. velocity units]. '+\
+                            '= sqrt (k_b * T_i / m_i)', uni=UNI_speed)
     docvar('ri', 'mass density of ifluid [simu. mass density units]. '+equivstr('ri'), uni=UNI_rho)
     for uix in ['uix', 'uiy', 'uiz']:
       docvar(uix, 'velocity of ifluid [simu. velocity units]. '+equivstr(uix), uni=UNI_speed)
@@ -451,6 +453,12 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     vtherm = np.sqrt(obj.uni.ksi_b * Ti / mi)            # [m / s]
     consts = np.sqrt(8 / np.pi)
     return consts * vtherm / obj.uni.usi_u                   # [simu. velocity units]
+
+  elif var == 'vtherm_simple':
+    Ti     = obj('tg')                                   # [K]
+    mi     = obj.get_mass(obj.mf_ispecies, units='si')   # [kg]
+    vtherm = np.sqrt(obj.uni.ksi_b * Ti / mi)            # [m / s]
+    return vtherm / obj.uni.usi_u                   # [simu. velocity units]
 
   else:
     if var in ['ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']:
@@ -1636,13 +1644,13 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     ion = fluids[obj.ifluid]
     assert ion.ionization >= 1, "ifluid {} is not ionized; cannot get ci (==ion acoustic speed).".format(obj.ifluid)
     # (we only want to get ion acoustic speed for ions; it doesn't make sense to get it for neutrals.)
-    itg = obj.get_var('tg')                  # [K] temperature of fluid
-    etg = obj.get_var('tg', mf_ispecies=-1)  # [K] temperature of electrons
+    tg_i   = obj.get_var('tg')                  # [K] temperature of fluid
+    tg_e   = obj.get_var('tg', mf_ispecies=-1)  # [K] temperature of electrons
     igamma = obj.uni.gamma        # gamma (ratio of specific heats) of fluid
     egamma = obj.uni.gamma        # gamma (ratio of specific heats) of electrons
-    ci2_p = ((ion.ionization * igamma * itg + egamma * etg) / ion.atomic_weight) # ci**2 if kB=amu=1
-    ci_cgs = np.sqrt((obj.uni.k_b / obj.uni.amu) * ci2_p ) # ci [cm/s]
-    ci_sim = ci_cgs / obj.uni.u_u                          # ci [simu. velocity units]
+    m_i    = obj.get_mass(ion, units='si')   # [kg] mass of ions
+    ci     = np.sqrt(obj.uni.ksi_b * (ion.ionization * igamma * tg_i + egamma * tg_e) / m_i)
+    ci_sim = ci / obj.uni.usi_u
     return ci_sim
 
   elif quant in ['kmaxx', 'kmaxy', 'kmaxz']:
