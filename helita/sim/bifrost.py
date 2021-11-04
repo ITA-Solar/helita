@@ -153,6 +153,7 @@ class BifrostData(object):
 
     def __call__(self, var, *args, **kwargs):
         '''equivalent to self.get_var(var, *args, **kwargs)'''
+        __tracebackhide__ = True  # hide this func from error traceback stack
         return self.get_var(var, *args, **kwargs)
     
     def _set_snapvars(self, firstime=False):
