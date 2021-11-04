@@ -1620,7 +1620,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
 
 # default
 _WAVE_QUANT = ('WAVE_QUANT',
-               ['ci', 'kmaxx', 'kmaxy', 'kmaxz']
+               ['ci', 'fplasma', 'kmaxx', 'kmaxy', 'kmaxz']
               )
 # get value
 @document_vars.quant_tracking_simple(_WAVE_QUANT[0])
@@ -1633,6 +1633,8 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     docvar = document_vars.vars_documenter(obj, _WAVE_QUANT[0], WAVE_QUANT, get_mf_wavequant.__doc__)
     docvar('ci', "ion acoustic speed for ifluid (must be ionized) [simu. velocity units]",
                  nfluid=1, uni=UNI_speed)
+    docvar('fplasma', "('angular') plasma frequency for ifluid (must be charged) [simu. frequency units]. " +\
+                      "== sqrt(n_i q_i**2 / (epsilon_0 m_i))", nfluid=1, uni=UNI_hz)
     for x in AXES:
       docvar('kmax'+x, "maximum resolvable wavevector in "+x+" direction. Determined via 2*pi/obj.d"+x+"1d",
                        nfluid=0, uni=UNI_length)
@@ -1652,6 +1654,16 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     ci     = np.sqrt(obj.uni.ksi_b * (ion.ionization * igamma * tg_i + egamma * tg_e) / m_i)
     ci_sim = ci / obj.uni.usi_u
     return ci_sim
+
+  elif quant == 'fplasma':
+    q    = obj.get_charge(obj.ifluid, units='si')
+    assert q != 0, "ifluid {} must be charged to get fplasma.".format(obj.ifluid)
+    m    = obj.get_mass(obj.ifluid, units='si')
+    eps0 = obj.uni.permsi
+    n    = obj('nr')
+    unit = 1 / obj.uni.usi_hz   # convert from si frequency to ebysus frequency.
+    consts = np.sqrt(q**2 / (eps0 * m)) * unit
+    return consts * np.sqrt(n)    # [ebysus frequency units]
 
   elif quant in ['kmaxx', 'kmaxy', 'kmaxz']:
     x = quant[-1] # axis; 'x', 'y', or 'z'.
