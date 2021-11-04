@@ -1482,12 +1482,20 @@ class BifrostData(object):
 
     write_meshfile = write_mesh_file  # alias
 
-    def get_coords(self, mode='si'):
+    def get_coords(self, mode='si', axes=None):
         '''returns dict of coords, with keys ['x', 'y', 'z', 't'].
         coords units are based on mode.
             'si' (default) -> [meters] for x,y,z; [seconds] for t.
             'cgs'     ->      [cm] for x,y,z;  [seconds] for t.
             'simu'    ->      [simulation units] for all coords.
+        if axes is not None:
+            instead of returning a dict, return coords for the axes provided, in the order listed.
+            axes can be provided in either of these formats:
+                strings: 'x', 'y', 'z', 't'.
+                ints:     0 ,  1 ,  2 ,  3 .
+            For example:
+                c = self.get_coords()
+                c['y'], c['t'] == self.get_coords(axes=('y', 'z'))
         '''
         mode = mode.lower()
         VALIDMODES = ('si', 'cgs', 'simu')
@@ -1502,8 +1510,12 @@ class BifrostData(object):
             u_l = 1
             u_t = 1
         x, y, z = (self_x * u_l for self_x in (self.x, self.y, self.z))
-        return dict(x=x, y=y, z=z, t=self.params['t'] * u_t)
-
+        t       = self.time * u_t
+        result = dict(x=x, y=y, z=z, t=t)
+        if axes is not None:
+            AXES_LOOKUP = {'x':'x', 0:'x', 'y':'y', 1:'y', 'z':'z', 2:'z', 't':'t', 3:'t'}
+            result = tuple(result[AXES_LOOKUP[axis]] for axis in axes)
+        return result
 
     if file_memory.DEBUG_MEMORY_LEAK:
         def __del__(self):
