@@ -595,7 +595,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
 # default
 _MOMENTUM_QUANT = []
-_MQVECS = ['rij', 'rijsum', 'momflorentz', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
+_MQVECS = ['rij', 'rijsum', 'momflorentz', 'mombat', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
 _MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
 _MOMENTUM_QUANT = ('MOMENTUM_QUANT', _MOMENTUM_QUANT)
 # get value
@@ -618,8 +618,11 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
       docvar('rijsum'+x, x+'-component of momentum density change of ifluid ' +\
                            'due to collisions with all other fluids. = sum_j rij'+x, nfluid=1, **units_dpdt)
     for x in AXES:
-      docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force.' +\
+      docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force. ' +\
                            '[simu. momentum density units / simu. time units]. = ni qi (E + ui x B).', nfluid=1, **units_dpdt)
+    for x in AXES:
+      docvar('mombat'+x, x+'-component of momentum density change of ifluid due to battery term. ' +\
+                           '[simu. momentum density units / simu. time units]. = ni qi grad(P_e) / (ne qe).', nfluid=1, **units_dpdt)
     for x in AXES:
       docvar('gradp'+x, x+'-component of grad(Pi), face-centered (interp. loc. aligns with momentum).', nfluid=1, uni=UNI.qc(0))
     for x in AXES:
@@ -643,11 +646,16 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     return None
 
   # --- momentum equation terms --- #
+  x = var[-1] # axis; x= 'x', 'y', or 'z'.
+  if x in AXES:
+    y, z = YZ_FROM_X[x]
+    base = var[:-1]
+  else:
+    base = var
 
-  if var in ['rijx', 'rijy', 'rijz']:
+  if base == 'rij':
     if obj.i_j_same_fluid():      # when ifluid==jfluid, u_j = u_i, so rij = 0.
       return obj.zero()           # save time by returning 0 without reading any data.
-    x = var[-1]  # axis; x= 'x', 'y', or 'z'.
     # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
     ## Scalars are at (0,0,0) so we must shift by xdn to align with face-centered u at (-0.5,0,0)
     nu_ij = obj.get_var('nu_ij' + x+'dn')
@@ -656,14 +664,13 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
     return ri * nu_ij * (ujx - uix)
 
-  elif var in ['rijsumx', 'rijsumy', 'rijsumz']:
-    x = var[-1]
+  elif base == 'rijsum':
     result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
     for fluid in fl.Fluids(dd=obj):
       result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
     return result
 
-  elif var in ['momflorentz'+x for x in AXES]:
+  elif base == 'momflorentz':
     # momflorentz = ni qi (E + ui x B)
     qi = obj.get_charge(obj.ifluid, units='simu')
     if qi == 0:
@@ -674,19 +681,25 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
     ## Meanwhile, E is edge-centered, so we must shift all three coords.
     ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
-    x = var[-1] # axis; x= 'x', 'y', or 'z'.
-    y, z = YZ_FROM_X[x]
     Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
     uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
     return ni * qi * (Ex + uxB__x)
 
-  elif var in ['gradpx', 'gradpy', 'gradpz']:
-    x = var[-1]
+  elif base == 'mombat':
+    # px is at (-0.5, 0, 0); nq is at (0, 0, 0), so we shift by xdn
+    interp = x+'dn'
+    niqi = obj('nq'+interp)
+    with obj.MaintainFluids():
+      obj.iS = -1
+      neqe     = obj('nq'+interp)
+      gradPe_x = obj('gradp'+x)  # gradp handles the interpolation already.
+    return (niqi / neqe) * gradPe_x
+
+  elif base == 'gradp':
     # px is at (-0.5, 0, 0); pressure is at (0, 0, 0), so we do dpdxdn
     return obj.get_var('dpd'+x+'dn')
 
-  elif var in ['momratex', 'momratey', 'momratez']:
-    x = var[-1]
+  elif base == 'momrate':
     if obj.get_param('do_recion', default=False):
       if obj.verbose:
         warnings.warn('momentum contribution from ionization & recombination have not yet been added.')
@@ -696,7 +709,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     return florentzx - gradpx + rijsumx
 
   # --- "equilibrium velocity" terms --- #
-  elif var in ['_ueq_scr'+x for x in AXES]:
+  elif base == '_ueq_scr':
     qi = obj.get_charge(obj.ifluid, units='simu')
     mi = obj.get_mass(obj.ifluid, units='simu')
     ifluid_orig = obj.ifluid
@@ -705,8 +718,6 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ## E is edge-centered, so we must shift all three coords.
     ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
     ## Meanwhile, scalars are at (0,0,0), so we shift those by xdn to align with u.
-    x = var[-1] # axis; x= 'x', 'y', or 'z'.
-    y, z = YZ_FROM_X[x]
     Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
     sum_nu_u = 0
     for jSL in obj.iter_fluid_SLs():
@@ -716,7 +727,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
         sum_nu_u += nu_sj * uj
     return (qi / mi) * Ex + sum_nu_u
 
-  elif var in ['ueq'+x for x in AXES]:
+  elif base == 'ueq':
     qi = obj.get_charge(obj.ifluid, units='simu')
     mi = obj.get_mass(obj.ifluid, units='simu')
     # make sure we get the interpolation correct:
@@ -724,8 +735,6 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ## B and _ueq_scr are face-centered, so we use _facecrosstoface_ to get a face-centered cross product.
     ## Meanwhile, E is edge-centered, so we must shift all three coords.
     ## Finally, scalars are at (0,0,0), so we shift those by xdn to align with u.
-    x = var[-1] # axis; x= 'x', 'y', or 'z'.
-    y, z = YZ_FROM_X[x]
     B2 = obj.get_var('b2' + x+'dn')
     # begin calculations
     ueq_scr_x_B__x = obj.get_var('_ueq_scr_facecrosstoface_b'+x)
@@ -738,7 +747,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     denom = (qi**2/mi) * B2 + mi * sumnu**2
     return numer / denom
 
-  elif var in ['ueqsimple'+x for x in AXES]:
+  elif base == 'ueqsimple':
     qi = obj.get_charge(obj.ifluid, units='simu')
     mi = obj.get_mass(obj.ifluid, units='simu')
     # make sure we get the interpolation correct:
@@ -747,8 +756,6 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ## Meanwhile, E is edge-centered, so we must shift all three coords.
     ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
     ## Finally, scalars are at (0,0,0), so we shift those by xdn to align with u.
-    x = var[-1] # axis; x= 'x', 'y', or 'z'.
-    y, z = YZ_FROM_X[x]
     Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
     B2 = obj.get_var('b2' + x+'dn')
     ExB__x = obj.get_var('ef_edgefacecross_b'+x)
