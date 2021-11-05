@@ -522,7 +522,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     def match_aux(self):
         '''return whether self.match_type == MATCH_AUX'''
-        return self._get_match_type() == MATCH_AUX
+        return self.match_type == MATCH_AUX
 
     ## READING DATA / DOING CALCULATIONS ##
     @fluid_tools.maintain_fluids
