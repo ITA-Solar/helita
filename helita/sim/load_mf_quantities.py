@@ -340,6 +340,8 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
     result = obj.get_var(ue+'_facecross_b'+x)
 
   elif base == 'bat':  # grad(P_e) / (ne qe)
+    if obj.match_aux() and (not obj.get_param('do_battery', default=False)):
+      return obj.zero()
     # interpolation:
     ## efx is at (0, -1/2, -1/2).
     ## P is at (0,0,0).
