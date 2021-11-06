@@ -2462,6 +2462,10 @@ class Cross_sect:
 
         return finterp(tgreg)
 
+    def __call__(self, tg, *args, **kwargs):
+        '''alias for self.tab_interp.'''
+        return self.tab_interp(tg, *args, **kwargs)
+
     def __repr__(self):
         return '{} == {}'.format(object.__repr__(self), str(self))
 
@@ -2482,6 +2486,66 @@ def cross_sect_for_obj(obj=None):
         if fdir is None: fdir = getattr(obj, 'fdir', '.')
         return Cross_sect(cross_tab, fdir, *args__Cross_sect, **kw__Cross_sect, obj=obj)
     return _init_cross_sect
+
+## Tools for making cross section table such that colfreq is independent of temperature ##
+def constant_colfreq_cross(tg0, Q0, tg=range(1000, 400000, 100), T_to_eV = lambda T: T / 11604):
+    '''makes values for constant collision frequency vs temperature cross section table.
+    tg0, Q0:
+        enforce Q(tg0) = Q0.
+    tg: array of values for temperature.
+        (recommend: 1000 to 400000, with intervals of 100.)
+    T_to_eV: function
+        T_to_eV(T) --> value in eV.
+    
+    colfreq = consts * Q(tg) * sqrt(tg).
+        For constant colfreq:
+        Q(tg1) sqrt(tg1) = Q(tg0) sqrt(tg0)
+        
+    returns dict of arrays. keys: 'E' (for energy in eV), 'T' (for temperature), 'Q' (for cross)
+    '''
+    tg = np.asarray(tg)
+    E  = T_to_eV(tg)
+    Q  = Q0 * np.sqrt(tg0) / np.sqrt(tg)
+    return dict(E=E, T=tg, Q=Q)
+
+def cross_table_str(E, T, Q, comment=''):
+    '''make a string for the table for cross sections.
+    put comment at top of file if provided.
+    '''
+    header = ''
+    if len(comment) > 0:
+        if not comment.startswith(';'):
+            comment = ';' + comment
+        header += comment + '\n'
+    header += '\n'.join(["",
+                         "; 1 atomic unit of square distance = 2.80e-17 cm^2",
+                         "; 1eV = 11604K",
+                         "",
+                         "2.80e-17",
+                         "",
+                         "",
+                         ";   E            T          Q11  ",
+                         ";  (eV)         (K)        (a.u.)",
+                         "",
+                         "",
+                        ])
+    lines = []
+    for e, t, q in zip(E, T, Q):
+        lines.append('{:.6f}       {:d}       {:.3f}'.format(e, t, q))
+    return header + '\n'.join(lines)
+
+def constant_colfreq_cross_table_str(tg0, Q0, **kw):
+    '''make a string for a cross section table which will give constant collision frequency (vs tg).'''
+    if 'comment' in kw:
+        comment = kw.pop('comment')
+    else:
+        comment = '\n'.join(['; This table provides cross sections such that',
+                             '; the collision frequency will be independent of temperature,',
+                             '; assuming the functional form colfreq proportional to sqrt(T).',
+                            ])
+    ccc = constant_colfreq_cross(tg0, Q0, **kw)
+    result = cross_table_str(**ccc, comment=comment)
+    return result
 
 
 ###########
