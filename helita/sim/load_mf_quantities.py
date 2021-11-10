@@ -148,27 +148,28 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       for ilevel in range(1,nlevels+1):
         output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
 
+    return output
   elif var in ['rc', 'rions']:  # total ionized density
     for fluid in fl.Fluids(dd=obj).ions():
       output += obj.get_var('r', ifluid=fluid)
-
+    return output
   elif var == 'rneu':  # total neutral density
     for ispecies in obj.att:
       nlevels = obj.att[ispecies].params.nlevel
       for ilevel in range(1,nlevels+1):
         if (obj.att[ispecies].params.levels['stage'][ilevel-1] == 1): 
           output += obj.get_var('r', mf_ispecies=ispecies, mf_ilevel=ilevel)
-
+    return output
   elif var == 'tot_e':
     output += obj.get_var('e', mf_ispecies= -1) # internal energy density of electrons
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('e', ifluid=fluid.SL) # internal energy density of fluid
-
+    return ouput
   elif var == 'tot_ke':
     output = obj.get_var('eke')   # kinetic energy density of electrons
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('ke', ifluid=fluid.SL)  # kinetic energy density of fluid
-
+    return output
   elif var == 'e_ef':
     ef2  = obj.get_var('ef2')   # |E|^2  [simu E-field units, squared]
     eps0 = obj.uni.permsi       # epsilon_0 [SI units]
@@ -183,6 +184,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     for fluid in fl.Fluids(dd=obj):
       nu_sum += obj.get_var('nu_ij',mf_ispecies=-1,jfluid=fluid)
     output = nu_sum * rhoe / (neqe)**2  
+    return output
 
   elif var == 'e_b':
     b2   = obj.get_var('b2')    # |B|^2  [simu B-field units, squared]
@@ -197,12 +199,14 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       output += obj.get_var('e_ef')
       output += obj.get_var('e_b')
       cache(var, output)
+    return output  
   
   elif var.startswith('tot_p'):  # note: must be tot_px, tot_py, or tot_pz.
     axis = var[-1]
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('p'+axis, ifluid=fluid.SL)   # momentum density of fluid
 
+    return output
   elif var == 'grph':
     for ispecies in obj.att:
       nlevels = obj.att[ispecies].params.nlevel
@@ -221,7 +225,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
         for ilevel in range(1,nlevels+1):
           output += obj.get_var('r', mf_ispecies=ispecies,
               mf_ilevel=ilevel) / mf_total_hpart * u_r
-
+    return output
   elif var == 'tot_part':
     for ispecies in obj.att:
       nlevels = obj.att[ispecies].params.nlevel
@@ -230,7 +234,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
       for ilevel in range(1,nlevels+1):
         output += obj.get_var('r', mf_ispecies=ispecies,
             mf_ilevel=ilevel) / weight * (obj.att[ispecies].params.levels[ilevel-1]+1)
-
+    return output
   elif var == 'mu':
     for ispecies in obj.att:
       nlevels = obj.att[ispecies].params.nlevel
@@ -240,7 +244,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
         output += obj.get_var('r', mf_ispecies=ispecies,
             mf_ilevel=mf_ilevel) / weight 
     output = output / obj.get_var('tot_part')
-
+    return output
   elif var in ['jx', 'jy', 'jz']:
     # J = curl (B) / mu_0
     x = var[-1]
