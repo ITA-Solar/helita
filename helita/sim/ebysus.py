@@ -1286,12 +1286,16 @@ def write_fundamentals(rootname, fluids, B, ee, zero=0):
     for fluid in fluids:
         write_mfp(rootname, zero+fluid.p[0], zero+fluid.p[1], zero+fluid.p[2], ifluid=fluid.SL)
     ## Fluid Energies ##
-    for fluid in fluids:
-        write_mfe(rootname, zero+fluid.energy, ifluid=fluid.SL)
-    ## Electron Energy ##
-    write_mf_e(rootname, zero+ee)
-    ## Magnetic Field ##
-    write_mf_common(rootname, zero+B[0], zero+B[1], zero+B[2])
+    if len(fluids) > 1: 
+        for fluid in fluids:
+            write_mfe(rootname, zero+fluid.energy, ifluid=fluid.SL)
+        ## Electron Energy ##
+        write_mf_e(rootname, zero+ee)
+
+        ## Magnetic Field ##
+        write_mf_common(rootname, zero+B[0], zero+B[1], zero+B[2])
+    else: 
+        write_mf_common(rootname, zero+B[0], zero+B[1], zero+B[2], fluid.energy)
 
 
 def printi(fdir='./',rootname='',it=1):
