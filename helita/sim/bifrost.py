@@ -2231,7 +2231,7 @@ class Opatab:
     which should be good enough for the purposes of this code
     """
     def __init__(self, tabname=None, fdir='.',  dtype='f4',
-                 verbose=True, lambd=100.0):
+                 verbose=True, lambd=100.0, big_endian=False):
         import ChiantiPy.core as ch
         self.fdir = fdir
         self.dtype = dtype
