@@ -2230,9 +2230,9 @@ class Opatab:
     gaunt factors are set to 0.99 for h and 0.85 for heii,
     which should be good enough for the purposes of this code
     """
+    
     def __init__(self, tabname=None, fdir='.',  dtype='f4',
                  verbose=True, lambd=100.0, big_endian=False):
-        import ChiantiPy.core as ch
         self.fdir = fdir
         self.dtype = dtype
         self.verbose = verbose
@@ -2247,7 +2247,7 @@ class Opatab:
             tabname = os.path.join(fdir, 'ionization.dat')
         self.tabname = tabname
         # load table(s)
-        self.load_opa_table()
+        #self.load_opa_table()
 
     def hopac(self):
         ghi = 0.99
@@ -2341,6 +2341,7 @@ class Opatab:
             self.ionhei1d = table[:, 2]
             self.opaload = True
         else: # Chianti table
+            import ChiantiPy.core as ch
             if self.verbose:
                 print('*** Reading Chianti table', whsp*4, end="\r",
                           flush=True)
