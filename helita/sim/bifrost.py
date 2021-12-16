@@ -341,6 +341,12 @@ class BifrostData(object):
         else:
             p = p[self.snapInd]
         return p
+
+    def get_params(self, *params, **kw):
+        '''return a dict of the values of params in self.
+        Equivalent to {p: self.get_param(p, **kw) for p in params}.
+        '''
+        return {p: self.get_param(p, **kw) for p in params}
         
     def __read_mesh(self, meshfile, firstime=False):
         """
