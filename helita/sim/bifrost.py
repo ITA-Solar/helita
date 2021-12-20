@@ -10,6 +10,7 @@ from glob import glob
 import warnings
 import time
 import ast
+import collections
 
 # import external public modules
 import numpy as np
@@ -1528,6 +1529,114 @@ class BifrostData(object):
             print('deleted {}'.format(self), flush=True)
 
 
+####################
+#  LOCATING SNAPS  #
+####################
+
+SnapStuff = collections.namedtuple('SnapStuff', ('snapname', 'snaps'))
+
+def get_snapstuff(dd=None):
+    '''return (get_snapname(), available_snaps()).
+    dd: None or BifrostData object.
+        None -> do operations locally.
+        else -> cd to dd.fdir, first.
+    '''
+    snapname = get_snapname(dd=dd)
+    snaps    = get_snaps(snapname=snapname, dd=dd)
+    return SnapStuff(snapname=snapname, snaps=snaps)
+
+snapstuff = get_snapstuff   # alias
+
+def get_snapname(dd=None):
+    '''gets snapname by reading it from mhd.in'''
+    with EnterDirectory(_get_dd_fdir(dd)):
+        mhdin_ascii = read_idl_ascii('mhd.in')
+        return mhdin_ascii['snapname']
+
+snapname = get_snapname   # alias
+
+def available_snaps(dd=None, snapname=None):
+    '''list available snap numbers.
+    Does look for: snapname_*.idl, snapname.idl (i.e. snap 0)
+    Doesn't look for: .pan, .scr, .aux files.
+    snapname: None (default) or str
+        snapname parameter from mhd.in. If None, get snapname.
+    if dd is not None, look in dd.fdir.
+    '''
+    with EnterDirectory(_get_dd_fdir(dd)):
+        snapname = snapname if snapname is not None else get_snapname()
+        snaps = [_snap_to_N(f, snapname) for f in os.listdir()]
+        snaps = [s for s in snaps if s is not None]
+        snaps = sorted(snaps)
+        return snaps
+
+snaps      = available_snaps   # alias
+get_snaps  = available_snaps   # alias
+list_snaps = available_snaps   # alias
+
+def snaps_info(dd=None, snapname=None):
+    '''returns string with length of snaps, as well as min and max.'''
+    snaps = get_snaps(dd=dd, snapname=snapname)
+    return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
+
+class EnterDir:
+    '''context manager for remembering directory.
+    upon enter, cd to directory. upon exit, restore original working directory.
+    '''
+    def __init__(self, directory=os.curdir):
+        self.cwd       = os.path.abspath(os.getcwd())
+        self.directory = directory
+
+    def __enter__ (self):
+        os.chdir(self.directory)
+
+    def __exit__ (self, exc_type, exc_value, traceback):
+        os.chdir(self.cwd)
+
+EnterDirectory = EnterDir  #alias
+
+def _get_dd_fdir(dd=None):
+    '''return dd.fdir if dd is not None, else os.curdir.'''
+    if dd is not None:
+        fdir = dd.fdir
+    else:
+        fdir = os.curdir
+    return fdir
+
+def _snap_to_N(name, base, sep='_', ext='.idl'):
+    '''returns N as number given snapname (and basename) if possible, else None.
+    for all strings in exclude, if name contains string, return None.
+    E.g. _snap_to_N('s_075.idl', 's') == 75
+    E.g. _snap_to_N('s.idl', 's')     == 0
+    E.g. _snap_to_N('notasnap', 's')  == None
+    '''
+    if not name.startswith(base):
+        return None
+    namext = os.path.splitext(name)
+    if   namext[1] != ext :
+        return None
+    elif namext[0] == base:
+        return 0
+    else:
+        try:
+            snapN = int(namext[0][len(base+sep):])
+        except ValueError:
+            return None
+        else:
+            return snapN
+
+# include methods (and some aliases) for getting snaps in BifrostData object
+BifrostData.get_snapstuff   = get_snapstuff
+BifrostData.get_snapname    = get_snapname
+BifrostData.available_snaps = available_snaps
+BifrostData.get_snaps       = available_snaps
+BifrostData.snaps_info      = snaps_info
+
+
+####################
+#  WRITING SNAPS   #
+####################
+
 def write_br_snap(rootname,r,px,py,pz,e,bx,by,bz):
     nx, ny, nz = r.shape
     data = np.memmap(rootname, dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,8))
@@ -1662,6 +1771,10 @@ class Create_new_br_files:
             f.write(" ".join(map("{:.5f}".format, 1.0/dxidxdn)) + "\n")
         f.close()
 
+
+############
+#  UNITS   #
+############
 
 class Bifrost_units(object):
     '''stores units as attributes.
@@ -2014,6 +2127,10 @@ class Bifrost_units(object):
                 best = compare_val
         return result
 
+
+#####################
+#  CROSS SECTIONS   #
+#####################
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
