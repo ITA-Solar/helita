@@ -114,40 +114,34 @@ def _can_interp(obj, axis, warn=True):
 
 ''' --------------------- functions to load quantities --------------------- '''
 
-def load_arithmetic_quantities(obj,quant, *args, **kwargs):
+def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
+  '''load arithmetic quantities.
+  *args__None and **kwargs__None go to nowhere.
+  '''
   __tracebackhide__ = True  # hide this func from error traceback stack.
   quant = quant.lower()
 
   document_vars.set_meta_quant(obj, 'arquantities', 'Computes arithmetic quantities')
 
-  val = get_center(obj,quant)
-  if val is None:
-    val = get_deriv(obj,quant)
-  if val is None:
-    val = get_interp(obj,quant)
-  if val is None:
-    val = get_module(obj,quant)
-  if val is None:
-    val = get_horizontal_average(obj,quant)
-  if val is None:
-    val = get_gradients_vect(obj,quant)
-  if val is None:
-    val = get_gradients_scalar(obj,quant)
-  if val is None:
-    val = get_square(obj,quant)
-  if val is None:
-    val = get_lg(obj,quant)
-  if val is None:
-    val = get_ratios(obj,quant)
-  if val is None:
-    val = get_projections(obj,quant)
-  if val is None:
-    val = get_vector_product(obj,quant)
-  if val is None:
-    val = get_angle(obj, quant)
+  # tell which funcs to use for getting things. (funcs will be called in the order listed here)
+  _getter_funcs = (
+    get_center, get_deriv, get_interp,
+    get_module, get_horizontal_average,
+    get_gradients_vect, get_gradients_scalar,
+    get_square, get_lg, get_ratios, get_projections,
+    get_vector_product, get_angle
+  )
 
-  if val is not None:                         # if got a value, use obj._quant_selection
-    document_vars.select_quant_selection(obj) #           to update obj._quant_selected.
+  val = None
+  # loop through the function and QUANT pairs, running the functions as appropriate.
+  for getter in _getter_funcs:
+    val = getter(obj, quant)
+    if val is not None:
+      break
+  else:  # didn't break; val is still None
+    return None
+  # << did break; found a non-None val.
+  document_vars.select_quant_selection(obj)  # (bookkeeping for obj.got_vars_tree(), obj.get_units(), etc.)
   return val
 
 

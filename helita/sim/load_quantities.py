@@ -187,54 +187,41 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
 
   document_vars.set_meta_quant(obj, 'quantities', 'These are the single-fluid quantities')
 
-  if EM_QUANT != '':
-    val = get_em(obj, quant, EM_QUANT=EM_QUANT, **kwargs)  
-  else: 
-    val = None
-  if val is None and COULOMB_COL_QUANT != '':
-    val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT, **kwargs)
-  if val is None and COLFRE_QUANT != '':
-    val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT,**kwargs)
-  if val is None and CROSTAB_QUANT != '':
-    val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT,**kwargs)
-  if val is None and COLFRI_QUANT != '':
-    val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT, **kwargs)
-  if val is None and CURRENT_QUANT != '':
-    val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT, **kwargs)
-  if val is None and FLUX_QUANT != '':
-    val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT, **kwargs)
-  if val is None and PLASMA_QUANT != '':
-    val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT, **kwargs)
-  if val is None and WAVE_QUANT != '':
-    val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT, **kwargs)
-  if val is None and CYCL_RES != '':
-    val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES, **kwargs)
-  if val is None and GYROF_QUANT != '':
-    val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT, **kwargs)
-  if val is None and KAPPA_QUANT != '':
-    val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT, **kwargs)
-  if val is None and DEBYE_LN_QUANT != '':
-    val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT, **kwargs)
-  if val is None and IONP_QUANT != '':
-    val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT, **kwargs)
-  if val is None and AMB_QUANT != '':
-    val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT, **kwargs)
-  if val is None and HALL_QUANT != '':
-    val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT, **kwargs)
-  if val is None and BATTERY_QUANT != '':
-    val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT, **kwargs)  
-  if val is None and SPITZER_QUANT != '':
-    val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT, **kwargs) 
-  if val is None and EOSTAB_QUANT != '': 
-    val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT, **kwargs)
-  if val is None and COLCOU_QUANT != '': 
-    val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT, **kwargs)
-  if val is None and COLCOUMS_QUANT != '': 
-    val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT, **kwargs)
-  if val is None and COLFREMX_QUANT != '': 
-    val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT, **kwargs)
-  #if np.shape(val) is ():
-  #  val = get_spitzerparam(obj, quant)
+  # tell which getter function is associated with each QUANT.
+  ## (would put this list outside this function if the getter functions were defined there, but they are not.)
+  _getter_QUANT_pairs = (
+    (get_em, 'EM_QUANT'),
+    (get_coulomb, 'COULOMB_COL_QUANT'),
+    (get_collision, 'COLFRE_QUANT'),
+    (get_crossections, 'CROSTAB_QUANT'),
+    (get_collision_ms, 'COLFRI_QUANT'),
+    (get_current, 'CURRENT_QUANT'),
+    (get_flux, 'FLUX_QUANT'),
+    (get_plasmaparam, 'PLASMA_QUANT'),
+    (get_wavemode, 'WAVE_QUANT'),
+    (get_cyclo_res, 'CYCL_RES'),
+    (get_gyrof, 'GYROF_QUANT'),
+    (get_kappa, 'KAPPA_QUANT'),
+    (get_debye_ln, 'DEBYE_LN_QUANT'),
+    (get_ionpopulations, 'IONP_QUANT'),
+    (get_ambparam, 'AMB_QUANT'),
+    (get_hallparam, 'HALL_QUANT'),
+    (get_batteryparam, 'BATTERY_QUANT'),
+    (get_spitzerparam, 'SPITZER_QUANT'),
+    (get_eosparam, 'EOSTAB_QUANT'),
+    (get_collcoul, 'COLCOU_QUANT'),
+    (get_collcoul_ms, 'COLCOUMS_QUANT'),
+    (get_collision_maxw, 'COLFREMX_QUANT'),
+  )
+
+  val = None
+  # loop through the function and QUANT pairs, running the functions as appropriate.
+  for getter, QUANT_STR in _getter_QUANT_pairs:
+    QUANT = locals()[QUANT_STR]   # QUANT = value of input parameter named QUANT_STR.
+    if QUANT != '':
+      val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
+      if val is not None:
+        break
   return val
 
 

@@ -41,13 +41,16 @@ units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
 
 
 
-def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, EFIELD_QUANT=None,
+def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=None,
                        ONEFLUID_QUANT=None, ELECTRON_QUANT=None, MOMENTUM_QUANT=None,
                        HEATING_QUANT=None, SPITZERTERM_QUANT=None,
                        COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
                        DRIFT_QUANT=None, MEAN_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
                        WAVE_QUANT=None, FB_INSTAB_QUANT=None, THERMAL_INSTAB_QUANT=None,
-                       **kwargs):
+                       **kw__None):
+  '''load multifluid quantity indicated by quant.
+  *args__None and **kw__None go nowhere.
+  '''
   __tracebackhide__ = True  # hide this func from error traceback stack.
 
   quant = quant.lower()
@@ -60,39 +63,36 @@ def load_mf_quantities(obj, quant, *args, GLOBAL_QUANT=None, EFIELD_QUANT=None,
        "  0  -> does not use ifluid nor jfluid. (e.g. 'bx', 'nel', 'tot_e'))\n")
                               )
 
-  val = get_global_var(obj, quant, GLOBAL_QUANT=GLOBAL_QUANT)
-  if val is None:
-    val = get_efield_var(obj, quant, EFIELD_QUANT=EFIELD_QUANT)
-  if val is None:
-    val = get_onefluid_var(obj, quant, ONEFLUID_QUANT=ONEFLUID_QUANT)
-  if val is None:
-    val = get_electron_var(obj, quant, ELECTRON_QUANT=ELECTRON_QUANT)
-  if val is None:
-    val = get_momentum_quant(obj, quant, MOMENTUM_QUANT=MOMENTUM_QUANT)
-  if val is None:
-    val = get_heating_quant(obj, quant, HEATING_QUANT=HEATING_QUANT)
-  if val is None:
-    val = get_spitzerterm(obj, quant, SPITZERTERM_QUANT=SPITZERTERM_QUANT) 
-  if val is None:
-    val = get_mf_colf(obj, quant, COLFRE_QUANT=COLFRE_QUANT)
-  if val is None:
-    val = get_mf_logcul(obj, quant, LOGCUL_QUANT=LOGCUL_QUANT)
-  if val is None:
-    val = get_mf_cross(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT)
-  if val is None:
-    val = get_mf_driftvar(obj, quant, DRIFT_QUANT=DRIFT_QUANT)
-  if val is None:
-    val = get_mean_quant(obj, quant, MEAN_QUANT=MEAN_QUANT)
-  if val is None:
-    val = get_cfl_quant(obj, quant, CFL_QUANT=CFL_QUANT)
-  if val is None: 
-    val = get_mf_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT)
-  if val is None:
-    val = get_mf_wavequant(obj, quant, WAVE_QUANT=WAVE_QUANT)
-  if val is None:
-    val = get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=FB_INSTAB_QUANT)
-  if val is None:
-    val = get_thermal_instab_quant(obj, quant, THERMAL_INSTAB_QUANT=THERMAL_INSTAB_QUANT)
+   # tell which getter function is associated with each QUANT.
+  ## (would put this list outside this function if the getter functions were defined there, but they are not.)
+  _getter_QUANT_pairs = (
+    (get_global_var, 'GLOBAL_QUANT'),
+    (get_efield_var, 'EFIELD_QUANT'),
+    (get_onefluid_var, 'ONEFLUID_QUANT'),
+    (get_electron_var, 'ELECTRON_QUANT'),
+    (get_momentum_quant, 'MOMENTUM_QUANT'),
+    (get_heating_quant, 'HEATING_QUANT'),
+    (get_spitzerterm, 'SPITZERTERM_QUANT'),
+    (get_mf_colf, 'COLFRE_QUANT'),
+    (get_mf_logcul, 'LOGCUL_QUANT'),
+    (get_mf_cross, 'CROSTAB_QUANT'),
+    (get_mf_driftvar, 'DRIFT_QUANT'),
+    (get_mean_quant, 'MEAN_QUANT'),
+    (get_cfl_quant, 'CFL_QUANT'),
+    (get_mf_plasmaparam, 'PLASMA_QUANT'),
+    (get_mf_wavequant, 'WAVE_QUANT'),
+    (get_fb_instab_quant, 'FB_INSTAB_QUANT'),
+    (get_thermal_instab_quant, 'THERMAL_INSTAB_QUANT')
+  )
+
+  val = None
+  # loop through the function and QUANT pairs, running the functions as appropriate.
+  for getter, QUANT_STR in _getter_QUANT_pairs:
+    QUANT = locals()[QUANT_STR]   # QUANT = value of input parameter named QUANT_STR.
+    #if QUANT != '':
+    val = getter(obj, quant, **{QUANT_STR : QUANT})
+    if val is not None:
+      break
   return val
 
 
