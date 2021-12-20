@@ -175,9 +175,9 @@ class BifrostData(object):
         '''
         if isinstance(i, str):
             self.set_snap(int(i))
-            return self
         else:
             self.set_snap(self.get_snaps()[i])
+        return self
     
     def _set_snapvars(self, firstime=False):
         """
