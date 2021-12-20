@@ -156,6 +156,28 @@ class BifrostData(object):
         '''equivalent to self.get_var(var, *args, **kwargs)'''
         __tracebackhide__ = True  # hide this func from error traceback stack
         return self.get_var(var, *args, **kwargs)
+
+    def __getitem__(self, i):
+        '''sets snap to i then returns self.
+
+        i: string, or anything which can index a list
+            string --> set snap to int(i)
+            else --> set snap to self.get_snaps()[i]
+
+        Example usage:
+            bb = BifrostData(...)
+            bb['3']('r')
+            # is equivalent to: bb.set_snap(3); bb.get_var('r')
+            bb[3]('r')
+            # is equivalent to: bb.set_snap(bb.get_snaps()[3]); bb.get_var('r')
+            #   if the existing snaps are [0,1,2,3,...], this is equivalent to bb['3']('r')
+            #   if the existing snaps are [4,5,6,7,...], this is equivalent to bb['7']('r')
+        '''
+        if isinstance(i, str):
+            self.set_snap(int(i))
+            return self
+        else:
+            self.set_snap(self.get_snaps()[i])
     
     def _set_snapvars(self, firstime=False):
         """
