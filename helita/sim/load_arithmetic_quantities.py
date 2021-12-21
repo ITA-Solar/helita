@@ -127,9 +127,9 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
   _getter_funcs = (
     get_center, get_deriv, get_interp,
     get_module, get_horizontal_average,
-    get_gradients_vect, get_gradients_scalar,
-    get_square, get_lg, get_ratios, get_projections,
-    get_vector_product, get_angle
+    get_gradients_vect, get_gradients_scalar, get_vector_product,
+    get_square, get_lg, get_numop, get_ratios,
+    get_projections, get_angle
   )
 
   val = None
@@ -629,6 +629,37 @@ def get_lg(obj,quant):
     return np.log10(obj.get_var(q))
   elif getq == 'ln_':
     return np.log(obj.get_var(q))
+
+
+# default
+_NUMOP_QUANT = ('NUMOP_QUANT', ['delta_', 'deltafrac_'])
+# get value
+def get_numop(obj,quant):
+  '''Some numerical operation on a variable. E.g. delta_var computes (var - var.mean()).'''
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_NUMOP_QUANT, get_numop.__doc__)
+    docvar('delta_', 'starting with, deviation from mean. delta_v --> v - mean(v)', uni=UNI.qc(0))
+    docvar('deltafrac_', 'starting with, fractional deviation from mean. deltafrac_v --> v / mean(v) - 1', uni=DIMENSIONLESS)
+    return None
+
+  # interpret quant string
+  for start in _NUMOP_QUANT[1]:
+    if quant.startswith(start):
+      getq = start                 # the quant we are "getting" via this function. (e.g. 'lg' or 'ln_')
+      base = quant[len(getq) : ]   # the "base" quant, i.e. whatever is left after pulling getq.
+      break
+  else:  # if we did not break, we did not match any start to quant, so we return None.
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0], delay=True)
+
+  # do calculations and return result
+  v = obj.get_var(base)
+  if getq == 'delta_':
+    return (v - np.mean(v))
+  elif getq == 'deltafrac_':
+    return (v / np.mean(v)) - 1
 
 
 # default
