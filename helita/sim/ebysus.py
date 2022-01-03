@@ -700,7 +700,6 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
         filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, mode=mode, panic=panic, *args, **kwargs)
-        
         # actually get the memmap and return result.
         result = get_numpy_memmap(filename, **kw__get_mmap)
         return result
@@ -866,19 +865,19 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # calculate info which numpy needs to read file as memmap.
         dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * self.nzb * idx * dsize * self.mf_arr_size
+        offset = self.nxb * self.nyb * self.nzb * idx * dsize * self.mf_arr_size
 
         # kwargs which will be passed to get_numpy_memmap.
         kw__get_mmap = dict(dtype=self.dtype, order=order, mode=mode,          # kwargs for np.memmap
-                            offset=offset, shape=(self.nx, self.ny, self.nzb), # kwargs for np.memmap
+                            offset=offset, shape=(self.nxb, self.nyb, self.nzb), # kwargs for np.memmap
                             obj=self if (self.N_memmap != 0) else None,        # kwarg for memmap management
                             )
         if (self.mf_arr_size == 1): # in case of mf_arr_size == 1, kw__get_mmap is already correct.
             pass
         elif var in self.varsmm:    # in case of var in varsmm, apply jdx info to offset.
-            kw__get_mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
+            kw__get_mmap['offset'] += self.nxb * self.nyb * self.nzb * jdx * dsize
         else:                       # in case of (else), adjust the shape kwarg appropriately.
-            kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
+            kw__get_mmap['shape'] = (self.nxb, self.nyb, self.nzb, self.mf_arr_size)
 
         return (filename, kw__get_mmap)
 
@@ -1536,6 +1535,8 @@ def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
      '         tsnap =  0.0                                               \n',
      '          tscr =  0.00000000E+00                                    \n',
      '   boundarychk =    0                                               \n',
+     '  boundarychky =    0                                               \n',
+     '  boundarychkx =    0                                               \n',          
      '   print_stats =    0                                               \n',
      '; ************************* From     math ************************* \n',
      '         max_r =    5                                               \n',

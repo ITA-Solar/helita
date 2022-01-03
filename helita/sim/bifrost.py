@@ -287,8 +287,18 @@ class BifrostData(object):
                     self.nzb = self.nz + 2 * self.nb
                 else:
                     self.nzb = self.nz
+                if ((params['boundarychky'] == 1) and (params['isnap'] !=0)):
+                    self.nyb = self.ny + 2 * self.nb
+                else:
+                    self.nyb = self.ny
+                if ((params['boundarychkx'] == 1) and (params['isnap'] !=0)):
+                    self.nxb = self.nx + 2 * self.nb
+                else:
+                    self.nxb = self.nx
             except KeyError:
                 self.nzb = self.nz
+                self.nyb = self.ny
+                self.nxb = self.nx
             # check if units are there, if not use defaults and print warning
             unit_def = {'u_l': 1.e8, 'u_t': 1.e2, 'u_r': 1.e-7,
                         'u_b': 1.121e3, 'u_ee': 1.e12}
@@ -385,6 +395,8 @@ class BifrostData(object):
                     np.repeat(self.dzidzdn[0], self.nb),
                     self.dzidzdn,
                     np.repeat(self.dzidzdn[-1], self.nb)))
+                self.nx = self.nxb
+                self.ny = self.nyb
                 self.nz = self.nzb
         else:  # no mesh file
             if self.dx == 0.0:
@@ -409,6 +421,8 @@ class BifrostData(object):
             self.dyidydn = np.zeros(self.ny) + 1. / self.dy
             # z
             if self.ghost_analyse:
+                self.nx = self.nxb
+                self.ny = self.nyb
                 self.nz = self.nzb
             self.z = np.arange(self.nz) * self.dz
             self.zdn = self.z - 0.5 * self.dz
@@ -644,10 +658,7 @@ class BifrostData(object):
 
         #set self.xLength
         if isinstance(iinum, slice):
-            if iiaxis == 'z':
-                nx = getattr(self, 'nzb')
-            else:
-                nx = getattr(self, 'n'+iiaxis)
+            nx = getattr(self, 'n'+iiaxis+'b')
             indSize = len(range(*iinum.indices(nx)))
         else:
             iinum = np.asarray(iinum)
@@ -1014,10 +1025,11 @@ class BifrostData(object):
                               '\n' + repr(self.simple_vars)))
         dsize = np.dtype(self.dtype).itemsize
         if self.ghost_analyse:
-            offset = self.nx * self.ny * self.nzb * idx * dsize
-            ss = (self.nx, self.ny, self.nzb)
+            offset = self.nxb * self.nyb * self.nzb * idx * dsize
+            ss = (self.nxb, self.nyb, self.nzb)
         else:
-            offset = (self.nx * self.ny *
+            offset = ((self.nxb + (self.nxb - self.nx)) * 
+                      (self.nyb + (self.nyb - self.ny)) *
                       (self.nzb + (self.nzb - self.nz) // 2) * idx * dsize)
             ss = (self.nx, self.ny, self.nz)
 
