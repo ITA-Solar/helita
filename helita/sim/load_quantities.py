@@ -10,6 +10,8 @@ from .load_arithmetic_quantities import do_cstagger
 # import external public modules
 import numpy as np
 
+from numba import jit, njit, prange
+
 ## import the potentially-relevant things from the internal module "units"
 from .units import (
   UNI, USI, UCGS, UCONST,
@@ -176,7 +178,8 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, 
                 KAPPA_QUANT=None, GYROF_QUANT=None, WAVE_QUANT=None, 
                 FLUX_QUANT=None, CURRENT_QUANT=None, COLCOU_QUANT=None,  
-                COLCOUMS_QUANT=None, COLFREMX_QUANT=None, EM_QUANT=None, **kwargs):
+                COLCOUMS_QUANT=None, COLFREMX_QUANT=None, EM_QUANT=None, 
+                POND_QUANT=None, **kwargs):
   #             HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   __tracebackhide__ = True  # hide this func from error traceback stack.
 
@@ -233,6 +236,8 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
     val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT, **kwargs)
   if val is None and COLFREMX_QUANT != '': 
     val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT, **kwargs)
+  if val is None and POND_QUANT != '': 
+    val = get_ponderomotive(obj, quant, POND_QUANT=POND_QUANT, **kwargs)
   #if np.shape(val) is ():
   #  val = get_spitzerparam(obj, quant)
   return val
@@ -845,6 +850,70 @@ def get_flux(obj, quant, FLUX_QUANT=None, **kwargs):
       obj.get_var('b' + varsn[0] + 'c')**2 +
       obj.get_var('b' + varsn[1] + 'c')**2)
   return var
+
+
+
+# default
+_POND_QUANT= ('POND_QUANT',
+              ['pond']
+             )
+# get value
+@document_vars.quant_tracking_simple(_POND_QUANT[0])
+def get_ponderomotive(obj, quant, POND_QUANT=None, **kwargs):
+  '''
+  Computes flux
+  '''
+  if POND_QUANT is None:
+    POND_QUANT = _POND_QUANT[1]
+
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, _POND_QUANT[0], POND_QUANT, get_flux.__doc__)
+    docvar('pond',  'Ponderomotive aceleration along the field lines')
+
+  if (quant == '') or not quant in POND_QUANT:
+    return None
+
+
+  bxc = obj.get_var('bxc')
+  byc = obj.get_var('byc')  
+  bzc = obj.get_var('bzc')
+  
+  nx, ny, nz = bxc.shape
+
+  b2 = bxc**2+ byc**2+ bzc**2
+
+  ubx = obj.get_var('uyc')*bzc - obj.get_var('uzc')*byc
+  uby = obj.get_var('uxc')*bzc - obj.get_var('uzc')*bxc
+  ubz = obj.get_var('uxc')*byc - obj.get_var('uyc')*bxc
+  
+  xl, yl, zl = calc_field_lines(obj.x[::2],obj.y,obj.z[::2],bxc[::2,:,::2],byc[::2,:,::2],bzc[::2,:,::2],niter=501)
+  S = calc_lenghth_lines(xl, yl, zl)
+  ixc = obj.get_var('ixc')
+  iyc = obj.get_var('iyc')
+  izc = obj.get_var('izc') 
+  
+
+  for iix in range(nx): 
+    for iiy in range(ny): 
+      for iiz in range(nz): 
+        ixc[iix,iiy,iiz] /= S[int(iix/2),iiy,int(iiz/2)]
+        iyc[iix,iiy,iiz] /= S[int(iix/2),iiy,int(iiz/2)]
+        izc[iix,iiy,iiz] /= S[int(iix/2),iiy,int(iiz/2)]
+
+  dex = - ubx + ixc
+  dey = - uby + iyc
+  dez = - ubz + izc
+
+  dpond = (dex**2 + dey**2 + dez**2) / b2
+
+  ibxc = bxc / (np.sqrt(b2)+1e-30)
+  ibyc = byc / (np.sqrt(b2)+1e-30)
+  ibzc = bzc / (np.sqrt(b2)+1e-30)
+    
+  return do_cstagger(dpond, 'ddxdn', obj=obj)*ibxc +\
+        do_cstagger(dpond, 'ddydn', obj=obj)*ibyc +\
+        do_cstagger(dpond, 'ddydn', obj=obj)*ibyc 
+
 
 
 # default
@@ -1619,6 +1688,72 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None, **kwargs):
  
 
 ''' ------------- End get_quant() functions; Begin helper functions -------------  '''
+
+@njit(parallel=True)
+def calc_field_lines(x,y,z,bxc,byc,bzc,niter=501):
+  
+  modb=np.sqrt(bxc**2+byc**2+bzc**2)
+
+  ibxc = bxc / (modb+1e-30)
+  ibyc = byc / (modb+1e-30)
+  ibzc = bzc / (modb+1e-30)
+  
+  nx, ny, nz = bxc.shape
+  niter2 = int(np.floor(niter/2))
+  dx = x[1]-x[0]
+  zl = np.zeros((nx,ny,nz,niter))
+  yl = np.zeros((nx,ny,nz,niter))
+  xl = np.zeros((nx,ny,nz,niter))
+  for iix in prange(nx): 
+    for iiy in prange(ny): 
+      for iiz in prange(nz): 
+
+        si = 0.0
+        xl[iix, iiy, iiz, niter2] = x[iix] 
+        yl[iix, iiy, iiz, niter2] = y[iiy]
+        zl[iix, iiy, iiz, niter2] = z[iiz]
+
+        for iil in prange(1,niter2+1): 
+          iixp = np.argmin(x-xl[iix, iiy, iiz, niter2 + iil - 1])
+          iiyp = np.argmin(y-yl[iix, iiy, iiz, niter2 + iil - 1])
+          iizp = np.argmin(z-zl[iix, iiy, iiz, niter2 + iil - 1])
+
+          xl[iix, iiy, iiz, niter2 + iil] = xl[iix, iiy, iiz, niter2 + iil - 1] + ibxc[iixp,iiyp,iizp]*dx
+          yl[iix, iiy, iiz, niter2 + iil] = yl[iix, iiy, iiz, niter2 + iil - 1] + ibyc[iixp,iiyp,iizp]*dx
+          zl[iix, iiy, iiz, niter2 + iil] = zl[iix, iiy, iiz, niter2 + iil - 1] + ibzc[iixp,iiyp,iizp]*dx
+
+          iixm = np.argmin(x-xl[iix, iiy, iiz, niter2 - iil + 1])
+          iiym = np.argmin(y-yl[iix, iiy, iiz, niter2 - iil + 1])
+          iizm = np.argmin(z-zl[iix, iiy, iiz, niter2 - iil + 1])
+
+          xl[iix, iiy, iiz, niter2 - iil] = xl[iix, iiy, iiz, niter2 - iil + 1] - ibxc[iixm,iiym,iizm]*dx
+          yl[iix, iiy, iiz, niter2 - iil] = yl[iix, iiy, iiz, niter2 - iil + 1] - ibyc[iixm,iiym,iizm]*dx
+          zl[iix, iiy, iiz, niter2 - iil] = zl[iix, iiy, iiz, niter2 - iil + 1] - ibzc[iixm,iiym,iizm]*dx
+
+  return xl, yl, zl
+
+
+@njit(parallel=True)
+def calc_lenghth_lines(xl,yl,zl):
+
+  nx, ny, nz, nl =np.shape(xl)
+
+  S = np.zeros((nx,ny,nz))  
+
+  for iix in prange(nx): 
+    for iiy in prange(ny): 
+      for iiz in prange(nz): 
+        iilmin = np.argmin(zl[iix, iiy, iiz,:])                  # Corona
+        iilmax = np.argmin(np.abs(zl[iix, iiy, iiz,:]))          # Photosphere
+        if iix == 0: 
+          if iiy == 0:
+            print('ii', np.min(zl[iix, iiy, iiz,:]),np.max(zl[iix, iiy, iiz,:]),iilmin,iilmax)
+        for iil in prange(iilmax+1,iilmin): 
+          S[iix,iiy,iiz] += np.sqrt((xl[iix,iiy,iiz,iil]-xl[iix,iiy,iiz,iil-1])**2 +\
+                            (yl[iix,iiy,iiz,iil]-yl[iix,iiy,iiz,iil-1])**2 +\
+                            (zl[iix,iiy,iiz,iil]-zl[iix,iiy,iiz,iil-1])**2)
+
+  return S
 
 def calc_tau(obj):
   """
