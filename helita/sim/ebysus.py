@@ -37,6 +37,10 @@ import collections
 from .bifrost import (
     BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
     read_idl_ascii, subs2grph,
+    # for historical reasons / convenience, also import directly:
+    get_snapstuff, snapstuff, get_snapname, snapname,
+    available_snaps, snaps, get_snaps, list_snaps, snaps_info,
+    EnterDir, EnterDirectory,
 )
 from .load_mf_quantities         import load_mf_quantities
 from .load_quantities            import load_quantities
@@ -895,111 +899,6 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
-    
-
-
-####################
-#  LOCATING SNAPS  #
-####################
-
-SnapStuff = collections.namedtuple('SnapStuff', ('snapname', 'snaps'))
-
-def get_snapstuff(dd=None):
-    '''return (get_snapname(), available_snaps()).
-    dd: None or EbysusData object.
-        None -> do operations locally.
-        else -> cd to dd.fdir, first.
-    '''
-    snapname = get_snapname(dd=dd)
-    snaps    = get_snaps(snapname=snapname, dd=dd)
-    return SnapStuff(snapname=snapname, snaps=snaps)
-
-snapstuff = get_snapstuff   # alias
-
-def get_snapname(dd=None):
-    '''gets snapname by reading it from mhd.in'''
-    with EnterDirectory(_get_dd_fdir(dd)):
-        mhdin_ascii = read_idl_ascii('mhd.in')
-        return mhdin_ascii['snapname']
-
-snapname = get_snapname   # alias
-
-def available_snaps(dd=None, snapname=None):
-    '''list available snap numbers.
-    Does look for: snapname_*.idl, snapname.idl (i.e. snap 0)
-    Doesn't look for: .pan, .scr, .aux files.
-    snapname: None (default) or str
-        snapname parameter from mhd.in. If None, get snapname.
-    if dd is not None, look in dd.fdir.
-    '''
-    with EnterDirectory(_get_dd_fdir(dd)):
-        snapname = snapname if snapname is not None else get_snapname()
-        snaps = [_snap_to_N(f, snapname) for f in os.listdir()]
-        snaps = [s for s in snaps if s is not None]
-        snaps = sorted(snaps)
-        return snaps
-
-snaps      = available_snaps   # alias
-get_snaps  = available_snaps   # alias
-list_snaps = available_snaps   # alias
-
-def snaps_info(dd=None, snapname=None):
-    '''returns string with length of snaps, as well as min and max.'''
-    snaps = get_snaps(dd=dd, snapname=snapname)
-    return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
-
-class EnterDir:
-    '''context manager for remembering directory.
-    upon enter, cd to directory. upon exit, restore original working directory.
-    '''
-    def __init__(self, directory=os.curdir):
-        self.cwd       = os.path.abspath(os.getcwd())
-        self.directory = directory
-
-    def __enter__ (self):
-        os.chdir(self.directory)
-
-    def __exit__ (self, exc_type, exc_value, traceback):
-        os.chdir(self.cwd)
-
-EnterDirectory = EnterDir  #alias
-
-def _get_dd_fdir(dd=None):
-    '''return dd.fdir if dd is not None, else os.curdir.'''
-    if dd is not None:
-        fdir = dd.fdir
-    else:
-        fdir = os.curdir
-    return fdir
-
-def _snap_to_N(name, base, sep='_', ext='.idl'):
-    '''returns N as number given snapname (and basename) if possible, else None.
-    for all strings in exclude, if name contains string, return None.
-    E.g. _snap_to_N('s_075.idl', 's') == 75
-    E.g. _snap_to_N('s.idl', 's')     == 0
-    E.g. _snap_to_N('notasnap', 's')  == None
-    '''
-    if not name.startswith(base):
-        return None
-    namext = os.path.splitext(name)
-    if   namext[1] != ext :
-        return None
-    elif namext[0] == base:
-        return 0
-    else:
-        try:
-            snapN = int(namext[0][len(base+sep):])
-        except ValueError:
-            return None
-        else:
-            return snapN
-
-# include methods (and some aliases) for getting snaps in EbysusData object
-EbysusData.get_snapstuff   = get_snapstuff
-EbysusData.get_snapname    = get_snapname
-EbysusData.available_snaps = available_snaps
-EbysusData.get_snaps       = available_snaps
-EbysusData.snaps_info      = snaps_info
 
 #############################
 #  MAKING INITIAL SNAPSHOT  #
