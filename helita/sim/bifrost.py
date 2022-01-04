@@ -732,9 +732,11 @@ class BifrostData(object):
 
         '''
 
-        self.sel_units = 'cgs'
         
         self.trans2commaxes() 
+
+        self.sel_units = 'cgs'
+
         sign = 1.0
         if varname[-1] in ['x','y','z']: 
             varname = varname+'c'
@@ -1856,8 +1858,7 @@ class Opatab:
     which should be good enough for the purposes of this code
     """
     def __init__(self, tabname=None, fdir='.',  dtype='f4',
-                 verbose=True, lambd=100.0):
-        import ChiantiPy.core as ch
+                 verbose=True, lambd=100.0, big_endian=False):
         self.fdir = fdir
         self.dtype = dtype
         self.verbose = verbose
@@ -1871,8 +1872,8 @@ class Opatab:
         if tabname is None:
             tabname = os.path.join(fdir, 'ionization.dat')
         self.tabname = tabname
-        # load table(s)
-        self.load_opa_table()
+
+
 
     def hopac(self):
         ghi = 0.99
@@ -1955,6 +1956,7 @@ class Opatab:
 
     def load_opa1d_table(self, tabname='chianti'):
         ''' Loads ionizationstate table. '''
+        import ChiantiPy.core as ch        
         if tabname is None:
             tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
         if tabname == '%s/%s' % (self.fdir, 'ionization1d.dat'):
