@@ -164,7 +164,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     output += obj.get_var('e', mf_ispecies= -1) # internal energy density of electrons
     for fluid in fl.Fluids(dd=obj):
       output += obj.get_var('e', ifluid=fluid.SL) # internal energy density of fluid
-    return ouput
+    return output
   elif var == 'tot_ke':
     output = obj.get_var('eke')   # kinetic energy density of electrons
     for fluid in fl.Fluids(dd=obj):
@@ -382,7 +382,7 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
 
 # default
 _ONEFLUID_QUANT = ('ONEFLUID_QUANT',
-                   ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'ke', 'vtherm', 'vtherm_simple',
+                   ['nr', 'nq', 'p', 'pressure', 'tg', 'temperature', 'tgjoule', 'ke', 'vtherm', 'vtherm_simple',
                     'ri', 'uix', 'uiy', 'uiz', 'pix', 'piy', 'piz']
                   )
 # get value
@@ -409,6 +409,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
                   uni_f= UNI.q * UNI_nr.f, usi_name=Usym('C') / Usym('m')**3)
     for tg in ['tg', 'temperature']:
       docvar(tg, 'temperature of ifluid [K]', uni=U_TUPLE(UNITS_FACTOR_1, Usym('K')))
+    docvar('tgjoule', 'temperature of ifluid [ebysus energy units]. == tg [K] * k_boltzmann [J/K]', uni=U_TUPLE(UNITS_FACTOR_1, Usym('J')))
     for p in ['p', 'pressure']:
       docvar(p, 'pressure of ifluid [simu. energy density units]', uni_f=UNI.e)
     docvar('ke', 'kinetic energy density of ifluid [simu. units]', **units_e)
@@ -449,6 +450,9 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     p  = obj.get_var('p') * obj.uni.u_e    # [cgs units]
     nr = obj.get_var('nr') * obj.uni.u_nr  # [cgs units]
     return p / (nr * obj.uni.k_b)          # [K]         # p = n k T
+
+  elif var == 'tgjoule':
+    return obj.uni.ksi_b * obj('tg')
 
   elif var == 'ke':
     return 0.5 * obj.get_var('ri') * obj.get_var('ui2')
