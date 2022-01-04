@@ -16,53 +16,43 @@ try:
 except ImportError:
   warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.fluid_tools may crash')
 
+# set defaults
+HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
+
+## list of functions from fluid_tools which will be set as methods of the Multifluid class.
+## for example, EbysusData inherits from Multifluid, so if Multifluid gets get_mass, then:
+##   for dd=EbysusData(...), dd.get_mass(*args, **kw) == fluid_tools.get_mass(dd, *args, **kw).
+MULTIFLUID_FUNCS = \
+    ['set_mf_fluid', 'set_mfi', 'set_mfj', 'set_fluids',
+    'get_species_name', 'get_fluid_name', 'get_mass', 'get_charge',
+    'get_cross_tab', 'get_cross_sect', 'get_coll_type',
+    'i_j_same_fluid', 'iter_fluid_SLs']
+
 ''' --------------------- setting fluids --------------------- '''
 
+# NOTE: these functions are largely obsolete, now.
+## Thanks to the "magic" of property(), doing something like obj.ifluid=(1,2)
+## will effectively set mf_ispecies and mf_ilevel appropriately.
+## And, reading something like obj.ifluid will give values (obj.mf_ispecies, obj.mf_ilevel)
+# However, we cannot delete these functions, for historical reasons.
+# And, maybe they are still useful thanks to the kwarg interpretation in set_fluids.
+
 def set_mf_fluid(obj, species=None, level=None, i='i'):
-    '''sets obj.mf_{i}species and obj.mf_{i}level. Also sets obj.{i}fluid
+    '''sets obj.mf_{i}species and obj.mf_{i}level.
     species, level: None or int
-        None -> if obj.mf_{i}attr already exists, don't change it.
-                else, set it to 1.
+        None -> don't change obj.mf_{i}species, mf_{i}level.
         ints -> set mf_{i}species=species, mf_{i}level=level.
     '''
-    DEFAULT_S, DEFAULT_L = (1, 1)
-    mf_species_attr = 'mf_'+i+'species'
-    mf_level_attr = 'mf_'+i+'level'
-    fluid_attr = i+'fluid'
-    # set species
-    if species is None:
-        if not hasattr(obj, mf_species_attr):
-            species = DEFAULT_S
-        else:
-            species = getattr(obj, mf_species_attr)
-    setattr(obj, mf_species_attr, species)
-    # set level
-    if level is None:
-        if not hasattr(obj, mf_level_attr):
-            level   = DEFAULT_L
-        else:
-            level   = getattr(obj, mf_level_attr)
-    setattr(obj, mf_level_attr, level)
-    # set fluid
-    setattr(obj, fluid_attr, (species, level) )
+    setattr(obj, 'mf_'+i+'species', species)
+    setattr(obj, 'mf_'+i+'level', level)
 
 def set_mfi(obj, mf_ispecies=None, mf_ilevel=None):
-    '''set obj.mf_ispecies, obj.mf_ilevel, and obj.ifluid.
-    mf_ispecies, mf_ilevel: None or int
-        None -> if attr already exists, don't change it.
-                else, set it to 1.
-        int  -> set attr to this value.
-    '''
     return obj.set_mf_fluid(mf_ispecies, mf_ilevel, 'i')
+set_mfi.__doc__ = set_mf_fluid.__doc__.format(i='i')
 
 def set_mfj(obj, mf_jspecies=None, mf_jlevel=None):
-    '''set obj.mf_jspecies, obj.mf_jlevel, and obj.jfluid.
-    mf_jspecies, mf_jlevel: None or int
-        None -> if attr already exists, don't change it.
-                else, set it to 1.
-        int  -> set attr to this value.
-    '''
     return obj.set_mf_fluid(mf_jspecies, mf_jlevel, 'j')
+set_mfj.__doc__ = set_mf_fluid.__doc__.format(i='j')
 
 def set_fluids(obj, **kw__fluids):
     '''interprets kw__fluids then sets them using set_mfi and set_mfj.
@@ -156,7 +146,7 @@ def _interpret_kw_fluid(mf_species=None, mf_level=None, fluid=None, SL=None, S=N
 
 ''' --------------------- fluid SL context managers --------------------- '''
 
-class _MaintainingFluids:
+class _MaintainingFluids():
     '''context manager which restores ifluid and jfluid to original values, upon exit.
 
     Example:
@@ -216,6 +206,7 @@ def maintain_fluids(f):
     '''decorator version of _MaintainFluids. first arg of f must be an EbysusData object.'''
     @functools.wraps(f)
     def f_but_maintain_fluids(obj, *args, **kwargs):
+        __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
         with _MaintainingFluids(obj):
             return f(obj, *args, **kwargs)
     return f_but_maintain_fluids
@@ -225,13 +216,14 @@ def use_fluids(**kw__fluids):
     def decorator(f):
         @functools.wraps(f)
         def f_but_use_fluids(obj, *args, **kwargs):
+            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             with _UsingFluids(obj, **kw__fluids):
                 return f(obj, *args, **kwargs)
         return f_but_use_fluids
     return decorator
 
 
-''' --------------------- iterators over fluid pairs --------------------- '''
+''' --------------------- iterators over fluids --------------------- '''
 
 def fluid_pairs(fluids, ordered=False, allow_same=False):
     '''returns an iterator over fluids of obj.
@@ -257,6 +249,29 @@ def fluid_pairs(fluids, ordered=False, allow_same=False):
     elif not ordered and     allow_same: return itertools.product(fluids, repeat=2)
     assert False #we should never reach this line...
 
+def iter_fluid_SLs(dd, with_electrons=True):
+    '''returns an iterator over the fluids of dd, and electrons.
+    yields SL pairs; NOT at_tools.fluids.Fluid objects!
+    example: list(iter_fluids(dd)) = [(-1,0), (1,1), (1,2)].
+    '''
+    if with_electrons:
+        yield (-1,0)
+    for fluid in fl.Fluids(dd=dd):
+        yield fluid.SL
+
+''' --------------------- compare fluids --------------------- '''
+
+def i_j_same_fluid(obj):
+    '''returns whether obj.ifluid and obj.jfluid represent the same fluid.'''
+    return fluid_equals(obj.ifluid, obj.jfluid)
+
+def fluid_equals(iSL, jSL):
+    '''returns whether iSL and jSL represent the same fluid.'''
+    if iSL[0] < 0 and jSL[0] < 0:
+        return True
+    else:
+        return (iSL == jSL)
+
 ''' --------------------- small helper functions --------------------- '''
 # for each of these functions, obj should be an EbysusData object.
 
@@ -266,6 +281,27 @@ def get_species_name(obj, specie):
         return 'e'
     else:
         return obj.att[specie].params.element
+
+def get_fluid_name(obj, fluid):
+    '''return fluid's name: 'e-' for electrons; element & ionization for other fluids (e.g. 'H II').
+    fluid can be at_tools.fluids.Fluid object, (species, level) pair, or -1 (for electrons).
+    '''
+    try:
+        return fluid.name
+    except AttributeError:
+        try:
+            specie = fluid[0]
+            electrons_or_bust = False
+        except TypeError:
+            specie = fluid
+            if not (specie < 0):
+                errmsg_badfluid = ('Expected at_tools.fluids.Fluid object or (species, level) for fluid, '
+                                   'but got fluid = {}'.format(fluid))
+                raise TypeError(errmsg_badfluid)
+        if specie < 0:
+            return 'e-'
+        else:
+            return fl.Fluids(dd=obj)[fluid].name
 
 def get_mass(obj, specie, units='amu'):
     '''return specie's mass [units]. default units is amu.
@@ -320,7 +356,7 @@ def get_charge(obj, SL, units='e'):
     VALID_UNITS = ['e', 'elementary', 'esu', 'c', 'cgs', 'si', 'simu']
     assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
     # get charge, in 'elementary charge' units:
-    if SL[0] < 0:
+    if (SL==-1) or (SL[0] < 0):
         # electron
         charge = -1.
     else:
@@ -353,7 +389,7 @@ def get_cross_tab(obj, iSL=None, jSL=None, **kw__fluids):
     # now, ispecies is the neutral one.
     # now we will actually get the filename.
     CTK = 'CROSS_SECTIONS_TABLES'
-    if jSL[0] < 0: 
+    if (jSL==-1) or (jSL[0] < 0): 
         # electrons
         cross_tab_table = obj.mf_etabparam[CTK]
         for row in cross_tab_table:
@@ -404,7 +440,12 @@ def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
     if icharge < 0 or jcharge < 0:
         implied_coll_key = 'CL' if (icharge != 0 and jcharge != 0) else 'EL'
         return ('EE', implied_coll_key)
-    coll_keys = obj.coll_keys[(iSL[0], jSL[0])]   # obj.coll_keys only knows about species.
+    try:
+        coll_keys = obj.coll_keys[(iSL[0], jSL[0])]   # obj.coll_keys only knows about species.
+    except KeyError:
+        errmsg_collkey_missing = 'coll key not found for (iS, jS) = ({}, {})! '.format(iSL[0], jSL[0]) +\
+                                 'Common cause: mistakes / missing keys in COLL KEYS in mf_param_file.'
+        raise KeyError(errmsg_collkey_missing)
     if icharge != 0 and jcharge != 0:    # two charged fluids --> return CL or None
         if 'CL' in coll_keys:
             return 'CL'
@@ -423,3 +464,128 @@ def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
             return 'MX'
         else:
             return None
+
+
+''' --------------------- MultiFluid class --------------------- '''
+
+def simple_property(internal_name, doc=None, name=None, **kw):
+    '''return a property with a setter and getter method for internal_name.
+    if 'default' in kw:
+        - getter will have a default of kw['default'], if attr has not been set.
+        - setter will do nothing if value is kw['default'].
+    '''
+    if 'default' in kw:
+        default = kw['default']
+        # define getter method
+        def getter(self):
+            return getattr(self, internal_name, default)
+        # define setter method
+        def setter(self, value):
+            if value is not default:
+                setattr(self, internal_name, value)
+    else:
+        # define getter method
+        def getter(self):
+            return getattr(self, internal_name)
+        # define setter method
+        def setter(self, value):
+            setattr(self, internal_name, value)
+    # define deleter method
+    def deleter(self):
+        delattr(self, internal_name)
+    # bookkeeping
+    if name is not None:
+        getter.__name__ = 'get_'+name
+        setter.__name__ = 'set_'+name
+        deleter.__name__ = 'del_'+name
+    # collect and return result.
+    return property(getter, setter, deleter, doc=doc)
+
+def simple_tuple_property(*internal_names, doc=None, name=None, **kw):
+    '''return a property which refers to a tuple of internal names.
+    if 'default' in kw:
+        - getter will have a default of kw['default'], if attr has not been set.
+        - setter will do nothing if value is kw['default'].
+        This applies to each name in internal_names, individually.
+    '''
+    if 'default' in kw:
+        default = kw['default']
+        # define getter method
+        def getter(self):
+            return tuple(getattr(self, name, default) for name in internal_names)
+        # define setter method
+        def setter(self, value):
+            for name, val in zip(internal_names, value):
+                if val is not default:
+                    setattr(self, name, val)
+    else:
+        # define getter method
+        def getter(self):
+            return tuple(getattr(self, name) for name in internal_names)
+        # define setter method
+        def setter(self, value):
+            for name, val in zip(internal_names, value):
+                setattr(self, name, val)
+    # define deleter method
+    def deleter(self):
+        for name in internal_names:
+            delattr(self, name)
+    # bookkeeping
+    if name is not None:
+        getter.__name__ = 'get_'+name
+        setter.__name__ = 'set_'+name
+        deleter.__name__ = 'del_'+name
+    # collect and return result.
+    return property(getter, setter, deleter, doc=doc)
+
+# internal names for properties:
+_IS = '_mf_ispecies'
+_JS = '_mf_jspecies'
+_IL = '_mf_ilevel'
+_JL = '_mf_jlevel'
+
+class Multifluid():
+    '''class which tracks fluids, and contains methods related to fluids.'''
+    def __init__(self, **kw):
+        self.set_fluids(**kw)
+
+    ## PROPERTIES (FLUIDS) ##
+    ### "ORIGINAL PROPERTIES" ###
+    mf_ispecies = simple_property(_IS, default=None, name='mf_ispecies')
+    mf_jspecies = simple_property(_JS, default=None, name='mf_jspecies')
+    mf_ilevel   = simple_property(_IL, default=None, name='mf_ilevel')
+    mf_jlevel   = simple_property(_JL, default=None, name='mf_jlevel')
+    ### ALIASES - single ###
+    iS          = simple_property(_IS, default=None, name='iS')
+    jS          = simple_property(_JS, default=None, name='jS')
+    iL          = simple_property(_IL, default=None, name='iL')
+    jL          = simple_property(_JL, default=None, name='jL')
+    ### ALIASES - multiple ###
+    ifluid      = simple_tuple_property(_IS, _IL, default=None, name='ifluid')
+    iSL         = simple_tuple_property(_IS, _IL, default=None, name='iSL')
+    jfluid      = simple_tuple_property(_JS, _JL, default=None, name='jfluid')
+    jSL         = simple_tuple_property(_JS, _JL, default=None, name='jSL')
+
+    ## METHODS ##
+    def fluids_equal(self, ifluid, jfluid):
+        '''returns whether ifluid and jfluid represent the same fluid.'''
+        return fluid_equals(ifluid, jfluid)
+
+    def MaintainingFluids(self):
+        return _MaintainingFluids(self)
+    MaintainingFluids.__doc__ = _MaintainingFluids.__doc__.replace(
+                                '_MaintainingFluids(dd', 'dd.MaintainingFluids(')  # set docstring
+    MaintainFluids = MaintainingFluids  # alias
+
+    def UsingFluids(self, **kw__fluids):
+        return _UsingFluids(self, **kw__fluids)
+
+    UsingFluids.__doc__ = _UsingFluids.__doc__.replace(
+                                '_UsingFluids(dd, ', 'dd.UsingFluids(') # set docstring
+    UseFluids = UsingFluids  # alias
+
+# include bound versions of methods from this module into the Multifluid class.
+for func in MULTIFLUID_FUNCS:
+    setattr(Multifluid, func, globals().get(func, NotImplementedError))
+
+del func   # (we don't want func to remain in the fluid_tools.py namespace beyond this point.)

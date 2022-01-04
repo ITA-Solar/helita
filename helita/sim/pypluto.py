@@ -955,7 +955,7 @@ class PlutoData(object):
 
 
 
-  def trans2comm(self, varname, snap=None, angle=0, loop=2): 
+  def trans2comm(self, varname, snap=None, angle=45, loop=None): 
     '''
     Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
     is: 
@@ -1001,7 +1001,7 @@ class PlutoData(object):
             var = vary * np.cos(self.trans2comm_angle/90.0*np.pi/2.0) + varx * np.sin(self.trans2comm_angle/90.0*np.pi/2.0)
         else:  # component z
             var = self.get_var(varname,snap=snap)
-            var = rotate(var, angle=self.trans2comm_angle, reshape=False, mode='nearest', axes=(0,1))
+        var = rotate(var, angle=self.trans2comm_angle, reshape=False, mode='nearest', axes=(0,1))
     else: 
         var = self.get_var(varname,snap=snap)
     

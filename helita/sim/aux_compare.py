@@ -110,9 +110,10 @@ AUXVARS = {
 # add each of these plus an axis to AUXVARS.
 # e.g. {'e': 'ef'} --> {'ex': 'efx', 'ey': 'efy', 'ez': 'efz'}.
 AUX_AXIAL_VARS = {
-    'e'         : 'ef',
-    'eu'        : 'ue',
-    'i'         : 'j',
+    'e'         : 'ef',      # electric field
+    'eu'        : 'ue',      # electron velocity
+    'i'         : 'j',       # current density (charge per time per area)
+    'bb_bat'    : 'bat',     # "battery" term (contribution to electric field: grad(P_e)/(n_e q_e))
 }
 AXES = ['x', 'y', 'z']
 # add the axial vars to auxvars.
