@@ -10,6 +10,8 @@ from .load_arithmetic_quantities import do_cstagger
 # import external public modules
 import numpy as np
 
+from numba import jit, njit, prange
+
 ## import the potentially-relevant things from the internal module "units"
 from .units import (
   UNI, USI, UCGS, UCONST,
@@ -176,7 +178,8 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 HALL_QUANT=None, BATTERY_QUANT=None, SPITZER_QUANT=None, 
                 KAPPA_QUANT=None, GYROF_QUANT=None, WAVE_QUANT=None, 
                 FLUX_QUANT=None, CURRENT_QUANT=None, COLCOU_QUANT=None,  
-                COLCOUMS_QUANT=None, COLFREMX_QUANT=None, EM_QUANT=None, **kwargs):
+                COLCOUMS_QUANT=None, COLFREMX_QUANT=None, EM_QUANT=None, 
+                POND_QUANT=None, **kwargs):
   #             HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   __tracebackhide__ = True  # hide this func from error traceback stack.
 
@@ -187,54 +190,42 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
 
   document_vars.set_meta_quant(obj, 'quantities', 'These are the single-fluid quantities')
 
-  if EM_QUANT != '':
-    val = get_em(obj, quant, EM_QUANT=EM_QUANT, **kwargs)  
-  else: 
-    val = None
-  if val is None and COULOMB_COL_QUANT != '':
-    val = get_coulomb(obj, quant, COULOMB_COL_QUANT=COULOMB_COL_QUANT, **kwargs)
-  if val is None and COLFRE_QUANT != '':
-    val = get_collision(obj, quant, COLFRE_QUANT=COLFRE_QUANT,**kwargs)
-  if val is None and CROSTAB_QUANT != '':
-    val = get_crossections(obj, quant, CROSTAB_QUANT=CROSTAB_QUANT,**kwargs)
-  if val is None and COLFRI_QUANT != '':
-    val = get_collision_ms(obj, quant, COLFRI_QUANT=COLFRI_QUANT, **kwargs)
-  if val is None and CURRENT_QUANT != '':
-    val = get_current(obj, quant, CURRENT_QUANT=CURRENT_QUANT, **kwargs)
-  if val is None and FLUX_QUANT != '':
-    val = get_flux(obj, quant, FLUX_QUANT=FLUX_QUANT, **kwargs)
-  if val is None and PLASMA_QUANT != '':
-    val = get_plasmaparam(obj, quant, PLASMA_QUANT=PLASMA_QUANT, **kwargs)
-  if val is None and WAVE_QUANT != '':
-    val = get_wavemode(obj, quant, WAVE_QUANT=WAVE_QUANT, **kwargs)
-  if val is None and CYCL_RES != '':
-    val = get_cyclo_res(obj, quant, CYCL_RES=CYCL_RES, **kwargs)
-  if val is None and GYROF_QUANT != '':
-    val = get_gyrof(obj, quant, GYROF_QUANT=GYROF_QUANT, **kwargs)
-  if val is None and KAPPA_QUANT != '':
-    val = get_kappa(obj, quant, KAPPA_QUANT=KAPPA_QUANT, **kwargs)
-  if val is None and DEBYE_LN_QUANT != '':
-    val = get_debye_ln(obj, quant, DEBYE_LN_QUANT=DEBYE_LN_QUANT, **kwargs)
-  if val is None and IONP_QUANT != '':
-    val = get_ionpopulations(obj, quant, IONP_QUANT=IONP_QUANT, **kwargs)
-  if val is None and AMB_QUANT != '':
-    val = get_ambparam(obj, quant, AMB_QUANT=AMB_QUANT, **kwargs)
-  if val is None and HALL_QUANT != '':
-    val = get_hallparam(obj, quant, HALL_QUANT=HALL_QUANT, **kwargs)
-  if val is None and BATTERY_QUANT != '':
-    val = get_batteryparam(obj, quant, BATTERY_QUANT=BATTERY_QUANT, **kwargs)  
-  if val is None and SPITZER_QUANT != '':
-    val = get_spitzerparam(obj, quant, SPITZER_QUANT=SPITZER_QUANT, **kwargs) 
-  if val is None and EOSTAB_QUANT != '': 
-    val = get_eosparam(obj, quant, EOSTAB_QUANT=EOSTAB_QUANT, **kwargs)
-  if val is None and COLCOU_QUANT != '': 
-    val = get_collcoul(obj, quant, COLCOU_QUANT=COLCOU_QUANT, **kwargs)
-  if val is None and COLCOUMS_QUANT != '': 
-    val = get_collcoul_ms(obj, quant, COLCOUMS_QUANT=COLCOUMS_QUANT, **kwargs)
-  if val is None and COLFREMX_QUANT != '': 
-    val = get_collision_maxw(obj, quant, COLFREMX_QUANT=COLFREMX_QUANT, **kwargs)
-  #if np.shape(val) is ():
-  #  val = get_spitzerparam(obj, quant)
+  # tell which getter function is associated with each QUANT.
+  ## (would put this list outside this function if the getter functions were defined there, but they are not.)
+  _getter_QUANT_pairs = (
+    (get_em, 'EM_QUANT'),
+    (get_coulomb, 'COULOMB_COL_QUANT'),
+    (get_collision, 'COLFRE_QUANT'),
+    (get_crossections, 'CROSTAB_QUANT'),
+    (get_collision_ms, 'COLFRI_QUANT'),
+    (get_current, 'CURRENT_QUANT'),
+    (get_flux, 'FLUX_QUANT'),
+    (get_plasmaparam, 'PLASMA_QUANT'),
+    (get_wavemode, 'WAVE_QUANT'),
+    (get_cyclo_res, 'CYCL_RES'),
+    (get_gyrof, 'GYROF_QUANT'),
+    (get_kappa, 'KAPPA_QUANT'),
+    (get_debye_ln, 'DEBYE_LN_QUANT'),
+    (get_ionpopulations, 'IONP_QUANT'),
+    (get_ambparam, 'AMB_QUANT'),
+    (get_hallparam, 'HALL_QUANT'),
+    (get_batteryparam, 'BATTERY_QUANT'),
+    (get_spitzerparam, 'SPITZER_QUANT'),
+    (get_eosparam, 'EOSTAB_QUANT'),
+    (get_collcoul, 'COLCOU_QUANT'),
+    (get_collcoul_ms, 'COLCOUMS_QUANT'),
+    (get_collision_maxw, 'COLFREMX_QUANT'),
+    (get_ponderomotive, 'POND_QUANT'),
+  )
+
+  val = None
+  # loop through the function and QUANT pairs, running the functions as appropriate.
+  for getter, QUANT_STR in _getter_QUANT_pairs:
+    QUANT = locals()[QUANT_STR]   # QUANT = value of input parameter named QUANT_STR.
+    if QUANT != '':
+      val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
+      if val is not None:
+        break
   return val
 
 
@@ -845,6 +836,70 @@ def get_flux(obj, quant, FLUX_QUANT=None, **kwargs):
       obj.get_var('b' + varsn[0] + 'c')**2 +
       obj.get_var('b' + varsn[1] + 'c')**2)
   return var
+
+
+
+# default
+_POND_QUANT= ('POND_QUANT',
+              ['pond']
+             )
+# get value
+@document_vars.quant_tracking_simple(_POND_QUANT[0])
+def get_ponderomotive(obj, quant, POND_QUANT=None, **kwargs):
+  '''
+  Computes flux
+  '''
+  if POND_QUANT is None:
+    POND_QUANT = _POND_QUANT[1]
+
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, _POND_QUANT[0], POND_QUANT, get_flux.__doc__)
+    docvar('pond',  'Ponderomotive aceleration along the field lines')
+
+  if (quant == '') or not quant in POND_QUANT:
+    return None
+
+
+  bxc = obj.get_var('bxc')
+  byc = obj.get_var('byc')  
+  bzc = obj.get_var('bzc')
+  
+  nx, ny, nz = bxc.shape
+
+  b2 = bxc**2+ byc**2+ bzc**2
+
+  ubx = obj.get_var('uyc')*bzc - obj.get_var('uzc')*byc
+  uby = obj.get_var('uxc')*bzc - obj.get_var('uzc')*bxc
+  ubz = obj.get_var('uxc')*byc - obj.get_var('uyc')*bxc
+  
+  xl, yl, zl = calc_field_lines(obj.x[::2],obj.y,obj.z[::2],bxc[::2,:,::2],byc[::2,:,::2],bzc[::2,:,::2],niter=501)
+  S = calc_lenghth_lines(xl, yl, zl)
+  ixc = obj.get_var('ixc')
+  iyc = obj.get_var('iyc')
+  izc = obj.get_var('izc') 
+  
+
+  for iix in range(nx): 
+    for iiy in range(ny): 
+      for iiz in range(nz): 
+        ixc[iix,iiy,iiz] /= S[int(iix/2),iiy,int(iiz/2)]
+        iyc[iix,iiy,iiz] /= S[int(iix/2),iiy,int(iiz/2)]
+        izc[iix,iiy,iiz] /= S[int(iix/2),iiy,int(iiz/2)]
+
+  dex = - ubx + ixc
+  dey = - uby + iyc
+  dez = - ubz + izc
+
+  dpond = (dex**2 + dey**2 + dez**2) / b2
+
+  ibxc = bxc / (np.sqrt(b2)+1e-30)
+  ibyc = byc / (np.sqrt(b2)+1e-30)
+  ibzc = bzc / (np.sqrt(b2)+1e-30)
+    
+  return do_cstagger(dpond, 'ddxdn', obj=obj)*ibxc +\
+        do_cstagger(dpond, 'ddydn', obj=obj)*ibyc +\
+        do_cstagger(dpond, 'ddydn', obj=obj)*ibyc 
+
 
 
 # default
@@ -1619,6 +1674,72 @@ def get_spitzerparam(obj, quant, SPITZER_QUANT=None, **kwargs):
  
 
 ''' ------------- End get_quant() functions; Begin helper functions -------------  '''
+
+@njit(parallel=True)
+def calc_field_lines(x,y,z,bxc,byc,bzc,niter=501):
+  
+  modb=np.sqrt(bxc**2+byc**2+bzc**2)
+
+  ibxc = bxc / (modb+1e-30)
+  ibyc = byc / (modb+1e-30)
+  ibzc = bzc / (modb+1e-30)
+  
+  nx, ny, nz = bxc.shape
+  niter2 = int(np.floor(niter/2))
+  dx = x[1]-x[0]
+  zl = np.zeros((nx,ny,nz,niter))
+  yl = np.zeros((nx,ny,nz,niter))
+  xl = np.zeros((nx,ny,nz,niter))
+  for iix in prange(nx): 
+    for iiy in prange(ny): 
+      for iiz in prange(nz): 
+
+        si = 0.0
+        xl[iix, iiy, iiz, niter2] = x[iix] 
+        yl[iix, iiy, iiz, niter2] = y[iiy]
+        zl[iix, iiy, iiz, niter2] = z[iiz]
+
+        for iil in prange(1,niter2+1): 
+          iixp = np.argmin(x-xl[iix, iiy, iiz, niter2 + iil - 1])
+          iiyp = np.argmin(y-yl[iix, iiy, iiz, niter2 + iil - 1])
+          iizp = np.argmin(z-zl[iix, iiy, iiz, niter2 + iil - 1])
+
+          xl[iix, iiy, iiz, niter2 + iil] = xl[iix, iiy, iiz, niter2 + iil - 1] + ibxc[iixp,iiyp,iizp]*dx
+          yl[iix, iiy, iiz, niter2 + iil] = yl[iix, iiy, iiz, niter2 + iil - 1] + ibyc[iixp,iiyp,iizp]*dx
+          zl[iix, iiy, iiz, niter2 + iil] = zl[iix, iiy, iiz, niter2 + iil - 1] + ibzc[iixp,iiyp,iizp]*dx
+
+          iixm = np.argmin(x-xl[iix, iiy, iiz, niter2 - iil + 1])
+          iiym = np.argmin(y-yl[iix, iiy, iiz, niter2 - iil + 1])
+          iizm = np.argmin(z-zl[iix, iiy, iiz, niter2 - iil + 1])
+
+          xl[iix, iiy, iiz, niter2 - iil] = xl[iix, iiy, iiz, niter2 - iil + 1] - ibxc[iixm,iiym,iizm]*dx
+          yl[iix, iiy, iiz, niter2 - iil] = yl[iix, iiy, iiz, niter2 - iil + 1] - ibyc[iixm,iiym,iizm]*dx
+          zl[iix, iiy, iiz, niter2 - iil] = zl[iix, iiy, iiz, niter2 - iil + 1] - ibzc[iixm,iiym,iizm]*dx
+
+  return xl, yl, zl
+
+
+@njit(parallel=True)
+def calc_lenghth_lines(xl,yl,zl):
+
+  nx, ny, nz, nl =np.shape(xl)
+
+  S = np.zeros((nx,ny,nz))  
+
+  for iix in prange(nx): 
+    for iiy in prange(ny): 
+      for iiz in prange(nz): 
+        iilmin = np.argmin(zl[iix, iiy, iiz,:])                  # Corona
+        iilmax = np.argmin(np.abs(zl[iix, iiy, iiz,:]))          # Photosphere
+        if iix == 0: 
+          if iiy == 0:
+            print('ii', np.min(zl[iix, iiy, iiz,:]),np.max(zl[iix, iiy, iiz,:]),iilmin,iilmax)
+        for iil in prange(iilmax+1,iilmin): 
+          S[iix,iiy,iiz] += np.sqrt((xl[iix,iiy,iiz,iil]-xl[iix,iiy,iiz,iil-1])**2 +\
+                            (yl[iix,iiy,iiz,iil]-yl[iix,iiy,iiz,iil-1])**2 +\
+                            (zl[iix,iiy,iiz,iil]-zl[iix,iiy,iiz,iil-1])**2)
+
+  return S
 
 def calc_tau(obj):
   """

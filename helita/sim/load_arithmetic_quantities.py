@@ -114,40 +114,34 @@ def _can_interp(obj, axis, warn=True):
 
 ''' --------------------- functions to load quantities --------------------- '''
 
-def load_arithmetic_quantities(obj,quant, *args, **kwargs):
+def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
+  '''load arithmetic quantities.
+  *args__None and **kwargs__None go to nowhere.
+  '''
   __tracebackhide__ = True  # hide this func from error traceback stack.
   quant = quant.lower()
 
   document_vars.set_meta_quant(obj, 'arquantities', 'Computes arithmetic quantities')
 
-  val = get_center(obj,quant)
-  if val is None:
-    val = get_deriv(obj,quant)
-  if val is None:
-    val = get_interp(obj,quant)
-  if val is None:
-    val = get_module(obj,quant)
-  if val is None:
-    val = get_horizontal_average(obj,quant)
-  if val is None:
-    val = get_gradients_vect(obj,quant)
-  if val is None:
-    val = get_gradients_scalar(obj,quant)
-  if val is None:
-    val = get_square(obj,quant)
-  if val is None:
-    val = get_lg(obj,quant)
-  if val is None:
-    val = get_ratios(obj,quant)
-  if val is None:
-    val = get_projections(obj,quant)
-  if val is None:
-    val = get_vector_product(obj,quant)
-  if val is None:
-    val = get_angle(obj, quant)
+  # tell which funcs to use for getting things. (funcs will be called in the order listed here)
+  _getter_funcs = (
+    get_center, get_deriv, get_interp,
+    get_module, get_horizontal_average,
+    get_gradients_vect, get_gradients_scalar, get_vector_product,
+    get_square, get_lg, get_numop, get_ratios,
+    get_projections, get_angle
+  )
 
-  if val is not None:                         # if got a value, use obj._quant_selection
-    document_vars.select_quant_selection(obj) #           to update obj._quant_selected.
+  val = None
+  # loop through the function and QUANT pairs, running the functions as appropriate.
+  for getter in _getter_funcs:
+    val = getter(obj, quant)
+    if val is not None:
+      break
+  else:  # didn't break; val is still None
+    return None
+  # << did break; found a non-None val.
+  document_vars.select_quant_selection(obj)  # (bookkeeping for obj.got_vars_tree(), obj.get_units(), etc.)
   return val
 
 
@@ -635,6 +629,37 @@ def get_lg(obj,quant):
     return np.log10(obj.get_var(q))
   elif getq == 'ln_':
     return np.log(obj.get_var(q))
+
+
+# default
+_NUMOP_QUANT = ('NUMOP_QUANT', ['delta_', 'deltafrac_'])
+# get value
+def get_numop(obj,quant):
+  '''Some numerical operation on a variable. E.g. delta_var computes (var - var.mean()).'''
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_NUMOP_QUANT, get_numop.__doc__)
+    docvar('delta_', 'starting with, deviation from mean. delta_v --> v - mean(v)', uni=UNI.qc(0))
+    docvar('deltafrac_', 'starting with, fractional deviation from mean. deltafrac_v --> v / mean(v) - 1', uni=DIMENSIONLESS)
+    return None
+
+  # interpret quant string
+  for start in _NUMOP_QUANT[1]:
+    if quant.startswith(start):
+      getq = start                 # the quant we are "getting" via this function. (e.g. 'lg' or 'ln_')
+      base = quant[len(getq) : ]   # the "base" quant, i.e. whatever is left after pulling getq.
+      break
+  else:  # if we did not break, we did not match any start to quant, so we return None.
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0], delay=True)
+
+  # do calculations and return result
+  v = obj.get_var(base)
+  if getq == 'delta_':
+    return (v - np.mean(v))
+  elif getq == 'deltafrac_':
+    return (v / np.mean(v)) - 1
 
 
 # default

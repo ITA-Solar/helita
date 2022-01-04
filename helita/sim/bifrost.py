@@ -10,6 +10,7 @@ from glob import glob
 import warnings
 import time
 import ast
+import collections
 
 # import external public modules
 import numpy as np
@@ -155,6 +156,28 @@ class BifrostData(object):
         '''equivalent to self.get_var(var, *args, **kwargs)'''
         __tracebackhide__ = True  # hide this func from error traceback stack
         return self.get_var(var, *args, **kwargs)
+
+    def __getitem__(self, i):
+        '''sets snap to i then returns self.
+
+        i: string, or anything which can index a list
+            string --> set snap to int(i)
+            else --> set snap to self.get_snaps()[i]
+
+        Example usage:
+            bb = BifrostData(...)
+            bb['3']('r')
+            # is equivalent to: bb.set_snap(3); bb.get_var('r')
+            bb[3]('r')
+            # is equivalent to: bb.set_snap(bb.get_snaps()[3]); bb.get_var('r')
+            #   if the existing snaps are [0,1,2,3,...], this is equivalent to bb['3']('r')
+            #   if the existing snaps are [4,5,6,7,...], this is equivalent to bb['7']('r')
+        '''
+        if isinstance(i, str):
+            self.set_snap(int(i))
+        else:
+            self.set_snap(self.get_snaps()[i])
+        return self
     
     def _set_snapvars(self, firstime=False):
         """
@@ -287,8 +310,18 @@ class BifrostData(object):
                     self.nzb = self.nz + 2 * self.nb
                 else:
                     self.nzb = self.nz
+                if ((params['boundarychky'] == 1) and (params['isnap'] !=0)):
+                    self.nyb = self.ny + 2 * self.nb
+                else:
+                    self.nyb = self.ny
+                if ((params['boundarychkx'] == 1) and (params['isnap'] !=0)):
+                    self.nxb = self.nx + 2 * self.nb
+                else:
+                    self.nxb = self.nx
             except KeyError:
                 self.nzb = self.nz
+                self.nyb = self.ny
+                self.nxb = self.nx
             # check if units are there, if not use defaults and print warning
             unit_def = {'u_l': 1.e8, 'u_t': 1.e2, 'u_r': 1.e-7,
                         'u_b': 1.121e3, 'u_ee': 1.e12}
@@ -341,6 +374,12 @@ class BifrostData(object):
         else:
             p = p[self.snapInd]
         return p
+
+    def get_params(self, *params, **kw):
+        '''return a dict of the values of params in self.
+        Equivalent to {p: self.get_param(p, **kw) for p in params}.
+        '''
+        return {p: self.get_param(p, **kw) for p in params}
         
     def __read_mesh(self, meshfile, firstime=False):
         """
@@ -385,6 +424,8 @@ class BifrostData(object):
                     np.repeat(self.dzidzdn[0], self.nb),
                     self.dzidzdn,
                     np.repeat(self.dzidzdn[-1], self.nb)))
+                self.nx = self.nxb
+                self.ny = self.nyb
                 self.nz = self.nzb
         else:  # no mesh file
             if self.dx == 0.0:
@@ -409,6 +450,8 @@ class BifrostData(object):
             self.dyidydn = np.zeros(self.ny) + 1. / self.dy
             # z
             if self.ghost_analyse:
+                self.nx = self.nxb
+                self.ny = self.nyb
                 self.nz = self.nzb
             self.z = np.arange(self.nz) * self.dz
             self.zdn = self.z - 0.5 * self.dz
@@ -644,10 +687,7 @@ class BifrostData(object):
 
         #set self.xLength
         if isinstance(iinum, slice):
-            if iiaxis == 'z':
-                nx = getattr(self, 'nzb')
-            else:
-                nx = getattr(self, 'n'+iiaxis)
+            nx = getattr(self, 'n'+iiaxis+'b')
             indSize = len(range(*iinum.indices(nx)))
         else:
             iinum = np.asarray(iinum)
@@ -874,9 +914,11 @@ class BifrostData(object):
 
         '''
 
-        self.sel_units = 'cgs'
         
         self.trans2commaxes() 
+
+        self.sel_units = 'cgs'
+
         sign = 1.0
         if varname[-1] in ['x','y','z']: 
             varname = varname+'c'
@@ -1014,10 +1056,11 @@ class BifrostData(object):
                               '\n' + repr(self.simple_vars)))
         dsize = np.dtype(self.dtype).itemsize
         if self.ghost_analyse:
-            offset = self.nx * self.ny * self.nzb * idx * dsize
-            ss = (self.nx, self.ny, self.nzb)
+            offset = self.nxb * self.nyb * self.nzb * idx * dsize
+            ss = (self.nxb, self.nyb, self.nzb)
         else:
-            offset = (self.nx * self.ny *
+            offset = ((self.nxb + (self.nxb - self.nx)) * 
+                      (self.nyb + (self.nyb - self.ny)) *
                       (self.nzb + (self.nzb - self.nz) // 2) * idx * dsize)
             ss = (self.nx, self.ny, self.nz)
 
@@ -1522,6 +1565,114 @@ class BifrostData(object):
             print('deleted {}'.format(self), flush=True)
 
 
+####################
+#  LOCATING SNAPS  #
+####################
+
+SnapStuff = collections.namedtuple('SnapStuff', ('snapname', 'snaps'))
+
+def get_snapstuff(dd=None):
+    '''return (get_snapname(), available_snaps()).
+    dd: None or BifrostData object.
+        None -> do operations locally.
+        else -> cd to dd.fdir, first.
+    '''
+    snapname = get_snapname(dd=dd)
+    snaps    = get_snaps(snapname=snapname, dd=dd)
+    return SnapStuff(snapname=snapname, snaps=snaps)
+
+snapstuff = get_snapstuff   # alias
+
+def get_snapname(dd=None):
+    '''gets snapname by reading it from mhd.in'''
+    with EnterDirectory(_get_dd_fdir(dd)):
+        mhdin_ascii = read_idl_ascii('mhd.in')
+        return mhdin_ascii['snapname']
+
+snapname = get_snapname   # alias
+
+def available_snaps(dd=None, snapname=None):
+    '''list available snap numbers.
+    Does look for: snapname_*.idl, snapname.idl (i.e. snap 0)
+    Doesn't look for: .pan, .scr, .aux files.
+    snapname: None (default) or str
+        snapname parameter from mhd.in. If None, get snapname.
+    if dd is not None, look in dd.fdir.
+    '''
+    with EnterDirectory(_get_dd_fdir(dd)):
+        snapname = snapname if snapname is not None else get_snapname()
+        snaps = [_snap_to_N(f, snapname) for f in os.listdir()]
+        snaps = [s for s in snaps if s is not None]
+        snaps = sorted(snaps)
+        return snaps
+
+snaps      = available_snaps   # alias
+get_snaps  = available_snaps   # alias
+list_snaps = available_snaps   # alias
+
+def snaps_info(dd=None, snapname=None):
+    '''returns string with length of snaps, as well as min and max.'''
+    snaps = get_snaps(dd=dd, snapname=snapname)
+    return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
+
+class EnterDir:
+    '''context manager for remembering directory.
+    upon enter, cd to directory. upon exit, restore original working directory.
+    '''
+    def __init__(self, directory=os.curdir):
+        self.cwd       = os.path.abspath(os.getcwd())
+        self.directory = directory
+
+    def __enter__ (self):
+        os.chdir(self.directory)
+
+    def __exit__ (self, exc_type, exc_value, traceback):
+        os.chdir(self.cwd)
+
+EnterDirectory = EnterDir  #alias
+
+def _get_dd_fdir(dd=None):
+    '''return dd.fdir if dd is not None, else os.curdir.'''
+    if dd is not None:
+        fdir = dd.fdir
+    else:
+        fdir = os.curdir
+    return fdir
+
+def _snap_to_N(name, base, sep='_', ext='.idl'):
+    '''returns N as number given snapname (and basename) if possible, else None.
+    for all strings in exclude, if name contains string, return None.
+    E.g. _snap_to_N('s_075.idl', 's') == 75
+    E.g. _snap_to_N('s.idl', 's')     == 0
+    E.g. _snap_to_N('notasnap', 's')  == None
+    '''
+    if not name.startswith(base):
+        return None
+    namext = os.path.splitext(name)
+    if   namext[1] != ext :
+        return None
+    elif namext[0] == base:
+        return 0
+    else:
+        try:
+            snapN = int(namext[0][len(base+sep):])
+        except ValueError:
+            return None
+        else:
+            return snapN
+
+# include methods (and some aliases) for getting snaps in BifrostData object
+BifrostData.get_snapstuff   = get_snapstuff
+BifrostData.get_snapname    = get_snapname
+BifrostData.available_snaps = available_snaps
+BifrostData.get_snaps       = available_snaps
+BifrostData.snaps_info      = snaps_info
+
+
+####################
+#  WRITING SNAPS   #
+####################
+
 def write_br_snap(rootname,r,px,py,pz,e,bx,by,bz):
     nx, ny, nz = r.shape
     data = np.memmap(rootname, dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,8))
@@ -1656,6 +1807,10 @@ class Create_new_br_files:
             f.write(" ".join(map("{:.5f}".format, 1.0/dxidxdn)) + "\n")
         f.close()
 
+
+############
+#  UNITS   #
+############
 
 class Bifrost_units(object):
     '''stores units as attributes.
@@ -2009,6 +2164,10 @@ class Bifrost_units(object):
         return result
 
 
+#####################
+#  CROSS SECTIONS   #
+#####################
+
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
                  verbose=True, radtab=False):
@@ -2246,8 +2405,6 @@ class Opatab:
         if tabname is None:
             tabname = os.path.join(fdir, 'ionization.dat')
         self.tabname = tabname
-        # load table(s)
-        #self.load_opa_table()
 
     def hopac(self):
         ghi = 0.99
@@ -2330,6 +2487,7 @@ class Opatab:
 
     def load_opa1d_table(self, tabname='chianti'):
         ''' Loads ionizationstate table. '''
+        import ChiantiPy.core as ch        
         if tabname is None:
             tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
         if tabname == '%s/%s' % (self.fdir, 'ionization1d.dat'):

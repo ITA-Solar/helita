@@ -37,6 +37,10 @@ import collections
 from .bifrost import (
     BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
     read_idl_ascii, subs2grph,
+    # for historical reasons / convenience, also import directly:
+    get_snapstuff, snapstuff, get_snapname, snapname,
+    available_snaps, snaps, get_snaps, list_snaps, snaps_info,
+    EnterDir, EnterDirectory,
 )
 from .load_mf_quantities         import load_mf_quantities
 from .load_quantities            import load_quantities
@@ -700,7 +704,6 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
         filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, mode=mode, panic=panic, *args, **kwargs)
-        
         # actually get the memmap and return result.
         result = get_numpy_memmap(filename, **kw__get_mmap)
         return result
@@ -866,19 +869,19 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # calculate info which numpy needs to read file as memmap.
         dsize = np.dtype(self.dtype).itemsize
-        offset = self.nx * self.ny * self.nzb * idx * dsize * self.mf_arr_size
+        offset = self.nxb * self.nyb * self.nzb * idx * dsize * self.mf_arr_size
 
         # kwargs which will be passed to get_numpy_memmap.
         kw__get_mmap = dict(dtype=self.dtype, order=order, mode=mode,          # kwargs for np.memmap
-                            offset=offset, shape=(self.nx, self.ny, self.nzb), # kwargs for np.memmap
+                            offset=offset, shape=(self.nxb, self.nyb, self.nzb), # kwargs for np.memmap
                             obj=self if (self.N_memmap != 0) else None,        # kwarg for memmap management
                             )
         if (self.mf_arr_size == 1): # in case of mf_arr_size == 1, kw__get_mmap is already correct.
             pass
         elif var in self.varsmm:    # in case of var in varsmm, apply jdx info to offset.
-            kw__get_mmap['offset'] += self.nx * self.ny * self.nzb * jdx * dsize
+            kw__get_mmap['offset'] += self.nxb * self.nyb * self.nzb * jdx * dsize
         else:                       # in case of (else), adjust the shape kwarg appropriately.
-            kw__get_mmap['shape'] = (self.nx, self.ny, self.nzb, self.mf_arr_size)
+            kw__get_mmap['shape'] = (self.nxb, self.nyb, self.nzb, self.mf_arr_size)
 
         return (filename, kw__get_mmap)
 
@@ -896,111 +899,6 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
-    
-
-
-####################
-#  LOCATING SNAPS  #
-####################
-
-SnapStuff = collections.namedtuple('SnapStuff', ('snapname', 'snaps'))
-
-def get_snapstuff(dd=None):
-    '''return (get_snapname(), available_snaps()).
-    dd: None or EbysusData object.
-        None -> do operations locally.
-        else -> cd to dd.fdir, first.
-    '''
-    snapname = get_snapname(dd=dd)
-    snaps    = get_snaps(snapname=snapname, dd=dd)
-    return SnapStuff(snapname=snapname, snaps=snaps)
-
-snapstuff = get_snapstuff   # alias
-
-def get_snapname(dd=None):
-    '''gets snapname by reading it from mhd.in'''
-    with EnterDirectory(_get_dd_fdir(dd)):
-        mhdin_ascii = read_idl_ascii('mhd.in')
-        return mhdin_ascii['snapname']
-
-snapname = get_snapname   # alias
-
-def available_snaps(dd=None, snapname=None):
-    '''list available snap numbers.
-    Does look for: snapname_*.idl, snapname.idl (i.e. snap 0)
-    Doesn't look for: .pan, .scr, .aux files.
-    snapname: None (default) or str
-        snapname parameter from mhd.in. If None, get snapname.
-    if dd is not None, look in dd.fdir.
-    '''
-    with EnterDirectory(_get_dd_fdir(dd)):
-        snapname = snapname if snapname is not None else get_snapname()
-        snaps = [_snap_to_N(f, snapname) for f in os.listdir()]
-        snaps = [s for s in snaps if s is not None]
-        snaps = sorted(snaps)
-        return snaps
-
-snaps      = available_snaps   # alias
-get_snaps  = available_snaps   # alias
-list_snaps = available_snaps   # alias
-
-def snaps_info(dd=None, snapname=None):
-    '''returns string with length of snaps, as well as min and max.'''
-    snaps = get_snaps(dd=dd, snapname=snapname)
-    return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
-
-class EnterDir:
-    '''context manager for remembering directory.
-    upon enter, cd to directory. upon exit, restore original working directory.
-    '''
-    def __init__(self, directory=os.curdir):
-        self.cwd       = os.path.abspath(os.getcwd())
-        self.directory = directory
-
-    def __enter__ (self):
-        os.chdir(self.directory)
-
-    def __exit__ (self, exc_type, exc_value, traceback):
-        os.chdir(self.cwd)
-
-EnterDirectory = EnterDir  #alias
-
-def _get_dd_fdir(dd=None):
-    '''return dd.fdir if dd is not None, else os.curdir.'''
-    if dd is not None:
-        fdir = dd.fdir
-    else:
-        fdir = os.curdir
-    return fdir
-
-def _snap_to_N(name, base, sep='_', ext='.idl'):
-    '''returns N as number given snapname (and basename) if possible, else None.
-    for all strings in exclude, if name contains string, return None.
-    E.g. _snap_to_N('s_075.idl', 's') == 75
-    E.g. _snap_to_N('s.idl', 's')     == 0
-    E.g. _snap_to_N('notasnap', 's')  == None
-    '''
-    if not name.startswith(base):
-        return None
-    namext = os.path.splitext(name)
-    if   namext[1] != ext :
-        return None
-    elif namext[0] == base:
-        return 0
-    else:
-        try:
-            snapN = int(namext[0][len(base+sep):])
-        except ValueError:
-            return None
-        else:
-            return snapN
-
-# include methods (and some aliases) for getting snaps in EbysusData object
-EbysusData.get_snapstuff   = get_snapstuff
-EbysusData.get_snapname    = get_snapname
-EbysusData.available_snaps = available_snaps
-EbysusData.get_snaps       = available_snaps
-EbysusData.snaps_info      = snaps_info
 
 #############################
 #  MAKING INITIAL SNAPSHOT  #
@@ -1536,6 +1434,8 @@ def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
      '         tsnap =  0.0                                               \n',
      '          tscr =  0.00000000E+00                                    \n',
      '   boundarychk =    0                                               \n',
+     '  boundarychky =    0                                               \n',
+     '  boundarychkx =    0                                               \n',          
      '   print_stats =    0                                               \n',
      '; ************************* From     math ************************* \n',
      '         max_r =    5                                               \n',
