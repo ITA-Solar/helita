@@ -367,6 +367,8 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _EOSTAB_QUANT[0], EOSTAB_QUANT, get_eosparam.__doc__)
     docvar('ne',  'electron density [m^-3]')
+    if (obj.sel_units == 'cgs'): 
+        docvar('ne',  'electron density [cm^-3]')
     docvar('tg',  'Temperature [K]')
     docvar('pg',  'gas pressure [dyn/cm^2]')
     docvar('kr',  'Rosseland opacity [cm^2/g]')
