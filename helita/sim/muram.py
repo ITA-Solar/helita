@@ -30,7 +30,7 @@ class MuramAtmos:
   """
 
   def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-               sel_units='cgs', big_endian=False, prim=False, iz0=None, inttostring=(lambda x: '{0:07d}'.format(x))):
+               sel_units='cgs', big_endian=False, prim=False, iz0=None, inttostring=(lambda x: '{0:06d}'.format(x))):
 
 
     self.prim = prim
@@ -54,6 +54,7 @@ class MuramAtmos:
     self.file_root = template
     
     self.transunits = False
+    self.lowbus = False
     
     self.cstagop = False # This will not allow to use cstagger from Bifrost in load
     self.hion = False # This will not allow to use HION from Bifrost in load
@@ -461,7 +462,7 @@ class MuramAtmos:
     self.varn['tg'] = 'eosT'
     self.varn['pg'] = 'eosP'
     if os.path.isfile(self.fdir+'/eosne'+ self.siter):
-        print('here')
+        print('Has ne files')
         self.varn['ne'] = 'eosne'
 
     unames = np.array(['result_prim_1','result_prim_2','result_prim_3']) 
