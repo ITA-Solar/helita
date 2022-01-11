@@ -80,14 +80,26 @@ def allsnap2fits(dd,iz0=116,z_tau51m=0.03045166015624971,rootname = "result_prim
       dens = dd.trasn2fits(var,snap,iz0=116,z_tau51m=0.03045166015624971)
 
 def inttostring(ii,ts_size=7):
+  '''convert int to string with length ts_size or longer, padding with leading 0s as necessary.
 
+  Note: SE changed on Jan 11, 2021 to use zfill.
+  this changes behavior on negative integers (to be more intuitive,
+  e.g. -00007 instead of 0000-7). If that's a problem, restore old version.
+  '''
+  # new version (new as of Jan 11, 2021)
+  return str(ii).zfill(ts_size)
+
+  """# old version:
   str_num = str(ii)
 
   for bb in range(len(str_num),ts_size,1):
     str_num = '0'+str_num
   
   return str_num
+  """
 
+
+''' --------------------------- units --------------------------- '''
 
 def units_title(obj): 
   '''
@@ -230,6 +242,8 @@ def globalvars(obj):
            'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
 
 
+''' --------------------------- coordinate transformations --------------------------- '''
+
 def polar2cartesian(r, t, grid, x, y, order=3):
     '''
     Converts polar grid to cartesian grid
@@ -291,3 +305,89 @@ def refine(s,q,factor=2,unscale=lambda x:x):
         qq = unscale(np.interp(ss[::-1], s[::-1], q[::-1]))
         qq = qq[::-1]
         return ss, qq
+
+
+''' --------------------------- vector rotations --------------------------- '''
+
+def rotation_align(vecs_source, vecs_destination):
+  ''' Return the rotation matrix which aligns vecs_source to vecs_destination.
+  
+  vecs_source, vecs_destination: array of vectors, or length 3 list of scalars
+      array of 3d vectors for source, destination.
+      Both will be cast to numpy arrays via np.asarray.
+      The inputs can be any number of dimensions,
+          but the last dimension should represent x,y,z,
+          E.g. the shape should be (..., 3).
+      NOTE: the np.stack function may be helpful in constructing this input.
+          E.g. for Bx, By, Bz, use np.stack([Bx, By, Bz], axis=-1).
+          This works for any same-shaped Bx, By, Bz arrays or scalars.
+          
+  Note: a divide by 0 error indicates that at least one of the rotations will be -I;
+      i.e. the vectors were originally parallel, but in opposite directions.
+  
+  Returns: array which, when applied to vecs_source, aligns them with vecs_destination.
+      The result will be an array of 3x3 matrices.
+      For applying the array, see rotation_apply(), or use:
+          np.sum(result * np.expand_dims(vec, axis=(-2)), axis=-1)
+          
+  Example:
+  # Bx, By, Bz each have shape (100, 70, 50), and represent the x, y, z components of B.
+  # ux, uy, uz each have shape (100, 70, 50), and represent the x, y, z components of u.
+  B_input = np.stack([Bx, By, Bz], axis=-1)  # >> B_input has shape (100, 70, 50, 3)
+  u_input = np.stack([ux, uy, uz], axis=-1)  # >> u_input has shape (100, 70, 50, 3)
+  d_input = [0, 0, 1]                        # "rotate to align with z"
+  result = rotation_align(B_input, d_input)  # >> result has shape (100, 70, 50, 3, 3)
+  # << result tells how to rotate such that B aligns with z
+  rotation_apply(result, B_input)
+  # >>> matrix of [Bx', By', Bz'], which has Bx' == By' == 0, Bz' == |B|
+  rotation_apply(result, u_input)
+  # >>> matrix of [ux', uy', uz'], where u' is in the coord. system with B in the z direction.
+  
+  # instead of rotation_apply(v1, v2), can use np.sum(v1 * np.expand_dims(v2, axis=(-2)), axis=-1).
+  
+  Rotation algorithm based on Rodrigues's rotation formula.
+  Adapted from https://stackoverflow.com/a/59204638
+  '''
+  # bookkeeping with dimensions
+  vec1 = np.asarray(vecs_source)
+  vec2 = np.asarray(vecs_destination)
+  vec1 = np.expand_dims(vec1, axis=tuple(range(0, vec2.ndim - vec1.ndim)))
+  vec2 = np.expand_dims(vec2, axis=tuple(range(0, vec1.ndim - vec2.ndim)))
+  # magnitudes, products
+  mag = lambda u: np.linalg.norm(u, axis=-1, keepdims=True)   # magnitude of u with vx, vy, vz = v[...,0], v[...,1], v[...,2]
+  a = vec1 / mag(vec1)
+  b = vec2 / mag(vec2)
+  v = np.cross(a, b, axis=-1)  # a x b,  with axis 0 looping over x, y, z.
+  c = np.sum(a * b, axis=-1)   # a . b,  with axis 0 looping over x, y, z.
+  # building kmat
+  v_x, v_y, v_z = (v[...,i] for i in (0,1,2))
+  zero = np.zeros_like(v_x)
+  kmat = np.stack([
+                   np.stack([zero, -v_z,  v_y], axis=-1),
+                   np.stack([ v_z, zero, -v_x], axis=-1),
+                   np.stack([-v_y,  v_x, zero], axis=-1),
+                  ], axis=-2)
+  _I = np.expand_dims(np.eye(3), axis=tuple(range(0, kmat.ndim - 2)))
+  _c = np.expand_dims(c, axis=tuple(range(np.ndim(c), kmat.ndim)))     # _c = c with dimensions added appropriately.
+  # implementation of Rodrigues's formula
+  result = _I + kmat + np.matmul(kmat, kmat) * 1 / (1 + _c)   # ((1 - c) / (s ** 2))    # s**2 = 1 - c**2    (s ~ sin, c ~ cos)      # s := mag(v)
+
+  # handle the c == -1 case.  wherever c == -1, vec1 and vec2 are parallel with vec1 == -1 * vec2.
+  flipvecs = (c == -1)
+  result[flipvecs,:,:] = -1 * np.eye(3)
+  return result
+
+def rotation_apply(rotations, vecs):
+  '''apply the rotations to vecs.
+  
+  rotations: array of 3x3 rotation matrices.
+      should have shape (..., 3, 3)
+  vecs: array of vectors.
+      should have shape (..., 3)
+      
+  shapes should be consistent,
+  E.g. rotations with shape (10, 7, 3, 3), vecs with shape (10, 7, 3).
+  
+  returns rotated vectors.
+  '''
+  return np.sum(rotations * np.expand_dims(vecs, axis=(-2)), axis=-1)
