@@ -2398,8 +2398,9 @@ class Opatab:
         self.big_endian = big_endian
         self.lambd = lambd
         self.radload = False
-        self.teinit = 4.0
-        self.dte = 0.1
+        self.teinit = 3.0
+        self.dte = 0.05
+        self.nte = 100
         self.ch_tabname = "chianti" # alternatives are e.g. 'mazzotta' and others found in Chianti
         # read table file and calculate parameters
         if tabname is None:
@@ -2456,10 +2457,11 @@ class Opatab:
         Interpolates the opa table to same format as tg table.
         '''
         self.load_opa1d_table()
-        rhoeetab = Rhoeetab(fdir=self.fdir)
-        tgTable = rhoeetab.get_table('tg')
+        #rhoeetab = Rhoeetab(fdir=self.fdir)
+        #tgTable = rhoeetab.get_table('tg')
+        tgTable = np.linspace(self.teinit,self.teinit + self.dte*self.nte,self.nte)
         # translate to table coordinates
-        x = (np.log10(tgTable) - self.teinit) / self.dte
+        x = ((tgTable) - self.teinit) / self.dte
         # interpolate quantity
         self.ionh = map_coordinates(self.ionh1d, [x], order=order)
         self.ionhe = map_coordinates(self.ionhe1d, [x], order=order)
@@ -2485,7 +2487,7 @@ class Opatab:
         arr[arr < 0] = 0
         return arr
 
-    def load_opa1d_table(self, tabname='chianti'):
+    def load_opa1d_table(self, tabname='chianti', tgmin=3.0, tgmax=9.0, ntg=121):
         ''' Loads ionizationstate table. '''
         import ChiantiPy.core as ch        
         if tabname is None:
@@ -2505,9 +2507,12 @@ class Opatab:
                           flush=True)
             h = ch.Ioneq.ioneq(1)
             h.load(tabname)
+            temp=np.linspace(tgmin,tgmax,ntg)
+            h.calculate(10**temp)
             logte = np.log10(h.Temperature)
             self.dte = logte[1]-logte[0]
             self.teinit = logte[0]
+            self.nte = np.size(logte)
             self.ionh1d = h.Ioneq[0,:]
             he = ch.Ioneq.ioneq(2)
             he.load(tabname)
