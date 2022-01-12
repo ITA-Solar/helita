@@ -1194,7 +1194,7 @@ _IONP_QUANT = ('IONP_QUANT')
 def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   '''
   densities for specific ionized species.
-  For example, nc-1 gives number density of neutral carbon, in cm^-3. nc-2 is for once-ionized carbon.
+  For example, nc-1 gives number density of neutral carbon, in m^-3. nc-2 is for once-ionized carbon.
   '''
   if (IONP_QUANT is None):
     IONP_QUANT = obj.IONP_QUANT
