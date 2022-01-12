@@ -90,6 +90,7 @@ class BifrostData(object):
 
     snap = None
 
+    ## CREATION ##
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.', 
                  fast=False, verbose=True, dtype='f4', big_endian=False, 
                  cstagop=True, ghost_analyse=False, lowbus=False, 
@@ -152,11 +153,12 @@ class BifrostData(object):
         document_vars.create_vardict(self)
         document_vars.set_vardocs(self)
 
-    def __call__(self, var, *args, **kwargs):
-        '''equivalent to self.get_var(var, *args, **kwargs)'''
-        __tracebackhide__ = True  # hide this func from error traceback stack
-        return self.get_var(var, *args, **kwargs)
+    ## PROPERTIES ##
+    shape = property(lambda self: (self.xLength, self.yLength, self.zLength))
+    size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
+    ndim  = property(lambda self: 3)
 
+    ## SET SNAPSHOT ##
     def __getitem__(self, i):
         '''sets snap to i then returns self.
 
@@ -540,6 +542,12 @@ class BifrostData(object):
                 self.cstagger_exists = True  # we must avoid using cstagger methods.
         else: 
             self.cstagger_exists = True
+
+    ## GET VARIABLE ##
+    def __call__(self, var, *args, **kwargs):
+        '''equivalent to self.get_var(var, *args, **kwargs)'''
+        __tracebackhide__ = True  # hide this func from error traceback stack
+        return self.get_var(var, *args, **kwargs)
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
                     print_freq=None, 
@@ -1329,7 +1337,7 @@ class BifrostData(object):
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
-    # --- misc. convenience methods --- #
+    ## MISC. CONVENIENCE METHODS ##
 
     def get_varm(self, *args__get_var, **kwargs__get_var):
         '''get_var but returns np.mean() of result.
@@ -1405,11 +1413,6 @@ class BifrostData(object):
                 return '{}  [{}]'.format(vec, units)
         fmt.__doc__ = 'formats result of get_varV. I was made by helita.sim.bifrost._varV_formatter.'
         return fmt
-
-    @property
-    def shape(self):
-        '''returns (xLength, yLength, zLength). Use self.shape to see this value.'''
-        return (self.xLength, self.yLength, self.zLength)
 
     def zero(self, **kw__np_zeros):
         '''return np.zeros() with shape equal to shape of result of get_var()'''
