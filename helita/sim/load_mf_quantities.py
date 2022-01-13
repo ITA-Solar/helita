@@ -1288,7 +1288,9 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     euler_constant = 0.577215
     b_0      = abs(icharge*jcharge)/(4 * np.pi * obj.uni.permsi * E_alpha)  # [m]  # permsi == epsilon_0
     #b_0      = abs(icharge*jcharge)/(2 * obj.uni.ksi_b*obj.uni.permsi * tgij)  # [m]   # permsi == epsilon_0
-    cross    = np.pi*2.0*(b_0**2)*(np.log(2.0*obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant) # [m2]
+    cross    = np.pi*2.0*(b_0**2)*(np.log(2.0*obj.get_var('ldebye')*obj.uni.usi_l/b_0)-2.0*euler_constant) # [m2]
+    # Before we had np.log(2.0*obj.get_var('ldebye')*obj.uni.usi_l/b_0)-0.5-2.0*euler_constant
+    # Not sure about the coefficient 0.5 from Capitelli et al. (2000). Should be only euler constant according to Liboff (1959, eq. 4.28)
 
     #calculate & return nu_ij:
     nu_ij = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
