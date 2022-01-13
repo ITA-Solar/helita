@@ -348,25 +348,43 @@ def rotation_align(vecs_source, vecs_destination):
   Rotation algorithm based on Rodrigues's rotation formula.
   Adapted from https://stackoverflow.com/a/59204638
   '''
-  # bookkeeping with dimensions
-  vec1 = np.asarray(vecs_source)
-  vec2 = np.asarray(vecs_destination)
+  # bookkeeping - whether to treat as masked arrays
+  if np.ma.isMaskedArray(vecs_source) or np.ma.isMaskedArray(vecs_destination):
+    stack   = np.ma.stack
+    asarray = np.ma.asarray
+  else:
+    stack   = np.stack
+    asarray = np.asarray
+  # bookkeeping - dimensions
+  vec1 = asarray(vecs_source)
+  vec2 = asarray(vecs_destination)
   vec1 = np.expand_dims(vec1, axis=tuple(range(0, vec2.ndim - vec1.ndim)))
   vec2 = np.expand_dims(vec2, axis=tuple(range(0, vec1.ndim - vec2.ndim)))
   # magnitudes, products
   mag = lambda u: np.linalg.norm(u, axis=-1, keepdims=True)   # magnitude of u with vx, vy, vz = v[...,0], v[...,1], v[...,2]
   a = vec1 / mag(vec1)
   b = vec2 / mag(vec2)
-  v = np.cross(a, b, axis=-1)  # a x b,  with axis 0 looping over x, y, z.
-  c = np.sum(a * b, axis=-1)   # a . b,  with axis 0 looping over x, y, z.
+  def cross(a, b):
+    '''takes the cross product along the last axis.
+    np.cross(a, b, axis=-1) can't handle masked arrays so we write out the cross product explicitly here.
+    '''
+    ax, ay, az = a[..., 0], a[..., 1], a[..., 2]
+    bx, by, bz = b[..., 0], b[..., 1], b[..., 2]
+    rx = ay * bz - az * by
+    ry = az * bx - ax * bz
+    rz = ax * by - ay * bx
+    return stack([rx, ry, rz], axis=-1)
+
+  v = cross(a, b)  # a x b,  with axis -1 looping over x, y, z.
+  c = np.sum(a * b, axis=-1)   # a . b,  with axis -1 looping over x, y, z.
   # building kmat
   v_x, v_y, v_z = (v[...,i] for i in (0,1,2))
   zero = np.zeros_like(v_x)
-  kmat = np.stack([
-                   np.stack([zero, -v_z,  v_y], axis=-1),
-                   np.stack([ v_z, zero, -v_x], axis=-1),
-                   np.stack([-v_y,  v_x, zero], axis=-1),
-                  ], axis=-2)
+  kmat = stack([
+                stack([zero, -v_z,  v_y], axis=-1),
+                stack([ v_z, zero, -v_x], axis=-1),
+                stack([-v_y,  v_x, zero], axis=-1),
+               ], axis=-2)
   _I = np.expand_dims(np.eye(3), axis=tuple(range(0, kmat.ndim - 2)))
   _c = np.expand_dims(c, axis=tuple(range(np.ndim(c), kmat.ndim)))     # _c = c with dimensions added appropriately.
   # implementation of Rodrigues's formula
