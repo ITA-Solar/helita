@@ -1461,7 +1461,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None, **kwargs):
   
   elif quant[0] == 'u':
     result = obj.get_var('itimesb' + quant[-1]) / \
-                         obj.get_var('modb') * obj.get_var('eta_amb')
+                         obj.get_var('b2') * obj.get_var('eta_amb')
 
   elif (quant[-4:-1] == 'amb' and quant[-1] in ['x','y','z'] and 
        quant[1:3] != 'chi' and quant[1:3] != 'psi'):
