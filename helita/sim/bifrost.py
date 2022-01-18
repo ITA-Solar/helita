@@ -763,11 +763,13 @@ class BifrostData(object):
         # Try to load simple quantities.
         val = load_fromfile_quantities.load_fromfile_quantities(self, var,
                                                 save_if_composite=True, **kwargs)
+        if val is not None:
+            val = val * cgsunits  # (vars from load_fromfile need to get hit by cgsunits.)
+        # Try to load "regular" quantities
         if val is None:
-            # Try to load "regular" quantities
             val = load_quantities(self, var, **kwargs)
+        # Try to load "arithmetic" quantities.
         if val is None:
-            # Try to load "arithmetic" quantities.
             val = load_arithmetic_quantities(self, var, **kwargs) 
 
         return val
