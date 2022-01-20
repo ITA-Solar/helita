@@ -20,10 +20,31 @@ Methods defined here (which an end-user might want to access):
         with the additional benefit that they can be chained togther, E.g:
             stagger.xup.ddzdn.yup(arr, diffz=arr_diff) is equivalent to:
             stagger.xup(stagger.ddzdn(stagger.yup(arr), diffz=arr_diff)))
+
+    ^ those methods (xup, ..., ddzdn) in a StaggerInterface:
+        Additional benefit that the defaults for pad_mode and diff will be determined based on obj,
+        and also if arr is a string, first do arr = obj(arr) (calls 'get_var').
+        Example:
+            dd = helita.sim.bifrost.BifrostData(...)
+            dd.stagger.xdn.yup.ddzdn('r')
+            # performs the operations xdn(yup(ddzdn(r)),
+            #    using dd.get_param('periodic_x') (or y, z, as appropriate) to choose pad_mode,
+            #    and dd.dzidzdn for diff during the ddzdn operation.
+        If desired to use non-defaults, the kwargs available are:
+            padx, pady, padz kwargs to force a specific pad_mode for a given axis,
+            diffx, diffy, diffz kwargs to force a specific diff for a given axis.
+
+TODO:
+    - fix ugly printout during verbose==1, for interfaces to 'do', e.g. stagger.xup(arr, verbose=1).
+    - debug numpy stagger method - precision error?
+        E.g. disagrees with numba method when mean is much larger than variation.
+        Maybe it is possible to use more precise numpy arrays.
+    - determine stagger_kind from BifrostData object, when using StaggerInterface (e.g. dd.stagger)
 """
 
 # import built-in modules
 import time
+import weakref
 
 # import public external modules
 import numpy as np
@@ -491,9 +512,14 @@ del props, funcs, dd, x, up, opstr, links, prop, link   # << remove "temporary v
 
 """ ------------------------ StaggerData (wrap methods in a class) ------------------------ """
 
-class StaggerData():
+class StaggerInterface():
     """
-    Class with stagger methods.
+    Interface to stagger methods, with defaults implied by an object.
+    Example:
+        self.stagger = StaggerInterface(self)
+        self.stagger.ddxdn(arr)   # will perform xdn of arr, using the defaults:
+                                  # pad_mode = '{PAD_PERIODIC}' if self.get_param('periodic_x') else '{PAD_NONPERIODIC}'
+                                  # diff = self.dxidxdn
 
     Available operations:
           xdn,   xup,   ydn,   yup,   zdn,   zup,
@@ -507,7 +533,7 @@ class StaggerData():
                 periodic True --> pad_mode = stagger.PAD_PERIODIC (=='{PAD_PERIODIC}')
                 periodic False -> pad_mode = stagger.PAD_NONPERIODIC (=='{PAD_NONPERIODIC}')
             diff:
-                self.d{x}id{x}{up}   with {x} --> x, y, or z; {up} --> up or dn.
+                self.dxidxup   with x --> x, y, or z; up --> up or dn.
         if the operation is called on a string instead of an array,
             first pass the string to a call of self.
             E.g. self.xup('r') will do stagger.xup(self('r'))
@@ -515,20 +541,32 @@ class StaggerData():
     _PAD_PERIODIC = PAD_PERIODIC
     _PAD_NONPERIODIC = PAD_NONPERIODIC
 
-    def __init__(self, *args__None, **kw__None):
-        _make_bound_chain(self, *_STAGGER_ALIASES.items(), name='BoundInterpolationChain')
+    def __init__(self, obj):
+        self._obj_ref = weakref.ref(obj)
+        prop_func_pairs = [(_trim_leading_underscore(prop), func) for prop, func in _STAGGER_ALIASES.items()]
+        self._make_bound_chain(*prop_func_pairs, name='BoundInterpolationChain')
+
+    obj = property(lambda self: self._obj_ref())
+
+    def _make_bound_chain(self, *prop_func_pairs, name='BoundChain'):
+        """create new bound chain, linking all props to same-named attributes of self."""
+        Chain, links = _make_chain(*prop_func_pairs, name=name,
+                           base=BoundBaseChain, creator=BoundChainCreator, obj=self)
+        props, funcs = zip(*prop_func_pairs)
+        for prop, link in zip(props, links):
+            setattr(self, prop, link)
 
     def _pad_modes(self):
         '''return dict of padx, pady, padz, with values the appropriate strings for padding.'''
         def _booly_to_mode(booly):
             return {None: None, True: self._PAD_PERIODIC, False: self._PAD_NONPERIODIC}[booly]
-        return {f'pad{x}': _booly_to_mode(self.get_param(f'periodic_{x}')) for x in ('x', 'y', 'z')}
+        return {f'pad{x}': _booly_to_mode(self.obj.get_param(f'periodic_{x}')) for x in ('x', 'y', 'z')}
 
     def _diffs(self):
         '''return dict of diffx, diffy, diffz, with values the appropriate arrays.
         CAUTION: assumes dxidxup == dxidxdn == diffx, and similar for y and z.
         '''
-        return {f'diff{x}': getattr(self, f'd{x}id{x}up') for x in ('x', 'y', 'z')}
+        return {f'diff{x}': getattr(self.obj, f'd{x}id{x}up') for x in ('x', 'y', 'z')}
 
     def __interpolation_call__(self, func, arr, *args__get_var, **kw):
         '''call interpolation function func on array arr with the provided kw.
@@ -540,8 +578,10 @@ class StaggerData():
         kw_to_use = {**self._pad_modes(), **self._diffs()}  # defaults based on obj.
         kw_to_use.update(kw)   # exisitng kwargs override defaults.
         if isinstance(arr, str):
-            arr = self(arr, *args__get_var, **kw)
+            arr = self.obj(arr, *args__get_var, **kw)
         return func(arr, **kw_to_use)
+
+StaggerInterface.__doc__ = StaggerInterface.__doc__.format(PAD_PERIODIC=PAD_PERIODIC, PAD_NONPERIODIC=PAD_NONPERIODIC)
 
 
 class BoundBaseChain(BaseChain):
@@ -574,13 +614,3 @@ class BoundChainCreator(ChainCreator):
 
     def _makelink(self, func):
         return self.Chain(self.obj, func)
-
-def _make_bound_chain(obj, *prop_func_pairs, name='BoundChain'):
-    """create new bound chain, linking all props to same-named attributes of obj."""
-    Chain, links = _make_chain(*prop_func_pairs, name=name,
-                       base=BoundBaseChain, creator=BoundChainCreator, obj=obj)
-    props, funcs = zip(*prop_func_pairs)
-    for prop, link in zip(props, links):
-        setattr(obj, prop, link)
-
-StaggerData.__doc__ = StaggerData.__doc__.format(PAD_PERIODIC=PAD_PERIODIC, x='x', up='up', PAD_NONPERIODIC=PAD_NONPERIODIC)
