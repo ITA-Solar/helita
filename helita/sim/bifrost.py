@@ -24,11 +24,12 @@ from . import load_fromfile_quantities
 from .tools import *
 from . import document_vars
 from . import file_memory
+from . import stagger
 
 whsp = '  '
 
 
-class BifrostData(object):
+class BifrostData(stagger.StaggerData):
     """
     Reads data from Bifrost simulations in native format.
 
@@ -100,6 +101,9 @@ class BifrostData(object):
         """
         Loads metadata and initialises variables.
         """
+        # behave nicely with class inheritance:
+        super().__init__()
+        # bookkeeping
         self.fdir = fdir if use_relpath else os.path.abspath(fdir)
         self.verbose = verbose
         self.cstagop = cstagop
