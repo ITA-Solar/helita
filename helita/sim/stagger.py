@@ -520,10 +520,13 @@ class StaggerInterface():
         self.stagger.ddxdn(arr)   # will perform xdn of arr, using the defaults:
                                   # pad_mode = '{PAD_PERIODIC}' if self.get_param('periodic_x') else '{PAD_NONPERIODIC}'
                                   # diff = self.dxidxdn
+        self.stagger.do('zup', arr)  # equivalent to self.stagger.zup(arr)
 
     Available operations:
           xdn,   xup,   ydn,   yup,   zdn,   zup,
         ddxdn, ddxup, ddydn, ddyup, ddzdn, ddzup
+    Available convenience method:
+        do(opstr, arr, ...)  # << does the operation implied by opstr; equivalent to getattr(self, opstr)(arr, ...)
 
     Each method will call the appropriate method from stagger.py.
     Additionally, for convenience:
@@ -547,6 +550,12 @@ class StaggerInterface():
         self._make_bound_chain(*prop_func_pairs, name='BoundInterpolationChain')
 
     obj = property(lambda self: self._obj_ref())
+
+    def do(self, arr, opstr, *args, **kw):
+        '''does the operation implied by opstr (e.g. 'xup', ..., 'ddzdn').
+        Equivalent to getattr(self, opstr)(arr, *args, **kw)
+        '''
+        return getattr(self, opstr)(arr, *args, **kw)
 
     def _make_bound_chain(self, *prop_func_pairs, name='BoundChain'):
         """create new bound chain, linking all props to same-named attributes of self."""

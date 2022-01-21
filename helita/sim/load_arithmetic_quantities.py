@@ -82,16 +82,8 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
       arr = arr.astype(default_type)      # convert type
     return cstagger.do(arr, operation)  # call the original cstagger function
   else:                  # use stagger routine.
-    # stagger routine requires 'diff' kwarg if doing a derivative.
-    if operation.startswith('dd'):
-      x    = operation[2]  # get the axis. operation is like ddxup or ddxdn. x may be x, y, or z.
-      xdir = operation[2:]
-      diff = getattr(obj, 'd'+x+'id'+xdir)  # for debugging: if crashing here, make sure obj is not None.
-    else:
-      diff = None
-    # deal with boundaries. (Note obj.get_param isn't defined for everyone, e.g. BifrostData, so we can't use it.)
-    bdr_pad = {x: ('reflect' if obj.params['periodic_'+x][obj.snapInd] else 'wrap') for x in AXES}
-    return stagger.do(arr, operation, diff=diff, DEFAULT_PAD = bdr_pad)
+    assert obj is not None, f'obj is required for stagger, in {stagger_kind = }.'
+    return obj.stagger.do(arr, operation)
 
 def _can_interp(obj, axis, warn=True):
   '''return whether we can interpolate. Make warning if we can't.'''
