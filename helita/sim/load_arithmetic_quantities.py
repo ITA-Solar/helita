@@ -624,7 +624,7 @@ def get_lg(obj,quant):
 
 
 # default
-_NUMOP_QUANT = ('NUMOP_QUANT', ['delta_', 'deltafrac_'])
+_NUMOP_QUANT = ('NUMOP_QUANT', ['delta_', 'deltafrac_', 'abs_'])
 # get value
 def get_numop(obj,quant):
   '''Some numerical operation on a variable. E.g. delta_var computes (var - var.mean()).'''
@@ -632,6 +632,7 @@ def get_numop(obj,quant):
     docvar = document_vars.vars_documenter(obj, *_NUMOP_QUANT, get_numop.__doc__)
     docvar('delta_', 'starting with, deviation from mean. delta_v --> v - mean(v)', uni=UNI.qc(0))
     docvar('deltafrac_', 'starting with, fractional deviation from mean. deltafrac_v --> v / mean(v) - 1', uni=DIMENSIONLESS)
+    docvar('abs_', 'starting with, absolute value of a scalar. abs_v --> |v|', uni=UNI.qc(0))
     return None
 
   # interpret quant string
@@ -652,7 +653,8 @@ def get_numop(obj,quant):
     return (v - np.mean(v))
   elif getq == 'deltafrac_':
     return (v / np.mean(v)) - 1
-
+  elif getq == 'abs_':
+    return np.abs(v)
 
 # default
 _RATIO_QUANT = ('RATIO_QUANT', ['rat'])
