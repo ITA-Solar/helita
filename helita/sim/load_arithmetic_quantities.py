@@ -645,7 +645,7 @@ def get_numop(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0], delay=True)
+  document_vars.setattr_quant_selected(obj, getq, _NUMOP_QUANT[0], delay=True)
 
   # do calculations and return result
   v = obj.get_var(base)
