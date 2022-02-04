@@ -2481,14 +2481,16 @@ class Opatab:
         if lambd is not None:
             self.lambd = lambd
         self.tg_tab_interp()
-        ion_h = self.ionh
-        ion_he = self.ionhe
-        ion_hei = self.ionhei
-        ohi = self.hopac()
-        ohei = self.heiopac()
-        oheii = self.heiiopac()
-        arr = (1 - ion_h) * ohi + rhe * ((1 - ion_he - ion_hei) *
-                                         ohei + ion_he * oheii)
+        arr = (self.ionh) * self.hopac() + rhe * ((1 - self.ionhei - (1-self.ionhei-self.ionhe)) * 
+                           self.heiopac() + (self.ionhei) * self.heiiopac())
+        #ion_h = self.ionh
+        #ion_he = self.ionhe
+        #ion_hei = self.ionhei
+        #ohi = self.hopac()
+        #ohei = self.heiopac()
+        #oheii = self.heiiopac()
+        #arr = (1 - ion_h) * ohi + rhe * ((1 - ion_he - ion_hei) *
+        #                                 ohei + ion_he * oheii)
         arr[arr < 0] = 0
         return arr
 
