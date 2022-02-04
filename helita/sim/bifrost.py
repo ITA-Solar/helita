@@ -24,11 +24,12 @@ from . import load_fromfile_quantities
 from .tools import *
 from . import document_vars
 from . import file_memory
+from . import stagger
 
 whsp = '  '
 
 
-class BifrostData(object):
+class BifrostData():
     """
     Reads data from Bifrost simulations in native format.
 
@@ -100,6 +101,7 @@ class BifrostData(object):
         """
         Loads metadata and initialises variables.
         """
+        # bookkeeping
         self.fdir = fdir if use_relpath else os.path.abspath(fdir)
         self.verbose = verbose
         self.cstagop = cstagop
@@ -149,6 +151,8 @@ class BifrostData(object):
             tabfile = os.path.join(self.fdir, self.get_param('tabinputfile').strip())
             if os.access(tabfile, os.R_OK):
                 self.rhoee = Rhoeetab(tabfile=tabfile, fdir=fdir, radtab=True)
+
+        self.stagger = stagger.StaggerInterface(self)
 
         document_vars.create_vardict(self)
         document_vars.set_vardocs(self)

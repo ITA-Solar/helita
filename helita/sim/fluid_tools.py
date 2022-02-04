@@ -566,6 +566,15 @@ class Multifluid():
     jfluid      = simple_tuple_property(_JS, _JL, default=None, name='jfluid')
     jSL         = simple_tuple_property(_JS, _JL, default=None, name='jSL')
 
+    ### FLUIDS OBJECT (from at_tools.fluids) ###
+    @property
+    def fluids(self):
+        '''at_tools.fluids.Fluids object describing the fluids in self.'''
+        if hasattr(self, '_fluids'):
+            return self._fluids
+        else:
+            return fl.Fluids(dd=self)
+
     ## METHODS ##
     def fluids_equal(self, ifluid, jfluid):
         '''returns whether ifluid and jfluid represent the same fluid.'''

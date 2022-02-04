@@ -82,16 +82,8 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
       arr = arr.astype(default_type)      # convert type
     return cstagger.do(arr, operation)  # call the original cstagger function
   else:                  # use stagger routine.
-    # stagger routine requires 'diff' kwarg if doing a derivative.
-    if operation.startswith('dd'):
-      x    = operation[2]  # get the axis. operation is like ddxup or ddxdn. x may be x, y, or z.
-      xdir = operation[2:]
-      diff = getattr(obj, 'd'+x+'id'+xdir)  # for debugging: if crashing here, make sure obj is not None.
-    else:
-      diff = None
-    # deal with boundaries. (Note obj.get_param isn't defined for everyone, e.g. BifrostData, so we can't use it.)
-    bdr_pad = {x: ('reflect' if obj.params['periodic_'+x][obj.snapInd] else 'wrap') for x in AXES}
-    return stagger.do(arr, operation, diff=diff, DEFAULT_PAD = bdr_pad)
+    assert obj is not None, f'obj is required for stagger, in {stagger_kind = }.'
+    return obj.stagger.do(arr, operation)
 
 def _can_interp(obj, axis, warn=True):
   '''return whether we can interpolate. Make warning if we can't.'''
@@ -632,7 +624,7 @@ def get_lg(obj,quant):
 
 
 # default
-_NUMOP_QUANT = ('NUMOP_QUANT', ['delta_', 'deltafrac_'])
+_NUMOP_QUANT = ('NUMOP_QUANT', ['delta_', 'deltafrac_', 'abs_'])
 # get value
 def get_numop(obj,quant):
   '''Some numerical operation on a variable. E.g. delta_var computes (var - var.mean()).'''
@@ -640,6 +632,7 @@ def get_numop(obj,quant):
     docvar = document_vars.vars_documenter(obj, *_NUMOP_QUANT, get_numop.__doc__)
     docvar('delta_', 'starting with, deviation from mean. delta_v --> v - mean(v)', uni=UNI.qc(0))
     docvar('deltafrac_', 'starting with, fractional deviation from mean. deltafrac_v --> v / mean(v) - 1', uni=DIMENSIONLESS)
+    docvar('abs_', 'starting with, absolute value of a scalar. abs_v --> |v|', uni=UNI.qc(0))
     return None
 
   # interpret quant string
@@ -652,7 +645,7 @@ def get_numop(obj,quant):
     return None
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0], delay=True)
+  document_vars.setattr_quant_selected(obj, getq, _NUMOP_QUANT[0], delay=True)
 
   # do calculations and return result
   v = obj.get_var(base)
@@ -660,7 +653,8 @@ def get_numop(obj,quant):
     return (v - np.mean(v))
   elif getq == 'deltafrac_':
     return (v / np.mean(v)) - 1
-
+  elif getq == 'abs_':
+    return np.abs(v)
 
 # default
 _RATIO_QUANT = ('RATIO_QUANT', ['rat'])

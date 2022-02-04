@@ -21,12 +21,6 @@ from .units import (
 # import external public modules
 import numpy as np
 
-# import external private modules
-try:
-  from at_tools import fluids as fl
-except ImportError:
-  warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.load_mf_quantities may crash')
-
 # set constants
 MATCH_PHYSICS = 0  # don't change this value.  # this one is the default (see ebysus.py)
 MATCH_AUX     = 1  # don't change this value.
@@ -150,7 +144,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
 
     return output
   elif var in ['rc', 'rions']:  # total ionized density
-    for fluid in fl.Fluids(dd=obj).ions():
+    for fluid in obj.fluids.ions():
       output += obj.get_var('r', ifluid=fluid)
     return output
   elif var == 'rneu':  # total neutral density
@@ -162,12 +156,12 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     return output
   elif var == 'tot_e':
     output += obj.get_var('e', mf_ispecies= -1) # internal energy density of electrons
-    for fluid in fl.Fluids(dd=obj):
+    for fluid in obj.fluids:
       output += obj.get_var('e', ifluid=fluid.SL) # internal energy density of fluid
     return output
   elif var == 'tot_ke':
     output = obj.get_var('eke')   # kinetic energy density of electrons
-    for fluid in fl.Fluids(dd=obj):
+    for fluid in obj.fluids:
       output += obj.get_var('ke', ifluid=fluid.SL)  # kinetic energy density of fluid
     return output
   elif var == 'e_ef':
@@ -181,7 +175,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     neqe = ne * obj.uni.simu_qsi_e
     rhoe = obj.get_var('re') 
     nu_sum = 0.0
-    for fluid in fl.Fluids(dd=obj):
+    for fluid in obj.fluids:
       nu_sum += obj.get_var('nu_ij',mf_ispecies=-1,jfluid=fluid)
     output = nu_sum * rhoe / (neqe)**2  
     return output
@@ -203,7 +197,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   
   elif var.startswith('tot_p'):  # note: must be tot_px, tot_py, or tot_pz.
     axis = var[-1]
-    for fluid in fl.Fluids(dd=obj):
+    for fluid in obj.fluids:
       output += obj.get_var('p'+axis, ifluid=fluid.SL)   # momentum density of fluid
 
     return output
@@ -523,7 +517,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
   elif var == 'nre': # number density of electrons [simu. units]
     with Caching(obj, nfluid=0) as cache:
-      for fluid in fl.Fluids(dd=obj).ions():
+      for fluid in obj.fluids.ions():
         output += obj.get_var('nr', ifluid=fluid.SL) * fluid.ionization   #[simu. number density units]
       cache(var, output)
       return output
@@ -547,7 +541,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## ---> to align with ux, we shift r by xdn
     interp = x+'dn'
     nqe    = obj.zero()  # charge density of electrons.
-    for fluid in fl.Fluids(dd=obj).ions():
+    for fluid in obj.fluids.ions():
       nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
       ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
       output -= nq * ux                                   # [simu. current per area units]
@@ -590,7 +584,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
       ## ---> to align with ux, we shift r by xdn
       interp = x+'dn'
       nqe    = obj.zero()  # charge density of electrons.
-      for fluid in fl.Fluids(dd=obj).ions():
+      for fluid in obj.fluids.ions():
         nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
         ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
         output -= nq * ux                                   # [simu. current per area units]
@@ -684,7 +678,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
 
   elif base == 'rijsum':
     result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
-    for fluid in fl.Fluids(dd=obj):
+    for fluid in obj.fluids:
       result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
     return result
 
@@ -902,7 +896,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     if heating_is_off(): return obj.zero()
     varj   = var + 'j'   # qcol_uj or qcol_tgj
     output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
-    for fluid in fl.Fluids(dd=obj):
+    for fluid in obj.fluids:
       if fluid.SL != obj.ifluid:        # exclude varj for j = i  # not necessary but doesn't hurt.
         output += obj.get_var(varj, jfluid=fluid)
     return output
@@ -934,7 +928,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
       return obj.get_var('tgqcol_equil_uj') + obj.get_var('tgqcol_equil_tgj')
     elif suffix in ['u', 'tg']:  # total contribution (sum over j); total from u or total from tg
       result = obj.get_var('tgqcol_equil_'+suffix+'j', jfluid=(-1,0))
-      for fluid in fl.Fluids(dd=obj):
+      for fluid in obj.fluids:
         result += obj.get_var('tgqcol_equil_'+suffix+'j', jfluid=fluid)
       return result
     elif suffix == 'equil':      # total contribution u + tg, summed over all j.
@@ -944,7 +938,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
       with obj.MaintainFluids():
         # denom = sum_{s!=i}(Cis).     [(simu length)^-3 (simu time)^-1]
         denom = obj.get_var('qcol_coeffj', jS=-1, cache_with_nfluid=2)  # coeff for j = electrons
-        for fluid in fl.Fluids(dd=obj):
+        for fluid in obj.fluids:
           denom += obj.get_var('qcol_coeffj', jfluid=fluid, cache_with_nfluid=2)
       # Based on suffix, return appropriate term.
       if suffix == 'uj':
@@ -1199,7 +1193,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   elif var == 'nu_si':
     ifluid = obj.ifluid
     result = obj.zero()
-    for fluid in fl.Fluids(dd=obj).ions():
+    for fluid in obj.fluids.ions():
       if fluid.SL != ifluid:
         result += obj.get_var('nu_ij', jfluid=fluid.SL)
     return result
@@ -1208,7 +1202,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   elif var == 'nu_sn':
     ifluid = obj.ifluid
     result = obj.zero()
-    for fluid in fl.Fluids(dd=obj).neutrals():
+    for fluid in obj.fluids.neutrals():
       if fluid.SL != ifluid:
         result += obj.get_var('nu_ij', jfluid=fluid.SL)
     return result 
@@ -1448,7 +1442,7 @@ def get_mean_quant(obj, var, MEAN_QUANT=None):
 
   if var.endswith('_meannr_mass'):
     neu = var[:-len('_meannr_mass')]
-    fluids = fl.Fluids(dd=obj)
+    fluids = obj.fluids
     if neu == 'neu':
       fluids = fluids.neutrals()
     elif neu == 'ion':
@@ -1556,7 +1550,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
 
   if quant == 'beta_ions':
     p = obj.zero()
-    for fluid in fl.Fluids(dd=obj).ions():
+    for fluid in obj.fluids.ions():
       p += obj.get_var('p', ifluid=fluid)
     bp = obj.get_var('b2') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
     return p / bp
@@ -1625,7 +1619,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   elif quant == 'ldebye':
     # ldebye = 1/sum_j( (1/ldebye_j) for j in fluids and electrons)
     ldeb_inv_sum = 1/obj.get_var('ldebyei', mf_ispecies=-1)
-    for fluid in fl.Fluids(dd=obj).ions():
+    for fluid in obj.fluids.ions():
       ldeb_inv_sum += 1/obj.get_var('ldebyei', ifluid=fluid.SL)
     return 1/ldeb_inv_sum
 
@@ -1654,7 +1648,7 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
 
   if quant == 'ci':
     assert obj.mf_ispecies != -1, "ifluid {} must be ion to get ci, but got electron.".format(obj.ifluid)
-    fluids = fl.Fluids(dd=obj)
+    fluids = obj.fluids
     ion = fluids[obj.ifluid]
     assert ion.ionization >= 1, "ifluid {} is not ionized; cannot get ci (==ion acoustic speed).".format(obj.ifluid)
     # (we only want to get ion acoustic speed for ions; it doesn't make sense to get it for neutrals.)
