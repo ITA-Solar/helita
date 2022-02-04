@@ -82,7 +82,7 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
       arr = arr.astype(default_type)      # convert type
     return cstagger.do(arr, operation)  # call the original cstagger function
   else:                  # use stagger routine.
-    assert obj is not None, f'obj is required for stagger, in {stagger_kind = }.'
+    assert obj is not None, f'obj is required for stagger, in stagger_kind = {stagger_kind}.'
     return obj.stagger.do(arr, operation)
 
 def _can_interp(obj, axis, warn=True):

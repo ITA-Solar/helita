@@ -143,7 +143,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind='numba'):
         elif stagger_kind=='numpy':
             return _np_stagger(out, out_diff, up, derivative, dim_index)
         else:
-            raise ValueError(f"invalid {stagger_kind = }; expected 'numba' or 'numpy'")
+            raise ValueError(f"invalid stagger_kind: '{stagger_kind}'; expected 'numba' or 'numpy'")
 
 
 """ ------------------------ numba stagger ------------------------ """
