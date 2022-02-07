@@ -1740,6 +1740,8 @@ class BifrostData(object):
             Slice objects for x, y, and z dimensions, when not all points
             are needed. E.g. use slice(None) for all points, slice(0, 100, 2)
             for every second point up to 100.
+        write_magnetic - bool, optional
+            Whether to write a magnetic field file. Default is False.
         Returns
         -------
         None.
