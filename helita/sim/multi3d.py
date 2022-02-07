@@ -1,6 +1,7 @@
 """
 Set of routines to read and work with input and output from Multi3D
 """
+
 import os
 import numpy as np
 import scipy.io
@@ -490,7 +491,7 @@ class Multi3dOut:
         Reads output variable
         """
         allowed_names = ['chi', 'ie', 'jnu', 'zt1', 'st', 'xt', 'cf', 'snu',
-                         'chi_c', 'scatt', 'therm']
+                         'chi_c', 'scatt', 'therm', 'qe', 'ue', 've']
         if var.lower() not in allowed_names:
             raise ValueError("%s is not an valid variable name, must be one"
                              "of '%s.'" % (var, "', '".join(allowed_names)))
@@ -505,7 +506,7 @@ class Multi3dOut:
         else:
             raise IOError('%s does not exist' % fname)
         sg = self.geometry
-        if var in ('ie', 'zt1'):
+        if var in ('ie', 'zt1', 'qe', 'ue', 've'):
             if all_vars:
                 shape = (sg.nx, sg.ny, self.outnnu)
                 offset = 0
@@ -588,3 +589,39 @@ class Multi3dAtmos:
         if read_vturb:
             self.vturb = np.memmap(infile, dtype=dtype, mode=mm, order="F",
                                    offset=offset, shape=(nx, ny, nz))
+
+class Multi3dMagnetic:
+    """
+    Class to read/write input magnetic field for Multi3D.
+
+    Parameters
+    ----------
+    infile : str
+        Name of file to read.
+    nx, ny, nz : ints
+        Number of points in x, y, and z dimensions.
+    mode : str, optional
+        Access mode. Can be either 'r' (read), 'w' (write, deletes existing),
+        or 'w+' (write, update).
+    dp : bool, optional
+        If True, will write in double precision (float64). Otherwise,
+        will write in single precision (float32, default).
+    big_endian : bool, optional
+        Endianness of output file. Default is False (little endian).
+    """
+    def __init__(self, infile, nx, ny, nz, mode='r', **kwargs):
+        if os.path.isfile(infile) or (mode == "w+"):
+            self.open_magnetic(infile, nx, ny, nz, mode=mode, **kwargs)
+
+    def open_magnetic(self, infile, nx, ny, nz, mode="r", dp=False,
+                   big_endian=False,):
+        """Reads/writes multi3d magnetic fields into parent object."""
+        dtype = ["<", ">"][big_endian] + ["f4", "f8"][dp]
+        ntot = nx * ny * nz * np.dtype(dtype).itemsize
+        mm = mode
+        self.Bx = np.memmap(infile, dtype=dtype, mode=mm, offset=0,
+                            shape=(nx, ny, nz), order="F")
+        self.By = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot,
+                              shape=(nx, ny, nz), order="F")
+        self.Bz = np.memmap(infile, dtype=dtype, mode=mm, offset=ntot * 2,
+                            shape=(nx, ny, nz), order="F")

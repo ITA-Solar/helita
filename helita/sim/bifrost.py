@@ -1724,7 +1724,8 @@ class BifrostData(object):
             pbar.update()
 
     def write_multi3d(self, outfile, mesh='mesh.dat', desc=None,
-                      sx=slice(None), sy=slice(None), sz=slice(None)):
+                      sx=slice(None), sy=slice(None), sz=slice(None),
+                      write_magnetic=False):
         """
         Writes snapshot in Multi3D format.
         Parameters
@@ -1744,11 +1745,13 @@ class BifrostData(object):
         None.
         """
         from .multi3d import Multi3dAtmos
+        from .multi3d import Multi3dMagnetic
         # unit conversion to cgs and km/s
         ul = self.params['u_l'][self.snapInd]   # to cm
         ur = self.params['u_r'][self.snapInd]   # to g/cm^3  (for ne_rt_table)
         ut = self.params['u_t'][self.snapInd]   # to seconds
         uv = ul / ut / 1e5        # to km/s
+        ub = self.params['u_b'][self.snapInd] # to G
         ue = self.params['u_ee'][self.snapInd]  # to erg/g
         nh = None
         if self.verbose:
@@ -1765,7 +1768,7 @@ class BifrostData(object):
         vz *= -uv
         rho = rho * ur  # to cgs
         x = self.x[sx] * ul
-        y = self.y[sy] * ul
+        y = self.y[sy] * (-ul)
         z = self.z[sz] * (-ul)
         ne = self.get_electron_density(sx, sy, sz).to_value('1/cm3')
         # write to file
@@ -1791,6 +1794,21 @@ class BifrostData(object):
             fout2.write("\n%i\n" % nz)
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
+        if write_magnetic:
+            Bx = cstagger.xup(self.bx)[sx, sy, sz]
+            By = cstagger.yup(self.by)[sx, sy, sz]
+            Bz = cstagger.zup(self.bz)[sx, sy, sz]
+            # Change sign of Bz (because of height scale) and By
+            # (to make right-handed system)
+            Bx = Bx * ub
+            By = -By * ub
+            Bz = -Bz * ub
+            fout3 = Multi3dMagnetic('magnetic.dat', nx, ny, nz, mode='w+')
+            fout3.Bx[:] = Bx
+            fout3.By[:] = By
+            fout3.Bz[:] = Bz
+
+
 
 
 class Create_new_br_files:
