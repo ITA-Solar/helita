@@ -763,7 +763,7 @@ class BifrostData():
         __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables
         if var in self.variables:                 # if var is still in memory,
-            return self.variables[var] * cgsunits  # load from memory instead of re-reading.
+            return self.variables[var]  # load from memory instead of re-reading.
         # Try to load simple quantities.
         val = load_fromfile_quantities.load_fromfile_quantities(self, var,
                                                 save_if_composite=True, **kwargs)
@@ -829,6 +829,7 @@ class BifrostData():
             cgsunits = 1.0
                 
         # get value of variable.
+
         val = self._load_quantity(var, cgsunits, **kwargs)
 
         # do post-processing
