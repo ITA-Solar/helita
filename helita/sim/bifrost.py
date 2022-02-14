@@ -165,6 +165,8 @@ class BifrostData():
     size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
     ndim  = property(lambda self: 3)
 
+    stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
+
     @property
     def cstagop(self): # cstagop is an alias to do_stagger. Maintained for backwards compatibility.
         return self.do_stagger

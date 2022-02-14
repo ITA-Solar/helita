@@ -45,6 +45,7 @@ TODO:
 # import built-in modules
 import time
 import weakref
+import collections
 
 # import public external modules
 import numpy as np
@@ -57,6 +58,58 @@ PAD_PERIODIC    = 'wrap'     # how to pad periodic dimensions, by default
 PAD_NONPERIODIC = 'reflect'  # how to pad nonperiodic dimensions, by default
 PAD_DEFAULTS = {'x': PAD_PERIODIC, 'y': PAD_PERIODIC, 'z': PAD_NONPERIODIC}   # default padding for each dimension.
 DEFAULT_STAGGER_KIND = 'numba'  # which stagger kind to use by default.
+VALID_STAGGER_KINDS  = tuple(('numba', 'numpy', 'numpy_improved', 'cstagger'))  # list of valid stagger kinds.
+PYTHON_STAGGER_KINDS = tuple(('numba', 'numpy', 'numpy_improved'))  # list of valid stagger kinds from stagger.py.
+ALIAS_STAGGER_KIND   = {'stagger': 'numba', 'numba': 'numba',   # dict of aliases for stagger kinds.
+                       'numpy': 'numpy',
+                       'numpy_improved': 'numpy_improved', 'numpy_i': 'numpy_improved',
+                       'cstagger': 'cstagger'}
+
+
+def STAGGER_KIND_PROPERTY(internal_name='_stagger_kind', default=DEFAULT_STAGGER_KIND):
+    '''creates a property which manages stagger_kind.
+    uses the internal name provided, and returns the default if property value has not been set.
+
+    only allows setting of stagger_kind to valid names (as determined by VALID_STAGGER_KINDS).
+    '''
+    def get_stagger_kind(self):
+        return getattr(self, internal_name, default)
+
+    def set_stagger_kind(self, value):
+        '''sets stagger_kind to VALID_STAGGER_KINDS[value]'''
+        try:
+            kind = ALIAS_STAGGER_KIND[value]
+        except KeyError:
+            class KeyErrorMessage(str):  # KeyError(msg) uses repr(msg), so newlines don't show up.
+                def __repr__(self): return str(self)    # this is a workaround. Makes the message prettier.
+            errmsg = (f"stagger_kind = {repr(value)} was invalid!" + "\n" + 
+                      f"Expected value from: {VALID_STAGGER_KINDS}." + "\n" + 
+                      f"Advanced: to add a valid value, edit helita.sim.stagger.ALIAS_STAGGER_KINDS")
+            raise KeyError(KeyErrorMessage(errmsg)) from None
+        setattr(self, internal_name, kind)
+
+    doc = f"Tells which method to use for stagger operations. Options are: {VALID_STAGGER_KINDS}"
+
+    return property(fset=set_stagger_kind, fget=get_stagger_kind, doc=doc)
+
+""" ------------------------ stagger constants ------------------------ """
+
+StaggerConstants = collections.namedtuple('StaggerConstants', ('a', 'b', 'c'))
+
+# derivatives
+c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
+b = (-1 - 120*c) / 24
+a = (1 - 3*b - 5*c)
+CONSTANTS_DERIV = StaggerConstants(a, b, c)
+
+# shifts (not a derivative)
+c = 3.0 / 256.0
+b = -25.0 / 256.0
+a = 0.5 - b - c
+CONSTANTS_SHIFT = StaggerConstants(a, b, c)
+
+# remove temporary variables from the module namespace
+del c, b, a
 
 
 """ ------------------------ 'do' - stagger interface ------------------------ """
@@ -84,10 +137,11 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         Mode for padding array `var` to have enough points for a 6th order
         polynomial interpolation. Same as supported by np.pad.
         if None, use default: `wrap` (periodic) for x and y; `reflect` for z.
-    stagger_kind: 'numba' or 'numpy'
+    stagger_kind: 'numba', 'numpy', or 'numpy_improved'
         Mode for stagger operations.
         numba --> numba methods ('_xshift', '_yshift', '_zshift')
         numpy --> numpy methods ('_np_stagger')
+        numpy_improved --> numpy implmentation of improved method. ('_np_stagger_improved')
         For historical reasons, stagger_kind='stagger' --> stagger_kind='numba'.
 
     Returns
@@ -101,7 +155,8 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         'y': _yshift,
         'z': _zshift,
     }
- 
+    stagger_kind = ALIAS_STAGGER_KIND[stagger_kind]
+
     operation = operation.lower()
     # up/dn
     if operation[-2:] == 'up':
@@ -139,35 +194,28 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     else:
         out = np.pad(var, padding, mode=pad_mode)
         out_diff = np.pad(diff, extra_dims, mode=pad_mode)
-        if stagger_kind in ('numba', 'stagger'):
+        if stagger_kind=='numba':
             func = AXES[op]
             return func(out, out_diff, up=up, derivative=derivative)
         elif stagger_kind=='numpy':
             return _np_stagger(out, out_diff, up, derivative, dim_index)
+        elif stagger_kind=='numpy_improved':
+            return _np_stagger_improved(out, out_diff, up, derivative, dim_index)
         else:
-            raise ValueError(f"invalid stagger_kind: '{stagger_kind}'; expected 'numba' or 'numpy'")
+            raise ValueError(f"invalid stagger_kind: '{stagger_kind}'. Options are: {PYTHON_STAGGER_KINDS}")
 
 
 """ ------------------------ numba stagger ------------------------ """
 
 @njit(parallel=True)
 def _xshift(var, diff, up=True, derivative=False):
-    if up:
-        grdshf = 1
-    else:
-        grdshf = 0
+    grdshf = 1 if up else 0
+    start  =   int(3. - grdshf)  
+    end    = - int(2. + grdshf)
     if derivative:
-        pm = -1
-        c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
-        b = (-1 - 120*c) / 24
-        a = (1 - 3*b - 5*c)
+        pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm = 1
-        c = 3.0 / 256.0
-        b = -25.0 / 256.0
-        a = 0.5 - b - c
-    start = int(3. - grdshf)  
-    end = - int(2. + grdshf)
+        pm, (a, b, c) =  1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
     out=np.zeros((nx,ny,nz))
     for k in prange(nz): 
@@ -177,27 +225,18 @@ def _xshift(var, diff, up=True, derivative=False):
                                 b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
                                 c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
 
-    return out[start:end]
+    return out[start:end, :, :]
 
 
 @njit(parallel=True)
 def _yshift(var, diff, up=True, derivative=False):
-    if up:
-        grdshf = 1
-    else:
-        grdshf = 0
+    grdshf = 1 if up else 0
+    start  =   int(3. - grdshf)  
+    end    = - int(2. + grdshf)
     if derivative:
-        pm = -1
-        c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
-        b = (-1 - 120*c) / 24
-        a = (1 - 3*b - 5*c)
+        pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm = 1
-        c = 3.0 / 256.0
-        b = -25.0 / 256.0
-        a = 0.5 - b - c
-    start = int(3. - grdshf)  
-    end = - int(2. + grdshf)
+        pm, (a, b, c) =  1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
     out=np.zeros((nx,ny,nz))
     for k in prange(nz): 
@@ -206,27 +245,18 @@ def _yshift(var, diff, up=True, derivative=False):
                 out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] + pm * var[i, j - 1 + grdshf, k]) +
                                 b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
                                 c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
-    return out[:, start:end]
+    return out[:, start:end, :]
 
 
 @njit(parallel=True)
 def _zshift(var, diff, up=True, derivative=False):
-    if up:
-        grdshf = 1
-    else:
-        grdshf = 0
+    grdshf = 1 if up else 0
+    start  =   int(3. - grdshf)  
+    end    = - int(2. + grdshf)
     if derivative:
-        pm = -1
-        c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
-        b = (-1 - 120*c) / 24
-        a = (1 - 3*b - 5*c)
+        pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm = 1
-        c = 3.0 / 256.0
-        b = -25.0 / 256.0
-        a = 0.5 - b - c
-    start = int(3. - grdshf)  
-    end = - int(2. + grdshf)
+        pm, (a, b, c) =  1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
     out=np.zeros((nx,ny,nz))
     for k in prange(start, nz + end): 
@@ -235,7 +265,7 @@ def _zshift(var, diff, up=True, derivative=False):
                 out[i, j, k] = diff[k] * (a * (var[i, j, k + grdshf] + pm * var[i, j, k - 1 + grdshf]) +
                                 b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
                                 c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
-    return out[..., start:end]
+    return out[:, :, start:end]
 
 
 """ ------------------------ numpy stagger ------------------------ """
@@ -258,25 +288,15 @@ def slicer_at_ax(slicer, ax):
 def _np_stagger(var, diff, up, derivative, x):
     """stagger along x axis. x should be 0, 1, or 2."""
     # -- same constants and setup as numba method -- #
-    if up:
-        grdshf = 1
-    else:
-        grdshf = 0
+    grdshf = 1 if up else 0
+    start  =   int(3. - grdshf)  
+    end    = - int(2. + grdshf)
     if derivative:
-        pm = -1
-        c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
-        b = (-1 - 120*c) / 24
-        a = (1 - 3*b - 5*c)
+        pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm = 1
-        c = 3.0 / 256.0
-        b = -25.0 / 256.0
-        a = 0.5 - b - c
-    start = int(3. - grdshf)  
-    end = - int(2. + grdshf)
-    nx = var.shape[x]
-    out=np.zeros(var.shape)
+        pm, (a, b, c) =  1, CONSTANTS_SHIFT
     # -- begin numpy syntax -- #
+    nx = var.shape[x]
     def slx(shift):
         '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
         return slicer_at_ax((start+shift, nx+end+shift), x)
@@ -288,6 +308,43 @@ def _np_stagger(var, diff, up, derivative, x):
     out = diff[slx(0)] * (a * (var[sgx(0)] + pm * var[sgx(-1)]) + 
                           b * (var[sgx(1)] + pm * var[sgx(-2)]) +
                           c * (var[sgx(2)] + pm * var[sgx(-3)]))
+
+    return out
+
+def _np_stagger_improved(var, diff, up, derivative, x):
+    """stagger along x axis. x should be 0, 1, or 2.
+    uses the "improved" stagger method, as implemented in stagger_mesh_improved_mpi.f90.
+        It subtracts f_0 from each term before multiplying, then adds f0 again at the end.
+        since a + b + c = 0.5 by definition,
+            a X + b Y + c Z == a (X - 2 f_0) + b (Y - 2 f_0) + c (Z - 2 f_0) + f_0
+    """
+    grdshf = 1 if up else 0
+    start  =   int(3. - grdshf)  
+    end    = - int(2. + grdshf)
+    # -- begin numpy syntax -- #
+    nx = var.shape[x]
+    def slx(shift):
+        '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
+        return slicer_at_ax((start+shift, nx+end+shift), x)
+    def sgx(shift):
+        '''return slicer at x axis from (start + shift + grdshf) to (nx + end + shift + grdshf)'''
+        return slx(shift + grdshf)
+    diff = np.expand_dims(diff,  axis=tuple( set((0,1,2)) - set((x,)) )  )   # make diff 3D (with size 1 for axes other than x)
+
+    if derivative:
+        # formula is exactly the same as regular numpy method. (though we use '-' instead of 'pm' with pm=-1)
+        a, b, c = CONSTANTS_DERIV
+        out = diff[slx(0)] * (a * (var[sgx(0)] - var[sgx(-1)]) + 
+                              b * (var[sgx(1)] - var[sgx(-2)]) +
+                              c * (var[sgx(2)] - var[sgx(-3)]))
+    else:
+        # here is where we see the 'improved' stagger method.
+        a, b, c = CONSTANTS_SHIFT
+        f0 = var[sgx(0)]
+        out = diff[slx(0)] * (a * (                   var[sgx(-1)] - f0) +    # note: the f0 - f0 term went away.
+                              b * (var[sgx(1)] - f0 + var[sgx(-2)] - f0) +
+                              c * (var[sgx(2)] - f0 + var[sgx(-3)] - f0)
+                              + f0)
 
     return out
 
