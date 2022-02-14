@@ -60,7 +60,6 @@ from .units import (
 import numpy as np
 
 # set constants
-DEFAULT_STAGGER_KIND = 'stagger'
 AXES      = ('x', 'y', 'z')
 YZ_FROM_X = dict(x=('y', 'z'), y=('z', 'x'), z=('x', 'y'))  # right-handed coord system x,y,z given x.
 EPSILON   = 1.0e-20   # small number which is added in denominators of some operations.
@@ -75,26 +74,28 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
   '''does cstagger, after ensuring arr is the correct type, converting if necessary.
   if type conversion is necessary, convert to default_type.
   '''
-  kind = getattr(obj,'stagger_kind',DEFAULT_STAGGER_KIND)
+  kind = getattr(obj,'stagger_kind', stagger.DEFAULT_STAGGER_KIND)
   if kind == 'cstagger': # use cstagger routine.
     arr = np.array(arr, copy=False)     # make numpy array, if necessary.
     if arr.dtype not in CSTAGGER_TYPES: # if necessary,
       arr = arr.astype(default_type)      # convert type
     return cstagger.do(arr, operation)  # call the original cstagger function
   else:                  # use stagger routine.
-    assert obj is not None, f'obj is required for stagger, in stagger_kind = {stagger_kind}.'
+    assert obj is not None, f'obj must be provided to use stagger, with stagger_kind = {stagger_kind}.'
     return obj.stagger.do(arr, operation)
 
 def _can_interp(obj, axis, warn=True):
   '''return whether we can interpolate. Make warning if we can't.'''
-  if not obj.cstagop:  # this is True by default; if it is False we assume that someone 
+  if not obj.do_stagger:  # this is True by default; if it is False we assume that someone 
     return False       # intentionally turned off interpolation. So we don't make warning.
-  if not getattr(obj, 'cstagger_exists', False):
-    if obj.verbose:
-      warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
-              'We will skip the interpolation, and instead return the original value.'
-      warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
-    return False
+  kind = getattr(obj,'stagger_kind', stagger.DEFAULT_STAGGER_KIND)
+  if kind == 'cstagger':
+    if not getattr(obj, 'cstagger_exists', False):
+      if obj.verbose:
+        warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
+                'We will skip the interpolation, and instead return the original value.'
+        warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
+      return False
   if not getattr(obj, 'n'+axis, 0) >=5:
     if obj.verbose:
       warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\

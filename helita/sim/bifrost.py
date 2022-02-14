@@ -55,9 +55,12 @@ class BifrostData():
     ghost_analyse - bool, optional
         If True, will read data from ghost zones when this is saved
         to files. Default is never to read ghost zones.
-    cstagop - bool, optional
-        Use true only if data is too big to load. Danger:
-        it will do quantity operations without correcting the stagger mesh.
+    do_stagger - bool, optional
+        whether to correctly account for the stagger mesh when doing operations.
+        if enabled, operations will take more time but produce more accurate results.
+    stagger_kind - string, optional
+        which method to use for performing stagger operations, if do_stagger.
+        options are 'cstagger', 'numba' (default), 'numpy'. See stagger.py for details.
     lowbus  - bool, optional
         Use True only if data is too big to load. It will do cstagger
         operations layer by layer using threads (slower).
@@ -94,9 +97,9 @@ class BifrostData():
     ## CREATION ##
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.', 
                  fast=False, verbose=True, dtype='f4', big_endian=False, 
-                 cstagop=True, ghost_analyse=False, lowbus=False, 
+                 cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
-                 use_relpath=False, stagger_kind = 'stagger',
+                 use_relpath=False, stagger_kind=stagger.DEFAULT_STAGGER_KIND,
                  iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
@@ -104,7 +107,7 @@ class BifrostData():
         # bookkeeping
         self.fdir = fdir if use_relpath else os.path.abspath(fdir)
         self.verbose = verbose
-        self.cstagop = cstagop
+        self.do_stagger = do_stagger if (cstagop is None) else cstagop
         self.lowbus = lowbus
         self.numThreads = numThreads
         self.file_root = os.path.join(self.fdir, file_root)
@@ -161,6 +164,13 @@ class BifrostData():
     shape = property(lambda self: (self.xLength, self.yLength, self.zLength))
     size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
     ndim  = property(lambda self: 3)
+
+    @property
+    def cstagop(self): # cstagop is an alias to do_stagger. Maintained for backwards compatibility.
+        return self.do_stagger
+    @cstagop.setter
+    def cstagop(self, value):
+        self.do_stagger = value
 
     ## SET SNAPSHOT ##
     def __getitem__(self, i):
@@ -648,8 +658,8 @@ class BifrostData():
         Sets iix=iinum and xLength=len(iinum). (x=iiaxis)
         if iinum is a slice, use self.nx (or self.nzb, for x='z') to determine xLength.
 
-        Also, if we end up using a non-None slice, disable cstagop.
-        TODO: maybe we can leave cstagop=True if stagger_kind != 'cstagger' ?
+        Also, if we end up using a non-None slice, disable stagger.
+        TODO: maybe we can leave do_stagger=True if stagger_kind != 'cstagger' ?
 
         Parameters
         ----------
@@ -720,13 +730,13 @@ class BifrostData():
             To set existing self.iix to slice(None), use iix=slice(None).
         iiy, iiz: similar to iix.
         internal: bool (default: False)
-            if internal and self.cstagop, don't change slices.
+            if internal and self.do_stagger, don't change slices.
             internal=True inside get_var.
 
         updates x, y, z, dx1d, dy1d, dz1d afterwards, if any domains were changed.
         '''
         AXES = ('x', 'y', 'z')
-        if internal and self.cstagop:
+        if internal and self.do_stagger:
             # we slice at the end, only. For now, set all to slice(None)
             slices = (slice(None), slice(None), slice(None))
         else:
@@ -865,8 +875,8 @@ class BifrostData():
                 "see e.g. help(self.get_var) or get_var('')) for guidance.")
             raise ValueError(errmsg.format(repr(var), repr(self.simple_vars)))
 
-        # set original_slice if cstagop is enabled and we are at the outermost layer.
-        if self.cstagop and not self._getting_internal_var():
+        # set original_slice if do_stagger and we are at the outermost layer.
+        if self.do_stagger and not self._getting_internal_var():
             self.set_domain_iiaxes(*original_slice, internal=False)
         
         # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.

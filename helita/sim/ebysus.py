@@ -455,7 +455,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             tells which fluids to include in the result.
             2 -> ifluid and jfluid. 1 -> just ifluid. 0 -> no fluids.
         '''
-        METADATA_ATTRS = ['ifluid', 'jfluid', 'snap', 'iix', 'iiy', 'iiz', 'match_type', 'panic', 'cstagop']
+        METADATA_ATTRS = ['ifluid', 'jfluid', 'snap', 'iix', 'iiy', 'iiz', 'match_type', 'panic', 'do_stagger']
         if with_nfluid < 2:
             del METADATA_ATTRS[1]  # jfluid
         if with_nfluid < 1:

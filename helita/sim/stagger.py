@@ -1,8 +1,8 @@
 """
 Stagger mesh methods using numba.
 
-set stagger_kind = 'stagger' to use these methods. (not 'cstagger')
-stagger_kind = 'stagger' is the default for BifrostData and EbysusData.
+set stagger_kind = 'numba' or 'numpy' to use these methods. (not 'cstagger')
+stagger_kind = 'numba' is the default for BifrostData and EbysusData.
 
 
 Methods defined here (which an end-user might want to access):
@@ -56,11 +56,12 @@ from numba import jit, njit, prange
 PAD_PERIODIC    = 'wrap'     # how to pad periodic dimensions, by default
 PAD_NONPERIODIC = 'reflect'  # how to pad nonperiodic dimensions, by default
 PAD_DEFAULTS = {'x': PAD_PERIODIC, 'y': PAD_PERIODIC, 'z': PAD_NONPERIODIC}   # default padding for each dimension.
+DEFAULT_STAGGER_KIND = 'numba'  # which stagger kind to use by default.
 
 
 """ ------------------------ 'do' - stagger interface ------------------------ """
 
-def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind='numba'):
+def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAGGER_KIND):
     """
     Do a stagger operation on `var` by doing a 6th order polynomial interpolation of 
     the variable from cell centres to cell faces (down operations), or cell faces
@@ -87,6 +88,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind='numba'):
         Mode for stagger operations.
         numba --> numba methods ('_xshift', '_yshift', '_zshift')
         numpy --> numpy methods ('_np_stagger')
+        For historical reasons, stagger_kind='stagger' --> stagger_kind='numba'.
 
     Returns
     -------
@@ -137,7 +139,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind='numba'):
     else:
         out = np.pad(var, padding, mode=pad_mode)
         out_diff = np.pad(diff, extra_dims, mode=pad_mode)
-        if stagger_kind=='numba':
+        if stagger_kind in ('numba', 'stagger'):
             func = AXES[op]
             return func(out, out_diff, up=up, derivative=derivative)
         elif stagger_kind=='numpy':
@@ -349,7 +351,7 @@ class _stagger_spatial(_stagger_factory):
         super().__init__(x, up, opstr_fmt='{x}{up}')
 
     def __call__(self, arr, pad_mode=None, verbose=False,
-                 padx=None, pady=None, padz=None, stagger_kind='numba', **kw__None):
+                 padx=None, pady=None, padz=None, stagger_kind=DEFAULT_STAGGER_KIND, **kw__None):
         return super().__call__(arr, pad_mode=pad_mode, verbose=verbose,
                                 padx=padx, pady=pady, padz=padz, stagger_kind=stagger_kind)
 
@@ -385,7 +387,7 @@ class _stagger_derivate(_stagger_factory):
     def __call__(self, arr, diff=None, pad_mode=None, verbose=False,
                  padx=None, pady=None, padz=None,
                  diffx=None, diffy=None, diffz=None,
-                 stagger_kind='numba', **kw__None):
+                 stagger_kind=DEFAULT_STAGGER_KIND, **kw__None):
         if diff is None:
             diff = {'x':diffx, 'y':diffy, 'z':diffz}[self.x]
         return super().__call__(arr, diff=diff, pad_mode=pad_mode, verbose=verbose,
@@ -447,6 +449,15 @@ class BaseChain():  # base class. Inherit from this class before creating the ch
         return x
 
     ## CONVNIENT BEHAVIORS ##
+    def op(self, opstr):
+        '''get link opstr from self. (For using dynamically-named links)
+
+        Equivalent to getattr(self, opstr).
+        Example:
+            self.op('xup').op('ddydn')   is equivalent to   self.xup.ddydn
+        '''
+        return getattr(self, opstr)
+
     def __getitem__(self, i):
         return self.funcs[i]
 
@@ -515,21 +526,34 @@ del props, funcs, dd, x, up, opstr, links, prop, link   # << remove "temporary v
 class StaggerInterface():
     """
     Interface to stagger methods, with defaults implied by an object.
-    Example:
+    Examples:
         self.stagger = StaggerInterface(self)
-        self.stagger.ddxdn(arr)   # will perform xdn of arr, using the defaults:
-                                  # pad_mode = '{PAD_PERIODIC}' if self.get_param('periodic_x') else '{PAD_NONPERIODIC}'
-                                  # diff = self.dxidxdn
-        self.stagger.do('zup', arr)  # equivalent to self.stagger.zup(arr)
+
+        # interpolate arr by ddxdn:
+        self.stagger.ddxdn(arr)
+        # Note, this uses the defaults:
+            # pad_mode     = '{PAD_PERIODIC}' if self.get_param('periodic_x') else '{PAD_NONPERIODIC}'
+            # diff         = self.dxidxdn
+            # stagger_kind = self.stagger_kind
+
+        # interpolate arr via xup( ydn(ddzdn(arr)) ), using defaults as appropriate:
+        self.stagger.xup.ydn.ddzdn(arr)  
 
     Available operations:
           xdn,   xup,   ydn,   yup,   zdn,   zup,
         ddxdn, ddxup, ddydn, ddyup, ddzdn, ddzup
     Available convenience method:
         do(opstr, arr, ...)  # << does the operation implied by opstr; equivalent to getattr(self, opstr)(arr, ...)
+        Example:
+            self.stagger.do('zup', arr)  # equivalent to self.stagger.zup(arr)
 
     Each method will call the appropriate method from stagger.py.
     Additionally, for convenience:
+        named operations can be chained together.
+            For example:
+                self.stagger.xup.ydn.ddzdn(arr)
+            This does not apply when using the 'do' function.
+            For dynamically-named chaining, see self.op.
         default values are supplied for the extra paramaters:
             pad_mode:
                 periodic = self.get_param('periodic_x') (or y, z)
@@ -537,6 +561,8 @@ class StaggerInterface():
                 periodic False -> pad_mode = stagger.PAD_NONPERIODIC (=='{PAD_NONPERIODIC}')
             diff:
                 self.dxidxup   with x --> x, y, or z; up --> up or dn.
+            stagger_kind:
+                self.stagger_kind
         if the operation is called on a string instead of an array,
             first pass the string to a call of self.
             E.g. self.xup('r') will do stagger.xup(self('r'))
@@ -545,7 +571,7 @@ class StaggerInterface():
     _PAD_NONPERIODIC = PAD_NONPERIODIC
 
     def __init__(self, obj):
-        self._obj_ref = weakref.ref(obj)
+        self._obj_ref = weakref.ref(obj)  # weakref to avoid circular reference.
         prop_func_pairs = [(_trim_leading_underscore(prop), func) for prop, func in _STAGGER_ALIASES.items()]
         self._make_bound_chain(*prop_func_pairs, name='BoundInterpolationChain')
 
@@ -557,6 +583,15 @@ class StaggerInterface():
         '''
         return getattr(self, opstr)(arr, *args, **kw)
 
+    def op(self, opstr):
+        '''gets the operation which opstr would apply.
+        For convenience. Equivalent to getattr(self, opstr).
+
+        Can be chained. For example:
+        self.op('xup').op('ddydn')   is equivalent to   self.xup.ddydn.
+        '''
+        return getattr(self, opstr)
+
     def _make_bound_chain(self, *prop_func_pairs, name='BoundChain'):
         """create new bound chain, linking all props to same-named attributes of self."""
         Chain, links = _make_chain(*prop_func_pairs, name=name,
@@ -565,6 +600,10 @@ class StaggerInterface():
         for prop, link in zip(props, links):
             setattr(self, prop, link)
 
+    ## __INTERPOLATION_CALL__ ##
+    # this function will be called whenever an interpolation method is used.
+    # To edit the behavior of calling an interpolation method, edit this function.
+    # E.g. here is where to connect properties of obj to defaults for interpolation.
     def _pad_modes(self):
         '''return dict of padx, pady, padz, with values the appropriate strings for padding.'''
         def _booly_to_mode(booly):
@@ -577,6 +616,9 @@ class StaggerInterface():
         '''
         return {f'diff{x}': getattr(self.obj, f'd{x}id{x}up') for x in ('x', 'y', 'z')}
 
+    def _stagger_kind(self):
+        return {'stagger_kind': self.obj.stagger_kind}
+
     def __interpolation_call__(self, func, arr, *args__get_var, **kw):
         '''call interpolation function func on array arr with the provided kw.
 
@@ -584,7 +626,7 @@ class StaggerInterface():
         if arr is a string, first call self(arr, *args__get_var, **kw).
         '''
         __tracebackhide__ = True
-        kw_to_use = {**self._pad_modes(), **self._diffs()}  # defaults based on obj.
+        kw_to_use = {**self._pad_modes(), **self._diffs(), **self._stagger_kind()}  # defaults based on obj.
         kw_to_use.update(kw)   # exisitng kwargs override defaults.
         if isinstance(arr, str):
             arr = self.obj(arr, *args__get_var, **kw)
