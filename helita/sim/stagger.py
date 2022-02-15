@@ -150,18 +150,16 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         Array of same type and dimensions to var, after performing the 
         stagger operation.
     """
-    AXES = {
-        'x': _xshift,
-        'y': _yshift,
-        'z': _zshift,
-    }
+    # initial bookkeeping
+    AXES = ('x', 'y', 'z')
     stagger_kind = ALIAS_STAGGER_KIND[stagger_kind]
-
     operation = operation.lower()
+
     # up/dn
-    if operation[-2:] == 'up':
+    up_str = operation[-2:]  # 'up' or 'dn'
+    if up_str == 'up':
         up = True
-    elif operation[-2:] == 'dn':
+    elif up_str == 'dn':
         up = False
     else: 
         raise ValueError(f"Invalid operation; must end in 'up' or 'dn': {operation}")
@@ -175,13 +173,13 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         derivative = False
         if diff is not None:
             raise ValueError(f"diff must not be provided for non-derivative operation: {operation}")
-    # op (aka 'axis'), dim_index (0 for x, 1 for y, 2 for z)
-    op = operation[:-2]
-    if op not in AXES:
+    # x, dim_index (0 for x, 1 for y, 2 for z)
+    x = operation[:-2]
+    if x not in AXES:
         raise ValueError(f"Invalid operation; axis must be 'x', 'y', or 'z': {operation}")
     if pad_mode is None:
-        pad_mode = PAD_DEFAULTS[op]
-    dim_index = 'xyz'.find(op[-1])
+        pad_mode = PAD_DEFAULTS[x]
+    dim_index = AXES.index(x)
     # padding
     extra_dims = (2, 3) if up else (3, 2)
     if not derivative:
@@ -189,20 +187,27 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     padding = [(0, 0)] * 3
     padding[dim_index] = extra_dims
     # interpolating
-    if var.shape[dim_index] == 1:   # don't interpolate along axis with size 1...
-        return var
+    if var.shape[dim_index] <= 5:   # don't interpolate along axis with size 5 or less...
+        result = var
     else:
         out = np.pad(var, padding, mode=pad_mode)
         out_diff = np.pad(diff, extra_dims, mode=pad_mode)
         if stagger_kind=='numba':
-            func = AXES[op]
-            return func(out, out_diff, up=up, derivative=derivative)
+            func = {'x':_xshift, 'y':_yshift, 'z':_zshift}[x]
+            result = func(out, out_diff, up=up, derivative=derivative)
         elif stagger_kind=='numpy':
-            return _np_stagger(out, out_diff, up, derivative, dim_index)
+            result = _np_stagger(out, out_diff, up, derivative, dim_index)
         elif stagger_kind=='numpy_improved':
-            return _np_stagger_improved(out, out_diff, up, derivative, dim_index)
+            result = _np_stagger_improved(out, out_diff, up, derivative, dim_index)
         else:
             raise ValueError(f"invalid stagger_kind: '{stagger_kind}'. Options are: {PYTHON_STAGGER_KINDS}")
+    # tracking mesh location.
+    meshloc = getattr(var, 'meshloc', None)
+    if meshloc is not None:  # (input array had a meshloc attribute)
+        result = ArrayOnMesh(result, meshloc=meshloc)
+        result._shift_location(f'{x}{up_str}')
+    # output.
+    return result
 
 
 """ ------------------------ numba stagger ------------------------ """
@@ -347,6 +352,197 @@ def _np_stagger_improved(var, diff, up, derivative, x):
                               + f0)
 
     return out
+
+
+""" ------------------------ MeshLocation, ArrayOnMesh ------------------------ """
+# The idea is to associate arrays with a location on the mesh,
+#   update that mesh location info whenever a stagger operation is performed,
+#   and enforce arrays have the same location when doing arithmetic.
+
+class MeshLocation():
+    '''class defining a location on a mesh.
+    Also provides shifting operations.
+
+    Examples:
+        m = MeshLocation([0, 0.5, 0])
+        m.xup
+        >>> MeshLocation([0.5, 0.5, 0])
+        m.xup.ydn.zdn
+        >>> MeshLocation([0.5, 0, -0.5])
+    '''
+    def __init__(self, loc=[0,0,0]):
+        self.loc = list(loc)
+
+    def __repr__(self):
+        return f'{type(self).__name__}({self.loc})'  # TODO even spacing (length == len('-0.5'))
+
+    ## LIST-LIKE BEHAVIOR ##
+
+    def __iter__(self):
+        return iter(self.loc)
+
+    def __len__(self):
+        return len(self.loc)
+
+    def __getitem__(self, i):
+        return self.loc[i]
+
+    def __setitem__(self, i, value):
+        self.loc[i] = value
+
+    def __eq__(self, other):
+        if len(other) != len(self):
+            return False
+        return all(s == o for s, o in zip(self, other))
+
+    def copy(self):
+        return MeshLocation(self)
+
+    ## MESH LOCATION ARITHMETIC ##
+    def __sub__(self, other):
+        '''returns the steps needed to get from self to other.'''
+        raise NotImplementedError(f'{type(self)}.__sub__')
+
+    ## MESH LOCATION SHIFTING ##
+    def shifted(self, xup):
+        '''return a copy of self shifted by xup.
+        xup: 'xup', 'xdn', 'yup', 'ydn', 'zup', or 'zdn'.
+        '''
+        return getattr(self, xup)
+
+    # the properties: xup, xdn, yup, ydn, zup, zdn
+    #   are added to the class after its initial definition.
+
+## MESH LOCATION SHIFTING ##
+def _mesh_shifter(x, up):
+    '''returns a function which returns a copy of MeshLocation but shifted by x and up.
+    x should be 'x', 'y', or 'z'.
+    up should be 'up' or 'dn'.
+    '''
+    ix = {'x':0, 'y':1, 'z':2}[x]
+    up_value = {'up':0.5, 'dn':-0.5}[up]
+    def mesh_shifted(self):
+        '''returns a copy of self shifted by {x}{up}'''
+        copy = self.copy()
+        copy[ix] += up_value
+        return copy
+    mesh_shifted.__doc__  = mesh_shifted.__doc__.format(x=x, up=up)
+    mesh_shifted.__name__ = f'{x}{up}'
+    return mesh_shifted
+
+def _mesh_shifter_property(x, up):
+    '''returns a property which calls a function that returns a copy of MeshLocation shifted by x and up.'''
+    shifter = _mesh_shifter(x, up)
+    return property(fget=shifter, doc=shifter.__doc__)
+
+# actually set the functions xup, ..., zdn, as methods of MeshLocation.
+for x in ('x', 'y', 'z'):
+    for up in ('up', 'dn'):
+        setattr(MeshLocation, f'{x}{up}', _mesh_shifter_property(x, up))
+
+
+class ArrayOnMesh(np.ndarray):
+    '''numpy array associated with a location on a mesh grid.
+    
+    Examples:
+        ArrayOnMesh(x, meshloc=[0,0,0])
+        ArrayOnMesh(y, meshloc=[0,0,0.5])
+        with x, y numpy arrays (or subclasses).
+    
+    The idea is to enforce that arrays are at the same mesh location before doing any math.
+    When arrays are at different locations, raise an AssertionError instead.
+    
+    meshloc: list, tuple, MeshLocation object, or None
+        None --> default. If input has meshloc, use meshloc of input; else use [0,0,0]
+        else --> use this value as the mesh location.
+    '''
+    def __new__(cls, input_array, meshloc=None):
+        obj = np.asanyarray(input_array).view(cls)   # view input_array as an ArrayOnMesh.
+        if meshloc is None:
+            obj.meshloc = getattr(obj, 'meshloc', [0,0,0])
+        else:
+            obj.meshloc = meshloc
+        return obj
+
+    @property
+    def meshloc(self):
+        return self._meshloc
+    @meshloc.setter
+    def meshloc(self, newloc):
+        if not isinstance(newloc, MeshLocation):
+            newloc = MeshLocation(newloc)
+        self._meshloc = newloc
+
+    def _relocate(self, new_meshloc):
+        '''changes the location associated with self to new_meshloc.
+        DOES NOT PERFORM ANY STAGGER OPERATIONS -
+            the array contents will be unchanged; only the mesh location label will be affected.
+        '''
+        self.meshloc = new_meshloc
+
+    def _shift_location(self, xup):
+        '''shifts the location associated with self by xup.
+        DOES NOT PERFORM ANY STAGGER OPERATIONS -
+            the array contents will be unchanged; only the mesh location label will be affected.
+        '''
+        self._relocate(self.meshloc.shifted(xup))
+
+    def __array_ufunc__(self, ufunc, method, *inputs, out=None, **kwargs):
+        '''does the ufunc but first ensures all arrays are at the same meshloc.
+        
+        The code here follows the format of the example from the numpy subclassing docs.
+        '''
+        args = []
+        meshloc = None
+        for i, input_ in enumerate(inputs):
+            if isinstance(input_, type(self)):
+                if meshloc is None:
+                    meshloc = input_.meshloc
+                else:
+                    assert meshloc == input_.meshloc, f"Inputs' mesh locations differ: {meshloc}, {input_.meshloc}"
+                args.append(input_.view(np.ndarray))
+            else:
+                args.append(input_)
+                
+        assert meshloc is not None  # meshloc should have been set to some value by this point.
+
+        outputs = out
+        if outputs:
+            out_args = []
+            for j, output in enumerate(outputs):
+                if isinstance(output, type(self)):
+                    out_args.append(output.view(np.ndarray))
+                else:
+                    out_args.append(output)
+            kwargs['out'] = tuple(out_args)
+        else:
+            outputs = (None,) * ufunc.nout
+
+        results = super().__array_ufunc__(ufunc, method, *args, **kwargs)
+        if results is NotImplemented:
+            return NotImplemented
+
+        if method == 'at':
+            if isinstance(inputs[0], type(self)):
+                inputs[0].meshloc = meshloc
+            return
+
+        if ufunc.nout == 1:
+            results = (results,)
+
+        results = tuple((np.asarray(result).view(type(self))
+                         if output is None else output)
+                        for result, output in zip(results, outputs))
+        if results and isinstance(results[0], type(self)):
+            results[0].meshloc = meshloc
+
+        return results[0] if len(results) == 1 else results
+        
+    def __repr__(self):
+        result = super().__repr__()
+        return f'{result} at {self.meshloc}'
+
+
 
 
 """ ------------------------ Aliases ------------------------ """

@@ -85,17 +85,21 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
     return obj.stagger.do(arr, operation)
 
 def _can_interp(obj, axis, warn=True):
-  '''return whether we can interpolate. Make warning if we can't.'''
+  '''return whether we can interpolate. Make warning if we can't.
+  must check before doing any cstagger operation.
+  pythonic stagger methods (e.g. 'numba', 'numpy') make this check on their own.
+  '''
   if not obj.do_stagger:  # this is True by default; if it is False we assume that someone 
     return False       # intentionally turned off interpolation. So we don't make warning.
   kind = getattr(obj,'stagger_kind', stagger.DEFAULT_STAGGER_KIND)
-  if kind == 'cstagger':
-    if not getattr(obj, 'cstagger_exists', False):
-      if obj.verbose:
-        warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
-                'We will skip the interpolation, and instead return the original value.'
-        warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
-      return False
+  if kind != 'cstagger':
+    return True   # we can let the pythonic methods check _can_interp on their own.
+  if not getattr(obj, 'cstagger_exists', False):
+    if obj.verbose:
+      warnmsg = 'interpolation requested, but cstagger not initialized, for obj={}! '.format(object.__repr__(obj)) +\
+              'We will skip the interpolation, and instead return the original value.'
+      warnings.warn(warnmsg) # warn user we will not be interpolating! (cstagger doesn't exist)
+    return False
   if not getattr(obj, 'n'+axis, 0) >=5:
     if obj.verbose:
       warnmsg = 'requested interpolation in {x:} but obj.n{x:} < 5. '.format(x=axis) +\
