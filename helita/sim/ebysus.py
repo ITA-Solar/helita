@@ -75,9 +75,6 @@ except ImportError:
     warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.ebysus may crash')
 
 # set defaults:
-from .load_arithmetic_quantities import (
-    DEFAULT_STAGGER_KIND,
-)
 from .load_mf_quantities import (
     MATCH_PHYSICS, MATCH_AUX
 )
