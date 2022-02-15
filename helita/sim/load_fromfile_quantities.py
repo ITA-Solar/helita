@@ -18,7 +18,7 @@ from .units import (
 # import external public modules
 import numpy as np
 
-def load_fromfile_quantities(obj, quant, order='F', mode='r', panic=False, save_if_composite=False, **kwargs):
+def load_fromfile_quantities(obj, quant, order='F', mode='r', panic=False, save_if_composite=False, cgsunits=1.0, **kwargs):
   '''loads quantities which are stored directly inside files.
 
   save_if_composite: False (default) or True.
@@ -36,6 +36,8 @@ def load_fromfile_quantities(obj, quant, order='F', mode='r', panic=False, save_
                               )
 
   val = obj._get_simple_var(quant, order=order, mode=mode, panic=panic, **kwargs) # method of obj.
+  if val is not None: 
+    val = val*cgsunits
   if val is None:
     val = _get_simple_var_xy(obj, quant, order=order, mode=mode) # method defined in this file.
   if val is None:

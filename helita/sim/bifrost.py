@@ -774,13 +774,13 @@ class BifrostData():
         '''helper function for get_var; actually calls load_quantities for var.'''
         __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables
-        if var in self.variables:                 # if var is still in memory,
-            return self.variables[var]  # load from memory instead of re-reading.
+        if cgsunits==1.0:
+            if var in self.variables:                 # if var is still in memory,
+                return self.variables[var]  # load from memory instead of re-reading.
         # Try to load simple quantities.
         val = load_fromfile_quantities.load_fromfile_quantities(self, var,
-                                                save_if_composite=True, **kwargs)
-        if val is not None:
-            val = val * cgsunits  # (vars from load_fromfile need to get hit by cgsunits.)
+                                                save_if_composite=True, cgsunits=cgsunits, **kwargs)
+
         # Try to load "regular" quantities
         if val is None:
             val = load_quantities(self, var, **kwargs)
@@ -837,12 +837,13 @@ class BifrostData():
                 cgsunits = self.uni.uni[varu]
             else: 
                 cgsunits = 1.0
+
         else: 
             cgsunits = 1.0
                 
         # get value of variable.
 
-        val = self._load_quantity(var, cgsunits, **kwargs)
+        val = self._load_quantity(var, cgsunits=cgsunits, **kwargs)
 
         # do post-processing
         val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
