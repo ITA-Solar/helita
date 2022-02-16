@@ -18,12 +18,16 @@ from .units import (
 # import external public modules
 import numpy as np
 
-def load_fromfile_quantities(obj, quant, order='F', mode='r', panic=False, save_if_composite=False, cgsunits=1.0, **kwargs):
+def load_fromfile_quantities(obj, quant, order='F', mode='r', panic=False, save_if_composite=False, cgsunits=None, **kwargs):
   '''loads quantities which are stored directly inside files.
 
   save_if_composite: False (default) or True.
     use True for bifrost; False for ebysus.
     See _get_composite_var() for more details.
+
+  cgsunits: None or value
+    None --> ignore
+    value --> multiply val by this value if val was a simple var.
   '''
   __tracebackhide__ = True  # hide this func from error traceback stack.
 
@@ -36,7 +40,7 @@ def load_fromfile_quantities(obj, quant, order='F', mode='r', panic=False, save_
                               )
 
   val = obj._get_simple_var(quant, order=order, mode=mode, panic=panic, **kwargs) # method of obj.
-  if val is not None: 
+  if not None in (val, cgsunits):   # val and cgsunits are both not None
     val = val*cgsunits
   if val is None:
     val = _get_simple_var_xy(obj, quant, order=order, mode=mode) # method defined in this file.
