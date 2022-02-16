@@ -40,7 +40,7 @@ def load_fromfile_quantities(obj, quant, order='F', mode='r', panic=False, save_
                               )
 
   val = obj._get_simple_var(quant, order=order, mode=mode, panic=panic, **kwargs) # method of obj.
-  if not None in (val, cgsunits):   # val and cgsunits are both not None
+  if not (None in (val, cgsunits)):   # val and cgsunits are both not None
     val = val*cgsunits
   if val is None:
     val = _get_simple_var_xy(obj, quant, order=order, mode=mode) # method defined in this file.
