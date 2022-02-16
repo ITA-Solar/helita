@@ -49,6 +49,7 @@ from .load_fromfile_quantities   import load_fromfile_quantities
 from . import document_vars
 from . import file_memory
 from . import fluid_tools
+from . import stagger
 from .units import (
     UNI, USI, UCGS, UCONST,
     Usym, Usyms, UsymD,
@@ -93,12 +94,20 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     """
 
     def __init__(self, *args, fast=True, match_type=MATCH_TYPE_DEFAULT,
+                 mesh_location_tracking=stagger.DEFAULT_MESH_LOCATION_TRACKING,
                  N_memmap=200, mm_persnap=True, 
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
                  _force_disable_memory=False,
                  **kwargs):
         ''' initialize EbysusData object.
-
+        
+        mesh_location_tracking: False (default) or True
+            False --> disable conversion to ArrayOnMesh. (You can safely ignore this feature.)
+            True  --> arrays from get_var will be returned as stagger.ArrayOnMesh objects,
+                      which track the location on the mesh. Note that when doing arithmetic
+                      with multiple ArrayOnMesh objects, it is required for locations to match.
+            The default may be changed to True in the future, after sufficient testing.
+    
         N_memmap: int (default 0)
             keep the N_memmap most-recently-created memmaps stored in self._memory_numpy_memmap.
             -1  --> try to never forget any memmaps.
@@ -146,6 +155,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         *args and **kwargs go to helita.sim.bifrost.BifrostData.__init__
         '''
         # set values of some attrs (e.g. from args & kwargs passed to __init__)
+        self.mesh_location_tracking = mesh_location_tracking
         self.match_type = match_type
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
@@ -191,6 +201,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # read minimal amounts of data, to finish initializing.
         self._init_vars_get(firstime=True)
         self._init_coll_keys()
+
+    ## PROPERTIES ##
+    mesh_location_tracking = stagger.MESH_LOCATION_TRACKING_PROPERTY(internal_name='_mesh_location_tracking')
 
     ## INITIALIZING ##
     def _init_coll_keys(self):
@@ -452,7 +465,10 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             tells which fluids to include in the result.
             2 -> ifluid and jfluid. 1 -> just ifluid. 0 -> no fluids.
         '''
-        METADATA_ATTRS = ['ifluid', 'jfluid', 'snap', 'iix', 'iiy', 'iiz', 'match_type', 'panic', 'do_stagger']
+        # METADATA_ATTRS is the list of all the attrs of self which may affect the output of get_var.
+        #   we only read from cache if ALL these attrs agree with those associated to the cached value.
+        METADATA_ATTRS = ['ifluid', 'jfluid', 'snap', 'iix', 'iiy', 'iiz', 'match_type', 'panic',
+                         'do_stagger', 'stagger_kind', '_mesh_location_tracking']
         if with_nfluid < 2:
             del METADATA_ATTRS[1]  # jfluid
         if with_nfluid < 1:
@@ -701,9 +717,31 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
         filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, mode=mode, panic=panic, *args, **kwargs)
-        # actually get the memmap and return result.
-        result = get_numpy_memmap(filename, **kw__get_mmap)
+        result = get_numpy_memmap(filename, **kw__get_mmap)          # actually read the file which contains the data
+        result = self._assign_simple_var_mesh_location(result, var)  # convert to ArrayOnMesh, if mesh_location_tracking is enabled
         return result
+
+    def _assign_simple_var_mesh_location(self, arr, var):
+        '''assigns the mesh location associated with var to arr, returning a stagger.ArrayOnMesh object.
+        (The ArrayOnMesh behaves just like a numpy array, but also tracks mesh location.)
+
+        if self.mesh_location_tracking is disabled, instead just returns arr.
+        '''
+        if not self.mesh_location_tracking:
+            return arr
+        # else
+        location = self._get_simple_var_mesh_location(var)
+        result = stagger.ArrayOnMesh(arr, location)
+        return result
+
+    def _get_simple_var_mesh_location(self, var):
+        '''returns mesh location of simple var (bx,by,bz,r,px,py,pz,e)'''
+        if var in ((face_centered_quant + x) for x in AXES for face_centered_quant in ('b', 'p')):
+            x = var[-1]
+            return stagger.mesh_location_face(x)
+        elif var in ('r', 'e'):
+            return stagger.mesh_location_center()
+        raise ValueError(f"Mesh location for var={var} unknown. Locations are only known for: (bx,by,bz,r,px,py,pz,e)")
 
     def _get_simple_var_file_info(self, var, order='F', mode='r', panic=False, *args, **kwargs):
         '''gets file info but does not read memmap; helper function for _get_simple_var.'''

@@ -64,7 +64,7 @@ ALIAS_STAGGER_KIND   = {'stagger': 'numba', 'numba': 'numba',   # dict of aliase
                        'numpy': 'numpy',
                        'numpy_improved': 'numpy_improved', 'numpy_i': 'numpy_improved',
                        'cstagger': 'cstagger'}
-
+DEFAULT_MESH_LOCATION_TRACKING = False   # whether mesh location tracking should be enabled, by default.
 
 def STAGGER_KIND_PROPERTY(internal_name='_stagger_kind', default=DEFAULT_STAGGER_KIND):
     '''creates a property which manages stagger_kind.
@@ -543,6 +543,99 @@ class ArrayOnMesh(np.ndarray):
         return f'{result} at {self.meshloc}'
 
 
+# predefined mesh locations
+def mesh_location_center():
+    '''returns MeshLocation at center of box. (0,0,0)'''
+    return MeshLocation([0,0,0])
+
+def mesh_location_face(x):
+    '''returns MeshLocation centered at face x.
+    x: 'x', 'y', or 'z'.
+        'x' --> [-0.5,  0  ,  0  ]
+        'y' --> [ 0  , -0.5,  0  ]
+        'z' --> [ 0  ,  0  , -0.5]
+    '''
+    loc = {'x' : [-0.5,  0  ,  0  ],
+           'y' : [ 0  , -0.5,  0  ],
+           'z' : [ 0  ,  0  , -0.5]}
+    return MeshLocation(loc[x])
+
+def mesh_location_edge(x):
+    '''returns MeshLocation centered at edge x.
+    x: 'x', 'y', or 'z'.
+        'x' --> [ 0  , -0.5, -0.5]
+        'y' --> [-0.5,  0  , -0.5]
+        'z' --> [-0.5, -0.5,  0  ]
+    '''
+    loc = {'x' : [ 0  , -0.5, -0.5],
+           'y' : [-0.5,  0  , -0.5],
+           'z' : [-0.5, -0.5,  0  ]}
+    return MeshLocation(loc[x])
+
+# mesh location tracking property
+def MESH_LOCATION_TRACKING_PROPERTY(internal_name='_mesh_location_tracking', default=DEFAULT_MESH_LOCATION_TRACKING):
+    '''creates a property which manages mesh_location_tracking.
+    uses the internal name provided, and returns the default if property value has not been set.
+
+    checks self.do_stagger and self.stagger_kind for compatibility (see doc of the produced property for details).
+    '''
+    doc = f'''whether mesh location tracking is enabled. (default is {default})
+        True --> arrays from get_var will be returned as stagger.ArrayOnMesh objects,
+                 which track the location on mesh but also require locations of
+                 arrays (if they are ArrayOnMesh) to match before doing arithmetic.
+        False --> stagger.ArrayOnMesh conversion will be disabled.
+
+        Tied directly to self.do_stagger and self.stagger_kind.
+            when self.do_stagger or self.stagger_kind are INCOMPATIBLE with mesh_location_tracking,
+                mesh_location_tracking will be disabled, until compatibility requirements are met.
+                trying to set mesh_location_tracking = True will make a ValueError.
+            INCOMPATIBLE when one or more of the following are True: 
+                1) bool(self.do_stagger) != True
+                2) self.stagger_kind not in stagger.PYTHON_STAGGER_KINDS
+                    (compatible stagger_kinds are {PYTHON_STAGGER_KINDS})
+        '''
+    def _mesh_location_tracking_incompatible(obj):
+        '''returns attributes of obj with present values incompatible with mesh_location_tracking.
+        e.g. ['do_stagger', 'stagger_kind'], or ['stagger_kind'], or ['do_stagger'] or [].
+
+        non-existing attributes do not break compatibility.
+        E.g. if do_stagger and stagger_kind are unset, result will be [] (i.e. "fully compatible").
+        '''
+        result = []
+        if not getattr(obj, 'do_stagger', True):
+            result.append('do_stagger')
+        if not getattr(obj, 'stagger_kind', PYTHON_STAGGER_KINDS[0]) in PYTHON_STAGGER_KINDS:
+            result.append('stagger_kind')
+        return result
+
+    def get_mesh_location_tracking(self):
+        result = getattr(self, '_mesh_location_tracking', default)
+        if result:
+            # before returning True, check compatibility.
+            incompatible = _mesh_location_tracking_incompatible(self)
+            if incompatible:
+                return False
+        return result
+
+    def set_mesh_location_tracking(self, value):
+        if value:
+            # before setting to True, check compatibility.
+            incompatible = _mesh_location_tracking_incompatible(self)
+            if incompatible:
+                # make a ValueError with helpful instructions.
+                errmsg = f"present values of attributes {incompatible} are incompatible" +\
+                    "with mesh_location_tracking. To enable mesh_location_tracking, first you must"
+                if 'do_stagger' in incompatible:
+                    errmsg += " enable do_stagger"
+                if len(incompatible) > 1:
+                    errmsg += " and"
+                if 'stagger_kind' in incompatible:
+                    errmsg += f" set stagger_kind to one of the python stagger kinds: {PYTHON_STAGGER_KINDS}"
+                errmsg += "."
+                raise ValueError(errmsg)
+        self._mesh_location_tracking = value
+
+    return property(fget=get_mesh_location_tracking, fset=set_mesh_location_tracking, doc=doc)
 
 
 """ ------------------------ Aliases ------------------------ """
