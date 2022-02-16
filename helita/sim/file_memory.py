@@ -467,7 +467,7 @@ class Cache:
     def cache(self, var, val, metadata=None, obj=None, with_nfluid=2, calctime=None, from_internal=False):
         '''add var with value val (and associated with cache_params) to self.'''
         if self.debugging >= 2: print(' < Caching {:15s}; with_nfluid={}'.format(var, with_nfluid))
-        val = np.array(val, copy=True)  # copy ensures value in cache isn't altered even if val array changes.
+        val = np.array(val, copy=True, subok=True)  # copy ensures value in cache isn't altered even if val array changes.
         nbytes = val.nbytes
         self._nbytes += nbytes
         metadata = self.get_metadata(metadata=metadata, obj=obj, with_nfluid=with_nfluid)

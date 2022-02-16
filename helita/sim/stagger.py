@@ -464,6 +464,11 @@ class ArrayOnMesh(np.ndarray):
             obj.meshloc = meshloc
         return obj
 
+    def __array_finalize__(self, obj):
+        '''handle other ways of creating this array, e.g. copying an existing ArrayOnMesh.'''
+        if obj is None: return
+        self.meshloc = getattr(obj, 'meshloc', [0,0,0])
+
     @property
     def meshloc(self):
         return self._meshloc
