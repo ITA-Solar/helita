@@ -135,7 +135,7 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
   if var not in GLOBAL_QUANT:
       return None
 
-  output = obj.zero()    
+  output = obj.zero_at_mesh_center()
   if var == 'totr':  # total density
     for ispecies in obj.att:
       nlevels = obj.att[ispecies].params.nlevel
@@ -339,7 +339,7 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
 
   elif base == 'bat':  # grad(P_e) / (ne qe)
     if obj.match_aux() and (not obj.get_param('do_battery', default=False)):
-      return obj.zero()
+      return obj.zero_at_mesh_edge(x)
     # interpolation:
     ## efx is at (0, -1/2, -1/2).
     ## P is at (0,0,0).
@@ -352,7 +352,7 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
 
   elif base == 'emom':  # -1 * sum_j R_e^(ej) / (ne qe)     (aligned with efx)
     if obj.match_aux() and (not obj.get_param('do_ohm_ecol', default=False)):
-      return obj.zero()
+      return obj.zero_at_mesh_edge(x)
     # interpolation:
     ## efx is at (0, -1/2, -1/2)
     ## rijx is at (-1/2, 0, 0)    (same as ux)
@@ -432,7 +432,7 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   elif var == 'nq':
     charge = obj.get_charge(obj.ifluid, units='simu') # [simu. charge units]
     if charge == 0:
-      return obj.zero()
+      return obj.zero_at_mesh_center()
     else:
       return charge * obj.get_var('nr')
 
@@ -510,13 +510,12 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
   if (var not in ELECTRON_QUANT):
     return None
 
-  output = obj.zero()
-
   if var == 'nel': # number density of electrons [cm^-3]
     return obj.get_var('nre') * obj.uni.u_nr   # [cm^-3]
 
   elif var == 'nre': # number density of electrons [simu. units]
     with Caching(obj, nfluid=0) as cache:
+      output = obj.zero_at_mesh_center()
       for fluid in obj.fluids.ions():
         output += obj.get_var('nr', ifluid=fluid.SL) * fluid.ionization   #[simu. number density units]
       cache(var, output)
@@ -540,7 +539,8 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
     ## ---> to align with ux, we shift r by xdn
     interp = x+'dn'
-    nqe    = obj.zero()  # charge density of electrons.
+    output = obj.zero_at_mesh_face(x)
+    nqe    = obj.zero_at_mesh_face(x)  # charge density of electrons.
     for fluid in obj.fluids.ions():
       nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
       ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
@@ -583,7 +583,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
       ## r is at (0, 0, 0); ux is at (-0.5, 0, 0)
       ## ---> to align with ux, we shift r by xdn
       interp = x+'dn'
-      nqe    = obj.zero()  # charge density of electrons.
+      nqe    = obj.zero_at_mesh_face(x)  # charge density of electrons.
       for fluid in obj.fluids.ions():
         nq   = obj.get_var('nq' + interp, ifluid=fluid.SL)  # [simu. charge density units]
         ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
@@ -667,7 +667,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
 
   if base == 'rij':
     if obj.i_j_same_fluid():      # when ifluid==jfluid, u_j = u_i, so rij = 0.
-      return obj.zero()           # save time by returning 0 without reading any data.
+      return obj.zero_at_mesh_face(x)  # save time by returning 0 without reading any data.
     # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
     ## Scalars are at (0,0,0) so we must shift by xdn to align with face-centered u at (-0.5,0,0)
     nu_ij = obj.get_var('nu_ij' + x+'dn')
@@ -686,7 +686,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     # momflorentz = ni qi (E + ui x B)
     qi = obj.get_charge(obj.ifluid, units='simu')
     if qi == 0:
-      return obj.zero()    # no lorentz force for neutrals - save time by just returning 0 here :)
+      return obj.zero_at_mesh_face(x)    # no lorentz force for neutrals - save time by just returning 0 here :)
     ni = obj.get_var('nr')
     # make sure we get the interpolation correct:
     ## B and ui are face-centered vectors, and we want a face-centered result to align with p.
@@ -866,7 +866,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
   # qcol terms
   if var == 'qcol_coeffj':
     if heating_is_off() or obj.i_j_same_fluid():
-      return obj.zero()
+      return obj.zero_at_mesh_center()
     ni = obj.get_var('nr')             # [simu. units]
     mi = obj.get_mass(obj.mf_ispecies) # [amu]
     mj = obj.get_mass(obj.mf_jspecies) # [amu]
@@ -876,7 +876,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
 
   if var in ['qcol_uj', 'qcol_tgj']:
     if heating_is_off() or obj.i_j_same_fluid():
-      return obj.zero()
+      return obj.zero_at_mesh_center()
     coeff = obj.get_var('qcol_coeffj')
     if var == 'qcol_uj':
       mj_simu = obj.get_mass(obj.mf_jspecies, units='simu') # [simu mass]
@@ -889,11 +889,11 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     return coeff * energy  # [simu energy density / time]
 
   elif var in ['qcolj', 'qcol_j']:
-    if heating_is_off(): return obj.zero()
+    if heating_is_off(): return obj.zero_at_mesh_center()
     return obj.get_var('qcol_uj') + obj.get_var('qcol_tgj')
 
   elif var in ['qcol_u', 'qcol_tg']:
-    if heating_is_off(): return obj.zero()
+    if heating_is_off(): return obj.zero_at_mesh_center()
     varj   = var + 'j'   # qcol_uj or qcol_tgj
     output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
     for fluid in obj.fluids:
@@ -902,7 +902,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     return output
 
   elif var == 'qcol':
-    if heating_is_off(): return obj.zero()
+    if heating_is_off(): return obj.zero_at_mesh_center()
     return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
 
   # converting to temperature (from energy density) terms
@@ -958,7 +958,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     # We must interpolate to align with energy density e, which is at center of grid cells.
     # uix is at (-0.5, 0, 0) while Ex is at (0, -0.5, -0.5)
     # --> we shift uix by xup, and Ex by yup zup
-    result = obj.zero()
+    result = obj.zero_at_mesh_center()
     qi = obj.get_charge(obj.ifluid, units='simu')    # [simu charge]
     if qi == 0:
       return result    # there is no contribution if qi is 0.
@@ -1106,7 +1106,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
           non_elec_fluid   = getattr(obj, '{}fluid'.format('j' if i_elec else 'i'))
           non_elec_neutral = obj.get_charge( non_elec_fluid ) == 0   # whether the non-electrons are neutral.
           def nu_ij(const_nu):
-            result = obj.zero() + const_nu
+            result = obj.zero_at_mesh_center() + const_nu
             if i_elec:
               return result
             else:
@@ -1124,7 +1124,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       return obj.get_var(nu_ij_varname)
     elif obj.match_aux() and (obj.get_charge(obj.ifluid) > 0) and (obj.get_charge(obj.jfluid) > 0):
       # here, we want to match aux, i and j are ions, and coulomb collisions are turned off.
-      return obj.zero()   ## so we return zero (instead of making a crash)
+      return obj.zero_at_mesh_center()   ## so we return zero (instead of making a crash)
     else:
       errmsg = ("Found no valid coll_keys for ifluid={}, jfluid={}. "
         "looked for 'CL' for coulomb collisions, or 'EL' or 'MX' for other collisions. "
@@ -1192,7 +1192,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   # sum of collision frequencies: sum_{i in ions} (nu_{ifluid, i})
   elif var == 'nu_si':
     ifluid = obj.ifluid
-    result = obj.zero()
+    result = obj.zero_at_mesh_center()
     for fluid in obj.fluids.ions():
       if fluid.SL != ifluid:
         result += obj.get_var('nu_ij', jfluid=fluid.SL)
@@ -1201,7 +1201,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
   # sum of collision frequencies: sum_{n in neutrals} (nu_{ifluid, n})
   elif var == 'nu_sn':
     ifluid = obj.ifluid
-    result = obj.zero()
+    result = obj.zero_at_mesh_center()
     for fluid in obj.fluids.neutrals():
       if fluid.SL != ifluid:
         result += obj.get_var('nu_ij', jfluid=fluid.SL)
@@ -1353,7 +1353,7 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
     # return 0 if ifluid > jfluid. (comparing species, then level if species are equal)
     # we do this because mm_cross gives 0 if ifluid > jfluid (and jfluid is not electrons))
     if (obj.ifluid > obj.jfluid) and obj.mf_jspecies > 0:
-      return obj.zero()
+      return obj.zero_at_mesh_center()
 
   # get masses & temperatures, then restore original obj.ifluid and obj.jfluid values.
   with obj.MaintainFluids():
@@ -1449,8 +1449,8 @@ def get_mean_quant(obj, var, MEAN_QUANT=None):
       fluids = fluids.ions()
     else:
       raise NotImplementedError('only know _meannr_mass for neu or ion but got {}'.format(neu))
-    numer = obj.zero()
-    denom = obj.zero()
+    numer = obj.zero_at_mesh_center()
+    denom = obj.zero_at_mesh_center()
     for fluid in fluids:
       r = obj.get_var('r', ifluid=fluid)
       m = obj.get_mass(fluid, units='simu')
@@ -1609,7 +1609,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
   elif quant == 'ldebyei':
     Zi2 = obj.get_charge(obj.ifluid)**2
     if Zi2 == 0:
-      return obj.zero()
+      return obj.zero_at_mesh_center()
     const = obj.uni.permsi * obj.uni.ksi_b / obj.uni.qsi_electron**2
     tg = obj.get_var('tg')                     # [K]
     nr = obj.get_var('nr') * obj.uni.usi_nr    # [m^-3]

@@ -934,6 +934,36 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
+    def zero_at_meshloc(self, meshloc=[0,0,0], **kw__np_zeros):
+        '''return array of zeros, associated with the provided mesh location.
+        if not self.mesh_location_tracking, return self.zero() instead.
+        '''
+        zero = self.zero(**kw__np_zeros)
+        if self.mesh_location_tracking:
+            return stagger.ArrayOnMesh(zero, meshloc)
+        else:
+            return zero
+
+    def zero_at_mesh_center(self, **kw__np_zeros):
+        '''return array of zeros, associated with 'center of cell' mesh location.
+        if not self.mesh_location_tracking, return self.zero() instead.
+        '''
+        return self.zero_at_meshloc(stagger.mesh_location_center(), **kw__np_zeros)
+
+    def zero_at_mesh_face(self, x, **kw__np_zeros):
+        '''return array of zeros, associated with 'face of cell' mesh location.
+        Uses x to determine face. Use x='x', 'y', or 'z'. E.g. 'y' --> (0, -0.5, 0).
+        if not self.mesh_location_tracking, return self.zero() instead.
+        '''
+        return self.zero_at_meshloc(stagger.mesh_location_face(x), **kw__np_zeros)
+
+    def zero_at_mesh_edge(self, x, **kw__np_zeros):
+        '''return array of zeros, associated with 'edge of cell' mesh location.
+        Uses x to determine edge. Use x='x', 'y', or 'z'. E.g. 'y' --> (-0.5, 0, -0.5).
+        if not self.mesh_location_tracking, return self.zero() instead.
+        '''
+        return self.zero_at_meshloc(stagger.mesh_location_edge(x), **kw__np_zeros)
+
 
 #############################
 #  MAKING INITIAL SNAPSHOT  #
