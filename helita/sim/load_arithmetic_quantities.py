@@ -228,7 +228,7 @@ def get_center(obj,quant, *args, **kwargs):
     docvar = document_vars.vars_documenter(obj, *_CENTER_QUANT, get_center.__doc__, uni=UNI.quant_child(0))
     return None
 
-  getq = quant[-2:]  # the quant we are "getting" by this function.
+  getq = quant[-2:]  # the quant we are "getting" by this function. E.g. 'xc'.
 
   if not getq in _CENTER_QUANT[1]:
       return None
@@ -238,19 +238,43 @@ def get_center(obj,quant, *args, **kwargs):
 
   # interpret quant string
   axis = quant[-2]
-  q    = quant[:-1]  # base variable
+  q    = quant[:-1]  # base variable, including axis. E.g. 'efx'.
+  qvec = q[:-1]      # base variable, without axis. E.g. 'ef'.
 
-  if q in ['i', 'e', 'j', 'ef']:     # edge-centered variable. efx is at (0, -0.5, -0.5)
-    AXIS_TRANSFORM = {'x': ['yup', 'zup'],
-                      'y': ['xup', 'zup'],
-                      'z': ['xup', 'yup']}
-  else:
-    AXIS_TRANSFORM = {'x': ['xup'],
-                      'y': ['yup'],
-                      'z': ['zup']}
-  transf = AXIS_TRANSFORM[axis]
-
+  # get the variable (pre-centering).
   var = obj.get_var(q, **kwargs)
+
+  # determine which interpolations are necessary.
+  meshloc_description, x = stagger.describe_mesh_location(var)
+  if meshloc_description == 'none':   # this handles the case when meshloc_tracking is disabled.)
+    if qvec in ['i', 'e', 'j', 'ef']:     # edge-centered variable. efx is at (0, -0.5, -0.5)
+      AXIS_TRANSFORM = {'x': ['yup', 'zup'],
+                        'y': ['xup', 'zup'],
+                        'z': ['xup', 'yup']}
+    else:
+      AXIS_TRANSFORM = {'x': ['xup'],
+                        'y': ['yup'],
+                        'z': ['zup']}
+    transf = AXIS_TRANSFORM[axis]
+  # TODO: move code for determining which ops to apply (when meshloc_tracking is enabled) to stagger.py
+  elif meshloc_description == 'edge':
+    print('edge centering')
+    transf = {'x': ['yup', 'zup'],
+              'y': ['xup', 'zup'],
+              'z': ['xup', 'yup']}[x]
+  elif meshloc_description == 'face':
+    print('face centering')
+    transf = {'x': ['xup'],
+              'y': ['yup'],
+              'z': ['zup']}[x]
+  elif meshloc_description == 'center':
+    transf = []
+    warnings.warn(f'called get_center on an already-centered variable: {q}')
+  elif meshloc_description == 'unknown':
+    raise NotImplementedError(f'centering for quantity which is not at standard face or edge position: {var}')
+  else:
+    raise NotImplementedError(f'centering for meshloc_description = {meshloc_description}')
+  
   # do interpolation
   if obj.lowbus:
     # do "lowbus" version of interpolation  # not sure what is this? -SE Apr21 2021
