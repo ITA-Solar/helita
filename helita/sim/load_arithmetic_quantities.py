@@ -23,12 +23,6 @@ Interpolation guide:
     Ey at ( -0.5,  0  , -0.5 )
     Ez at ( -0.5, -0.5,  0   )
     E = electric field; i = current per unit area.
-
-
-TODO:
-  - cleanup code in get_center using quants from get_interp.
-  - be more sophisticated in learning if quant is edge-centered or face-centered;
-    - e.g. get_center now just checks if quant is i, e, j, or ef.
 """
 
 
@@ -245,8 +239,12 @@ def get_center(obj,quant, *args, **kwargs):
   var = obj.get_var(q, **kwargs)
 
   # determine which interpolations are necessary.
-  meshloc_description, x = stagger.describe_mesh_location(var)
-  if meshloc_description == 'none':   # this handles the case when meshloc_tracking is disabled.)
+  if stagger.has_mesh_location(var):
+    transf = var.meshloc.steps_to((0,0,0))   # e.g. the list: ['xup', 'ydn', 'zdn']
+    print(f'transforming by: {transf}')
+    if len(transf) == 0:
+      warnings.warn(f'called get_center on an already-centered variable: {q}')
+  else:
     if qvec in ['i', 'e', 'j', 'ef']:     # edge-centered variable. efx is at (0, -0.5, -0.5)
       AXIS_TRANSFORM = {'x': ['yup', 'zup'],
                         'y': ['xup', 'zup'],
@@ -256,22 +254,6 @@ def get_center(obj,quant, *args, **kwargs):
                         'y': ['yup'],
                         'z': ['zup']}
     transf = AXIS_TRANSFORM[axis]
-  # TODO: move code for determining which ops to apply (when meshloc_tracking is enabled) to stagger.py
-  elif meshloc_description == 'edge':
-    transf = {'x': ['yup', 'zup'],
-              'y': ['xup', 'zup'],
-              'z': ['xup', 'yup']}[x]
-  elif meshloc_description == 'face':
-    transf = {'x': ['xup'],
-              'y': ['yup'],
-              'z': ['zup']}[x]
-  elif meshloc_description == 'center':
-    transf = []
-    warnings.warn(f'called get_center on an already-centered variable: {q}')
-  elif meshloc_description == 'unknown':
-    raise NotImplementedError(f'centering for quantity which is not at standard face or edge position: {var}')
-  else:
-    raise NotImplementedError(f'centering for meshloc_description = {meshloc_description}')
   
   # do interpolation
   if obj.lowbus:
