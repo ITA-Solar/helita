@@ -258,12 +258,10 @@ def get_center(obj,quant, *args, **kwargs):
     transf = AXIS_TRANSFORM[axis]
   # TODO: move code for determining which ops to apply (when meshloc_tracking is enabled) to stagger.py
   elif meshloc_description == 'edge':
-    print('edge centering')
     transf = {'x': ['yup', 'zup'],
               'y': ['xup', 'zup'],
               'z': ['xup', 'yup']}[x]
   elif meshloc_description == 'face':
-    print('face centering')
     transf = {'x': ['xup'],
               'y': ['yup'],
               'z': ['zup']}[x]
