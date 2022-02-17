@@ -36,10 +36,8 @@ Methods defined here (which an end-user might want to access):
 
 TODO:
     - fix ugly printout during verbose==1, for interfaces to 'do', e.g. stagger.xup(arr, verbose=1).
-    - debug numpy stagger method - precision error?
-        E.g. disagrees with numba method when mean is much larger than variation.
-        Maybe it is possible to use more precise numpy arrays.
-    - determine stagger_kind from BifrostData object, when using StaggerInterface (e.g. dd.stagger)
+    - implement __sub__ for MeshLocation.
+        - use MeshLocation(...) - (0, 0, 0) to create a generic load_arithmetic_quantities.get_center.
 """
 
 # import built-in modules
@@ -403,6 +401,46 @@ class MeshLocation():
         '''returns the steps needed to get from self to other.'''
         raise NotImplementedError(f'{type(self)}.__sub__')
 
+    ## MESH LOCATION DESCRIPTION ##
+    def describe(self):
+        '''returns a description of self.
+        The possible descriptions are:
+            ('center', None),
+            ('face', 'x'), ('face', 'y'), ('face', 'z'),
+            ('edge', 'x'), ('edge', 'y'), ('edge', 'z'),
+            ('unknown', None)
+        They mean:
+            'center' --> location == (0,0,0)
+            'face_x' --> location == (-0.5, 0, 0)    # corresponds to x-component of a face-centered vector like magnetic field.
+            'edge_x' --> location == (0, -0.5, -0.5) # correspodns to x-component of an edge-centered vector like electric field.
+            'unknown' --> location is not center, face, or edge.
+        face_y, face_z, edge_y, edge_z take similar meanings as face_x, edge_x, but for the y, z directions instead.
+
+        returns one of the tuples above.
+        '''
+        lookup = {-0.5: True, 0: False}
+        xdn = lookup.get(self[0], None)
+        ydn = lookup.get(self[1], None)
+        zdn = lookup.get(self[2], None)
+        pos = (xdn, ydn, zdn)
+        if all(p is True for p in pos):
+            return ('center', None)
+        if any(p is None for p in pos) or all(p is True for p in pos):
+            return ('unknown', None)
+        if xdn:
+            if   ydn: return ('edge', 'z')
+            elif zdn: return ('edge', 'y')
+            else:     return ('face', 'x')
+        elif ydn:
+            if   zdn: return ('edge', 'x')
+            else:     return ('face', 'y')
+        elif zdn:
+            return ('face', 'z')
+        # could just return ('unknown', None) if we reach this line.
+        # But we expect the code to have handled all cases by this line.
+        # So if this error is ever raised, we made a mistake in the code of this function.
+        assert False, f"Expected all meshlocs should have been accounted for, but this one was not: {self}"
+
     ## MESH LOCATION SHIFTING ##
     def shifted(self, xup):
         '''return a copy of self shifted by xup.
@@ -451,6 +489,12 @@ class ArrayOnMesh(np.ndarray):
     
     The idea is to enforce that arrays are at the same mesh location before doing any math.
     When arrays are at different locations, raise an AssertionError instead.
+
+    The operations xup, ..., zdn are intentionally not provided here.
+        This is to avoid potential confusion of thinking stagger is being performed when it is not.
+        ArrayOnMesh does not know how to actually do any of the stagger operations.
+        Rather, the stagger operations are responsible for properly tracking mesh location;
+            they can use the provided _relocate or _shift_location methods to do so.
     
     meshloc: list, tuple, MeshLocation object, or None
         None --> default. If input has meshloc, use meshloc of input; else use [0,0,0]
@@ -468,6 +512,24 @@ class ArrayOnMesh(np.ndarray):
         '''handle other ways of creating this array, e.g. copying an existing ArrayOnMesh.'''
         if obj is None: return
         self.meshloc = getattr(obj, 'meshloc', [0,0,0])
+
+    def describe_mesh_location(self):
+        '''returns a description of the mesh location of self.
+        The possible descriptions are:
+            ('center', None),
+            ('face', 'x'), ('face', 'y'), ('face', 'z'),
+            ('edge', 'x'), ('edge', 'y'), ('edge', 'z'),
+            ('unknown', None)
+        They mean:
+            'center' --> location == (0,0,0)
+            'face_x' --> location == (-0.5, 0, 0)    # corresponds to x-component of a face-centered vector like magnetic field.
+            'edge_x' --> location == (0, -0.5, -0.5) # correspodns to x-component of an edge-centered vector like electric field.
+            'unknown' --> location is not center, face, or edge.
+        face_y, face_z, edge_y, edge_z take similar meanings as face_x, edge_x, but for the y, z directions instead.
+
+        returns one of the tuples above.
+        '''
+        return self.meshloc.describe()
 
     @property
     def meshloc(self):
@@ -576,6 +638,32 @@ def mesh_location_edge(x):
            'y' : [-0.5,  0  , -0.5],
            'z' : [-0.5, -0.5,  0  ]}
     return MeshLocation(loc[x])
+
+# describing mesh locations (for a "generic object")
+def describe_mesh_location(obj):
+    '''returns a description of the mesh location of obj
+    The possible descriptions are:
+        ('center', None),
+        ('face', 'x'), ('face', 'y'), ('face', 'z'),
+        ('edge', 'x'), ('edge', 'y'), ('edge', 'z'),
+        ('unknown', None)
+        ('none', None)
+    They mean:
+        'center' --> location == (0,0,0)
+        'face_x' --> location == (-0.5, 0, 0)    # corresponds to x-component of a face-centered vector like magnetic field.
+        'edge_x' --> location == (0, -0.5, -0.5) # correspodns to x-component of an edge-centered vector like electric field.
+        'unknown' --> location is not center, face, or edge.
+        'none'   --> obj is not a MeshLocation and does not have attribute meshloc.
+    face_y, face_z, edge_y, edge_z take similar meanings as face_x, edge_x, but for the y, z directions instead.
+
+    returns one of the tuples above.
+    '''
+    if isinstance(obj, MeshLocation):
+        return obj.describe()
+    elif hasattr(obj, 'meshloc'):
+        return obj.meshloc.describe()
+    else:
+        return ('unknown', None)
 
 # mesh location tracking property
 def MESH_LOCATION_TRACKING_PROPERTY(internal_name='_mesh_location_tracking', default=DEFAULT_MESH_LOCATION_TRACKING):
