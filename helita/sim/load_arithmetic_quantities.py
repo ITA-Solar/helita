@@ -241,7 +241,6 @@ def get_center(obj,quant, *args, **kwargs):
   # determine which interpolations are necessary.
   if stagger.has_mesh_location(var):
     transf = var.meshloc.steps_to((0,0,0))   # e.g. the list: ['xup', 'ydn', 'zdn']
-    print(f'transforming by: {transf}')
     if len(transf) == 0:
       warnings.warn(f'called get_center on an already-centered variable: {q}')
   else:
