@@ -374,6 +374,9 @@ class MeshLocation():
     def __repr__(self):
         return f'{type(self).__name__}({self.loc})'  # TODO even spacing (length == len('-0.5'))
 
+    def _new(self, *args, **kw):
+        return type(self)(*args, **kw)
+
     ## LIST-LIKE BEHAVIOR ##
 
     def __iter__(self):
@@ -397,9 +400,70 @@ class MeshLocation():
         return MeshLocation(self)
 
     ## MESH LOCATION ARITHMETIC ##
+    def __add__(self, other):
+        '''element-wise addition of self + other, returned as a MeshLocation.'''
+        return self._new([s + o for s, o in zip(self, other)])
+
     def __sub__(self, other):
-        '''returns the steps needed to get from self to other.'''
-        raise NotImplementedError(f'{type(self)}.__sub__')
+        '''element-wise subtraction of self - other, returned as a MeshLocation.'''
+        return self._new([s - o for s, o in zip(self, other)])
+
+    def __radd__(self, other):
+        '''element-wise addition of other + self, returned as a MeshLocation.'''
+        return self._new([o + s for s, o in zip(self, other)])
+
+    def __rsub__(self, other):
+        '''element-wise subtraction of other - self, returned as a MeshLocation.'''
+        return self._new([o - s for s, o in zip(self, other)])
+
+    ## MESH LOCATION AS OPERATION LIST ##
+    def as_operations(self):
+        '''returns self, viewed as a list of operations. (returns a list of strings.)
+        equivalently, returns "steps needed to get from (0,0,0) to self". 
+        
+        Examples:
+            MeshLocation([0.5, 0, 0]).as_operations()
+            >>> ['xup']
+            MeshLocation([0, -0.5, -0.5]).as_operations()
+            >>> ['ydn', 'zdn']
+            MeshLocation([1.0, -0.5, -1.5]).as_operations()
+            >>> ['xup', 'xup', 'ydn', 'zdn', 'zdn', 'zdn']
+        '''
+        AXES = ('x', 'y', 'z')
+        result = []
+        for x, val in zip(AXES, self):
+            if val == 0:
+                continue
+            n = val / 0.5   # here we expect n to be an integer-valued float. (e.g. 1.0)
+            assert getattr(n, 'is_integer', lambda: True)(), f"Expected n/0.5 to be an integer. n={n}, self={self}"
+            up = 'up' if val > 0 else 'dn'
+            n = abs(int(n)) # convert n to positive integer (required for list multiplication)
+            result += ([f'{x}{up}'] * n)  # list addition; list multiplication.
+        return result
+
+    as_ops = property(lambda self: self.as_operations, doc='alias for as_operations')
+
+    def steps_from(self, other):
+        '''return the steps needed to get FROM other TO self. (returns a list of strings.)
+
+        Examples:
+            MeshLocation([0.5, 0, 0]).steps_from([0,0,0])
+            >>> ['xup']
+            MeshLocation([-0.5, 0, 0]).steps_from(MeshLocation([0.5, -0.5, -0.5]))
+            >>> ['xdn', 'xdn', 'yup', 'zup']
+        '''
+        return (self - other).as_operations()
+
+    def steps_to(self, other):
+        '''return the steps needed to get TO other FROM self. (returns a list of strings.)
+
+        Examples:
+            MeshLocation([0.5, 0, 0]).steps_to([0,0,0])
+            >>> ['xdn']
+            MeshLocation([-0.5, 0, 0]).steps_to(MeshLocation([0.5, -0.5, -0.5]))
+            >>> ['xup', 'xup', 'ydn', 'zdn']
+        '''
+        return (other - self).as_operations()
 
     ## MESH LOCATION DESCRIPTION ##
     def describe(self):
@@ -640,6 +704,15 @@ def mesh_location_edge(x):
     return MeshLocation(loc[x])
 
 # describing mesh locations (for a "generic object")
+def get_mesh_location(obj, *default):
+    if len(default) > 0:
+        return getattr(obj, 'meshloc', default[0])
+    else:
+        return getattr(obj, 'meshloc')
+
+def has_mesh_location(obj):
+    return hasattr(obj, 'meshloc')
+
 def describe_mesh_location(obj):
     '''returns a description of the mesh location of obj
     The possible descriptions are:
