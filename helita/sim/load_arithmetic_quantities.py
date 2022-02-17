@@ -212,7 +212,7 @@ def get_deriv(obj,quant):
 
 
 # default
-_CENTER_QUANT = ('CENTER_QUANT', [x+'c' for x in AXES])
+_CENTER_QUANT = ('CENTER_QUANT', [x+'c' for x in AXES] + ['_center'])
 # get value
 def get_center(obj,quant, *args, **kwargs):
   '''
@@ -220,30 +220,33 @@ def get_center(obj,quant, *args, **kwargs):
   '''
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_CENTER_QUANT, get_center.__doc__, uni=UNI.quant_child(0))
+    docvar('_center', 'quant_center brings quant to center via interpolation. Requires mesh_location_tracking to be enabled')
     return None
 
   getq = quant[-2:]  # the quant we are "getting" by this function. E.g. 'xc'.
 
-  if not getq in _CENTER_QUANT[1]:
-      return None
+  if getq in _CENTER_QUANT[1]:
+    q = quant[:-1]  # base variable, including axis. E.g. 'efx'.
+  elif quant.endswith('_center'):
+    assert getattr(obj, mesh_location_tracking, False), "mesh location tracking is required for this to be enabled"
+    q = quant[:-len('_center')]
+  else:
+    return None
 
   # tell obj the quant we are getting by this function.
   document_vars.setattr_quant_selected(obj, getq, _CENTER_QUANT[0], delay=True)
-
-  # interpret quant string
-  axis = quant[-2]
-  q    = quant[:-1]  # base variable, including axis. E.g. 'efx'.
-  qvec = q[:-1]      # base variable, without axis. E.g. 'ef'.
 
   # get the variable (pre-centering).
   var = obj.get_var(q, **kwargs)
 
   # determine which interpolations are necessary.
-  if stagger.has_mesh_location(var):
+  if stagger.has_mesh_location(var):  # << using mesh_location_tracking >>
     transf = var.meshloc.steps_to((0,0,0))   # e.g. the list: ['xup', 'ydn', 'zdn']
     if len(transf) == 0:
       warnings.warn(f'called get_center on an already-centered variable: {q}')
-  else:
+  else:                               # << not using mesh_location_tracking >>
+    axis = quant[-2]
+    qvec = q[:-1]      # base variable, without axis. E.g. 'ef'.
     if qvec in ['i', 'e', 'j', 'ef']:     # edge-centered variable. efx is at (0, -0.5, -0.5)
       AXIS_TRANSFORM = {'x': ['yup', 'zup'],
                         'y': ['xup', 'zup'],
