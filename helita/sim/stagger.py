@@ -56,9 +56,10 @@ PAD_PERIODIC    = 'wrap'     # how to pad periodic dimensions, by default
 PAD_NONPERIODIC = 'reflect'  # how to pad nonperiodic dimensions, by default
 PAD_DEFAULTS = {'x': PAD_PERIODIC, 'y': PAD_PERIODIC, 'z': PAD_NONPERIODIC}   # default padding for each dimension.
 DEFAULT_STAGGER_KIND = 'numba'  # which stagger kind to use by default.
-VALID_STAGGER_KINDS  = tuple(('numba', 'numpy', 'numpy_improved', 'cstagger'))  # list of valid stagger kinds.
-PYTHON_STAGGER_KINDS = tuple(('numba', 'numpy', 'numpy_improved'))  # list of valid stagger kinds from stagger.py.
+VALID_STAGGER_KINDS  = tuple(('numba', 'numba_nopython', 'numpy', 'numpy_improved', 'cstagger'))  # list of valid stagger kinds.
+PYTHON_STAGGER_KINDS = tuple(('numba', 'numba_nopython', 'numpy', 'numpy_improved'))  # list of valid stagger kinds from stagger.py.
 ALIAS_STAGGER_KIND   = {'stagger': 'numba', 'numba': 'numba',   # dict of aliases for stagger kinds.
+                       'numba_nopython': 'numba_nopython', 
                        'numpy': 'numpy',
                        'numpy_improved': 'numpy_improved', 'numpy_i': 'numpy_improved',
                        'cstagger': 'cstagger'}
@@ -196,6 +197,8 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         if stagger_kind=='numba':
             func = {'x':_xshift, 'y':_yshift, 'z':_zshift}[x]
             result = func(out, out_diff, up=up, derivative=derivative)
+        elif stagger_kind=='numba_nopython':
+            result = _numba_stagger(out, out_diff, up, derivative, dim_index)
         elif stagger_kind=='numpy':
             result = _np_stagger(out, out_diff, up, derivative, dim_index)
         elif stagger_kind=='numpy_improved':
@@ -213,6 +216,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
 
 """ ------------------------ numba stagger ------------------------ """
 
+## STAGGER_KIND = NUMBA ##
 @njit(parallel=True)
 def _xshift(var, diff, up=True, derivative=False):
     grdshf = 1 if up else 0
@@ -233,7 +237,6 @@ def _xshift(var, diff, up=True, derivative=False):
 
     return out[start:end, :, :]
 
-
 @njit(parallel=True)
 def _yshift(var, diff, up=True, derivative=False):
     grdshf = 1 if up else 0
@@ -253,7 +256,6 @@ def _yshift(var, diff, up=True, derivative=False):
                                 c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
     return out[:, start:end, :]
 
-
 @njit(parallel=True)
 def _zshift(var, diff, up=True, derivative=False):
     grdshf = 1 if up else 0
@@ -265,6 +267,57 @@ def _zshift(var, diff, up=True, derivative=False):
         pm, (a, b, c) =  1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
     out=np.zeros((nx,ny,nz))
+    for k in prange(start, nz + end): 
+        for j in prange(ny):
+            for i in prange(nx):
+                out[i, j, k] = diff[k] * (a * (var[i, j, k + grdshf] + pm * var[i, j, k - 1 + grdshf]) +
+                                b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
+                                c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
+    return out[:, :, start:end]
+
+## STAGGER_KIND = NUMBA_NOPYTHON ##
+def _numba_stagger(var, diff, up, derivative, x):
+    '''stagger along x axis. x should be 0, 1, or 2. Corresponds to stagger_kind='numba_compiled'.
+
+    The idea is to put the numba parts of _xshift, _yshift, _zshift
+        in their own functions, so that we can compile them with nopython=True.
+
+    brief testing (by SE on 2/18/22) showed no speed improvement compared to stagger_kind='numba' method.
+    '''
+    grdshf = 1 if up else 0
+    start  =   int(3. - grdshf)  
+    end    = - int(2. + grdshf)
+    if derivative:
+        pm, (a, b, c) = -1, CONSTANTS_DERIV
+    else:
+        pm, (a, b, c) =  1, CONSTANTS_SHIFT
+    nx, ny, nz = var.shape
+    out=np.zeros((nx,ny,nz))
+    _nopython_shift = {0:_nopython_xshift, 1:_nopython_yshift, 2:_nopython_zshift}[x]
+    return _nopython_shift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm)
+
+@jit(parallel=True, nopython=True)
+def _nopython_xshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm):
+    for k in prange(nz): 
+        for j in prange(ny):
+            for i in prange(start, nx + end):
+                out[i, j, k] = diff[i] * (a * (var[i+ grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
+                                b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
+                                c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
+    return out[start:end, :, :]
+
+@jit(parallel=True, nopython=True)
+def _nopython_yshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm):
+    for k in prange(nz): 
+        for j in prange(start, ny + end):
+            for i in prange(nx):
+                out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] + pm * var[i, j - 1 + grdshf, k]) +
+                                b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
+                                c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
+    return out[:, start:end, :]
+
+@jit(parallel=True, nopython=True)
+def _nopython_zshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm):
     for k in prange(start, nz + end): 
         for j in prange(ny):
             for i in prange(nx):
@@ -291,6 +344,7 @@ def slicer_at_ax(slicer, ax):
         slicer = slice(*slicer)
     return (slice(None),)*ax + (slicer,)
 
+## STAGGER_KIND = NUMPY ##
 def _np_stagger(var, diff, up, derivative, x):
     """stagger along x axis. x should be 0, 1, or 2."""
     # -- same constants and setup as numba method -- #
@@ -317,6 +371,7 @@ def _np_stagger(var, diff, up, derivative, x):
 
     return out
 
+## STAGGER_KIND = NUMPY_IMPROVED ##
 def _np_stagger_improved(var, diff, up, derivative, x):
     """stagger along x axis. x should be 0, 1, or 2.
     uses the "improved" stagger method, as implemented in stagger_mesh_improved_mpi.f90.
