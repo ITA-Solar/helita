@@ -186,7 +186,10 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     padding[dim_index] = extra_dims
     # interpolating
     if var.shape[dim_index] <= 5:   # don't interpolate along axis with size 5 or less...
-        result = var
+        if derivative:
+            result = np.zeros_like(var)   # E.g. ( dvardzup, where var has shape (Nx, Ny, 1) ) --> 0
+        else:
+            result = var
     else:
         out = np.pad(var, padding, mode=pad_mode)
         out_diff = np.pad(diff, extra_dims, mode=pad_mode)
