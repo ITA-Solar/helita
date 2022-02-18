@@ -153,7 +153,7 @@ class BifrostData():
         if 'tabinputfile' in self.params.keys(): 
             tabfile = os.path.join(self.fdir, self.get_param('tabinputfile').strip())
             if os.access(tabfile, os.R_OK):
-                self.rhoee = Rhoeetab(tabfile=tabfile, fdir=fdir, radtab=True)
+                self.rhoee = Rhoeetab(tabfile=tabfile, fdir=fdir, radtab=True, verbose=self.verbose)
 
         self.stagger = stagger.StaggerInterface(self)
 
