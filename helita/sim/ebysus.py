@@ -205,6 +205,17 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     ## PROPERTIES ##
     mesh_location_tracking = stagger.MESH_LOCATION_TRACKING_PROPERTY(internal_name='_mesh_location_tracking')
 
+    @property
+    def mf_arr_size(self):
+        '''now deprecated. Previously: number of fluids per variable in the most recently queried memmap file.
+
+        To reinstate this value (if your code actually used it..) take these steps:
+            - add this line to the end (before return) of _get_simple_var_file_meta:
+                self.mf_arr_size = mf_arr_size
+            - delete the mf_arr_size @property (where this documentation appears in the code).
+        '''
+        raise AttributeError('mf_arr_size has been deprecated.')
+
     ## INITIALIZING ##
     def _init_coll_keys(self):
         '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
@@ -716,7 +727,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             return None
 
         # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
-        filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, mode=mode, panic=panic, *args, **kwargs)
+        filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, mode=mode, panic=panic, **kwargs)
         result = get_numpy_memmap(filename, **kw__get_mmap)          # actually read the file which contains the data
         result = self._assign_simple_var_mesh_location(result, var)  # convert to ArrayOnMesh, if mesh_location_tracking is enabled
         return result
@@ -743,9 +754,29 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             return stagger.mesh_location_center()
         raise ValueError(f"Mesh location for var={var} unknown. Locations are only known for: (bx,by,bz,r,px,py,pz,e)")
 
-    def _get_simple_var_file_info(self, var, order='F', mode='r', panic=False, *args, **kwargs):
-        '''gets file info but does not read memmap; helper function for _get_simple_var.'''
+    def _get_simple_var_file_info(self, var, panic=False, **kw__get_memmap):
+        '''gets file info but does not read memmap; helper function for _get_simple_var.
 
+        returns (filename, kwargs for get_numpy_memmap) corresponding to var.
+        '''
+        filename, meta_info = self._get_simple_var_file_meta(var, panic=panic)
+        _kw__memmap = self._file_meta_to_memmap_kwargs(*meta_info)
+        _kw__memmap.update(**kw__get_memmap)
+        return filename, _kw__memmap
+
+    def _get_simple_var_file_meta(self, var, panic=False):
+        '''returns "meta" info about reading var from file.
+
+        primarily intended as a helper function for _get_simple_var_file_info.
+
+        Each file contains N vars, M fluids per var. For a total of N*M single-fluid arrays.
+        The meta details tell:
+            idx - index of var in the file.  (scan along N)
+            jdx - index of fluid for this array.  (scan along M) (equals 0 for vars with M==1)
+            mf_arr_size - number of fluids per var in the file. (== M)
+
+        returns (filename, (idx, mf_arr_size, jdx))
+        '''
         # set currSnap, currStr = (current single snap, string for this snap)
         if np.shape(self.snap) != ():  # self.snap is list; pick snapInd value from list.
             currSnap = self.snap[self.snapInd]
@@ -765,13 +796,14 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             _reading_scr = True
             currStr = ''
 
-        self.mf_arr_size = 1
+        mf_arr_size = 1
         iS = str(self.mf_ispecies).zfill(2)   # ispecies as str. min 2 digits. (E.g.  3 --> '03')
         iL = str(self.mf_ilevel).zfill(2)     # ilevel as str.   min 2 digits. (E.g. 14 --> '14')
         iSL = dict(iS=iS, iL=iL)
 
-        # -------- figure out file name and idx (used to find offset in file). --------- #
+        jdx=0 # counts number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
 
+        # -------- figure out file name and idx (used to find offset in file). --------- #
         if os.path.exists('%s.io' % self.file_root):
             # in this case, we are reading an ebysus-like snapshot.
             _reading_ebysuslike_snap = True
@@ -819,8 +851,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                     idx      = self.varsmm.index(var)
                     filename = os.path.join('mf_{iS:}_{iL:}', 'mm',  self.mm_file).format(**iSL)
                     # calculate important details for data's offset in file.
-                    self.mf_arr_size = self.mf_total_nlevel
-                    jdx=0 # count number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
+                    mf_arr_size = self.mf_total_nlevel
                     for ispecies in range(1,self.mf_nspecies+1):
                         nlevels=self.att[ispecies].params.nlevel
                         for ilevel in range(1,nlevels+1):
@@ -875,8 +906,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                     idx      = self.varsmm.index(var)
                     filename = self.mm_file.format(**iSL)
                     # calculate important details for data's offset in file.
-                    self.mf_arr_size = self.mf_total_nlevel
-                    jdx=0 # count number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
+                    mf_arr_size = self.mf_total_nlevel
                     for ispecies in range(1,self.mf_nspecies+1):
                         nlevels=self.att[ispecies].params.nlevel
                         for ilevel in range(1,nlevels+1):
@@ -900,25 +930,35 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             _suffix_dotscr  = '.scr'  if _reading_scr else ''
             filename = filename + currStr + _suffix_dotsnap + _suffix_dotscr
 
+        return filename, (idx, mf_arr_size, jdx)
+
+    def _file_meta_to_memmap_kwargs(self, idx, mf_arr_size=1, jdx=0):
+        '''convert details about where the array is located in the file, to kwargs for numpy memmap.
+
+        primarily intended as a helper function for _get_simple_var_file_info.
+
+        Each file contains N vars, M fluids per var. For a total of N*M single-fluid arrays.
+        The meta details tell:
+            idx - index of var in the file.  (scan along N)
+            jdx - index of fluid for this array.  (scan along M. equals 0 when M==1.)
+            mf_arr_size - number of fluids per var in the file. (== M)
+
+        returns a dict of the kwargs to pass to get_numpy_memmap.
+        '''
         # -------- use filename and offset details to pick appropriate kwargs for numpy memmap --------- #
 
         # calculate info which numpy needs to read file as memmap.
-        dsize = np.dtype(self.dtype).itemsize
-        offset = self.nxb * self.nyb * self.nzb * idx * dsize * self.mf_arr_size
+        dsize  = np.dtype(self.dtype).itemsize
+        offset = self.nxb * self.nyb * self.nzb * dsize * (idx * mf_arr_size + jdx)
+        if mf_arr_size == 1:
+            shape = (self.nxb, self.nyb, self.nzb)
+        else:
+            shape = (self.nxb, self.nyb, self.nzb, mf_arr_size)
+        obj = self if (self.N_memmap != 0) else None    # for memmap memory management; popped before np.memmap(**kw).
 
         # kwargs which will be passed to get_numpy_memmap.
-        kw__get_mmap = dict(dtype=self.dtype, order=order, mode=mode,          # kwargs for np.memmap
-                            offset=offset, shape=(self.nxb, self.nyb, self.nzb), # kwargs for np.memmap
-                            obj=self if (self.N_memmap != 0) else None,        # kwarg for memmap management
-                            )
-        if (self.mf_arr_size == 1): # in case of mf_arr_size == 1, kw__get_mmap is already correct.
-            pass
-        elif var in self.varsmm:    # in case of var in varsmm, apply jdx info to offset.
-            kw__get_mmap['offset'] += self.nxb * self.nyb * self.nzb * jdx * dsize
-        else:                       # in case of (else), adjust the shape kwarg appropriately.
-            kw__get_mmap['shape'] = (self.nxb, self.nyb, self.nzb, self.mf_arr_size)
-
-        return (filename, kw__get_mmap)
+        kw__get_mmap = dict(dtype=self.dtype, offset=offset, shape=shape, obj=obj)
+        return kw__get_mmap
 
     def get_var_if_in_aux(self, var, *args__get_var, **kw__get_var):
         """ get_var but only if it appears in aux (i.e. self.params['aux'][self.snapInd])
