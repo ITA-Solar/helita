@@ -64,6 +64,10 @@ except ImportError:
 
 # import external public modules
 import numpy as np
+try:
+    import zarr
+except ImportError:
+    warnings.warn("failed to import zarr; read_mode='zc' and EbysusData.compress() will be unavailable.")
 
 # import external private modules
 try:
@@ -95,6 +99,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     def __init__(self, *args, fast=True, match_type=MATCH_TYPE_DEFAULT,
                  mesh_location_tracking=stagger.DEFAULT_MESH_LOCATION_TRACKING,
+                 read_mode='io',
                  N_memmap=200, mm_persnap=True, 
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
                  _force_disable_memory=False,
@@ -107,6 +112,13 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                       which track the location on the mesh. Note that when doing arithmetic
                       with multiple ArrayOnMesh objects, it is required for locations to match.
             The default may be changed to True in the future, after sufficient testing.
+
+        read_mode: 'io' (default) or 'zc'
+            Where to read the data from, and how the data is stored.
+            'io': 'input/output', the direct output from the ebysus simulation.
+            'zc': 'zarr-compressed', the output from the EbysusData.compress() function.
+                'zc' mode is generally faster to read and requires less storage space.
+                But it requires the compress function to have been run separately.
     
         N_memmap: int (default 0)
             keep the N_memmap most-recently-created memmaps stored in self._memory_numpy_memmap.
@@ -157,6 +169,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # set values of some attrs (e.g. from args & kwargs passed to __init__)
         self.mesh_location_tracking = mesh_location_tracking
         self.match_type = match_type
+        self.read_mode  = read_mode
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
@@ -216,6 +229,28 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         '''
         raise AttributeError('mf_arr_size has been deprecated.')
 
+    @property
+    def read_mode(self):
+        '''which data to read. options are 'io', 'zc'. default is 'io'
+        'io': 'input/output', the direct output from the ebysus simulation.
+        'zc': 'zarr-compressed', the output from the EbysusData.compress() function.
+                'zc' mode is generally faster to read and requires less storage space.
+                But it requires the compress function to have been run separately.
+        '''
+        return getattr(self, '_read_mode', 'io')
+    @read_mode.setter
+    def read_mode(self, value):
+        value = value.lower()
+        assert value in ('io', 'zc'), f"Expected read_mode in ('io', 'zc') but got {value}"
+        self._read_mode = value
+
+    @property
+    def file_root_with_io_ext(self):
+        '''returns self.file_root with appropriate extension. E.g. 'snapname.io'.
+        extension is based on read_mode. '.io' by default. Can be '.zc' if using 'zc' read_mode.
+        '''
+        return f'{self.file_root}.{self.read_mode}'
+
     ## INITIALIZING ##
     def _init_coll_keys(self):
         '''initialize self.coll_keys as a dict for better efficiency when looking up collision types.
@@ -254,7 +289,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     def _set_snapvars(self,firstime=False):
 
-        if os.path.exists('%s.io' % self.file_root):
+        if os.path.exists(self.file_root_with_io_ext):
             self.snaprvars = ['r']
             self.snappvars = ['px', 'py', 'pz']
         else:
@@ -303,7 +338,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         #    if self.mf_total_nlevel == 1:
         #        self.snapvars.append('e')
 
-        if os.path.exists('%s.io' % self.file_root):
+        if os.path.exists(self.file_root_with_io_ext):
             self.simple_vars = self.snaprvars + self.snappvars + \
                 self.snapevars + self.mhdvars + self.auxvars + \
                 self.varsmf + self.varsmfr + self.varsmfp + self.varsmfe + \
@@ -390,7 +425,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         #as long as fast is False, fast_skip_flag should be None.
 
         self.mf_common_file = (self.root_name + '_mf_common')
-        if os.path.exists('%s.io' % self.file_root):
+        if os.path.exists(self.file_root_with_io_ext):
             self.mfr_file = (self.root_name + '_mfr_{iS:}_{iL:}')
             self.mfp_file = (self.root_name + '_mfp_{iS:}_{iL:}')
         else:
@@ -585,6 +620,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                 ifluid=None, jfluid=None, panic=False, 
                 match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
+                read_mode=None,
                 *args, **kwargs):
         """
         Reads a given variable from the relevant files.
@@ -626,6 +662,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         cache_with_nfluid - None (default), 0, 1, or 2
             if not None, cache result and associate it with this many fluids.
             0 -> neither; 1 -> just ifluid; 2 -> both ifluid and jfluid.
+        read_mode - None (default), 'io', or 'zc'
+            if not None, first set self.read_mode to the value provided.
         **kwargs may contain the following:
             iSL    - alias for ifluid
             jSL    - alias for jfluid
@@ -643,6 +681,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         if match_type is not None:
             self.match_type = match_type
+        if read_mode is not None:
+            self.read_mode = read_mode
 
         # set fluids as appropriate to kwargs
         kw__fluids = dict(mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
@@ -727,8 +767,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             return None
 
         # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
-        filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, mode=mode, panic=panic, **kwargs)
-        result = get_numpy_memmap(filename, **kw__get_mmap)          # actually read the file which contains the data
+        result = self._load_simple_var_from_file(var, order=order, mode=mode, panic=panic, **kwargs)
         result = self._assign_simple_var_mesh_location(result, var)  # convert to ArrayOnMesh, if mesh_location_tracking is enabled
         return result
 
@@ -754,17 +793,31 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             return stagger.mesh_location_center()
         raise ValueError(f"Mesh location for var={var} unknown. Locations are only known for: (bx,by,bz,r,px,py,pz,e)")
 
-    def _get_simple_var_file_info(self, var, panic=False, **kw__get_memmap):
+    def _load_simple_var_from_file(self, var, order='F', mode='r', panic=False, **kwargs):
+        '''loads the var data directly from the appropriate file. returns an array.'''
+        if self.read_mode == 'io':
+            assert mode in ('r', 'r+'), f"invalid mode: {mode}. Halted before deleting data. Valid modes are: 'r', 'r+'."
+            filename, kw__get_mmap = self._get_simple_var_file_info(var, order=order, panic=panic, **kwargs)
+            result = get_numpy_memmap(filename, mode=mode, **kw__get_mmap)
+        elif self.read_mode == 'zc':
+            # << note that 'zc' read_mode ignores order, mode, and **kwargs
+            filename, array_n = self._get_simple_var_file_meta(var, panic=panic, _meta_as_index=True)
+            result = load_zarr(filename, array_n)
+        else:
+            raise NotImplementedError(f'EbysusData.read_mode = {read_mode}')
+        return result
+
+    def _get_simple_var_file_info(self, var, panic=False, order='F', **kw__get_memmap):
         '''gets file info but does not read memmap; helper function for _get_simple_var.
 
         returns (filename, kwargs for get_numpy_memmap) corresponding to var.
         '''
         filename, meta_info = self._get_simple_var_file_meta(var, panic=panic)
         _kw__memmap = self._file_meta_to_memmap_kwargs(*meta_info)
-        _kw__memmap.update(**kw__get_memmap)
+        _kw__memmap.update(**kw__get_memmap, order=order)
         return filename, _kw__memmap
 
-    def _get_simple_var_file_meta(self, var, panic=False):
+    def _get_simple_var_file_meta(self, var, panic=False, _meta_as_index=False):
         '''returns "meta" info about reading var from file.
 
         primarily intended as a helper function for _get_simple_var_file_info.
@@ -776,6 +829,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             mf_arr_size - number of fluids per var in the file. (== M)
 
         returns (filename, (idx, mf_arr_size, jdx))
+
+        if _meta_as_index, instead returns (filename, index of array in file),
+            where index of array in file = idx * mf_arr_size + jdx.
         '''
         # set currSnap, currStr = (current single snap, string for this snap)
         if np.shape(self.snap) != ():  # self.snap is list; pick snapInd value from list.
@@ -804,7 +860,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         jdx=0 # counts number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
 
         # -------- figure out file name and idx (used to find offset in file). --------- #
-        if os.path.exists('%s.io' % self.file_root):
+        if os.path.exists(self.file_root_with_io_ext):
             # in this case, we are reading an ebysus-like snapshot.
             _reading_ebysuslike_snap = True
             
@@ -919,7 +975,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                     errmsg = errmsg.format(var, self)
                     raise ValueError(errmsg)
 
-        _snapdir = (self.file_root + '.io') if _reading_ebysuslike_snap else ''
+        _snapdir = (self.file_root_with_io_ext) if _reading_ebysuslike_snap else ''
         filename = os.path.join(_snapdir, filename)  # TODO: remove formats above; put .format(**iSL) here.
 
         if panic:
@@ -930,7 +986,10 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             _suffix_dotscr  = '.scr'  if _reading_scr else ''
             filename = filename + currStr + _suffix_dotsnap + _suffix_dotscr
 
-        return filename, (idx, mf_arr_size, jdx)
+        if _meta_as_index:
+            return filename, (idx * mf_arr_size + jdx)
+        else:
+            return filename, (idx, mf_arr_size, jdx)
 
     def _file_meta_to_memmap_kwargs(self, idx, mf_arr_size=1, jdx=0):
         '''convert details about where the array is located in the file, to kwargs for numpy memmap.
@@ -971,6 +1030,93 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         else:
             return None  
 
+    ## COMPRESSION ALGORITHMS ##
+    def compress(self, mode='zc', **kwargs):
+        '''compress the direct output of an ebysus simulation (the .io folder).
+
+        mode tells what type of compression to use.
+            'zc': zarr compression. Use zarr package to read then store data in compressed format.
+            Currently, there are no other modes available.
+
+        The resulting, compressed data will be stored in a folder with .{mode} at the end of it.
+            e.g. self.compress(mode='zc') if data is stored in snapname.io will create snapname.zc.
+        **kwargs go to the compression algorithm for the given mode.
+            e.g. for mode='zc', kwargs go to zarr.array(**kwargs).
+        '''
+        mode = mode.lower()
+        try:    # put the compression algorithms in a try..except block to make a warning if error is encountered.
+            if mode == 'zc':
+                return self._zc_compress(**kwargs)
+        except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
+            print('\n', '-'*94, sep='')
+            print('WARNING: ERROR ENCOUNTERED DURING COMPRESSION. COMPRESSION OUTPUT MAY BE CORRUPT OR INCOMPLETE')
+            print('-'*94)
+            raise
+        raise NotImplementedError(f"EbysusData.compress(mode={repr(mode)})")
+
+    def _zc_compress(self, verbose=1, **kw__zarr):
+        '''compress the .io folder into a .zc folder.
+        Converts data to format readable by zarr.
+        Testing indicates the .zc data usually takes less space AND is faster to read.
+
+        returns the name of the new folder.
+        '''
+        # bookkeeping - parameters
+        SNAPNAME = self.get_param('snapname')
+        SHAPE    = (*self.shape, -1)                    # (nx, ny, nz, -1). reshape the whole file to this shape.
+        CHUNKS   = (*(None for dim in self.shape), 1)   # (None, None, None, 1).     "1 chunk per array for each var".
+        ORDER    = 'F'        # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
+        DTYPE    = '<f4'
+
+        # bookkeeping - printing updates
+        if verbose >= 1:   # calculate total number of files and print progress as fraction.
+            nfiles = sum(len(files) for _, _, files in os.walk(f'{SNAPNAME}.io'))
+            nfstr = len(str(nfiles))
+            start_time = time.time()
+
+        def print_if_verbose(*args, vreq=1, print_time=True, file_n=None, clearline=0, **kw):
+            if file_n is not None:
+                args = (f'({file_n:>{nfstr}d} / {nfiles})', *args)
+            if print_time:
+                args = (f'Time elapsed: {time.time() - start_time:.2f} s.', *args)
+            if verbose >= vreq:
+                print(' '*clearline, end='\r')   # cover the first <clearline> characters with empty space.
+                print(*args, **kw)
+
+        # helper function
+        def file_to_zarr(filename, **kw__zarr):
+            '''converts file to zarr of the file, via numpy memmap.'''
+            arr = np.memmap(filename, dtype=DTYPE).reshape(SHAPE, order=ORDER)
+            z = zarr.array(arr, chunks=CHUNKS, **kw__zarr)
+            return z
+
+        # the actuall compression happens in this loop.
+        file_n = 0
+        file_str_len = 0
+        for root, dirs, files in os.walk(f'{SNAPNAME}.io'):
+            if len(files) > 0:
+                new_dir = root.replace(f'{SNAPNAME}.io', f'{SNAPNAME}.zc')
+                os.makedirs(new_dir, exist_ok=True)
+                for base in files:
+                    file_n += 1   # bookkeeping
+                    ofile = os.path.join(root,    base)
+                    zfile = os.path.join(new_dir, base)
+                    z     = file_to_zarr(ofile, **kw__zarr)
+                    zarr.save(zfile, z)
+                    # printing updates
+                    if verbose: file_str_len = max(file_str_len, len(zfile))
+                    print_if_verbose(f'{zfile}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
+
+        print_if_verbose('_zc_compress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
+        return f'{SNAPNAME}.zc'
+
+    def decompress(self):
+        '''convert compressed data back into 'original .io format'.
+        NOT YET IMPLEMENTED. DO NOT DELETE ORIGINAL .io DATA UNTIL THIS IS IMPLEMENTED.
+        '''
+        raise NotImplementedError('EbysusData.decompress()')
+
+    ## CONVENIENCE METHODS ##
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
@@ -1344,6 +1490,15 @@ def printi(fdir='./',rootname='',it=1):
 def get_numpy_memmap(filename, **kw__np_memmap):
     '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
     return np.memmap(filename, **kw__np_memmap)
+
+def load_zarr(filename, array_n=None):
+    '''reads zarr from file. if array_n is provided, index by [..., array_n].'''
+    z = zarr.open(filename, mode='r')   # we use 'open' instead of 'load' to ensure we only read the required chunks.
+    if array_n is None:
+        result = z[...]
+    else:
+        result = z[..., array_n]
+    return result
 
 @file_memory.remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
