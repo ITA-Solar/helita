@@ -1084,7 +1084,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         '''
         # bookkeeping - parameters
         SNAPNAME = self.get_param('snapname')
-        SHAPE    = (*self.shape, -1)                    # (nx, ny, nz, -1). reshape the whole file to this shape.
+        SHAPE    = self.shape        # (nx, ny, nz). reshape the whole file to shape (nx, ny, nz, -1).
         CHUNKS   = (*(None for dim in self.shape), 1)   # (None, None, None, 1).     "1 chunk per array for each var".
         ORDER    = 'F'        # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
         DTYPE    = '<f4'
