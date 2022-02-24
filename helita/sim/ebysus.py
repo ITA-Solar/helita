@@ -514,7 +514,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # METADATA_ATTRS is the list of all the attrs of self which may affect the output of get_var.
         #   we only read from cache if ALL these attrs agree with those associated to the cached value.
         METADATA_ATTRS = ['ifluid', 'jfluid', 'snap', 'iix', 'iiy', 'iiz', 'match_type', 'panic',
-                         'do_stagger', 'stagger_kind', '_mesh_location_tracking']
+                         'do_stagger', 'stagger_kind', '_mesh_location_tracking', 'read_mode']
         if with_nfluid < 2:
             del METADATA_ATTRS[1]  # jfluid
         if with_nfluid < 1:
@@ -1054,6 +1054,27 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             raise
         raise NotImplementedError(f"EbysusData.compress(mode={repr(mode)})")
 
+    def decompress(self, mode='zc', **kwargs):
+        '''convert compressed data back into 'original .io format'.
+
+        mode tells which type of compressed data to use.
+            'zc': zarr compressed data.
+            Currently, there are no other modes available.
+
+        The resulting data will be stored in a folder with .io at the end of it, like the original .io folder.
+        '''
+        mode = mode.lower()
+        # put the compression algorithms in a try..except block to make a warning if error is encountered.
+        try:
+            if mode == 'zc':
+                return self._zc_decompress(**kwargs)
+        except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
+            print('\n', '-'*98, sep='')
+            print('WARNING: ERROR ENCOUNTERED DURING DECOMPRESSION. DECOMPRESSION OUTPUT MAY BE CORRUPT OR INCOMPLETE')
+            print('-'*98)
+            raise
+        raise NotImplementedError(f"EbysusData.decompress(mode={repr(mode)})")
+
     def _zc_compress(self, verbose=1, **kw__zarr):
         '''compress the .io folder into a .zc folder.
         Converts data to format readable by zarr.
@@ -1075,22 +1096,16 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             start_time = time.time()
 
         def print_if_verbose(*args, vreq=1, print_time=True, file_n=None, clearline=0, **kw):
+            if verbose < vreq:
+                return   # without printing anything.
             if file_n is not None:
                 args = (f'({file_n:>{nfstr}d} / {nfiles})', *args)
             if print_time:
                 args = (f'Time elapsed: {time.time() - start_time:.2f} s.', *args)
-            if verbose >= vreq:
-                print(' '*clearline, end='\r')   # cover the first <clearline> characters with empty space.
-                print(*args, **kw)
+            print(' '*clearline, end='\r')   # cover the first <clearline> characters with empty space.
+            print(*args, **kw)
 
-        # helper function
-        def file_to_zarr(filename, **kw__zarr):
-            '''converts file to zarr of the file, via numpy memmap.'''
-            arr = np.memmap(filename, dtype=DTYPE).reshape(SHAPE, order=ORDER)
-            z = zarr.array(arr, chunks=CHUNKS, **kw__zarr)
-            return z
-
-        # the actuall compression happens in this loop.
+        # the actual compression happens in this loop.
         file_n = 0
         file_str_len = 0
         for root, dirs, files in os.walk(f'{SNAPNAME}.io'):
@@ -1099,22 +1114,62 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 os.makedirs(new_dir, exist_ok=True)
                 for base in files:
                     file_n += 1   # bookkeeping
-                    ofile = os.path.join(root,    base)
-                    zfile = os.path.join(new_dir, base)
-                    z     = file_to_zarr(ofile, **kw__zarr)
-                    zarr.save(zfile, z)
+                    src = os.path.join(root,    base)
+                    dst = os.path.join(new_dir, base)
+                    save_filebinary_to_filezarr(src, dst, shape=SHAPE, dtype=DTYPE, order=ORDER, chunks=CHUNKS, **kw__zarr)
                     # printing updates
-                    if verbose: file_str_len = max(file_str_len, len(zfile))
-                    print_if_verbose(f'{zfile}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
+                    if verbose: file_str_len = max(file_str_len, len(dst))
+                    print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
 
         print_if_verbose('_zc_compress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
         return f'{SNAPNAME}.zc'
 
-    def decompress(self):
-        '''convert compressed data back into 'original .io format'.
-        NOT YET IMPLEMENTED. DO NOT DELETE ORIGINAL .io DATA UNTIL THIS IS IMPLEMENTED.
+    def _zc_decompress(self, verbose=1):
+        '''use the data from the .zc folder to recreate the original .io folder.
+        returns the name of the new (.io) folder.
         '''
-        raise NotImplementedError('EbysusData.decompress()')
+        # notes:
+        #   each zarray (in SNAPNAME.zc) is stored as a directory,
+        #   containing a file named '.zarray', and possibly some data files.
+        #   We assume that all folders containing a '.zarray' file are zarrays.
+        #   (This structure is utilized in the implementation below.)
+
+        # bookkeeping - parameters
+        SNAPNAME = self.get_param('snapname')
+        ORDER    = 'F'    # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
+
+        # bookeeping - printing updates
+        if verbose >= 1:   # calculate total number of files and print progress as fraction.
+            nfiles = sum(1 for _, _, files in os.walk(f'{SNAPNAME}.zc') if '.zarray' in files)
+            nfstr = len(str(nfiles))
+            start_time = time.time()
+        
+        def print_if_verbose(*args, vreq=1, print_time=True, file_n=None, clearline=0, **kw):
+            if verbose < vreq:
+                return   # without printing anything.
+            if file_n is not None:
+                args = (f'({file_n:>{nfstr}d} / {nfiles})', *args)
+            if print_time:
+                args = (f'Time elapsed: {time.time() - start_time:.2f} s.', *args)
+            print(' '*clearline, end='\r')   # cover the first <clearline> characters with empty space.
+            print(*args, **kw)
+
+        # the actual decompression happens in this loop.
+        file_n = 0
+        file_str_len = 0
+        for root, dirs, files in os.walk(f'{SNAPNAME}.zc'):
+            if '.zarray' in files:   # then this root is actually a zarray folder.
+                file_n += 1  # bookkeeping
+                src = root
+                dst = src.replace(f'{SNAPNAME}.zc', f'{SNAPNAME}.io')
+                os.makedirs(os.path.dirname(dst), exist_ok=True)   # make dst dir if necessary.
+                save_filezarr_to_filebinary(src, dst, order=ORDER)
+                # printing updates
+                if verbose: file_str_len = max(file_str_len, len(dst))
+                print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
+
+        print_if_verbose('_zc_decompress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
+        return f'{SNAPNAME}.io'
 
     ## CONVENIENCE METHODS ##
     def get_nspecies(self):
@@ -1499,6 +1554,35 @@ def load_zarr(filename, array_n=None):
     else:
         result = z[..., array_n]
     return result
+
+def save_filebinary_to_filezarr(src, dst, shape, dtype='<f4', order='F',
+                                chunks=(None, None, None, 1), **kw__zarr):
+    '''converts file of binary data (at src) to saved zarr (at dst).
+    shape: tuple
+        the shape of a single array at src. reshapes memmap to (*shape, -1).
+        E.g. src with 6 arrays, each of shape=(3,4,5) will end up as array with shape (3,4,5,6).
+    chunks: chunking rule for zarr.
+        default is to make each full 3D array its own chunk.
+        E.g. src with 6 arrays, each of shape=(3,4,5) will be stored in 6 chunks, one for each array.
+        if using a non-3D shape, a different value for chunks is required.
+    (creates a new file; does not delete the source file.)
+    returns a zarr.array of the data from src.
+    '''
+    arr = np.memmap(src, dtype=dtype).reshape((*shape, -1), order=order)
+    z = zarr.array(arr, chunks=chunks, **kw__zarr)
+    zarr.save(dst, z)
+    return z
+
+def save_filezarr_to_filebinary(src, dst, order='F'):
+    '''converts saved zarr file to file of binary data.
+    (creates a new file; does not delete the source file.)
+    returns a numpy array of the data from src.
+    '''
+    arr = load_zarr(src)
+    if order=='F':   # we want to write in fortran order.
+        arr = arr.T    # transposing converts from 'C' to 'F' order.
+    arr.tofile(dst)
+    return arr
 
 @file_memory.remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
