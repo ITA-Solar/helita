@@ -47,7 +47,18 @@ import collections
 
 # import public external modules
 import numpy as np
-from numba import jit, njit, prange
+
+try:
+    from numba import jit, njit, prange
+except ImportError:
+    import warnings
+    warnings.warn("failed to import numba; using stagger_kind='numba' will cause crashes.")
+    # we still need to set jit and njit to something so that the rest of the module can be imported.
+    def boring_decorator_factory(*args, **kw):
+        def boring_decorator(f):
+            return f
+        return boring_decorator
+    jit = njit = boring_decorator_factory
 
 
 """ ------------------------ defaults ------------------------ """
