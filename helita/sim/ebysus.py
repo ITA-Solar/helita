@@ -1548,6 +1548,10 @@ def get_numpy_memmap(filename, **kw__np_memmap):
 
 def load_zarr(filename, array_n=None):
     '''reads zarr from file. if array_n is provided, index by [..., array_n].'''
+    if not os.path.exists(filename):
+        raise FileNotFoundError(filename)
+        # zarr error for non-existing file is confusing and doesn't include filename (as of 02/28/22)
+        # so we instead do our own check if file exists, and raise a nice error if it doesn't exist.
     z = zarr.open(filename, mode='r')   # we use 'open' instead of 'load' to ensure we only read the required chunks.
     if array_n is None:
         result = z[...]
