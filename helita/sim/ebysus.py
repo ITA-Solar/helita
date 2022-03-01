@@ -32,6 +32,7 @@ import os
 import time
 import warnings
 import collections
+import shutil
 
 # import local modules
 from .bifrost import (
@@ -1031,7 +1032,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             return None  
 
     ## COMPRESSION ALGORITHMS ##
-    def compress(self, mode='zc', **kwargs):
+    def compress(self, mode='zc', smash_mode=None, warn=True, kw_smash=dict(), **kwargs):
         '''compress the direct output of an ebysus simulation (the .io folder).
 
         mode tells what type of compression to use.
@@ -1042,38 +1043,77 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             e.g. self.compress(mode='zc') if data is stored in snapname.io will create snapname.zc.
         **kwargs go to the compression algorithm for the given mode.
             e.g. for mode='zc', kwargs go to zarr.array(**kwargs).
+
+        smash_mode: None (default), 'trash' or one of ('destroy', 'delete', 'rm')
+            mode for smashing the original folder (containing the non-compressed data).
+            (Will only be applied after the compression is completed successfully)
+            None --> do not smash the original folder.
+            'trash' --> move original folder to trash (determined by os.environ['TRASH'])
+            'destroy', 'delete', or 'rm' --> destroy the original folder permanently.
+        warn: bool, default True
+            whether to ask for user confirmation before smashing the old folder.
+            CAUTION: be very careful about using warn=False!
+        kw_smash: dict
+            additional kwargs to pass to smash_folder().
+
+        returns name of created folder.
         '''
         mode = mode.lower()
         try:    # put the compression algorithms in a try..except block to make a warning if error is encountered.
             if mode == 'zc':
-                return self._zc_compress(**kwargs)
+                result   = self._zc_compress(**kwargs)
+            else:
+                raise NotImplementedError(f"EbysusData.compress(mode={repr(mode)})")
         except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
             print('\n', '-'*94, sep='')
             print('WARNING: ERROR ENCOUNTERED DURING COMPRESSION. COMPRESSION OUTPUT MAY BE CORRUPT OR INCOMPLETE')
             print('-'*94)
             raise
-        raise NotImplementedError(f"EbysusData.compress(mode={repr(mode)})")
+        else:
+            if smash_mode is not None:
+                ORIGINAL = f"{self.get_param('snapname')}.io"
+                smash_folder(ORIGINAL, mode=smash_mode, warn=warn, **kw_smash)
+            return result
 
-    def decompress(self, mode='zc', **kwargs):
+    def decompress(self, mode='zc', smash_mode=None, warn=True, kw_smash=dict(), **kwargs):
         '''convert compressed data back into 'original .io format'.
 
         mode tells which type of compressed data to use.
             'zc': zarr compressed data.
             Currently, there are no other modes available.
 
+        smash_mode: None (default), 'trash' or one of ('destroy', 'delete', 'rm')
+            mode for smashing the original folder (containing the compressed data).
+            (Will only be applied after the compression is completed successfully)
+            None --> do not smash the original folder.
+            'trash' --> move original folder to trash (determined by os.environ['TRASH'])
+            'destroy', 'delete', or 'rm' --> destroy the original folder permanently.
+        warn: bool, default True
+            whether to ask for user confirmation before smashing the old folder.
+            CAUTION: be very careful about using warn=False!
+        kw_smash: dict
+            additional kwargs to pass to smash_folder().
+
         The resulting data will be stored in a folder with .io at the end of it, like the original .io folder.
+        returns name of created folder.
         '''
         mode = mode.lower()
         # put the compression algorithms in a try..except block to make a warning if error is encountered.
         try:
             if mode == 'zc':
-                return self._zc_decompress(**kwargs)
+                ORIGINAL = f"{self.get_param('snapname')}.zc"
+                result   = self._zc_decompress(**kwargs)
+            else:
+                raise NotImplementedError(f"EbysusData.decompress(mode={repr(mode)})")
         except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
             print('\n', '-'*98, sep='')
             print('WARNING: ERROR ENCOUNTERED DURING DECOMPRESSION. DECOMPRESSION OUTPUT MAY BE CORRUPT OR INCOMPLETE')
             print('-'*98)
             raise
-        raise NotImplementedError(f"EbysusData.decompress(mode={repr(mode)})")
+        else:
+            if smash_mode is not None:
+                smash_folder(ORIGINAL, mode=smash_mode, warn=warn, **kw_smash)
+            return result
 
     def _zc_compress(self, verbose=1, **kw__zarr):
         '''compress the .io folder into a .zc folder.
@@ -2258,3 +2298,133 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28,
                             0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
     f.close()
+
+######################
+#  DESTROYING FILES  #
+######################
+
+def smash_folder(folder, mode='trash', warn=True, _force_no_warn=False):
+    '''smashes (destroys or moves to trash) folder.
+    mode: 'trash' (default) or one of ('destroy', 'delete', 'rm')
+        'trash' --> move folder to trash (determined by os.environ['TRASH'])
+        'destroy', 'delete', or 'rm' --> destroy the folder permanently as per shutil.rmtree.
+    warn: bool, default True
+        whether to ask for user confirmation before smashing the folder.
+        CAUTION: be very careful about using warn=False!
+    _force_no_warn: bool, default False
+        if folder has fewer than N components, warn is set to True unless _force_no_warn.
+        N = 3 for 'trash' mode; N = 4 for 'destroy' mode.
+        E.g. /Users/You/ has 2 components. /Users/You/Folder/Subfolder has 4 components.
+
+    returns one of:
+        None (if smashing was aborted, due to user input)
+        new path to folder, in trash (for mode='trash')
+        old path to now-destroyed folder (for mode='destroy')
+    '''
+    mode = mode.lower()
+    VALID_MODES = 'trash', 'destroy', 'delete', 'rm'
+    assert mode in VALID_MODES, f"mode={repr(mode)} invalid; expected one of: {VALID_MODES}"
+    if mode == 'trash':
+        result = _trash_folder(folder, warn=warn, _force_no_warn=_force_no_warn)
+        if result is not None:
+            print(f"trashed folder; now located at {repr(result)}")
+    elif mode in ('destroy', 'delete', 'rm'):
+        result = _destroy_folder(folder, warn=warn, _force_no_warn=_force_no_warn)
+        if result is not None:
+            print(f"permanently destroyed folder {repr(result)}")
+    else:
+        raise NotImplementedError(f"mode={repr(mode)}")   # << we should never reach this line.
+    return result
+
+def _trash_folder(folder, warn=True, _force_no_warn=False):
+    '''moves the indicated folder to Trash (which the User can empty at a later time).
+    Uses os.environ['TRASH'] to determine the location of trash.
+        (You must set os.environ['TRASH'] before using this function)
+        E.g. on macOS, the standard Trash is at os.environ['TRASH']='~/.Trash'
+
+    if warn (default True), first ask for user confirmation.
+        CAUTION: be very careful about using warn=False!
+
+    if folder has fewer than 3 components, warn is set to True unless _force_no_warn.
+        E.g. /Users/You/ has 2 components. /Users/You/Folder/Subfolder has 4 components.
+
+    returns the new abspath to the folder (in the trash), or None if aborted.
+    '''
+    # preprocessing - folder exists?
+    folder = os.path.abspath(folder)
+    if not os.path.exists(folder):
+        raise FileNotFoundError(folder)
+    # preprocessing - trash exists?
+    try:
+        trash_ = os.environ['TRASH']
+    except KeyError:
+        errmsg = ("_trash_folder() requires os.environ['TRASH'] to be set.\n"
+                 "Set it via os.environ['TRASH']='~/.Trash'  (or some other value, as appropriate)")
+        raise AttributeError(errmsg) from None
+    trash = os.path.abspath(os.path.expanduser(trash_))   # expanduser handles '~'.
+    # preprocessing - are we warning the user?
+    if _force_no_warn:
+        warn = False
+    else:
+        MIN_N_COMPONENTS = 3
+        if _count_components(folder) < MIN_N_COMPONENTS:
+            warn = True   # force warn to True for "small" paths.
+    # possible warning
+    if warn:
+        confirm_msg = f'About to move to trash (at {repr(trash)}) the folder:\n    {repr(folder)}\n' + \
+                       "Proceed? ('y' or empty string for yes; 'n' or anything else for no.)\n"
+        input_ = input(confirm_msg)
+        input_ = input_.lower()
+        if input_ not in ('y', ''):
+            print('Aborted. No files were moved to trash.')
+            return
+    # check if folder already in trash; edit name if necessary
+    folder_basename = os.path.basename(folder)
+    dst = os.path.join(trash, folder_basename)
+    if os.path.exists(dst):   # append time if necessary to make name unique in trash
+        dst = dst + ' ' + time.strftime('%I.%M.%S %p')  # e.g. '12.07.59 PM'
+    if os.path.exists(dst):   # append date if necessary to make name unique in trash
+        dst = dst + ' ' + time.strftime('%m_%d_%Y') # e.g. '03_01_2022'
+    # actually trash the folder
+    result = shutil.move(folder, dst)
+    # return the old path of the now-deleted folder.
+    return result
+
+def _destroy_folder(folder, warn=True, _force_no_warn=False):
+    '''destroys the indicated folder.
+    if warn (default True), first ask for user confirmation.
+        CAUTION: be very careful about using warn=False!
+
+    if folder has fewer than 4 components, warn is set to True unless _force_no_warn.
+        E.g. /Users/You/ has 2 components. /Users/You/Folder/Subfolder has 4 components.
+
+    returns the abspath to the now-deleted folder, or None if aborted.
+    '''
+    # preprocessing
+    folder = os.path.abspath(folder)
+    if not os.path.exists(folder):
+        raise FileNotFoundError(folder)
+    if _force_no_warn:
+        warn = False
+    else:
+        MIN_N_COMPONENTS = 4
+        if _count_components(folder) < MIN_N_COMPONENTS:
+            warn = True   # force warn to True for "small" paths.
+    # possible warning
+    if warn:
+        confirm_msg = f'About to destroy the folder:\n    {repr(folder)}\nProceed? ' + \
+                       "('y' or empty string for yes; 'n' or anything else for no.)\n"
+        input_ = input(confirm_msg)
+        input_ = input_.lower()
+        if input_ not in ('y', ''):
+            print('Aborted. No files were destroyed.')
+            return
+    # actually remove the folder
+    shutil.rmtree(folder)
+    # return the old path of the now-deleted folder.
+    return folder
+
+def _count_components(path):
+    '''counts components in the provided path.
+    E.g. /Users/You/ has 2 components. /Users/You/Folder/Subfolder has 4 components.'''
+    return len(os.path.normpath(path).split(path))
