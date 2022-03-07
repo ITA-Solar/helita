@@ -611,12 +611,11 @@ class BifrostData():
             self.set_snap(snap)
             self.variables={}
 
-        # set iix,iiy,iiz; figure out dimensions of return array
+        # set iix,iiy,iiz.
         self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
-
         snapLen = np.size(self.snap)
-        value = np.empty([self.xLength, self.yLength, self.zLength, snapLen])
 
+        # bookkeeping - maintain self.snap; handle self.recoverData; track timing.
         remembersnaps = self.snap                   # remember self.snap (restore later if crash)
         if hasattr(self, 'recoverData'):
             delattr(self, 'recoverData')            # smash any existing saved data
@@ -624,7 +623,9 @@ class BifrostData():
         printed_update  = False
         def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
             print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
+
         try:
+            firstit = True
             for it in range(0, snapLen):
                 self.snapInd = it
                 # print update if it is time to print update
@@ -637,8 +638,16 @@ class BifrostData():
                     printed_update=True
                     
                 # actually get the values here:
-                value[..., it] = self.get_var(var, snap=snap[it],
-                                              *args__get_var, **kw__get_var)
+                if firstit:
+                    # get value at first snap
+                    val0 = self.get_var(var, snap=snap[it], *args__get_var, **kw__get_var)
+                    # figure out dimensions and initialize the output array.
+                    value = np.empty([*np.shape(val0), snapLen], dtype=self.dtype)
+                    value[..., 0] = val0
+                    firstit = False
+                else:
+                    value[..., it] = self.get_var(var, snap=snap[it],
+                                                 *args__get_var, **kw__get_var)
         except:   # here it is ok to except all errors, because we always raise.
             if it > 0:
                 self.recoverData = value[..., :it]   # save data 
@@ -883,7 +892,7 @@ class BifrostData():
             self.set_domain_iiaxes(*original_slice, internal=False)
         
         # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
-        if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+        if (np.ndim(val) == self.ndim) and (np.shape(val) != self.shape):
             def isslice(x): return isinstance(x, slice)
             if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
                 val = val[self.iix, self.iiy, self.iiz]  # we can index all together
