@@ -120,7 +120,8 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
     get_module, get_horizontal_average,
     get_gradients_vect, get_gradients_scalar, get_vector_product,
     get_square, get_lg, get_numop, get_ratios,
-    get_projections, get_angle
+    get_projections, get_angle,
+    get_stat_quant
   )
 
   val = None
@@ -906,6 +907,44 @@ def get_angle(obj,quant):
     varx = obj.get_var(var + x)
     vary = obj.get_var(var + y)
     return np.arctan2(vary, varx)
+
+
+#default
+_STAT_QUANT = ('STAT_QUANT', ['mean_', 'variance_', 'std_'])
+# get value
+def get_stat_quant(obj, quant):
+  '''statistics such as mean, std.
+
+  The result will be a single value (not a 3D array).
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, *_STAT_QUANT, get_stat_quant.__doc__)
+    docvar('mean_', 'mean_v --> np.mean(v)', uni=UNI.qc(0))
+    docvar('variance_', 'variance_v --> np.var(v).', uni=UNI.qc(0)**2)
+    docvar('std_', 'std_v --> np.std(v)', uni=UNI.qc(0))
+    return None
+
+  # interpret quant string
+  command, _, var = quant.partition('_')
+  command = command + '_'
+
+  if command not in _STAT_QUANT[1]:
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, command, _STAT_QUANT[0], delay=True)
+
+  # do calculations and return result
+  val = obj.get_var(var)
+  if command == 'mean_':
+    return np.mean(val)
+  elif command == 'variance_':
+    return np.var(val)
+  elif command == 'std_':
+    return np.std(val)
+  else:
+    raise NotImplementedError(f'command={repr(command)} in get_stat_quant')
+
 
 
 ''' ------------- End get_quant() functions; Begin helper functions -------------  '''
