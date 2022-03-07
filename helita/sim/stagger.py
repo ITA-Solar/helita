@@ -4,8 +4,22 @@ Stagger mesh methods using numba.
 set stagger_kind = 'numba' or 'numpy' to use these methods. (not 'cstagger')
 stagger_kind = 'numba' is the default for BifrostData and EbysusData.
 
+STAGGER KINDS DEFINED HERE:
+    numba          - original 5th order scheme using numba.
+                        functions wrapped in njit
+    numba_nopython - original 5th order scheme using numba.
+                        functions wrapped in jit with nopython=True.
+    numpy          - original 5th order scheme using numpy.
+    numpy_improved - improved 5th order scheme using numpy.
+                        the improvement refers to improved precision for "shift" operations.
+                        the improved scheme is also an implemented option in ebysus.
+    o1_numpy       - 1st order scheme using numpy.
+                        "simplest" method available.
+                        good enough, for most uses.
+                        ~20% faster than numpy and numpy_improved methods
 
-Methods defined here (which an end-user might want to access):
+
+METHODS DEFINED HERE (which an end-user might want to access):
     do:
         perform the indicated stagger operation.
         interface for the low-level _xshift, _yshift, _zshift functions.
@@ -36,8 +50,6 @@ Methods defined here (which an end-user might want to access):
 
 TODO:
     - fix ugly printout during verbose==1, for interfaces to 'do', e.g. stagger.xup(arr, verbose=1).
-    - implement __sub__ for MeshLocation.
-        - use MeshLocation(...) - (0, 0, 0) to create a generic load_arithmetic_quantities.get_center.
 """
 
 # import built-in modules
@@ -67,12 +79,17 @@ PAD_PERIODIC    = 'wrap'     # how to pad periodic dimensions, by default
 PAD_NONPERIODIC = 'reflect'  # how to pad nonperiodic dimensions, by default
 PAD_DEFAULTS = {'x': PAD_PERIODIC, 'y': PAD_PERIODIC, 'z': PAD_NONPERIODIC}   # default padding for each dimension.
 DEFAULT_STAGGER_KIND = 'numba'  # which stagger kind to use by default.
-VALID_STAGGER_KINDS  = tuple(('numba', 'numba_nopython', 'numpy', 'numpy_improved', 'cstagger'))  # list of valid stagger kinds.
-PYTHON_STAGGER_KINDS = tuple(('numba', 'numba_nopython', 'numpy', 'numpy_improved'))  # list of valid stagger kinds from stagger.py.
+VALID_STAGGER_KINDS  = tuple(('numba', 'numba_nopython',
+                              'numpy', 'numpy_improved', 'o1_numpy',
+                              'cstagger'))  # list of valid stagger kinds.
+PYTHON_STAGGER_KINDS = tuple(('numba', 'numba_nopython',
+                              'numpy', 'numpy_improved', 'o1_numpy',
+                              ))  # list of valid stagger kinds from stagger.py.
 ALIAS_STAGGER_KIND   = {'stagger': 'numba', 'numba': 'numba',   # dict of aliases for stagger kinds.
                        'numba_nopython': 'numba_nopython', 
                        'numpy': 'numpy',
                        'numpy_improved': 'numpy_improved', 'numpy_i': 'numpy_improved',
+                       'o1_numpy': 'o1_numpy',
                        'cstagger': 'cstagger'}
 DEFAULT_MESH_LOCATION_TRACKING = False   # whether mesh location tracking should be enabled, by default.
 
@@ -106,17 +123,32 @@ def STAGGER_KIND_PROPERTY(internal_name='_stagger_kind', default=DEFAULT_STAGGER
 
 StaggerConstants = collections.namedtuple('StaggerConstants', ('a', 'b', 'c'))
 
+## FIFTH ORDER SCHEME ##
 # derivatives
 c = (-1 + (3**5 - 3) / (3**3 - 3)) / (5**5 - 5 - 5 * (3**5 - 3))
 b = (-1 - 120*c) / 24
 a = (1 - 3*b - 5*c)
 CONSTANTS_DERIV = StaggerConstants(a, b, c)
 
-# shifts (not a derivative)
+# shifts (i.e. not a derivative)
 c = 3.0 / 256.0
 b = -25.0 / 256.0
 a = 0.5 - b - c
 CONSTANTS_SHIFT = StaggerConstants(a, b, c)
+
+
+## FIRST ORDER SCHEME ##
+CONSTANTS_DERIV_o1 = StaggerConstants(1.0, 0, 0)
+CONSTANTS_SHIFT_o1 = StaggerConstants(0.5, 0, 0)
+
+
+## GENERIC ##
+CONSTANTS_DERIV_ODICT = {5: CONSTANTS_DERIV, 1: CONSTANTS_DERIV_o1}
+CONSTANTS_SHIFT_ODICT = {5: CONSTANTS_SHIFT, 1: CONSTANTS_SHIFT_o1}
+def GET_CONSTANTS_DERIV(order):
+    return CONSTANTS_DERIV_ODICT[order]
+def GET_CONSTANTS_SHIFT(order):
+    return CONSTANTS_SHIFT_ODICT[order]
 
 # remove temporary variables from the module namespace
 del c, b, a
@@ -162,8 +194,14 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     """
     # initial bookkeeping
     AXES = ('x', 'y', 'z')
-    stagger_kind = ALIAS_STAGGER_KIND[stagger_kind]
     operation = operation.lower()
+    stagger_kind = ALIAS_STAGGER_KIND[stagger_kind]
+    # order
+    if stagger_kind == 'o1_numpy':
+        order = 1
+        stagger_kind = 'numpy'
+    else:
+        order = 5
 
     # up/dn
     up_str = operation[-2:]  # 'up' or 'dn'
@@ -210,8 +248,8 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
             result = func(out, out_diff, up=up, derivative=derivative)
         elif stagger_kind=='numba_nopython':
             result = _numba_stagger(out, out_diff, up, derivative, dim_index)
-        elif stagger_kind=='numpy':
-            result = _np_stagger(out, out_diff, up, derivative, dim_index)
+        elif stagger_kind=='numpy':   # 'numpy' or 'o1_numpy', originally.
+            result = _np_stagger(out, out_diff, up, derivative, dim_index, order=order)
         elif stagger_kind=='numpy_improved':
             result = _np_stagger_improved(out, out_diff, up, derivative, dim_index)
         else:
@@ -356,16 +394,16 @@ def slicer_at_ax(slicer, ax):
     return (slice(None),)*ax + (slicer,)
 
 ## STAGGER_KIND = NUMPY ##
-def _np_stagger(var, diff, up, derivative, x):
+def _np_stagger(var, diff, up, derivative, x, order=5):
     """stagger along x axis. x should be 0, 1, or 2."""
     # -- same constants and setup as numba method -- #
     grdshf = 1 if up else 0
     start  =   int(3. - grdshf)  
     end    = - int(2. + grdshf)
     if derivative:
-        pm, (a, b, c) = -1, CONSTANTS_DERIV
+        pm, (a, b, c) = -1, GET_CONSTANTS_DERIV(order)
     else:
-        pm, (a, b, c) =  1, CONSTANTS_SHIFT
+        pm, (a, b, c) =  1, GET_CONSTANTS_SHIFT(order)
     # -- begin numpy syntax -- #
     nx = var.shape[x]
     def slx(shift):
@@ -376,9 +414,12 @@ def _np_stagger(var, diff, up, derivative, x):
         return slx(shift + grdshf)
     diff = np.expand_dims(diff,  axis=tuple( set((0,1,2)) - set((x,)) )  )   # make diff 3D (with size 1 for axes other than x)
 
-    out = diff[slx(0)] * (a * (var[sgx(0)] + pm * var[sgx(-1)]) + 
-                          b * (var[sgx(1)] + pm * var[sgx(-2)]) +
-                          c * (var[sgx(2)] + pm * var[sgx(-3)]))
+    if order == 5:
+        out = diff[slx(0)] * (a * (var[sgx(0)] + pm * var[sgx(-1)]) + 
+                              b * (var[sgx(1)] + pm * var[sgx(-2)]) +
+                              c * (var[sgx(2)] + pm * var[sgx(-3)]))
+    elif order == 1:
+        out = diff[slx(0)] * (a * (var[sgx(0)] + pm * var[sgx(-1)]))  # b=c=0 for order 1.
 
     return out
 
