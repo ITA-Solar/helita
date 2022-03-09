@@ -25,6 +25,7 @@ from .tools import *
 from . import document_vars
 from . import file_memory
 from . import stagger
+from .units import UNITS_OUTPUT_PROPERTY
 
 whsp = '  '
 
@@ -61,6 +62,7 @@ class BifrostData():
     stagger_kind - string, optional
         which method to use for performing stagger operations, if do_stagger.
         options are 'cstagger', 'numba' (default), 'numpy'. See stagger.py for details.
+        More options may be defined later. Set stagger_kind='' to see all options.
     lowbus  - bool, optional
         Use True only if data is too big to load. It will do cstagger
         operations layer by layer using threads (slower).
@@ -73,6 +75,12 @@ class BifrostData():
         every time you want to have data, and don't assume things exist 
         (e.g. self.bx) unless you do get_var for that thing 
         (e.g. get_var('bx')).
+    units_output - string, optional
+        unit system for output. default 'simu' for simulation output.
+        options are 'simu', 'si', 'cgs'.
+        Only affects final values from (external calls to) get_var.
+        if not 'simu', self.got_units_name will store units string from latest get_var.
+        Do not use at the same time as non-default sel_units.
 
     Examples
     --------
@@ -100,6 +108,7 @@ class BifrostData():
                  cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
                  use_relpath=False, stagger_kind=stagger.DEFAULT_STAGGER_KIND,
+                 units_output='simu',
                  iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
@@ -115,10 +124,13 @@ class BifrostData():
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
         self.stagger_kind = stagger_kind
-        self.sel_units = sel_units 
         self.numThreads = numThreads
         self.fast = fast
         self._fast_skip_flag = False if fast else None  # None-> never skip
+
+        # units. Two options for management. Should only use one at a time; leave the other at default value.
+        self.units_output = units_output    # < units.py system of managing units.
+        self.sel_units = sel_units          # < other system of managing units.
 
         setattr(self, document_vars.LOADING_LEVEL, -1) # tells how deep we are into loading a quantity now.
 
@@ -166,6 +178,7 @@ class BifrostData():
     ndim  = property(lambda self: 3)
 
     stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
+    units_output = UNITS_OUTPUT_PROPERTY(internal_name='_units_output')
 
     @property
     def cstagop(self): # cstagop is an alias to do_stagger. Maintained for backwards compatibility.
@@ -173,6 +186,16 @@ class BifrostData():
     @cstagop.setter
     def cstagop(self, value):
         self.do_stagger = value
+
+    @property
+    def snaps(self):
+        '''equivalent to self.snap when it is a list (or other iterable). Otherwise, raise TypeError.'''
+        snaps = self.snap
+        try:
+            iter(snaps)
+        except TypeError:
+            raise TypeError(f'self.snap (={self.snap}) is not a list!') from None
+        return snaps
 
     ## SET SNAPSHOT ##
     def __getitem__(self, i):
@@ -864,6 +887,10 @@ class BifrostData():
             - handle "creating documentation" or "var==''" case
             - handle "don't know how to get this var" case
             - reshape result as appropriate (based on iix,iiy,iiz)
+            - convert units as appropriate (based on self.units_output.)
+                - default is to keep result in simulation units, doing no conversions.
+                - if converting, note that any caching would happen in _load_quantity,
+                  outside this function. The cache will always be in simulation units.
         returns val after the processing is complete.
         '''
         # handle documentation case
@@ -900,6 +927,12 @@ class BifrostData():
                 val = val[self.iix,:,:]
                 val = val[:,self.iiy,:]
                 val = val[:,:,self.iiz]
+
+        # convert units if this was a top-level call to get_var, and we are using units_output != 'simu'.
+        if (not self._getting_internal_var()) and (self.units_output != 'simu'):
+            units_f, units_name = self.get_units(mode=self.units_output, _force_from_simu=True)
+            self.got_units_name = units_name   # << this line is just for reference. Not used internally.
+            val *= units_f   # we can use *=, overwriting the original val, since no one else is using it.
 
         return val
 

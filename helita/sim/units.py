@@ -153,6 +153,45 @@ import collections
 # whether to hide tracebacks from internal funcs in this file when showing error traceback.
 HIDE_INTERNAL_TRACEBACKS = True
 
+# UNIT_SYSTEMS are the allowed names for units_output.
+# units_output will dictate the units for the output of get_var.
+## additionally, get_units will give (1, units name) if units_output matches the request,
+## or raise NotImplementedError if units_output is not 'simu' and does not match the request.
+# For example:
+#  for obj.units_output='simu', get_units('si') tells (conversion to SI, string for SI units name)
+#  for obj.units_output='si', get_units('si') tells (1, string for SI units name)
+#  for obj.units_output='si', get_units('cgs') raises NotImplementedError.
+UNIT_SYSTEMS = ('simu', 'si', 'cgs')
+
+# UNITS_OUTPUT property
+def UNITS_OUTPUT_PROPERTY(internal_name='_units_output', default='simu'):
+    '''creates a property which manages units_output.
+    uses the internal name provided, and returns the default if property value has not been set.
+
+    only allows setting of units_output to valid names (as determined by helita.sim.units.UNIT_SYSTEMS).
+    '''
+    def get_units_output(self):
+        return getattr(self, internal_name, default)
+
+    def set_units_output(self, value):
+        '''sets units output to value.lower()'''
+        try:
+            value = value.lower()
+        except AttributeError:
+            pass   # the error below ("value isn't in UNIT_SYSTEMS") will be more elucidating than raising here.
+        assert value in UNIT_SYSTEMS, f"can only set units_output to one of {UNIT_SYSTEMS}, but got {value}"
+        setattr(self, internal_name, value)
+
+    doc = \
+        f"""Tells which unit system to use for output of get_var. Options are: {UNIT_SYSTEMS}.
+        'simu' --> simulation units. This is the default, and requires no "extra" unit conversions.
+        'si' --> si units.
+        'cgs' --> cgs units.
+        """
+
+    return property(fset=set_units_output, fget=get_units_output, doc=doc)
+
+
 # for ATF = AttrsFunclike(..., format_attr=None, **kw__entered),
 ## if kw__entered[ATTR_FORMAT_KWARG] (:=kw_fmt) exists,
 ### for any required kwargs which haven't been entered,
@@ -998,7 +1037,7 @@ def _get_units_info_from_mode(mode='si'):
     units_key, format_attr = UNITS_MODES[mode]
     return units_key, format_attr
 
-def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', **kw__units_tuple):
+def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', _force_from_simu=False, **kw__units_tuple):
     '''evaluates units for units_tuple using the attrs of obj and the selected units mode.
 
     units_tuple is called with units_tuple(obj.uni, obj, *args__units_tuple, **kw__units_tuple).
@@ -1006,6 +1045,10 @@ def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', **kw__
         to their "default" values (based on mode), unless other values are provided in kw__units_tuple.
     
     Accepted modes are 'si' for SI units, and 'cgs' for cgs units. Case-insensitive.
+
+    if _force_from_simu, always give the conversion factor from simulation units,
+        regardless of the value of obj.units_output.
+        This kwarg is mainly intended for internal use, during _get_var_postprocess.
     '''
     # initial processing of mode.
     units_key, format_attr = _get_units_info_from_mode(mode=mode)
@@ -1014,11 +1057,18 @@ def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', **kw__
     kw__units_tuple[UNITS_KEY_KWARG]   = kw__units_tuple.get(UNITS_KEY_KWARG,   units_key  )
     # evaluate units_tuple, using obj and **kwargs.
     result = units_tuple(obj.uni, obj, *args__units_tuple, **kw__units_tuple)
+    # check obj's unit system.
+    if _force_from_simu or (obj.units_output == 'simu'):
+        f = result.f
+    elif obj.units_output == mode:
+        f = 1
+    else:
+        raise NotImplementedError(f'units conversion from {repr(obj.units_output)} to {repr(mode)}')
     # make result formatting prettier and return result.
-    result = EvaluatedUnits(result.f, str(result.name))
+    result = EvaluatedUnits(f, str(result.name))
     return result
 
-def get_units(obj, mode='si', **kw__units_tuple):
+def get_units(obj, mode='si', **kw__evaluate_units_tuple):
     '''evaluates units for most-recently-gotten var (at top of obj._quants_tree).
     Accepted modes are defined by UNITS_MODES in helita.sim.units.py near top of file.
 
@@ -1026,6 +1076,8 @@ def get_units(obj, mode='si', **kw__units_tuple):
 
     kw__units_tuple go to units function.
         (meanwhile, kwargs related to units mode are automatically set, unless provided here)
+
+    This function is bound to the BifrostData object via helita.sim.document_vars.create_vardict().
     '''
     units_key, format_attr = _get_units_info_from_mode(mode=mode)
     # lookup info about most-recently-gotten var.
@@ -1033,7 +1085,7 @@ def get_units(obj, mode='si', **kw__units_tuple):
     units_tuple = _units_lookup_by_quant_info(obj, quant_info, units_key=units_key)
     quant_tree  = obj.got_vars_tree(as_data=True)
     # evaluate units_tuple, given obj.uni, obj, and **kwargs.
-    result = evaluate_units_tuple(units_tuple, obj, quant_tree, mode=mode, **kw__units_tuple)
+    result = evaluate_units_tuple(units_tuple, obj, quant_tree, mode=mode, **kw__evaluate_units_tuple)
     return result
 
 
