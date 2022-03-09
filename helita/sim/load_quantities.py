@@ -5,7 +5,7 @@ import warnings
 
 # import internal modules
 from . import document_vars
-from .load_arithmetic_quantities import do_cstagger
+from .load_arithmetic_quantities import do_stagger
 
 # import external public modules
 import numpy as np
@@ -898,9 +898,9 @@ def get_ponderomotive(obj, quant, POND_QUANT=None, **kwargs):
   ibyc = byc / (np.sqrt(b2)+1e-30)
   ibzc = bzc / (np.sqrt(b2)+1e-30)
     
-  return do_cstagger(dpond, 'ddxdn', obj=obj)*ibxc +\
-        do_cstagger(dpond, 'ddydn', obj=obj)*ibyc +\
-        do_cstagger(dpond, 'ddzdn', obj=obj)*ibzc 
+  return do_stagger(dpond, 'ddxdn', obj=obj)*ibxc +\
+        do_stagger(dpond, 'ddydn', obj=obj)*ibyc +\
+        do_stagger(dpond, 'ddzdn', obj=obj)*ibzc 
 
 
 
@@ -945,7 +945,7 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
       if getattr(obj, 'nx') < 5:
         return obj.zero()
       else:
-        return 1. / (do_cstagger(var, 'ddzup',obj=obj) + 1e-12)
+        return 1. / (do_stagger(var, 'ddzup',obj=obj) + 1e-12)
     elif quant == 'cs':
       return np.sqrt(obj.params['gamma'][obj.snapInd] *
                      var / obj.get_var('r'))
@@ -1022,12 +1022,12 @@ def get_wavemode(obj, quant, WAVE_QUANT=None, **kwargs):
     uperb = obj.get_var('uperb')
     uperbVect = uperb * unitB
     # cross product (uses cstagger bc no variable gets uperbVect)
-    curlX = (do_cstagger(do_cstagger(uperbVect[2], 'ddydn', obj=obj), 'yup',obj=obj) -
-             do_cstagger(do_cstagger(uperbVect[1], 'ddzdn',obj=obj), 'zup',obj=obj))
-    curlY = (-do_cstagger(do_cstagger(uperbVect[2], 'ddxdn',obj=obj), 'xup',obj=obj)
-             + do_cstagger(do_cstagger(uperbVect[0], 'ddzdn',obj=obj), 'zup',obj=obj))
-    curlZ = (do_cstagger(do_cstagger(uperbVect[1], 'ddxdn',obj=obj), 'xup',obj=obj) -
-             do_cstagger(do_cstagger(uperbVect[0], 'ddydn',obj=obj), 'yup',obj=obj))
+    curlX = (do_stagger(do_stagger(uperbVect[2], 'ddydn', obj=obj), 'yup',obj=obj) -
+             do_stagger(do_stagger(uperbVect[1], 'ddzdn',obj=obj), 'zup',obj=obj))
+    curlY = (-do_stagger(do_stagger(uperbVect[2], 'ddxdn',obj=obj), 'xup',obj=obj)
+             + do_stagger(do_stagger(uperbVect[0], 'ddzdn',obj=obj), 'zup',obj=obj))
+    curlZ = (do_stagger(do_stagger(uperbVect[1], 'ddxdn',obj=obj), 'xup',obj=obj) -
+             do_stagger(do_stagger(uperbVect[0], 'ddydn',obj=obj), 'yup',obj=obj))
     curl = np.stack((curlX, curlY, curlZ))
     # dot product
     result = np.abs((unitB * curl).sum(0))
@@ -1035,15 +1035,15 @@ def get_wavemode(obj, quant, WAVE_QUANT=None, **kwargs):
     uperb = obj.get_var('uperb')
     uperbVect = uperb * unitB
 
-    result = np.abs(do_cstagger(do_cstagger(
-      uperbVect[0], 'ddxdn',obj=obj), 'xup',obj=obj) + do_cstagger(do_cstagger(
-        uperbVect[1], 'ddydn',obj=obj), 'yup',obj=obj) + do_cstagger(
-          do_cstagger(uperbVect[2], 'ddzdn',obj=obj), 'zup',obj=obj))
+    result = np.abs(do_stagger(do_stagger(
+      uperbVect[0], 'ddxdn',obj=obj), 'xup',obj=obj) + do_stagger(do_stagger(
+        uperbVect[1], 'ddydn',obj=obj), 'yup',obj=obj) + do_stagger(
+          do_stagger(uperbVect[2], 'ddzdn',obj=obj), 'zup',obj=obj))
   else:
     dot1 = obj.get_var('uparb')
-    grad = np.stack((do_cstagger(do_cstagger(dot1, 'ddxdn',obj=obj),
-            'xup',obj=obj), do_cstagger(do_cstagger(dot1, 'ddydn',obj=obj), 'yup',obj=obj),
-                     do_cstagger(do_cstagger(dot1, 'ddzdn',obj=obj), 'zup',obj=obj)))
+    grad = np.stack((do_stagger(do_stagger(dot1, 'ddxdn',obj=obj),
+            'xup',obj=obj), do_stagger(do_stagger(dot1, 'ddydn',obj=obj), 'yup',obj=obj),
+                     do_stagger(do_stagger(dot1, 'ddzdn',obj=obj), 'zup',obj=obj)))
     result = np.abs((unitB * grad).sum(0))
   return result
 

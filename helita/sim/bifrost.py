@@ -1276,9 +1276,9 @@ class BifrostData():
         rho = self.r[sx, sy, sz]
 
         if self.do_mhd:
-            Bx = do_cstagger(self.bx, 'xup', obj=self)[sx, sy, sz]
-            By = do_cstagger(self.by, 'yup', obj=self)[sx, sy, sz]
-            Bz = do_cstagger(self.bz, 'zup', obj=self)[sx, sy, sz]
+            Bx = do_stagger(self.bx, 'xup', obj=self)[sx, sy, sz]
+            By = do_stagger(self.by, 'yup', obj=self)[sx, sy, sz]
+            Bz = do_stagger(self.bz, 'zup', obj=self)[sx, sy, sz]
             # Bx = cstagger.xup(self.bx)[sx, sy, sz]
             # By = cstagger.yup(self.by)[sx, sy, sz]
             # Bz = cstagger.zup(self.bz)[sx, sy, sz]
@@ -1290,7 +1290,7 @@ class BifrostData():
         else:
             Bx = By = Bz = None
 
-        vz = do_cstagger(self.pz, 'zup', obj=self)[sx, sy, sz] / rho
+        vz = do_stagger(self.pz, 'zup', obj=self)[sx, sy, sz] / rho
         # vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         if write_all_v:
@@ -1363,11 +1363,11 @@ class BifrostData():
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
         # vx = cstagger.xup(self.px)[sx, sy, sz] / rho
-        vx = do_cstagger(self.px, 'xup', obj=self)[sx, sy, sz] / rho
+        vx = do_stagger(self.px, 'xup', obj=self)[sx, sy, sz] / rho
         vx *= uv
-        vy = do_cstagger(self.py, 'yup', obj=self)[sx, sy, sz] / rho
+        vy = do_stagger(self.py, 'yup', obj=self)[sx, sy, sz] / rho
         vy *= -uv
-        vz = do_cstagger(self.pz, 'zup', obj=self)[sx, sy, sz] / rho
+        vz = do_stagger(self.pz, 'zup', obj=self)[sx, sy, sz] / rho
         vz *= -uv
         rho = rho * ur  # to cgs
         x = self.x[sx] * ul
@@ -2856,7 +2856,7 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
         data.set_snap(s)
         tgas[:, i] = np.squeeze(data.tg)[sx, sz]
         rho = np.squeeze(data.r)[sx, sz]
-        vz[:, i] = np.squeeze(do_cstagger(data.pz,'zup',obj=data))[sx, sz] / rho * (-uv)
+        vz[:, i] = np.squeeze(do_stagger(data.pz,'zup',obj=data))[sx, sz] / rho * (-uv)
         if writeB:
             Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
             By[:, i] = np.squeeze(-data.by)[sx, sz] * ub

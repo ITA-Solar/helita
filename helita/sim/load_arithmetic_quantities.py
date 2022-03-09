@@ -64,9 +64,15 @@ EPSILON   = 1.0e-20   # small number which is added in denominators of some oper
 ## painful to change the method itself (required re-installing helita for me) so we will
 ## instead just change our calls to the method here. -SE Apr 22 2021
 CSTAGGER_TYPES = ['float32']  # these are the allowed types
-def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
-  '''does cstagger, after ensuring arr is the correct type, converting if necessary.
-  if type conversion is necessary, convert to default_type.
+def do_stagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
+  '''does stagger of arr.
+  For stagger_kind='cstagger', first does some preprocessing:
+    - ensure arr is the correct type, converting if necessary.
+      if type conversion is necessary, convert to default_type.
+    - TODO: check _can_interp here, instead of separately.
+  For other stagger kinds,
+    - assert that obj has been provided
+    - call stagger via obj: obj.stagger.do(arr, operation)
   '''
   kind = getattr(obj,'stagger_kind', stagger.DEFAULT_STAGGER_KIND)
   if kind == 'cstagger': # use cstagger routine.
@@ -77,6 +83,8 @@ def do_cstagger(arr, operation, default_type=CSTAGGER_TYPES[0], obj=None):
   else:                  # use stagger routine.
     assert obj is not None, f'obj must be provided to use stagger, with stagger_kind = {stagger_kind}.'
     return obj.stagger.do(arr, operation)
+
+do_cstagger = do_stagger   # << alias, for backwards compatibility.
 
 def _can_interp(obj, axis, warn=True):
   '''return whether we can interpolate. Make warning if we can't.
@@ -188,7 +196,7 @@ def get_deriv(obj,quant):
       print('Threading', whsp*8, end="\r", flush=True)
     quantlist = [quant[-4:] for numb in range(obj.numThreads)]
     def deriv_loop(var, quant):
-      return do_cstagger(var, 'd' + quant[0], obj=obj)
+      return do_stagger(var, 'd' + quant[0], obj=obj)
     if axis != 'z':
       return threadQuantity_z(deriv_loop, obj.numThreads, var, quantlist)
     else:
@@ -199,17 +207,17 @@ def get_deriv(obj,quant):
       if axis != 'z':
         for iiz in range(obj.nz):
           slicer = np.s_[:, :, iiz:iiz+1]
-          staggered = do_cstagger(var[slicer], 'd' + quant[-4:], obj=obj)
+          staggered = do_stagger(var[slicer], 'd' + quant[-4:], obj=obj)
           output[slicer] = staggered
       else:
         for iiy in range(obj.ny):
           slicer = np.s_[:, iiy:iiy+1, :]
-          staggered = do_cstagger(var[slicer], 'd' + quant[-4:], obj=obj)
+          staggered = do_stagger(var[slicer], 'd' + quant[-4:], obj=obj)
           output[slicer] = staggered
 
       return output
     else:
-      return do_cstagger(var, 'd' + quant[-4:], obj=obj)
+      return do_stagger(var, 'd' + quant[-4:], obj=obj)
 
 
 # default
@@ -268,18 +276,18 @@ def get_center(obj,quant, *args, **kwargs):
         if axis != 'z':
           for iiz in range(obj.nz):
             slicer = np.s_[:, :, iiz:iiz+1]
-            staggered = do_cstagger(var[slicer], interp, obj=obj)
+            staggered = do_stagger(var[slicer], interp, obj=obj)
             output[slicer] = staggered
         else:
           for iiy in range(obj.ny):
             slicer = np.s_[:, iiy:iiy+1, :]
-            staggered = do_cstagger(var[slicer], interp, obj=obj)
+            staggered = do_stagger(var[slicer], interp, obj=obj)
             output[slicer] = staggered
   else:
     # do "regular" version of interpolation
     for interp in transf:
       if _can_interp(obj, interp[0]):
-        var = do_cstagger(var, interp, obj=obj)
+        var = do_stagger(var, interp, obj=obj)
   return var
 
 
@@ -288,7 +296,7 @@ _INTERP_QUANT = ('INTERP_QUANT', [x+up for up in ('up', 'dn') for x in AXES])
 # get value
 def get_interp(obj, quant):
   '''simple interpolation. var must end in interpolation instructions.
-  e.g. get_var('rxup') --> do_cstagger(get_var('r'), 'xup')
+  e.g. get_var('rxup') --> do_stagger(get_var('r'), 'xup')
   '''
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_INTERP_QUANT, get_interp.__doc__, uni=UNI.quant_child(0))
@@ -307,7 +315,7 @@ def get_interp(obj, quant):
 
   val = obj.get_var(varname)      # un-interpolated value
   if _can_interp(obj, interp[0]):
-    val = do_cstagger(val, interp, obj=obj) # interpolated value
+    val = do_stagger(val, interp, obj=obj) # interpolated value
   return val
 
 

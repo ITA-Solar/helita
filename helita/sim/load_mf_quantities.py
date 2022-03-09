@@ -6,7 +6,7 @@ from . import document_vars
 from .file_memory import Caching   # never alters results, but caches them for better efficiency.
                                    # use sparingly on "short" calculations; apply liberally to "long" calculations.
                                    # see also cache_with_nfluid and cache kwargs of get_var.
-from .load_arithmetic_quantities import do_cstagger
+from .load_arithmetic_quantities import do_stagger
 
 ## import the relevant things from the internal module "units"
 from .units import (
@@ -1538,7 +1538,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       if getattr(obj, 'nx') < 5:
         return obj.zero()
       else:
-        return 1. / (do_cstagger(var, 'ddzup',obj=obj) + 1e-12)
+        return 1. / (do_stagger(var, 'ddzup',obj=obj) + 1e-12)
     elif quant == 'cs':
       return np.sqrt(obj.params['gamma'][obj.snapInd] *
                      var / obj.get_var('totr'))
