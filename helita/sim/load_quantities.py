@@ -900,7 +900,7 @@ def get_ponderomotive(obj, quant, POND_QUANT=None, **kwargs):
     
   return do_cstagger(dpond, 'ddxdn', obj=obj)*ibxc +\
         do_cstagger(dpond, 'ddydn', obj=obj)*ibyc +\
-        do_cstagger(dpond, 'ddydn', obj=obj)*ibyc 
+        do_cstagger(dpond, 'ddzdn', obj=obj)*ibzc 
 
 
 
@@ -1733,9 +1733,6 @@ def calc_lenghth_lines(xl,yl,zl):
       for iiz in prange(nz): 
         iilmin = np.argmin(zl[iix, iiy, iiz,:])                  # Corona
         iilmax = np.argmin(np.abs(zl[iix, iiy, iiz,:]))          # Photosphere
-        if iix == 0: 
-          if iiy == 0:
-            print('ii', np.min(zl[iix, iiy, iiz,:]),np.max(zl[iix, iiy, iiz,:]),iilmin,iilmax)
         for iil in prange(iilmax+1,iilmin): 
           S[iix,iiy,iiz] += np.sqrt((xl[iix,iiy,iiz,iil]-xl[iix,iiy,iiz,iil-1])**2 +\
                             (yl[iix,iiy,iiz,iil]-yl[iix,iiy,iiz,iil-1])**2 +\
