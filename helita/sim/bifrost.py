@@ -22,14 +22,17 @@ from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import load_fromfile_quantities 
 from .tools import *
+from . import tools
 from . import document_vars
 from . import file_memory
 from . import stagger
 from .units import UNITS_OUTPUT_PROPERTY
 
+# defaults
 whsp = '  '
+AXES = ('x', 'y', 'z')
 
-
+# BifrostData class
 class BifrostData():
     """
     Reads data from Bifrost simulations in native format.
@@ -196,6 +199,14 @@ class BifrostData():
         except TypeError:
             raise TypeError(f'self.snap (={self.snap}) is not a list!') from None
         return snaps
+
+    kx = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.xLength, self.dx)),
+                  doc='kx coordinates [simulation units] (fftshifted such that 0 is in the middle).')
+    ky = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.yLength, self.dy)),
+                  doc='ky coordinates [simulation units] (fftshifted such that 0 is in the middle).')
+    kz = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.zLength, self.dz)),
+                  doc='kz coordinates [simulation units] (fftshifted such that 0 is in the middle).')
+    # ^ convert k to physical units by dividing by self.uni.usi_l  (or u_l for cgs)
 
     ## SET SNAPSHOT ##
     def __getitem__(self, i):
@@ -769,7 +780,6 @@ class BifrostData():
 
         updates x, y, z, dx1d, dy1d, dz1d afterwards, if any domains were changed.
         '''
-        AXES = ('x', 'y', 'z')
         if internal and self.do_stagger:
             # we slice at the end, only. For now, set all to slice(None)
             slices = (slice(None), slice(None), slice(None))
@@ -1580,7 +1590,6 @@ class BifrostData():
             scaling = 1.0
         else:
             scaling = self.uni.u_l / u_l
-        AXES = ('x', 'y', 'z')
         kw_x    = {  x   : getattr(self,    x      ) * scaling for x in AXES}
         kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') / scaling for x in AXES}
         kw_nx   = {'n'+x : getattr(self, x+'Length')           for x in AXES}
@@ -1590,9 +1599,9 @@ class BifrostData():
 
     write_meshfile = write_mesh_file  # alias
 
-    def get_coords(self, mode='si', axes=None):
+    def get_coords(self, units='si', axes=None, mode=None):
         '''returns dict of coords, with keys ['x', 'y', 'z', 't'].
-        coords units are based on mode.
+        units:
             'si' (default) -> [meters] for x,y,z; [seconds] for t.
             'cgs'     ->      [cm] for x,y,z;  [seconds] for t.
             'simu'    ->      [simulation units] for all coords.
@@ -1604,7 +1613,11 @@ class BifrostData():
             For example:
                 c = self.get_coords()
                 c['y'], c['t'] == self.get_coords(axes=('y', 'z'))
+                c['z'], c['x'], c['y'] == self.get_coords(axes='zxy')
+        mode: alias for units. (for backwards compatibility)
+            if entered, ignore units kwarg; use mode instead.
         '''
+        if mode is None: mode = units
         mode = mode.lower()
         VALIDMODES = ('si', 'cgs', 'simu')
         assert mode in VALIDMODES, "Invalid mode ({})! Expected one of {}".format(repr(mode), VALIDMODES)
@@ -1624,6 +1637,73 @@ class BifrostData():
             AXES_LOOKUP = {'x':'x', 0:'x', 'y':'y', 1:'y', 'z':'z', 2:'z', 't':'t', 3:'t'}
             result = tuple(result[AXES_LOOKUP[axis]] for axis in axes)
         return result
+
+    def get_kcoords(self, units='si', axes=None):
+        '''returns dict of k-space coords, with keys ['kx', 'ky', 'kz']
+        coords units are based on mode.
+            'si' (default) -> [ 1 / m]
+            'cgs'     ->      [ 1 / cm]
+            'simu'    ->      [ 1 / simulation unit length]
+        if axes is not None:
+            instead of returning a dict, return coords for the axes provided, in the order listed.
+            axes can be provided in either of these formats:
+                strings: 'x', 'y', 'z'
+                ints:     0 ,  1 ,  2
+        '''
+        # units
+        units = units.lower()
+        assert units in ('si', 'cgs', 'simu')
+        u_l = {'si': self.uni.usi_l, 'cgs': self.uni.u_l, 'simu': 1}[units]
+        # axes bookkeeping
+        if axes is None:
+            axes = AXES
+            return_dict = True
+        else:
+            AXES_LOOKUP = {'x':'x', 0:'x', 'y':'y', 1:'y', 'z':'z', 2:'z'}
+            axes = [AXES_LOOKUP[x] for x in axes]
+            return_dict = False
+        result = {f'k{x}': getattr(self, f'k{x}') for x in axes}   # get k
+        result = {key: val / u_l for key, val in result.items()}  # convert units
+        # return
+        if return_dict:
+            return result
+        else:
+            return [result[f'k{x}'] for x in axes]
+
+    def get_extent(self, axes, units='si'):
+        '''use plt.imshow(extent=get_extent()) to make a 2D plot in x,y,z,t coords.
+        (Be careful if coords are unevenly spaced; imshow assumes even spacing.)
+        units: 'si' (default), 'cgs', or 'simu'
+            unit system for result
+        axes: None, strings (e.g. ('x', 'z') or 'xz'), or list of indices (e.g. (0, 2))
+            which axes to get the extent for.
+            first axis will be the plot's x axis; second will be the plot's y axis.
+            E.g. axes='yz' means 'y' as the horizontal axis, 'z' as the vertical axis.
+        '''
+        assert len(axes) == 2, f"require exactly 2 axes for get_extent, but got {len(axes)}"
+        x, y = self.get_coords(units=units, axes=axes)
+        return tools.extent(x, y)
+
+    def get_kextent(self, axes=None, units='si'):
+        '''use plt.imshow(extent=get_kextent()) to make a plot in k-space.
+        units: 'si' (default), 'cgs', or 'simu'
+            unit system for result
+        axes: None, strings (e.g. ('x', 'z') or 'xz'), or list of indices (e.g. (0, 2))
+            which axes to get the extent for.
+            if None, use obj._latest_fft_axes (see helita.sim.load_arithmetic_quantities.get_fft_quant)
+            first axis will be the plot's x axis; second will be the plot's y axis.
+            E.g. axes='yz' means 'y' as the horizontal axis, 'z' as the vertical axis.
+        '''
+        if axes is None:
+            try:
+                axes = self._latest_fft_axes
+            except AttributeError:
+                errmsg = "self._latest_fft_axes not set; maybe you meant to get a quant from " +\
+                         "FFT_QUANT first? Use self.vardoc('FFT_QUANT') to see list of options."
+                raise AttributeError(errmsg) from None
+        assert len(axes) == 2, f"require exactly 2 axes for get_kextent, but got {len(axes)}"
+        kx, ky = self.get_kcoords(units=units, axes=axes)
+        return tools.extent(kx, ky)
 
     if file_memory.DEBUG_MEMORY_LEAK:
         def __del__(self):
