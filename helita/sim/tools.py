@@ -409,3 +409,23 @@ def rotation_apply(rotations, vecs):
   returns rotated vectors.
   '''
   return np.sum(rotations * np.expand_dims(vecs, axis=(-2)), axis=-1)
+
+
+''' --------------------------- plotting --------------------------- '''
+
+def extent(xcoords, ycoords):
+  '''returns extent (to go to imshow), given xcoords, ycoords. Assumes origin='lower'.
+  Use this method to properly align extent with middle of pixels.
+  (Noticeable when imshowing few enough pixels that individual pixels are visible.)
+  
+  xcoords and ycoords should be arrays.
+  (This method uses their first & last values, and their lengths.)
+
+  returns extent == np.array([left, right, bottom, top]).
+  '''
+  Nx = len(xcoords)
+  Ny = len(ycoords)
+  dx = (xcoords[-1] - xcoords[0])/Nx
+  dy = (ycoords[-1] - ycoords[0])/Ny
+  return np.array([*(xcoords[0] + np.array([0 - dx/2, dx * Nx + dx/2])),
+                   *(ycoords[0] + np.array([0 - dy/2, dy * Ny + dy/2]))])
