@@ -129,7 +129,7 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
     get_gradients_vect, get_gradients_scalar, get_vector_product,
     get_square, get_lg, get_numop, get_ratios,
     get_projections, get_angle,
-    get_stat_quant
+    get_stat_quant, get_fft_quant,
   )
 
   val = None
@@ -953,6 +953,74 @@ def get_stat_quant(obj, quant):
   else:
     raise NotImplementedError(f'command={repr(command)} in get_stat_quant')
 
+
+#default
+_FFT_QUANT = ('FFT_QUANT', ['fft2_', 'fftxy_', 'fftyz_', 'fftxz_'])
+# get value
+def get_fft_quant(obj, quant):
+  '''Fourier transform, using np.fft.fft2, and shifting using np.fft.fftshift.
+
+  result will be complex-valued. (consider get_var('abs_fft2_quant') to convert to magnitude.)
+
+  See obj.kx, ky, kz for the corresponding coordinates in k-space.
+  See obj.get_kextent for the extent to use if plotting k-space via imshow.
+
+  Also sets obj._latest_fft_axes = ('x', 'y'), ('x', 'z') or ('y', 'z') as appropriate.
+
+  Note that for plotting with imshow, you will likely want to transpose and use origin='lower'.
+  Example, making a correctly labeled and aligned plot of FFT(r[:, 0, :]):
+    dd = BifrostData(...)
+    val = dd('abs_fftxz_r')[:, 0, :]    # == |FFT(dd('r')[:, 0, :])|
+    extent = dd.get_kextent('xz', units='si')
+    plt.imshow(val.T, origin='lower', extent=extent)
+    plt.xlabel('kx [1/m]'); plt.ylabel('kz [1/m]')
+    plt.xlim([0, None])   # <-- not necessary, however numpy's FFT of real-valued input
+        # will be symmetric under rotation by 180 degrees, so half the spectrum is redundant.
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, *_FFT_QUANT, get_fft_quant.__doc__, uni=UNI.qc(0))
+    shifted = ' result will be shifted so that the zero-frequency component is in the middle (via np.fft.fftshift).'
+    docvar('fft2_', '2D fft. requires 2D data (i.e. x, y, or z with length 1). result will be 2D.' + shifted)
+    docvar('fftxy_', '2D fft in (x, y) plane, at each z. result will be 3D.' + shifted)
+    docvar('fftyz_', '2D fft in (y, z) plane, at each x. result will be 3D.' + shifted)
+    docvar('fftxz_', '2D fft in (x, z) plane, at each y. result will be 3D.' + shifted)
+    return None
+
+  # interpret quant string
+  command, _, var = quant.partition('_')
+  command = command + '_'
+
+  if command not in _FFT_QUANT[1]:
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, command, _FFT_QUANT[0], delay=True)
+
+  # do calculations and return result
+  val = obj(var)
+  if command == 'fft2_':
+    if np.shape(val) != obj.shape:
+      raise NotImplementedError(f'fft2_ for {repr(var)} with shape {np.shape(val)} not equal to obj.shape {obj.shape}')
+    if obj.xLength == 1:
+      return obj(f'fftyz_{var}')[0, :, :]
+    elif obj.yLength == 1:
+      return obj(f'fftxz_{var}')[:, 0, :]
+    elif obj.zLength == 1:
+      return obj(f'fftxy_{var}')[:, :, 0]
+    else:
+      errmsg = f'fft2_ requires x, y, or z to have length 1, but obj.shape = {obj.shape}.' +\
+                'maybe you meant to specify axes, via fftxy_, fftyz, or fftxz_?'
+      raise ValueError(errmsg)
+  elif command in ('fftxy_', 'fftyz_', 'fftxz_'):
+    x, y = command[3:5]
+    obj._latest_fft_axes = (x, y)    # <-- bookkeeping
+    AX_STR_TO_I = {'x': 0, 'y': 1, 'z': 2}
+    xi = AX_STR_TO_I[x]
+    yi = AX_STR_TO_I[y]
+    fft_unshifted = np.fft.fft2(val, axes=(xi, yi))
+    return np.fft.fftshift(fft_unshifted)
+  else:
+    raise NotImplementedError(f'command={repr(command)} in get_fft_quant')
 
 
 ''' ------------- End get_quant() functions; Begin helper functions -------------  '''
