@@ -613,13 +613,13 @@ def get_square(obj,quant):
 
 
 # default
-_LOG_QUANT = ('LOG_QUANT', ['lg', 'log_', 'ln_'])
+_LOG_QUANT = ('LOG_QUANT', ['lg', 'log_', 'log10_', 'ln_'])
 # get value
 def get_lg(obj,quant):
   '''Logarithm of a variable. E.g. log_r --> log10(r)'''
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_LOG_QUANT, get_lg.__doc__, uni=DIMENSIONLESS)
-    for lg in ['lg', 'log_']:
+    for lg in ['lg', 'log_', 'log10_']:
       docvar(lg,  'starting with, logarithm base 10 of a variable expressed in [simu. units].')
     docvar('ln_', 'starting with, logarithm base e  of a variable expressed in [simu. units].')
     return None
@@ -637,10 +637,13 @@ def get_lg(obj,quant):
   document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0], delay=True)
 
   # do calculations and return result
-  if getq in ['lg', 'log_']:
+  if getq in ['lg', 'log_', 'log10_']:
     return np.log10(obj.get_var(q))
   elif getq == 'ln_':
     return np.log(obj.get_var(q))
+  else:
+    raise NotImplementedError(f'{repr(getq)} in get_lg')
+
 
 
 # default
