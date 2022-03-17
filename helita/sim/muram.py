@@ -30,7 +30,7 @@ class MuramAtmos:
   """
 
   def __init__(self, fdir='.', template=".020000", verbose=True, dtype='f4',
-               sel_units='cgs', big_endian=False, prim=False, iz0=None, inttostring=(lambda x: '{0:06d}'.format(x))):
+               sel_units='cgs', big_endian=False, prim=False, iz0=None, inttostring=(lambda x: '{0:07d}'.format(x))):
 
 
     self.prim = prim
@@ -249,7 +249,37 @@ class MuramAtmos:
     return dem,taxis,time
 
 
-  def get_var(self,var,snap=None, iix=None, iiy=None, iiz=None, layout=None, **kargs): 
+  def _load_quantity(self, var, cgsunits=1.0, **kwargs):
+    '''helper function for get_var; actually calls load_quantities for var.'''
+    __tracebackhide__ = True  # hide this func from error traceback stack
+    # look for var in self.variables
+    if (var == 'ne'): 
+        print('WWW: Reading ne from Bifrost EOS',end="\r",flush=True)
+
+    # Try to load simple quantities.
+    #val = load_fromfile_quantities.load_fromfile_quantities(self, var,
+    #                                        save_if_composite=True, **kwargs)
+    #if val is not None:
+    #    val = val * cgsunits  # (vars from load_fromfile need to get hit by cgsunits.)
+    # Try to load "regular" quantities
+    #if val is None:
+    val = load_quantities(self, var, PLASMA_QUANT='', CYCL_RES='',
+                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
+                EOSTAB_QUANT=['ne','tau'], TAU_QUANT='', DEBYE_LN_QUANT='',
+                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
+                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
+                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
+                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
+                COLCOUMS_QUANT='', COLFREMX_QUANT='', **kwargs)
+        
+    # Try to load "arithmetic" quantities.
+    if val is None:
+        val = load_arithmetic_quantities(self, var, **kwargs) 
+
+    return val
+
+    
+  def get_var(self,var,snap=None, iix=None, iiy=None, iiz=None, layout=None, **kwargs): 
     '''
     Reads the variables from a snapshot (snap).
 
@@ -326,37 +356,58 @@ class MuramAtmos:
 
     else:
       # Loading quantities
-      if (var == 'ne'): 
-        print('WWW: Reading ne from Bifrost EOS',end="\r",flush=True)
-      if self.verbose: 
-        print('Loading composite variable',end="\r",flush=True)
-      self.data = load_quantities(self,var,PLASMA_QUANT='', CYCL_RES='',
-                COLFRE_QUANT='', COLFRI_QUANT='', IONP_QUANT='',
-                EOSTAB_QUANT=['ne','tau'], TAU_QUANT='', DEBYE_LN_QUANT='',
-                CROSTAB_QUANT='', COULOMB_COL_QUANT='', AMB_QUANT='', 
-                HALL_QUANT='', BATTERY_QUANT='', SPITZER_QUANT='', 
-                KAPPA_QUANT='', GYROF_QUANT='', WAVE_QUANT='', 
-                FLUX_QUANT='', CURRENT_QUANT='', COLCOU_QUANT='',  
-                COLCOUMS_QUANT='', COLFREMX_QUANT='', **kargs)
-      # Loading arithmetic quantities
-      if np.shape(self.data) == ():
-        if self.verbose: 
-          print('Loading arithmetic variable',end="\r",flush=True)
-        self.data = load_arithmetic_quantities(self,var, **kargs) 
- 
-    if document_vars.creating_vardict(self):
-        return None
-    elif var == '': 
-      print(help(self.get_var))
-      print('VARIABLES USING CGS OR GENERIC NOMENCLATURE')
-      for ii in self.varn: 
-          print('use ', ii,' for ',self.varn[ii])
-      if hasattr(self,'vardict'):
-        self.vardocs()
+      cgsunits = 1.0
+      # get value of variable.
+      self.data = self._load_quantity(var, cgsunits, **kwargs)
 
-      return None
+      # do post-processing
+      # self.data = self._get_var_postprocess(self.data, var=var, original_slice=original_slice)        
    
     return self.data
+
+
+  def _get_var_postprocess(self, val, var='', original_slice=[slice(None) for x in ('x', 'y', 'z')]):
+    '''does post-processing for get_var.
+    This includes:
+        - handle "creating documentation" or "var==''" case
+        - handle "don't know how to get this var" case
+        - reshape result as appropriate (based on iix,iiy,iiz)
+    returns val after the processing is complete.
+    '''
+    # handle documentation case
+    if document_vars.creating_vardict(self):
+        return None
+    elif var == '':
+        print('Variables from snap or aux files:')
+        print(self.simple_vars)
+        if hasattr(self,'vardict'):
+            self.vardocs()
+        return None
+
+    # handle "don't know how to get this var" case
+    if val is None:
+        errmsg = ('get_var: do not know (yet) how to calculate quantity {}. '
+            '(Got None while trying to calculate it.) '
+            'Note that simple_var available variables are: {}. '
+            '\nIn addition, get_quantity can read others computed variables; '
+            "see e.g. help(self.get_var) or get_var('')) for guidance.")
+        raise ValueError(errmsg.format(repr(var), repr(self.simple_vars)))
+
+    # set original_slice if cstagop is enabled and we are at the outermost layer.
+    if self.cstagop and not self._getting_internal_var():
+        self.set_domain_iiaxes(*original_slice, internal=False)
+
+    # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
+    if np.shape(val) != (self.xLength, self.yLength, self.zLength):
+        def isslice(x): return isinstance(x, slice)
+        if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
+            val = val[self.iix, self.iiy, self.iiz]  # we can index all together
+        else:  # we need to index separately due to numpy multidimensional index array rules.
+            val = val[self.iix,:,:]
+            val = val[:,self.iiy,:]
+            val = val[:,:,self.iiz]
+
+    return val
 
   def read_var_3d(self,var,iter=None,layout=None):
 
