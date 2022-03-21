@@ -219,6 +219,9 @@ def get_deriv(obj,quant):
     else:
       return do_stagger(var, 'd' + quant[-4:], obj=obj)
 
+  # if we reach this line, quant is a deriv quant but we did not handle it.
+  raise NotImplementedError(f'{repr(getq)} in get_deriv')
+
 
 # default
 _CENTER_QUANT = ('CENTER_QUANT', [x+'c' for x in AXES] + ['_center'])
@@ -387,7 +390,10 @@ def get_horizontal_average(obj,quant):
     for iix in range(0, getattr(obj, 'nx')):
       for iiy in range(0, getattr(obj, 'ny')):
         result[iix, iiy, :] = result[iix, iiy, :] / horv[:]
-  return result
+    return result
+  else:
+    # quant is a horizontal_average quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_horizontal_average')
 
 
 # default
@@ -551,6 +557,10 @@ def get_gradients_vect(obj,quant):
           result += obj.get_var('d' + q + 'xdyup')
     return result
 
+  else:
+    # if we reach this line, quant is a gradients_vect quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_gradients_vect')
+
 
 # default
 _GRADSCAL_QUANT = ('GRADSCAL_QUANT', ['gra'])
@@ -579,7 +589,10 @@ def get_gradients_scalar(obj,quant):
     result = obj.get_var('d' + q + 'dxup')
     result += obj.get_var('d' + q + 'dyup')
     result += obj.get_var('d' + q + 'dzup')
-  return result
+    return result
+  else:
+    # if we reach this line, quant is a gradients_scalar quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_gradients_scalar')
 
 
 # default
@@ -610,6 +623,9 @@ def get_square(obj,quant):
     result += obj.get_var(q + 'yc') ** 2
     result += obj.get_var(q + 'zc') ** 2
     return result
+  else:
+    # if we reach this line, quant is a square quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_square')
 
 
 # default
@@ -642,6 +658,7 @@ def get_lg(obj,quant):
   elif getq == 'ln_':
     return np.log(obj.get_var(q))
   else:
+    # if we reach this line, quant is a lg quant but we did not handle it.
     raise NotImplementedError(f'{repr(getq)} in get_lg')
 
 
@@ -678,6 +695,9 @@ def get_numop(obj,quant):
     return (v / np.mean(v)) - 1
   elif getq == 'abs_':
     return np.abs(v)
+  else:
+    # if we reach this line, quant is a numop quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_numop')
 
 # default
 _RATIO_QUANT = ('RATIO_QUANT', ['rat'])
@@ -869,6 +889,10 @@ def get_vector_product(obj,quant):
     ## '_facecrosstocenter_' gives result at (0, 0, 0) so we shift by xdn to align.
     return obj.get_var(A+'_facecrosstocenter_'+B+x + x+'dn')
 
+  else:
+    # if we reach this line, quant is a vector_product but we did not handle it.
+    raise NotImplementedError(f'{repr(cross)} in get_vector_product')
+
 
 # default
 _HATS = ['_hat'+x for x in AXES]
@@ -913,11 +937,15 @@ def get_angle(obj,quant):
     varhatx = obj.get_var(var+x) / obj.get_var('mod'+var)
     return varhatx
 
-  if command in _ANGLES_XXY:
+  elif command in _ANGLES_XXY:
     x, y = command[-2], command[-1] # _angle_xxy[-3] == _angle_xxy[-1]
     varx = obj.get_var(var + x)
     vary = obj.get_var(var + y)
     return np.arctan2(vary, varx)
+
+  else:
+    # if we reach this line, quant is an angle quant but we did not handle it.
+    raise NotImplementedError(f'{repr(command)} in get_angle')
 
 
 #default

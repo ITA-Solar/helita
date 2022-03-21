@@ -257,6 +257,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     jx = curlb_x / obj.uni.mu0si   # j [si units]
     jx = jx / obj.uni.usi_i        # j [simu. units]
     return ic_ix + jx              # j [simu. units]
+  else:
+    # if we reach this line, var is a global_var quant but we did not handle it.
+    raise NotImplementedError(f'{repr(var)} in get_global_var')
 
 
 # default
@@ -370,6 +373,9 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
     interp = y+'dn'+z+'dn'
     result = obj.get_var('nq'+interp, iS=-1)   # [simu. charge density units]  (Note: 'nq' < 0 for electrons)
 
+  else:
+    raise NotImplementedError(f'{repr(base)} in get_efield_var')
+
   return result
 
 
@@ -472,6 +478,9 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
       else:                    # not electrons
         f_var = var.replace('i', '')
         return obj.get_var(f_var)
+
+    else:
+      raise NotImplementedError(f'{repr(var)} in get_onefluid_var')
 
 
 # default
@@ -603,6 +612,9 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     re  = obj.get_var('re'+interp)  # [simu. mass density units]
     uex = obj.get_var('ue'+x)       # [simu. velocity units]
     return re * uex                 # [simu. momentum density units]
+
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_electron_var')
 
 
 # default
@@ -778,6 +790,9 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     numer = q_over_m_nu__squared * ExB__x + q_over_m_nu * Ex
     denom = q_over_m_nu__squared * B2 + 1
     return numer / denom
+
+  else:
+    raise NotImplementedError(f'{repr(base)} in get_momentum_quant')
 
 
 # default
@@ -971,6 +986,9 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     # << at this point, result = ui dot ef
     return qi * ni * result
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_heating_quant')
+
 
 # default
 _SPITZTERM_QUANT = ('SPITZTERM_QUANT', ['kappaq','dxTe','dyTe','dzTe','rhs'])
@@ -1000,19 +1018,19 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
     te  = obj.get_var('tg', mf_ispecies=-1) #obj.get_var('etg')
     result = kappaq0*(te)**(5.0/2.0)
 
-  if (var == 'dxTe'):     
+  elif (var == 'dxTe'):     
     gradx_Te = obj.get_var('dtgdxup', iS=-1)
     result = gradx_Te
 
-  if (var == 'dyTe'):
+  elif (var == 'dyTe'):
     grady_Te = obj.get_var('dtgdyup', iS=-1)
     result = grady_Te
   
-  if (var == 'dzTe'):
+  elif (var == 'dzTe'):
     gradz_Te = obj.get_var('dtgdzup', iS=-1)
     result = gradz_Te
 
-  if (var == 'rhs'):  
+  elif (var == 'rhs'):  
     bx =   obj.get_var('bx')
     by =   obj.get_var('by')
     bz =   obj.get_var('bz')
@@ -1033,6 +1051,9 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 
     rhs = bbx*gradx_Te + bby*grady_Te + bbz*gradz_Te
     result = rhs
+
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_spitzterm')
 
   return result
 
@@ -1306,6 +1327,9 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       warnings.warn(DeprecationWarning('1dcolslope will be removed at some point in the future.'))
     return -1 * obj.get_var("nu_ij") * (1 + obj.get_var('nu_ij_to_ji'))
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_mf_colf')
+
 
 # default
 _LOGCUL_QUANT = ('LOGCUL_QUANT', ['logcul'])
@@ -1329,6 +1353,9 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
     nel = obj.get_var('nel')
     return 23. + 1.5 * np.log(etg / 1.e6) - \
           0.5 * np.log(nel / 1e6)
+
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_logcul')
 
 
 # default
@@ -1458,6 +1485,9 @@ def get_mean_quant(obj, var, MEAN_QUANT=None):
       denom += r / m
     return numer / denom
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_mean_quant')
+
 
 # default
 _CFL_QUANTS = ['ohm']
@@ -1486,6 +1516,9 @@ def get_cfl_quant(obj, quant, CFL_QUANT=None):
     qrat  = obj.get_charge(fluid) / -1                                  # qs / qe
     nu_es = obj.get_var('nu_ij', iS=-1, jfluid=fluid)                   # nu_es
     return mrat * (qrat + nrat) * nu_es
+
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_cfl_quant')
 
 
 # default
@@ -1623,6 +1656,9 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       ldeb_inv_sum += 1/obj.get_var('ldebyei', ifluid=fluid.SL)
     return 1/ldeb_inv_sum
 
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_mf_plasmaparam')
+
 
 # default
 _WAVE_QUANT = ('WAVE_QUANT',
@@ -1644,6 +1680,9 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     for x in AXES:
       docvar('kmax'+x, "maximum resolvable wavevector in "+x+" direction. Determined via 2*pi/obj.d"+x+"1d",
                        nfluid=0, uni=UNI_length)
+    return None
+
+  if quant not in _WAVE_QUANT[1]:
     return None
 
   if quant == 'ci':
@@ -1677,6 +1716,9 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     dx1d = getattr(obj, 'd'+x+'1d')  # 1D; needs dims to be added. add dims below.
     dx1d = np.expand_dims(dx1d, axis=tuple(set((0,1,2)) - set([xidx])))
     return (2 * np.pi / dx1d) + obj.zero()
+
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_mf_wavequant')
 
 
 # default
@@ -1776,6 +1818,9 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
   elif quant in ['fb_ssi_growth_time_min'+x for x in AXES]:
     x = quant[-1]
     return 1/obj.get_var('fb_ssi_growth_rate_max'+x)
+
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_fb_instab_quant')
 
 
 # default
