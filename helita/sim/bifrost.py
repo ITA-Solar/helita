@@ -1638,6 +1638,15 @@ class BifrostData():
             result = tuple(result[AXES_LOOKUP[axis]] for axis in axes)
         return result
 
+    def get_coord(self, axis, units='si'):
+        '''gets coord for the given axis, in the given unit system.
+        axis: string ('x', 'y', 'z', 't') or int (0, 1, 2, 3)
+        units: string ('si', 'cgs', 'simu')   ('simu' for 'simulation units')
+
+        The result will be an array (possibly with only 1 element).
+        '''
+        return self.get_coords(units=units, axes=[axis])[0]
+
     def get_kcoords(self, units='si', axes=None):
         '''returns dict of k-space coords, with keys ['kx', 'ky', 'kz']
         coords units are based on mode.
