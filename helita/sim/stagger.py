@@ -56,6 +56,7 @@ TODO:
 import time
 import weakref
 import collections
+import warnings
 
 # import public external modules
 import numpy as np
@@ -166,6 +167,9 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     ----------
     var : 3D array
         Variable to work on.
+        if not 3D, makes a warning but still tries to return a reasonable result:
+            for non-derivatives, return var (unchanged).
+            for derivatives, return 0 (as an array with same shape as var).
     operation: str
         Type of operation. Currently supported values are
         * 'xup', 'xdn', 'yup', 'ydn', 'zup', 'zdn'
@@ -194,7 +198,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     """
     # initial bookkeeping
     AXES = ('x', 'y', 'z')
-    operation = operation.lower()
+    operation = operation_orig = operation.lower()
     stagger_kind = ALIAS_STAGGER_KIND[stagger_kind]
     # order
     if stagger_kind == 'o1_numpy':
@@ -202,7 +206,25 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         stagger_kind = 'numpy'
     else:
         order = 5
-
+    # derivative, diff
+    if operation[:2] == 'dd':  # For derivative operations
+        derivative = True
+        operation = operation[2:]
+        if diff is None:
+            raise ValueError(f"diff not provided for derivative operation: {operation_orig}")
+    else:
+        derivative = False
+        if diff is not None:
+            raise ValueError(f"diff must not be provided for non-derivative operation: {operation}")
+    # make sure var is 3D. make warning then handle appropriately if not.
+    if var.ndim != 3:
+        warnmsg = f'can only stagger 3D array but got {var.ndim}D.'
+        if derivative:
+            warnings.warn(warnmsg + f' returning 0 for operation {operation_orig}')
+            return np.zeros_like(var)
+        else:
+            warnings.warn(warnmsg + f' returning original array for operation {operation_orig}')
+            return var
     # up/dn
     up_str = operation[-2:]  # 'up' or 'dn'
     if up_str == 'up':
@@ -211,16 +233,6 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         up = False
     else: 
         raise ValueError(f"Invalid operation; must end in 'up' or 'dn': {operation}")
-    # derivative, diff
-    if operation[:2] == 'dd':  # For derivative operations
-        derivative = True
-        operation = operation[2:]
-        if diff is None:
-            raise ValueError(f"diff not provided for derivative operation: {operation}")
-    else:
-        derivative = False
-        if diff is not None:
-            raise ValueError(f"diff must not be provided for non-derivative operation: {operation}")
     # x, dim_index (0 for x, 1 for y, 2 for z)
     x = operation[:-2]
     if x not in AXES:
