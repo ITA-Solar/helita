@@ -180,8 +180,23 @@ class BifrostData():
     size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
     ndim  = property(lambda self: 3)
 
-    stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
     units_output = UNITS_OUTPUT_PROPERTY(internal_name='_units_output')
+
+    @property
+    def internal_means(self):
+        '''whether to take means of get_var internally, immediately (for simple vars).
+        DISABLED by default.
+
+        E.g. if enabled, self.get_var('r') will be single-valued, not an array.
+        Note this will have many consequences. E.g. derivatives will all be 0.
+        Original intent: analyzing simulations with just a small perturbation around the mean.
+        '''
+        return getattr(self, '_internal_means', False)
+    @internal_means.setter
+    def internal_means(self, value):
+        self._internal_means = value
+
+    stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
 
     @property
     def cstagop(self): # cstagop is an alias to do_stagger. Maintained for backwards compatibility.
@@ -897,6 +912,7 @@ class BifrostData():
             - handle "creating documentation" or "var==''" case
             - handle "don't know how to get this var" case
             - reshape result as appropriate (based on iix,iiy,iiz)
+            - take mean if self.internal_means (disabled by default).
             - convert units as appropriate (based on self.units_output.)
                 - default is to keep result in simulation units, doing no conversions.
                 - if converting, note that any caching would happen in _load_quantity,
@@ -937,6 +953,10 @@ class BifrostData():
                 val = val[self.iix,:,:]
                 val = val[:,self.iiy,:]
                 val = val[:,:,self.iiz]
+
+        # take mean if self.internal_means (disabled by default)
+        if self.internal_means:
+            val = val.mean()
 
         # convert units if this was a top-level call to get_var, and we are using units_output != 'simu'.
         if (not self._getting_internal_var()) and (self.units_output != 'simu'):
