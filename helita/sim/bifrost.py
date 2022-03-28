@@ -84,6 +84,8 @@ class BifrostData():
         Only affects final values from (external calls to) get_var.
         if not 'simu', self.got_units_name will store units string from latest get_var.
         Do not use at the same time as non-default sel_units.
+    squeeze_output - bool, optional. default False
+        whether to apply np.squeeze() before returning the result of get_var.
 
     Examples
     --------
@@ -111,7 +113,7 @@ class BifrostData():
                  cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
                  use_relpath=False, stagger_kind=stagger.DEFAULT_STAGGER_KIND,
-                 units_output='simu',
+                 units_output='simu', squeeze_output=False,
                  iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
@@ -130,6 +132,7 @@ class BifrostData():
         self.numThreads = numThreads
         self.fast = fast
         self._fast_skip_flag = False if fast else None  # None-> never skip
+        self.squeeze_output = squeeze_output
 
         # units. Two options for management. Should only use one at a time; leave the other at default value.
         self.units_output = units_output    # < units.py system of managing units.
@@ -913,6 +916,7 @@ class BifrostData():
             - handle "don't know how to get this var" case
             - reshape result as appropriate (based on iix,iiy,iiz)
             - take mean if self.internal_means (disabled by default).
+            - squeeze if self.squeeze_output (disabled by default).
             - convert units as appropriate (based on self.units_output.)
                 - default is to keep result in simulation units, doing no conversions.
                 - if converting, note that any caching would happen in _load_quantity,
@@ -958,11 +962,18 @@ class BifrostData():
         if self.internal_means:
             val = val.mean()
 
-        # convert units if this was a top-level call to get_var, and we are using units_output != 'simu'.
-        if (not self._getting_internal_var()) and (self.units_output != 'simu'):
-            units_f, units_name = self.get_units(mode=self.units_output, _force_from_simu=True)
-            self.got_units_name = units_name   # << this line is just for reference. Not used internally.
-            val *= units_f   # we can use *=, overwriting the original val, since no one else is using it.
+        # handle post-processing steps which we only do for top-level calls to get_var:
+        if not self._getting_internal_var():
+            
+            # squeeze if self.squeeze_output (disabled by default)
+            if self.squeeze_output and (np.ndim(val) > 0):
+                val = val.squeeze()
+
+            # convert units if we are using units_output != 'simu'.
+            if self.units_output != 'simu':
+                units_f, units_name = self.get_units(mode=self.units_output, _force_from_simu=True)
+                self.got_units_name = units_name   # << this line is just for reference. Not used internally.
+                val *= units_f   # we can use *=, overwriting the original val, since no one else is using it.
 
         return val
 
