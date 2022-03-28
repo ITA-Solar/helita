@@ -1667,6 +1667,30 @@ class BifrostData():
         '''
         return self.get_coords(units=units, axes=[axis])[0]
 
+    def coord_grid(self, axes='xyz', units='si', sparse=True, **kw__meshgrid):
+        '''returns grid of coords for self along the given axes.
+
+        axes: list of strings ('x', 'y', 'z', 't'), or ints (0, 1, 2, 3)
+        units: string ('si', 'cgs', 'simu')   ('simu' for 'simulation units')
+        sparse: bool. Example:
+            coord_grid('xyz', sparse=True)[0].shape == (Nx, 1, 1)
+            coord_grid('xyz', sparse=False)[0].shape == (Nx, Ny, Nz)
+
+        This function basically just calls np.meshgrid, using coords from self.get_coords.
+
+        Example:
+            xx, yy, zz = self.coord_grid('xyz', sparse=True)
+            # yy.shape == (1, self.yLength, 1)
+            # yy[0, i, 0] == self.get_coord('x')[i]
+
+            xx, tt = self.coord_grid('xt', sparse=False)
+            # xx.shape == (self.xLength, len(self.time))
+            # tt.shape == (self.XLength, len(self.time))
+        '''
+        coords = self.get_coords(axes=axes, units=units)
+        indexing = kw__meshgrid.pop('indexing', 'ij')  # default 'ij' indexing
+        return np.meshgrid(*coords, sparse=sparse, indexing=indexing, **kw__meshgrid)
+
     def get_kcoords(self, units='si', axes=None):
         '''returns dict of k-space coords, with keys ['kx', 'ky', 'kz']
         coords units are based on mode.
