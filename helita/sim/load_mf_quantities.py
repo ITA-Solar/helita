@@ -36,8 +36,9 @@ units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
 
 
 def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=None,
-                       ONEFLUID_QUANT=None, ELECTRON_QUANT=None, MOMENTUM_QUANT=None,
-                       HEATING_QUANT=None, SPITZERTERM_QUANT=None,
+                       ONEFLUID_QUANT=None, ELECTRON_QUANT=None,
+                       CONTINUITY_QUANT=None, MOMENTUM_QUANT=None, HEATING_QUANT=None,
+                       SPITZERTERM_QUANT=None,
                        COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
                        DRIFT_QUANT=None, MEAN_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
                        WAVE_QUANT=None, FB_INSTAB_QUANT=None, THERMAL_INSTAB_QUANT=None,
@@ -64,6 +65,7 @@ def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=
     (get_efield_var, 'EFIELD_QUANT'),
     (get_onefluid_var, 'ONEFLUID_QUANT'),
     (get_electron_var, 'ELECTRON_QUANT'),
+    (get_continuity_quant, 'CONTINUITY_QUANT'),
     (get_momentum_quant, 'MOMENTUM_QUANT'),
     (get_heating_quant, 'HEATING_QUANT'),
     (get_spitzerterm, 'SPITZERTERM_QUANT'),
@@ -618,6 +620,54 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
 
 # default
+_CONTINUITY_QUANT = ('CONTINUITY_QUANT',
+                     ['ndivu', 'udivn', 'udotgradn', 'flux_nu', 'flux_un',
+                     'gradnx', 'gradny', 'gradnz']
+                     )
+# get value
+@document_vars.quant_tracking_simple(_CONTINUITY_QUANT[0])
+def get_continuity_quant(obj, var, CONTINUITY_QUANT=None):
+  '''terms related to the continuity equation.
+  In the simple case (e.g. no ionization), expect dn/dt + flux_un = 0.
+  '''
+  if CONTINUITY_QUANT is None:
+    CONTINUITY_QUANT = _CONTINUITY_QUANT[1]
+
+  if var == '':
+    docvar = document_vars.vars_documenter(obj, _CONTINUITY_QUANT[0], CONTINUITY_QUANT,
+                                           get_continuity_quant.__doc__, nfluid=1, uni=UNI_nr * UNI_hz)
+    docvar('ndivu', 'number density times divergence of velocity')
+    for udivn in ('udivn', 'udotgradn'):
+      docvar(udivn, 'velocity dotted with gradient of number density')
+    for x in AXES:
+      docvar('gradn'+x, x+'-component of grad(nr), face-centered.', nfluid=1, uni=UNI.qc(0)) # qc0 will be e.g. dnrdxdn.
+    for flux_un in ('flux_un', 'flux_nu'):
+      docvar(flux_un, 'divergence of (velocity times number density). Calculated via ndivu + udotgradn.')
+    docvar('flux_p', 'divergence of momentum density')
+    return None
+
+  if var not in CONTINUITY_QUANT:
+    return None
+
+  # --- continuity equation terms --- #
+  if var == 'ndivu':
+    n    = obj('nr')
+    divu = obj('divupui')  # divup(ui). up to align with n.
+    return n * divu
+
+  elif var in ('gradnx', 'gradny', 'gradnz'):
+    return obj(f'dnrd{var[-1]}dn')
+
+  elif var in ('udivn', 'udotgradn'):
+    return obj('ui_facedot_gradn')
+
+  elif var in ('flux_nu', 'flux_un'):
+    return obj('ndivu') + obj('udivn')
+
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_momentum_quant')
+
+# default
 _MOMENTUM_QUANT = []
 _MQVECS = ['rij', 'rijsum', 'momflorentz', 'mombat', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
 _MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
@@ -650,7 +700,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     for x in AXES:
       docvar('gradp'+x, x+'-component of grad(Pi), face-centered (interp. loc. aligns with momentum).', nfluid=1, uni=UNI.qc(0))
     for x in AXES:
-      docvar('momrate'+x, x+'-component of rate of change of momentum. ' +\
+      docvar('momrate'+x, x+'-component of rate of change of momentum density. ' +\
                           '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1, **units_dpdt)
     for x in AXES:
       docvar('ueq'+x, x+'-component of equilibrium velocity of ifluid. Ignores derivatives in momentum equation. ' +\
