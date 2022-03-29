@@ -973,7 +973,7 @@ class BifrostData():
             if self.units_output != 'simu':
                 units_f, units_name = self.get_units(mode=self.units_output, _force_from_simu=True)
                 self.got_units_name = units_name   # << this line is just for reference. Not used internally.
-                val *= units_f   # we can use *=, overwriting the original val, since no one else is using it.
+                val = val * units_f   # can't do *= in case val is a read-only memmap.
 
         return val
 
