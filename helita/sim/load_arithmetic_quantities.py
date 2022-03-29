@@ -126,7 +126,8 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
   _getter_funcs = (
     get_center, get_deriv, get_interp,
     get_module, get_horizontal_average,
-    get_gradients_vect, get_gradients_scalar, get_vector_product,
+    get_gradients_vect, get_gradients_scalar,
+    get_vector_product, get_dot_product,
     get_square, get_lg, get_numop, get_ratios,
     get_projections, get_angle,
     get_stat_quant, get_fft_quant,
@@ -398,7 +399,9 @@ def get_horizontal_average(obj,quant):
 
 # default
 _GRADVECT_QUANT = ('GRADVECT_QUANT',
-                   ['div', 'divup', 'divdn',
+                   ['divup', 'divdn', 'div',  # note: div must come after divup and divdn,
+                          # since to check which quant to get we are checking .startswith,
+                          # and 'divup' and 'divdn' both start with 'div'.
                    'rot', 'she', 'curlcc', 'curvec',
                    'chkdiv', 'chbdiv', 'chhdiv']
                   )
@@ -808,7 +811,8 @@ def get_vector_product(obj,quant):
                            'result is fully centered. E.g. result_x is at ( 0  ,  0  ,  0  ).'
                            ' For most cases, it is better to use _facecrosstoface_'))
     docvar('_facecrosstoface_', ('cross product for two face-centered vectors such as B, u. '
-                           'result is face-centered E.g. result_x is at (-0.5,  0 ,  0  ).'), uni=UNI.quant_child(0))
+                           'result is face-centered E.g. result_x is at (-0.5,  0 ,  0  ).'),
+                            uni=UNI.quant_child(0))   # quant_child(0) will be _facecrosstocenter_ for this one.
     return None
 
   # interpret quant string
@@ -818,7 +822,7 @@ def get_vector_product(obj,quant):
       B, x = q[:-1], q[-1]
       y, z = YZ_FROM_X[x]
       break
-  else:  # if we did not break, we did not match any RAT to quant, so we return None.
+  else:  # if we did not break, we did not match any TIMES to quant, so we return None.
     return None
 
   # tell obj the quant we are getting by this function.
@@ -892,6 +896,59 @@ def get_vector_product(obj,quant):
   else:
     # if we reach this line, quant is a vector_product but we did not handle it.
     raise NotImplementedError(f'{repr(cross)} in get_vector_product')
+
+
+# default
+_DOT_PRODUCT_QUANT = \
+          ('DOT_PRODUCT_QUANT',
+            ['_dot_', '_facedot_', '_edgedot_']
+          )
+# get value
+def get_dot_product(obj,quant):
+  '''dot product between two vectors.
+  call via <v1><dot><v2>
+  Example, u dot ue, you should call get_var('u_facedot_ue').
+  Result will always be centered on the meshgrid.
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, *_DOT_PRODUCT_QUANT, get_dot_product.__doc__,
+                                           uni=UNI.quant_child(0) * UNI.quant_child(1))
+    docvar('_dot_',  '"smart" dot product between two vectors. centers all values before dotting.')
+    docvar('_facedot_', 'dot product between two face-centered vectors, such as B, u.')
+    docvar('_edgedot_', 'dot product between two edge-centered vectors, such as E, I.')
+    return None
+
+  # interpret quant string
+  for TIMES in _DOT_PRODUCT_QUANT[1]:
+    A, dot, B = quant.partition(TIMES)
+    if B != '':
+      break
+  else:  # if we did not break, we did not match any TIMES to quant, so we return None.
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, dot, _DOT_PRODUCT_QUANT[0], delay=True)
+
+  # at this point, we know quant looked like <A><dot><B>
+
+  if dot == '_dot_':
+    return obj(A+'xc') * obj(B+'xc') + \
+           obj(A+'yc') * obj(B+'yc') + \
+           obj(A+'zc') * obj(B+'zc')
+
+  elif dot == '_facedot_':
+    return obj(A+'xxup') * obj(B+'xxup') + \
+           obj(A+'yyup') * obj(B+'yyup') + \
+           obj(A+'zzup') * obj(B+'zzup')
+
+  elif dot == '_edgedot_':
+    return obj(A+'xyupzup') * obj(B+'xyupzup') + \
+           obj(A+'yzupxup') * obj(B+'yzupxup') + \
+           obj(A+'zxupyup') * obj(B+'zxupyup')
+
+  else:
+    # if we reach this line, quant is a dot_product quant but we did not handle it.
+    raise NotImplementedError(f'{repr(dot)} in get_dot_product')
 
 
 # default
