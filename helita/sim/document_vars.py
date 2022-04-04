@@ -39,12 +39,6 @@ vardict = {
     ...
 }
 
-
-[TODO]:
-    - [FIX] Solve sad interaction between self.variables checking and quant_tracking.
-        - E.g. get_var('r') after initialization of EbysusData confuses quant_tracking,
-            because it returns the data in self.r immediately, instead of loading a quantity.
-
 """
 
 # import built-ins
