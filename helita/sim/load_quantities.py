@@ -631,8 +631,9 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _COLFRI_QUANT0, COLFRI_QUANT, get_collision_ms.__doc__)
+    return None
 
-  if quant not in COLFRI_QUANT:
+  if (quant[0:2] != 'nu') or (not ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT):
     return None
 
   elif quant in ('nu_ni_mag', 'nu_ni', 'numx_ni_mag', 'numx_ni'):
@@ -695,25 +696,23 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
                        ('nue', ielem, lvl), **kwargs)
 
   elif (quant[0:2]=='nu' and (quant[-2:] == '_i' or quant[-2:] == '_n' or quant[-6:] == '_i_mag' or quant[-6:] == '_n_mag')):
-    addtxt = ''
-    if quant[-4:] == '_mag':
-      addtxt = '_mag'
-    if '_i' in quant:
-      lvl = '2'
-      lvl_a = '1'
-    else:
-      lvl = '1'
-      lvl_a = '2'
-    elem = quant.split('_')
+    nu = 'numx' if quant.startswith('numx') else 'nu'
+    qrem = quant[len(nu):]   # string remaining in quant, after taking away nu (either 'nu' or 'numx').
+    elem, _, qrem = qrem.partition('_')   # e.g. 'h2', '_', 'n_mag'    # or, e.g. 'he', '_', 'i'
+    n, _, mag = qrem.partition('_')       # e.g. 'n', '_', 'mag'       # or, e.g. 'i', '', ''
+    if mag!='': mag = '_' + mag
+
+    if not elem[-1].isdigit():   # Didn't provide level for elem; we infer it to be 1 or 2 based on '_i' or '_n'.
+      elemlvl = {'n':2, 'i':1}[n]  # elemlvl is 2 for nu<elem>_n; 1 for nu<elem>_i.
+      elem = '{elem}{lvl}'.format(elem=elem, lvl=elemlvl)
+    jlvl = {'n':1, 'i':2}[n]   # level of second species will be 1 for nu<elem>_n, 2 for nu<elem>_i.
+
     result = obj.zero()
-    for ielem in obj.ELEMLIST:
-      if elem[0][2:] != '%s%s' % (ielem, lvl):
-        result += obj.get_var('%s%s_%s%s%s' %
-                (elem[0], lvl_a, ielem, lvl, addtxt), **kwargs) #* obj.uni.weightdic[ielem] /\
-                #(obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
-    #if obj.heion and quant[-3:] == '_i':
-      #result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) * obj.uni.weightdic['he'] /\
-      #        (obj.uni.weightdic['he'] + obj.uni.weightdic[elem[0][2:-1]])
+    for ielem in obj.ELEMLIST:   # e.g. ielem == 'he'
+      ielem = '{elem}{lvl}'.format(elem=ielem, lvl=jlvl)
+      if ielem != elem:
+        getting = '{nu}{elem}_{ielem}{mag}'.format(nu=nu, elem=elem, ielem=ielem, mag=mag)
+        result += obj.get_var(getting, **kwargs)
 
   return result
 
@@ -1124,9 +1123,11 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
     return obj.get_var('modb') * obj.uni.usi_b * \
             obj.uni.qsi_electron / (obj.uni.msi_e)
   else:
-    ion = float(''.join([i for i in quant if i.isdigit()]))
+    ion_level = ''.join([i for i in quant if i.isdigit()])  # 1-indexed ionization level (e.g. H+ --> ion_level=2)
+    assert ion_level!='', "Expected 'gf<A><N>' with A an element, N a number (ionization level), but got '{quant}'".format(quant)
+    ion_Z = float(ion_level) - 1.0   # 0-indexed ionization level. (e.g. H+ --> ion_Z = 1. He++ --> ion_Z=2.)
     return obj.get_var('modb') * obj.uni.usi_b * \
-        obj.uni.qsi_electron * (ion - 1.0) / \
+        obj.uni.qsi_electron * ion_Z / \
         (obj.uni.weightdic[quant[2:-1]] * obj.uni.amusi)
 
 
