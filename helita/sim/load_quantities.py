@@ -108,7 +108,9 @@ def set_elemlist_as_needed(obj, elemlist=None, ELEMLIST=None, **kwargs):
     return set_elemlist(obj, elemlist)
 
 def set_elemlist(obj, elemlist):
-  ''' sets all things which depend on elemlist, as attrs of data_object. '''
+  ''' sets all things which depend on elemlist, as attrs of obj.
+  Also sets obj.set_elemlist to partial(set_elemlist(obj)).
+  '''
   obj.ELEMLIST = elemlist
   obj.CROSTAB_LIST = ['e_'+elem for elem in obj.ELEMLIST]   \
                 + [elem+'_e' for elem in obj.ELEMLIST]   \
@@ -134,7 +136,11 @@ def set_elemlist(obj, elemlist):
   obj.IONP_QUANT = ['n' + elem + '-' for elem in obj.ELEMLIST]  \
                + ['r' + elem + '-' for elem in obj.ELEMLIST]  \
                + ['rneu', 'rion', 'nion', 'nneu', 'nelc'] \
-               + ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']         
+               + ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']       
+  def _set_elemlist(elemlist):
+    '''sets all things which depend on elemlist, as attrs of self.'''
+    set_elemlist(obj, elemlist)
+  obj.set_elemlist = _set_elemlist
 
 def set_crossdict_as_needed(obj, **kwargs):
   '''sets all things related to cross_dict.
@@ -425,6 +431,7 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
     return None
+
 
   elem = quant.split('_')
   spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
