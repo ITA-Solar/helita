@@ -277,9 +277,9 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
 
 
 # default
-_CROSTAB_QUANT = ('CROSTAB_QUANT')
+_CROSTAB_QUANT0 = ('CROSTAB_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
+@document_vars.quant_tracking_simple(_CROSTAB_QUANT0)
 def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   '''
   Computes cross section between species in cgs
@@ -298,7 +298,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
     CROSTAB_QUANT = obj.CROSTAB_LIST
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _CROSTAB_QUANT[0], CROSTAB_QUANT, get_crossections.__doc__)
+    docvar = document_vars.vars_documenter(obj, _CROSTAB_QUANT0, CROSTAB_QUANT, get_crossections.__doc__)
  
   quant_elem = ''.join([i for i in quant if not i.isdigit()])
 
@@ -406,11 +406,10 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs):
     return obj.rhoee.tab_interp(
       rho, ee, order=1, out=quant) * fac
 
-
 # default
-_COLFRE_QUANT = ('COLFRE_QUANT')
+_COLFRE_QUANT0 = ('COLFRE_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLFRE_QUANT[0])
+@document_vars.quant_tracking_simple(_COLFRE_QUANT0)
 def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
   '''
   Collision frequency between different species in (cgs)
@@ -422,7 +421,7 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
     COLFRE_QUANT = obj.COLFRE_QUANT#_COLFRE_QUANT[1]
 
   if quant=='':  
-    docvar = document_vars.vars_documenter(obj, _COLFRE_QUANT[0], COLFRE_QUANT, get_collision.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLFRE_QUANT0, COLFRE_QUANT, get_collision.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
     return None
@@ -460,9 +459,9 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
 
 
 # default
-_COLFREMX_QUANT = ('COLFREMX_QUANT')
+_COLFREMX_QUANT0 = ('COLFREMX_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLFREMX_QUANT[0])
+@document_vars.quant_tracking_simple(_COLFREMX_QUANT0)
 def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
   '''
   Maxwell molecular collision frequency 
@@ -471,7 +470,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
     COLFREMX_QUANT = obj.COLFREMX_QUANT
   
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLFREMX_QUANT[0], COLFREMX_QUANT, get_collision_maxw.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLFREMX_QUANT0, COLFREMX_QUANT, get_collision_maxw.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFREMX_QUANT:
     return None
@@ -520,9 +519,9 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
 
 
 # default
-_COLCOU_QUANT = ('COLCOU_QUANT')
+_COLCOU_QUANT0 = ('COLCOU_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLCOU_QUANT[0])
+@document_vars.quant_tracking_simple(_COLCOU_QUANT0)
 def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
   '''
   Coulomb Collision frequency between different ionized species (cgs)
@@ -532,7 +531,7 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
     COLCOU_QUANT = obj.COLCOU_QUANT
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLCOU_QUANT[0], COLCOU_QUANT, get_collcoul.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLCOU_QUANT0, COLCOU_QUANT, get_collcoul.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLCOU_QUANT:
     return None
@@ -559,9 +558,9 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
 
 
 # default
-_COLCOUMS_QUANT = ('COLCOUMS_QUANT')
+_COLCOUMS_QUANT0 = ('COLCOUMS_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLCOUMS_QUANT[0])
+@document_vars.quant_tracking_simple(_COLCOUMS_QUANT0)
 def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
   '''
   Coulomb collision between for a specific ionized species (or electron) with 
@@ -571,7 +570,7 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
     COLCOUMS_QUANT =  obj.COLCOUMS_QUANT
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLCOUMS_QUANT[0], COLCOUMS_QUANT, get_collcoul_ms.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLCOUMS_QUANT0, COLCOUMS_QUANT, get_collcoul_ms.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLCOUMS_QUANT:
     return None
@@ -603,9 +602,9 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
 
 
 # default
-_COLFRI_QUANT = ('COLFRI_QUANT')
+_COLFRI_QUANT0 = ('COLFRI_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLFRI_QUANT[0])
+@document_vars.quant_tracking_simple(_COLFRI_QUANT0)
 def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   '''
   Sum of collision frequencies (cgs). 
@@ -615,7 +614,7 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
     COLFRI_QUANT = obj.COLFRI_QUANT 
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLFRI_QUANT[0], COLFRI_QUANT, get_collision_ms.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLFRI_QUANT0, COLFRI_QUANT, get_collision_ms.__doc__)
 
   if quant not in COLFRI_QUANT:
     return None
@@ -704,9 +703,9 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
 
 
 #default
-_COULOMB_COL_QUANT = ('COULOMB_COL_QUANT')
+_COULOMB_COL_QUANT0 = ('COULOMB_COL_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COULOMB_COL_QUANT[0])
+@document_vars.quant_tracking_simple(_COULOMB_COL_QUANT0)
 def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
   '''
   Coulomb collision frequency in Hz
@@ -716,7 +715,7 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
     COULOMB_COL_QUANT = obj.COULOMB_COL_QUANT
   
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COULOMB_COL_QUANT[0], COULOMB_COL_QUANT, get_coulomb.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COULOMB_COL_QUANT0, COULOMB_COL_QUANT, get_coulomb.__doc__)
 
   if (quant == '') or not quant in COULOMB_COL_QUANT:
     return None
@@ -1087,9 +1086,9 @@ def get_cyclo_res(obj, quant, CYCL_RES=None, **kwargs):
 
 
 # default
-_GYROF_QUANT = ('GYROF_QUANT')
+_GYROF_QUANT0 = ('GYROF_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_GYROF_QUANT[0])
+@document_vars.quant_tracking_simple(_GYROF_QUANT0)
 def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
   '''
   gyro freqency are (Hz)
@@ -1100,7 +1099,7 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
     GYROF_QUANT = obj.GYROF_QUANT
   
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _GYROF_QUANT[0], GYROF_QUANT, get_gyrof.__doc__)
+    docvar = document_vars.vars_documenter(obj, _GYROF_QUANT0, GYROF_QUANT, get_gyrof.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
     return None
@@ -1120,9 +1119,9 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
 #_KAPPA_QUANT = ['kappanorm_', 'kappae'] + _KAPPA_QUANT 
 ## I suspect that ^^^ should be kappanorm_ + elem for elem in ELEMLIST,
 ## but I don't know what kappanorm is supposed to mean, so I'm not going to change it now. -SE June 28 2021
-_KAPPA_QUANT = ('KAPPA_QUANT')
+_KAPPA_QUANT0 = ('KAPPA_QUANT')
 # set value
-@document_vars.quant_tracking_simple(_KAPPA_QUANT[0])
+@document_vars.quant_tracking_simple(_KAPPA_QUANT0)
 def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
   '''
   kappa, i.e., magnetization (adimensional)
@@ -1134,7 +1133,7 @@ def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
         
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _KAPPA_QUANT[0], KAPPA_QUANT, get_kappa.__doc__)
+    docvar = document_vars.vars_documenter(obj, _KAPPA_QUANT0, KAPPA_QUANT, get_kappa.__doc__)
 
   if (quant == ''):
     return None
@@ -1188,9 +1187,9 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
 
 
 # default
-_IONP_QUANT = ('IONP_QUANT')
+_IONP_QUANT0 = ('IONP_QUANT')
 # set value
-@document_vars.quant_tracking_simple(_IONP_QUANT[0])
+@document_vars.quant_tracking_simple(_IONP_QUANT0)
 def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   '''
   densities for specific ionized species.
@@ -1200,7 +1199,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
     IONP_QUANT = obj.IONP_QUANT
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _IONP_QUANT[0], IONP_QUANT, get_ionpopulations.__doc__)
+    docvar = document_vars.vars_documenter(obj, _IONP_QUANT0, IONP_QUANT, get_ionpopulations.__doc__)
 
   if (quant == ''):
       return None
@@ -1482,7 +1481,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None, **kwargs):
 
 
 # default
-_HALL_QUANT = ('HAL_QUANT',
+_HALL_QUANT = ('HALL_QUANT',
                ['uhallx', 'uhally', 'uhallz', 'hallx', 'hally', 'hallz',
                 'eta_hall', 'eta_hallb']
               )
