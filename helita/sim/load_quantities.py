@@ -107,7 +107,7 @@ def set_elemlist_as_needed(obj, elemlist=None, ELEMLIST=None, **kwargs):
   else:
     return set_elemlist(obj, elemlist)
 
-def set_elemlist(obj, elemlist):
+def set_elemlist(obj, elemlist=DEFAULT_ELEMLIST):
   ''' sets all things which depend on elemlist, as attrs of obj.
   Also sets obj.set_elemlist to partial(set_elemlist(obj)).
   '''
@@ -137,7 +137,7 @@ def set_elemlist(obj, elemlist):
                + ['r' + elem + '-' for elem in obj.ELEMLIST]  \
                + ['rneu', 'rion', 'nion', 'nneu', 'nelc'] \
                + ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']       
-  def _set_elemlist(elemlist):
+  def _set_elemlist(elemlist=DEFAULT_ELEMLIST):
     '''sets all things which depend on elemlist, as attrs of self.'''
     set_elemlist(obj, elemlist)
   obj.set_elemlist = _set_elemlist
@@ -615,6 +615,15 @@ _COLFRI_QUANT0 = ('COLFRI_QUANT')
 def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   '''
   Sum of collision frequencies (cgs). 
+
+  Formats (with <A>, <B> replaced by elements, e.g. '<A>' --> 'he'):
+  - nu<A>_n   :  sum of collision frequencies between A2 and neutrals
+    nuA2_h1 + nuA2_he1 + ...
+  - nu<A>_i   :  sum of collision frequencies between A1 and once-ionized ions
+    nuA1_h2 + nuA1_he2 + ...
+
+  For more precise control over which collision frequencies are summed,
+  refer to obj.ELEMLIST, and/or obj.set_elemlist().
   '''
 
   if (COLFRI_QUANT == None):
