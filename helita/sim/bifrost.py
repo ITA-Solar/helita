@@ -2240,6 +2240,12 @@ class Bifrost_units(object):
         self.simu_qsi_e = self.qsi_electron / self.usi_q # [derived from si]
         ### note simu_q_e != simu_qsi_e because charge is defined
         ### by different equations, for cgs and si. 
+        ## permeability (magnetic constant) (mu0) (We expect mu0_simu == 1.)
+        self.simu_mu0 = self.mu0si * (1/self.usi_b) * (self.usi_l) * (self.usi_i)
+        ### J = curl(B) / mu0 --> mu0 = curl(B) / J --> [mu0] = [B] [length]^-1 [J]^-1
+        ### --> mu0[simu] / mu0[SI] = (B[simu] / B[SI]) * (L[SI] / L[simu]) * (J[SI]/J[simu])
+        ## boltzmann constant
+        self.simu_kB = self.ksi_b * (self.usi_nr / self.usi_e)   # kB [simu energy / K]
 
         # update the dict doc_units with the values of units
         self._update_doc_units_with_values()
