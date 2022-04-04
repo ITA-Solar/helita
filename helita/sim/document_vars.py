@@ -383,7 +383,8 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
         elif search.type == 'typequant':
             result += _vardocs_typequant(search.result, tqd=tqd, q=q, ud=ud)
         elif search.type == 'var':
-            result += _vardocs_var(x, search.result, q=q)
+            vdv = _vardocs_var(x, search.result, q=q)
+            result += [WS*TW*2 + NONEDOC] if vdv is None else vdv
         return _vardocs_print(result, printout)
 
     obj.vardoc = vardoc
