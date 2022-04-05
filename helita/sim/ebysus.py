@@ -51,6 +51,7 @@ from . import document_vars
 from . import file_memory
 from . import fluid_tools
 from . import stagger
+from . import tools
 from .units import (
     UNI, USI, UCGS, UCONST,
     Usym, Usyms, UsymD,
@@ -1032,7 +1033,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             return None  
 
     ## COMPRESSION ALGORITHMS ##
-    def compress(self, mode='zc', smash_mode=None, warn=True, kw_smash=dict(), **kwargs):
+    def compress(self, mode='zc', smash_mode=None, warn=True, kw_smash=dict(), skip_existing=False, **kwargs):
         '''compress the direct output of an ebysus simulation (the .io folder).
 
         mode tells what type of compression to use.
@@ -1055,13 +1056,17 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             CAUTION: be very careful about using warn=False!
         kw_smash: dict
             additional kwargs to pass to smash_folder().
+        skip_existing: bool, default False
+            if True, skip compressing each file for which a compressed version exists
+            (only checking destination filepath to determine existence.)
 
         returns name of created folder.
         '''
+        assert (smash_mode is None) or (not skip_existing), "smash_mode and skip_existing are incompatible."  # for safety reasons. 
         mode = mode.lower()
         try:    # put the compression algorithms in a try..except block to make a warning if error is encountered.
             if mode == 'zc':
-                result   = self._zc_compress(**kwargs)
+                result   = self._zc_compress(skip_existing=skip_existing, **kwargs)
             else:
                 raise NotImplementedError(f"EbysusData.compress(mode={repr(mode)})")
         except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
@@ -1115,12 +1120,16 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 smash_folder(ORIGINAL, mode=smash_mode, warn=warn, **kw_smash)
             return result
 
-    def _zc_compress(self, verbose=1, **kw__zarr):
+    def _zc_compress(self, verbose=1, skip_existing=False, **kw__zarr):
         '''compress the .io folder into a .zc folder.
         Converts data to format readable by zarr.
         Testing indicates the .zc data usually takes less space AND is faster to read.
 
-        returns the name of the new folder.
+        skip_existing: bool, default False
+            if True, skip compressing each file for which a compressed version exists
+            (only checking destination filepath to determine existence.)
+
+        returns (the name of the new folder, the number of bytes originally, the number of bytes after compression)
         '''
         # bookkeeping - parameters
         SNAPNAME = self.get_param('snapname')
@@ -1129,9 +1138,30 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         ORDER    = 'F'        # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
         DTYPE    = '<f4'
 
+        # iterator through existing files
+        def snapfiles_iter(makedirs=False):
+            '''returns iterator through files to be compressed, yielding (src, dst).
+            where src is name of (existing) source file to be compressed;
+            dst is name of (possibly not existing) destination for compressed file.
+
+            if makedirs, also make any directories required for dst, as necessary.
+            '''
+            for root, dirs, files in os.walk(f'{SNAPNAME}.io'):
+                if len(files) > 0:
+                    new_dir = root.replace(f'{SNAPNAME}.io', f'{SNAPNAME}.zc')
+                    if makedirs:
+                        os.makedirs(new_dir, exist_ok=True)
+                    for base in files:
+                        src = os.path.join(root,    base)
+                        dst = os.path.join(new_dir, base)
+                        if skip_existing and os.path.exists(dst):
+                            continue
+                        else:
+                            yield (src, dst)
+
         # bookkeeping - printing updates
         if verbose >= 1:   # calculate total number of files and print progress as fraction.
-            nfiles = sum(len(files) for _, _, files in os.walk(f'{SNAPNAME}.io'))
+            nfiles = sum(1 for src, dst in snapfiles_iter(makedirs=False))
             nfstr = len(str(nfiles))
             start_time = time.time()
 
@@ -1146,22 +1176,22 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             print(*args, **kw)
 
         # the actual compression happens in this loop.
-        file_n = 0
         file_str_len = 0
-        for root, dirs, files in os.walk(f'{SNAPNAME}.io'):
-            if len(files) > 0:
-                new_dir = root.replace(f'{SNAPNAME}.io', f'{SNAPNAME}.zc')
-                os.makedirs(new_dir, exist_ok=True)
-                for base in files:
-                    file_n += 1   # bookkeeping
-                    src = os.path.join(root,    base)
-                    dst = os.path.join(new_dir, base)
-                    save_filebinary_to_filezarr(src, dst, shape=SHAPE, dtype=DTYPE, order=ORDER, chunks=CHUNKS, **kw__zarr)
-                    # printing updates
-                    if verbose: file_str_len = max(file_str_len, len(dst))
-                    print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
+        original_bytes_total   = 0
+        compressed_bytes_total = 0
+        for file_n, (src, dst) in enumerate(snapfiles_iter(makedirs=True)):
+            z = save_filebinary_to_filezarr(src, dst, shape=SHAPE, dtype=DTYPE, order=ORDER, chunks=CHUNKS, **kw__zarr)
+            original_bytes_total   += z.nbytes
+            compressed_bytes_total += z.nbytes_stored
+            # printing updates
+            if verbose: file_str_len = max(file_str_len, len(dst))
+            print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
 
-        print_if_verbose('_zc_compress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
+        print_if_verbose('_zc_compress complete!'  + \
+                         f' Compressed {tools.pretty_nbytes(original_bytes_total)}' + \
+                         f' into {tools.pretty_nbytes(compressed_bytes_total)}' + \
+                         f' (net compression ratio = {original_bytes_total/(compressed_bytes_total+1e-10):.2f}).',
+                         print_time=True, vreq=1, clearline=40+file_str_len)
         return f'{SNAPNAME}.zc'
 
     def _zc_decompress(self, verbose=1):
