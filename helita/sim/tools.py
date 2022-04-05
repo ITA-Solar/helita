@@ -307,6 +307,24 @@ def refine(s,q,factor=2,unscale=lambda x:x):
         return ss, qq
 
 
+''' --------------------------- strings --------------------------- '''
+
+def pretty_nbytes(nbytes, fmt='{:.2f}'):
+  '''returns nbytes as a string with units for improved readability.
+  E.g. pretty_nbytes(20480, fmt='{:.1f}') --> '10.0 kB'.
+  '''
+  n_u_bytes = nbytes
+  u = ''
+  for u_next in ['k', 'M', 'G', 'T']:
+    n_next = n_u_bytes / 1024
+    if n_next < 1:
+      break
+    else:
+      n_u_bytes = n_next
+      u = u_next
+  return '{fmt} {u}B'.format(fmt=fmt, u=u).format(n_u_bytes)
+
+
 ''' --------------------------- vector rotations --------------------------- '''
 
 def rotation_align(vecs_source, vecs_destination):
