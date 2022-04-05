@@ -920,7 +920,7 @@ def get_ponderomotive(obj, quant, POND_QUANT=None, **kwargs):
 
 # default
 _PLASMA_QUANT = ('PLASMA_QUANT',
-                 ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp', 'nr',
+                 ['beta', 'beta_ion', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp', 'nr',
                   'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                  ]
                 )
@@ -935,7 +935,8 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _PLASMA_QUANT[0], PLASMA_QUANT, get_plasmaparam.__doc__)
-    docvar('beta', "plasma beta")
+    docvar('beta', "plasma beta: P / (B / (2 mu0)), where P is the single-fluid pressure.")
+    docvar('beta_ion', "plasma beta: Pi / (B / (2 mu0)), where Pi is the pressure from ions, only.")
     docvar('va', "alfven speed [simu. units]")
     docvar('cs', "sound speed [simu. units]")
     docvar('s', "entropy [log of quantities in simu. units]")
@@ -968,6 +969,15 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
               np.log(obj.get_var('r')))
     elif quant == 'beta':
       return 2 * var / obj.get_var('b2')
+
+  elif quant == 'beta_ion':
+    ni = obj.get_var('nion') / (obj.uni.cm_to_m**3)    # [1/m^3]
+    kB = obj.uni.ksi_b
+    Ti = obj.get_var('tg')    # [K]
+    Pi = ni * kB * Ti         # [SI pressure units]
+    B2 = obj.get_var('b2') * obj.uni.usi_b **2   # [T^2]
+    mu0 = obj.uni.mu0si
+    return Pi / (B2 / (2 * mu0))   # [dimensionless]
 
   if quant in ['mn', 'man']:
     var = obj.get_var('modu')
@@ -1805,8 +1815,9 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True, **kwargs):
   The output, is in cgs
   '''
 
-  print('ionpopulation: reading species %s and level %s' % (elem, lvl), whsp,
-      end="\r", flush=True)
+  if getattr(obj, 'verbose', True):
+    print('ionpopulation: reading species %s and level %s' % (elem, lvl), whsp,
+        end="\r", flush=True)
   '''
   fdir = '.'
   try:
