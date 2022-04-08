@@ -2834,7 +2834,7 @@ class Cross_sect:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
 
         finterp = interpolate.interp1d(np.log(self.cross_tab[itab]['tg']),
-                                          self.cross_tab[itab][out],kind='slinear')#,kind='linear')#cubic, 
+                                          self.cross_tab[itab][out]) 
         tgreg = np.array(tg, copy=True)
         max_temp = np.max(self.cross_tab[itab]['tg'])
         tgreg[tg > max_temp] = max_temp

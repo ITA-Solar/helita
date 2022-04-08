@@ -1488,7 +1488,7 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
     #crossunits = 2.8e-17  
     crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
     crossunits = crossobj.cross_tab[0]['crossunits']
-    cross = crossunits * crossobj.tab_interp(tg,order=0)
+    cross = crossunits * crossobj.tab_interp(tg)
 
     return cross
 
