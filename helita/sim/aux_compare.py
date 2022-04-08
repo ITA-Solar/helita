@@ -99,13 +99,18 @@ DEFAULT_TOLERANCE = 0.05    # the max for (1-abs(X/Y)) before we think X != Y
 AUXVARS = {
     # aux var   : helita var. if tuple, v[1] is required ifluid or mf_ispecies.
                                      #  v[2] (if it exists) jfluid or mf_jspecies.
-    'etg'       : ('tg', -1),    # electron temperature
-    'mfe_tg'    : 'tg',          #  fluid   temperature
-    'mfr_nu_es' : ('nu_ij', -1), # electron-fluid collision frequency
-    'mm_cnu'    : 'nu_ij',       #  fluid - fluid collision frequency
-    'mm_cross'  : 'cross',       # cross section
-    'mfr_p'     : 'p',           # pressure
-    
+    'etg'           : ('tg', -1),    # electron temperature
+    'mfe_tg'        : 'tg',          #  fluid   temperature
+    'mfr_nu_es'     : ('nu_ij', -1), # electron-fluid collision frequency
+    'mm_cnu'        : 'nu_ij',       #  fluid - fluid collision frequency
+    'mm_cross'      : 'cross',       # cross section
+    'mfr_cross'     : ('cross',-1),  # cross section
+    'mfr_tgei'      : ('tgij',-1),        # tg+etg weighted. 
+    'mfr_p'         : 'p',           # pressure
+    'mfp_ecdpxdt_ef': 'momohmex',    # momentum component of the ohmic term 
+    'mfp_ecdpydt_ef': 'momohmey',    # momentum component of the ohmic term 
+    'mfp_ecdpzdt_ef': 'momohmez',    # momentum component of the ohmic term 
+    'mfp_ecdpxdt'   : ('rijsumx',-1),# momentum component of the ohmic term 
 }
 # add each of these plus an axis to AUXVARS.
 # e.g. {'e': 'ef'} --> {'ex': 'efx', 'ey': 'efy', 'ez': 'efz'}.
@@ -114,6 +119,8 @@ AUX_AXIAL_VARS = {
     'eu'        : 'ue',      # electron velocity
     'i'         : 'j',       # current density (charge per time per area)
     'bb_bat'    : 'bat',     # "battery" term (contribution to electric field: grad(P_e)/(n_e q_e))
+    'mfp_bb_ddp': 'mombat',  # momentum component of the battery term ni*qi*grad(P_e)/(n_e q_e)
+    'mfp_ddp'   : 'gradp',   # momentum component of the gradient of pressure
 }
 AXES = ['x', 'y', 'z']
 # add the axial vars to auxvars.

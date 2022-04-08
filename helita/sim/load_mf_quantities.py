@@ -323,6 +323,7 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
       else:
         ue = 'ue'   # include the full ue term, in our ef calculation.
       B_cross_ue__x = -1 * obj.get_var(ue+'xb'+x)
+
       # ----- grad Pe contribution ----- #
       battery_x = obj.get_var('bat'+x)
       # ----- calculate ionization & recombination effects ----- #
@@ -600,7 +601,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
         ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
         output -= nq * ux                                   # [simu. current per area units]
         nqe    -= nq                                        # [simu. charge density units]
-      output = output / nqe
+      output = output / nqe 
       cache(var, output)
       return output  # [simu velocity units]
 
@@ -669,7 +670,7 @@ def get_continuity_quant(obj, var, CONTINUITY_QUANT=None):
 
 # default
 _MOMENTUM_QUANT = []
-_MQVECS = ['rij', 'rijsum', 'momflorentz', 'mombat', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
+_MQVECS = ['rij', 'rijsum', 'momflorentz','momohme', 'mombat', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
 _MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
 _MOMENTUM_QUANT = ('MOMENTUM_QUANT', _MOMENTUM_QUANT)
 # get value
@@ -694,6 +695,9 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     for x in AXES:
       docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force. ' +\
                            '[simu. momentum density units / simu. time units]. = ni qi (E + ui x B).', nfluid=1, **units_dpdt)
+    for x in AXES:
+      docvar('momohme'+x, x+'-component of momentum density change of ifluid due the ohmic term in the electric field. ' +\
+                           '[simu. momentum density units / simu. time units]. = ni qi E = ni qi nu_es (ui-epUx) .', nfluid=1, **units_dpdt)
     for x in AXES:
       docvar('mombat'+x, x+'-component of momentum density change of ifluid due to battery term. ' +\
                            '[simu. momentum density units / simu. time units]. = ni qi grad(P_e) / (ne qe).', nfluid=1, **units_dpdt)
@@ -735,12 +739,16 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     nu_ij = obj.get_var('nu_ij' + x+'dn')
     px_i = obj.get_var('pi'+x)
     px_j = obj.get_var('pi'+x, ifluid=obj.jfluid)
-    return nu_ij * (px_j - px_i)
+    return nu_ij * (px_j - px_i) 
 
   elif base == 'rijsum':
     result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
     for fluid in obj.fluids:
       result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
+    return result
+
+  elif base == 'rejsum':
+    result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
     return result
 
   elif base == 'momflorentz':
@@ -757,6 +765,21 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
     uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
     return ni * qi * (Ex + uxB__x)
+
+  elif base == 'momohme':
+    # momflorentz = ni qi (E + ui x B)
+    qi = obj.get_charge(obj.ifluid, units='simu')
+    if qi == 0:
+      return obj.zero_at_mesh_face(x)    # no lorentz force for neutrals - save time by just returning 0 here :)
+    ni = obj.get_var('nr')
+    # make sure we get the interpolation correct:
+    ## B and ui are face-centered vectors, and we want a face-centered result to align with p.
+    ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
+    ## Meanwhile, E is edge-centered, so we must shift all three coords.
+    ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
+    Ex = obj.get_var('emom'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
+
+    return ni * qi * Ex
 
   elif base == 'mombat':
     # px is at (-0.5, 0, 0); nq is at (0, 0, 0), so we shift by xdn
@@ -1238,8 +1261,8 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         result = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
 
       # cache result, then return:
-      cache(var, result)
-      return result
+      cache(var, result)#/ 1.0233)
+      return result#/ 1.0233
 
 
   # collision frequency - maxwell
@@ -1408,7 +1431,7 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
 
 
 # default
-_CROSTAB_QUANT = ('CROSTAB_QUANT', ['cross'])
+_CROSTAB_QUANT = ('CROSTAB_QUANT', ['cross','tgij'])
 # get value
 @document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
 def get_mf_cross(obj, var, CROSTAB_QUANT=None):
@@ -1440,14 +1463,16 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
 
   # temperature, weighted by mass of species
   tg = (tgi*m_j + tgj*m_i)/(m_i + m_j)
+  if var == 'tgij' : 
+    return tg
+  else: 
+    # look up cross table and get cross section
+    #crossunits = 2.8e-17  
+    crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
+    crossunits = crossobj.cross_tab[0]['crossunits']
+    cross = crossunits * crossobj.tab_interp(tg,order=0)
 
-  # look up cross table and get cross section
-  #crossunits = 2.8e-17  
-  crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
-  crossunits = crossobj.cross_tab[0]['crossunits']
-  cross = crossunits * crossobj.tab_interp(tg)
-
-  return cross
+    return cross
 
 
 # default

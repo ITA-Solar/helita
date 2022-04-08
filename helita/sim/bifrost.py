@@ -2833,15 +2833,15 @@ class Cross_sect:
         if out in ['se el vi mt'.split()] and not self.load_cross_tables:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
 
-        finterp = interpolate.interp1d(self.cross_tab[itab]['tg'],
-                                          self.cross_tab[itab][out])
+        finterp = interpolate.interp1d(np.log(self.cross_tab[itab]['tg']),
+                                          self.cross_tab[itab][out],kind='slinear')#,kind='linear')#cubic, 
         tgreg = np.array(tg, copy=True)
         max_temp = np.max(self.cross_tab[itab]['tg'])
         tgreg[tg > max_temp] = max_temp
         min_temp = np.min(self.cross_tab[itab]['tg'])
         tgreg[tg < min_temp] = min_temp
 
-        return finterp(tgreg)
+        return finterp(np.log(tgreg))
 
     def __call__(self, tg, *args, **kwargs):
         '''alias for self.tab_interp.'''
