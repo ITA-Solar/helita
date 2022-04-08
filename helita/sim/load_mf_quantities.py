@@ -872,7 +872,10 @@ _HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
                  'qcol_u', 'qcol_tg', 'qcol',
                  'e_to_tg',
                  'tg_qcol',  # TODO: add tg_qcol_... for as many of the qcol terms as applicable.
-                 'qjoulei']
+                 'qjoulei',
+                 'tgdu',
+                 'dtgdt',
+                 ]
 _TGQCOL_EQUIL  = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
 _HEATING_QUANT += _TGQCOL_EQUIL
 _HEATING_QUANT = ('HEATING_QUANT', _HEATING_QUANT)
@@ -920,7 +923,11 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
                        'e_ifluid * e_to_tg = tg_ifluid', nfluid=1, **units_e_to_tg)
     tg_heati = 'heating of ifluid [Kelvin per simu. time]'
     units_tg = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
-    docvar('tg_qcol',  'total '+tg_heati+'.', nfluid=1, uni_f=UNI.hz, uni_name=Usym('K') / Usym('s'))
+    units_dtgdt = dict(uni_f=UNI.hz, uni_name=Usym('K')/Usym('s'))
+    docvar('tg_qcol',  'total '+tg_heati+'.', nfluid=1, **units_dtgdt)
+    # the other heating in the heating equation
+    docvar('tgdu', 'rate of change of Ti due to -2/3 * T * div(u).', **units_dtgdt)
+    docvar('dtgdt', 'predicted total rate of change of Ti, including all contributions', **units_dtgdt)
     # "simple equilibrium" vars
     equili = '"simple equilibrium" temperature [K] of ifluid (setting sum_j Qcol_ij=0 and solving for Ti)'
     ## note: these all involve setting sum_j Qcol_ij = 0 and solving for Ti.
@@ -1003,6 +1010,17 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     qcol_value = obj.get_var(qcol)         # [simu energy density / time]
     e_to_tg    = obj.get_var('e_to_tg')    # [K / simu energy density (of ifluid)]
     return qcol_value * e_to_tg            # [K]
+
+  # rate of change of T, terms
+  elif var == 'tgdu':
+    tg = obj('tg')
+    divu = obj('divup'+'ui')
+    return -2/3 * tg * divu
+
+  elif var == 'dtgdt':
+    tgqcol = obj('tg_qcol')
+    tgdu = obj('tgdu')
+    return tgqcol + tgdu
 
   # "simple equilibrium temperature" terms
   elif var in _TGQCOL_EQUIL:
