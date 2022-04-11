@@ -756,12 +756,12 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     qi = obj.get_charge(obj.ifluid, units='simu')
     if qi == 0:
       return obj.zero_at_mesh_face(x)    # no lorentz force for neutrals - save time by just returning 0 here :)
-    ni = obj.get_var('nr')
     # make sure we get the interpolation correct:
     ## B and ui are face-centered vectors, and we want a face-centered result to align with p.
     ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
     ## Meanwhile, E is edge-centered, so we must shift all three coords.
-    ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
+    ## And n is fully centered, so we shift by xdn.
+    ni = obj.get_var('nr'+x+'dn')
     Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
     uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
     return ni * qi * (Ex + uxB__x)
