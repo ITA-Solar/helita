@@ -973,7 +973,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     mi = obj.get_mass(obj.mf_ispecies) # [amu]
     mj = obj.get_mass(obj.mf_jspecies) # [amu]
     nu_ij = obj.get_var('nu_ij')       # [simu. units]
-    coeff = (1 / (obj.uni.gamma - 1)) * (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
+    coeff = (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
     return coeff
 
   if var in ['qcol_uj', 'qcol_tgj']:
@@ -982,12 +982,12 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     coeff = obj.get_var('qcol_coeffj')
     if var == 'qcol_uj':
       mj_simu = obj.get_mass(obj.mf_jspecies, units='simu') # [simu mass]
-      energy = (2/3) * mj_simu * obj.get_var('uid2')        # [simu energy]
+      energy = mj_simu * obj.get_var('uid2')        # [simu energy]
     elif var == 'qcol_tgj':
       simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
       tgi = obj.get_var('tg')                       # [K]
       tgj = obj.get_var('tg', ifluid=obj.jfluid)    # [K]
-      energy = 2 * simu_kB * (tgj - tgi)
+      energy = (1./3) * simu_kB * (tgj - tgi)
     return coeff * energy  # [simu energy density / time]
 
   elif var in ['qcolj', 'qcol_j']:
