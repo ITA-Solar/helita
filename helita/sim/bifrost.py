@@ -694,7 +694,7 @@ class BifrostData():
                     # get value at first snap
                     val0 = self.get_var(var, snap=snap[it], *args__get_var, **kw__get_var)
                     # figure out dimensions and initialize the output array.
-                    value = np.empty([*np.shape(val0), snapLen], dtype=self.dtype)
+                    value = np.empty_like(val0, shape=[*np.shape(val0), snapLen])
                     value[..., 0] = val0
                     firstit = False
                 else:
