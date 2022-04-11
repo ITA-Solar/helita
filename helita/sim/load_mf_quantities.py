@@ -872,9 +872,10 @@ _HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
                  'qcol_u', 'qcol_tg', 'qcol',
                  'e_to_tg',
                  'tg_qcol',  # TODO: add tg_qcol_... for as many of the qcol terms as applicable.
+                 'tg_qcol_uj', 'tg_qcol_u', 'tg_qcol_tgj', 'tg_qcol_tg', 'tg_qcol_j', 'tg_qcolj',
                  'qjoulei',
                  'tgdu',
-                 'dtgdt',
+                 'tg_rate',
                  ]
 _TGQCOL_EQUIL  = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
 _HEATING_QUANT += _TGQCOL_EQUIL
@@ -904,30 +905,37 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, _HEATING_QUANT[0], HEATING_QUANT, get_heating_quant.__doc__)
+    units_qcol    = dict(uni_f=UNI.e / UNI.t, usi_name=Usym('J')/(Usym('m')**3 * Usym('s')))
+    units_e_to_tg = dict(uni_f=UNITS_FACTOR_1 / UNI.e, usi_name=Usym('K') / (Usym('J') / Usym('m')**3))
+    units_tg      = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
+    units_dtgdt   = dict(uni_f=UNI.hz, uni_name=Usym('K')/Usym('s'))
+
+    # docs for qcol and tg_qcol terms.
+    qcol_docdict = {
+      'qcol_uj' : ('{heati} due to collisions with jfluid, and velocity drifts.', dict(nfluid=2)),
+      'qcol_u'  :              ('{heati} due to collisions and velocity drifts.', dict(nfluid=1)),
+      'qcol_tgj': ('{heati} due to collisions with jfluid, and temperature differences.', dict(nfluid=2)),
+      'qcol_tg' :              ('{heati} due to collisions and temperature differences.', dict(nfluid=1)),
+      'qcolj'   : ('total {heati} due to collisions with jfluid.', dict(nfluid=2)),
+      'qcol'    : ('total {heati} due to collisions.', dict(nfluid=1)),
+    }
+    qcol_docdict['qcol_j'] = qcol_docdict['qcolj']  # alias
+    
     # qcol: heating due to collisions in addition to velocity and/or temperature differences
     ## qcol tells the energy density change per unit time.
-    heati = 'heating of ifluid [simu. energy density per time]'
-    units_qcol = dict(uni_f=UNI.e / UNI.t, usi_name=Usym('J')/(Usym('m')**3 * Usym('s')))
-    docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2, **units_qcol)
-    docvar('qcol_tgj', heati + ' due to jfluid, due to collisions and temperature differences.', nfluid=2, **units_qcol)
+    ## tg_qcol tells the temperature change per unit time.
+    for vname, (vdoc, kw_nfluid) in qcol_docdict.items():
+      docvar(vname, vdoc.format(heati='heating of ifluid [simu. energy density per time]'), **kw_nfluid, **units_qcol)
+      docvar('tg_'+vname, vdoc.format(heati='heating of ifluid [Kelvin per simu. time]'), **kw_nfluid, **units_tg)
     docvar('qcol_coeffj', 'coefficient common to qcol_uj and qcol_tj terms.' +\
-                          ' == (mi / (gamma - 1) (mi + mj)) * ni * nu_ij. [simu units: length^-3 time^-1]', nfluid=2, **units_qcol)
-    for qcolj in ['qcolj', 'qcol_j']:
-      docvar(qcolj,    'total '+heati+' due to jfluid.', nfluid=2, **units_qcol)
-    docvar('qcol_u',   heati + ' due to collisions and velocity drifts.', nfluid=1, **units_qcol)
-    docvar('qcol_tg',  heati + ' due to collisions and temperature differences.', nfluid=1, **units_qcol)
-    docvar('qcol',     'total '+heati+'.', nfluid=1, **units_qcol)
-    # converting from qcol (energy density per time) to tg_qcol (temperature per time)
-    units_e_to_tg = dict(uni_f=UNITS_FACTOR_1 / UNI.e, usi_name=Usym('K') / (Usym('J') / Usym('m')**3))
+                          ' == (mi / (gamma - 1) (mi + mj)) * ni * nu_ij. [simu units: length^-3 time^-1]',
+                          nfluid=2, **units_qcol)
     docvar('e_to_tg',  'conversion factor from energy density to temperature for ifluid. '+\
                        'e_ifluid * e_to_tg = tg_ifluid', nfluid=1, **units_e_to_tg)
-    tg_heati = 'heating of ifluid [Kelvin per simu. time]'
-    units_tg = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
-    units_dtgdt = dict(uni_f=UNI.hz, uni_name=Usym('K')/Usym('s'))
-    docvar('tg_qcol',  'total '+tg_heati+'.', nfluid=1, **units_dtgdt)
     # the other heating in the heating equation
     docvar('tgdu', 'rate of change of Ti due to -2/3 * T * div(u).', **units_dtgdt)
-    docvar('dtgdt', 'predicted total rate of change of Ti, including all contributions', **units_dtgdt)
+    docvar('tg_rate', 'predicted total rate of change of Ti, including all contributions', **units_dtgdt)
+
     # "simple equilibrium" vars
     equili = '"simple equilibrium" temperature [K] of ifluid (setting sum_j Qcol_ij=0 and solving for Ti)'
     ## note: these all involve setting sum_j Qcol_ij = 0 and solving for Ti.
@@ -942,7 +950,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     docvar('tgqcol_equil_tg', equili + ', due only to contribution from temperature of fluids.', nfluid=1, **units_tg)
     docvar('tgqcol_equil', equili + '.', nfluid=1, **units_tg)
     # "ohmic heating" (obsolete (?) - nonphysical to include this qjoule and the qcol_u term as it appears here.)
-    docvar('qjoulei',  heati + ' due to Ji dot E. (Ji = qi ni ui).', nfluid=1, **units_qcol)
+    docvar('qjoulei',  'qi ni ui dot E. (obsolete, nonphysical to include this term and the qcol_u term)', nfluid=1, **units_qcol)
     return None
 
   if var not in HEATING_QUANT:
@@ -999,6 +1007,17 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     if heating_is_off(): return obj.zero_at_mesh_center()
     return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
 
+  # rate of change of T, terms
+  elif var == 'tgdu':
+    tg = obj('tg')
+    divu = obj('divup'+'ui')
+    return -2/3 * tg * divu
+
+  elif var == 'tg_rate':
+    tgqcol = obj('tg_qcol')
+    tgdu = obj('tgdu')
+    return tgqcol + tgdu
+
   # converting to temperature (from energy density) terms
   elif var == 'e_to_tg':
     simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
@@ -1010,17 +1029,6 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     qcol_value = obj.get_var(qcol)         # [simu energy density / time]
     e_to_tg    = obj.get_var('e_to_tg')    # [K / simu energy density (of ifluid)]
     return qcol_value * e_to_tg            # [K]
-
-  # rate of change of T, terms
-  elif var == 'tgdu':
-    tg = obj('tg')
-    divu = obj('divup'+'ui')
-    return -2/3 * tg * divu
-
-  elif var == 'dtgdt':
-    tgqcol = obj('tg_qcol')
-    tgdu = obj('tgdu')
-    return tgqcol + tgdu
 
   # "simple equilibrium temperature" terms
   elif var in _TGQCOL_EQUIL:
