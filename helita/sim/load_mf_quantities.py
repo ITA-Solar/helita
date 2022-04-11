@@ -990,7 +990,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
       simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
       tgi = obj.get_var('tg')                       # [K]
       tgj = obj.get_var('tg', ifluid=obj.jfluid)    # [K]
-      energy = (1./3) * simu_kB * (tgj - tgi)
+      energy = 3. * simu_kB * (tgj - tgi)
     return coeff * energy  # [simu energy density / time]
 
   elif var in ['qcolj', 'qcol_j']:
