@@ -1011,10 +1011,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # calculate info which numpy needs to read file as memmap.
         dsize  = np.dtype(self.dtype).itemsize
         offset = self.nxb * self.nyb * self.nzb * dsize * (idx * mf_arr_size + jdx)
-        if mf_arr_size == 1:
-            shape = (self.nxb, self.nyb, self.nzb)
-        else:
-            shape = (self.nxb, self.nyb, self.nzb, mf_arr_size)
+        shape  = (self.nxb, self.nyb, self.nzb)
         obj = self if (self.N_memmap != 0) else None    # for memmap memory management; popped before np.memmap(**kw).
 
         # kwargs which will be passed to get_numpy_memmap.
