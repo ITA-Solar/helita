@@ -876,6 +876,7 @@ _HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
                  'qjoulei',
                  'tgdu',
                  'tg_rate',
+                 'qcol_u_noe', 'qcol_tg_noe',
                  ]
 _TGQCOL_EQUIL  = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
 _HEATING_QUANT += _TGQCOL_EQUIL
@@ -912,12 +913,14 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
 
     # docs for qcol and tg_qcol terms.
     qcol_docdict = {
-      'qcol_uj' : ('{heati} due to collisions with jfluid, and velocity drifts.', dict(nfluid=2)),
-      'qcol_u'  :              ('{heati} due to collisions and velocity drifts.', dict(nfluid=1)),
-      'qcol_tgj': ('{heati} due to collisions with jfluid, and temperature differences.', dict(nfluid=2)),
-      'qcol_tg' :              ('{heati} due to collisions and temperature differences.', dict(nfluid=1)),
-      'qcolj'   : ('total {heati} due to collisions with jfluid.', dict(nfluid=2)),
-      'qcol'    : ('total {heati} due to collisions.', dict(nfluid=1)),
+      'qcol_uj'    : ('{heati} due to collisions with jfluid, and velocity drifts.', dict(nfluid=2)),
+      'qcol_u'     :              ('{heati} due to collisions and velocity drifts.', dict(nfluid=1)),
+      'qcol_u_noe' :              ('{heati} due to collisions and velocity drifts without electrons.', dict(nfluid=1)),
+      'qcol_tgj'   : ('{heati} due to collisions with jfluid, and temperature differences.', dict(nfluid=2)),
+      'qcol_tg'    :              ('{heati} due to collisions and temperature differences.', dict(nfluid=1)),
+      'qcol_tg_noe':              ('{heati} due to collisions and temperature differences without electrons.', dict(nfluid=1)),
+      'qcolj'      : ('total {heati} due to collisions with jfluid.', dict(nfluid=2)),
+      'qcol'       : ('total {heati} due to collisions.', dict(nfluid=1)),
     }
     qcol_docdict['qcol_j'] = qcol_docdict['qcolj']  # alias
     
@@ -998,6 +1001,15 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     if heating_is_off(): return obj.zero_at_mesh_center()
     varj   = var + 'j'   # qcol_uj or qcol_tgj
     output = obj.get_var(varj, jS=-1)   # get varj for j = electrons
+    for fluid in obj.fluids:
+      if fluid.SL != obj.ifluid:        # exclude varj for j = i  # not necessary but doesn't hurt.
+        output += obj.get_var(varj, jfluid=fluid)
+    return output
+
+  elif var in ['qcol_u_noe', 'qcol_tg_noe']:
+    output = obj.zero_at_mesh_center()
+    if heating_is_off(): return obj.zero_at_mesh_center()
+    varj   = var[:-4] + 'j'   # qcol_uj or qcol_tgj
     for fluid in obj.fluids:
       if fluid.SL != obj.ifluid:        # exclude varj for j = i  # not necessary but doesn't hurt.
         output += obj.get_var(varj, jfluid=fluid)

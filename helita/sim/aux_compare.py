@@ -105,12 +105,16 @@ AUXVARS = {
     'mm_cnu'        : 'nu_ij',       #  fluid - fluid collision frequency
     'mm_cross'      : 'cross',       # cross section
     'mfr_cross'     : ('cross',-1),  # cross section
-    'mfr_tgei'      : ('tgij',-1),        # tg+etg weighted. 
+    'mfr_tgei'      : ('tgij',-1),   # tg+etg weighted. 
     'mfr_p'         : 'p',           # pressure
     'mfp_ecdpxdt_ef': 'momohmex',    # momentum component of the ohmic term 
     'mfp_ecdpydt_ef': 'momohmey',    # momentum component of the ohmic term 
     'mfp_ecdpzdt_ef': 'momohmez',    # momentum component of the ohmic term 
     'mfp_ecdpxdt'   : ('rijsumx',-1),# momentum component of the ohmic term 
+    'mfe_qcolue'    : ('qcol_uj',-1), # energy component of the ohmic term from velocity drift
+    'mfe_qcolte'    : ('qcol_tgj',-1),# energy component of the ohmic term from temperature diff
+    'mm_qcolt'      : 'qcol_tgj',  # energy component of the coll. term from temperature diff
+    'mm_qcolu'      : 'qcol_uj',   # energy component of the coll. term from velocity drift
 }
 # add each of these plus an axis to AUXVARS.
 # e.g. {'e': 'ef'} --> {'ex': 'efx', 'ey': 'efy', 'ez': 'efz'}.
