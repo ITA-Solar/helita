@@ -934,7 +934,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     ## tg_qcol tells the temperature change per unit time.
     for vname, (vdoc, kw_nfluid) in qcol_docdict.items():
       docvar(vname, vdoc.format(heati='heating of ifluid [simu. energy density per time]'), **kw_nfluid, **units_qcol)
-      docvar('tg_'+vname, vdoc.format(heati='heating of ifluid [Kelvin per simu. time]'), **kw_nfluid, **units_tg)
+      docvar('tg_'+vname, vdoc.format(heati='heating of ifluid [Kelvin per simu. time]'), **kw_nfluid, **units_dtgdt)
     docvar('qcol_coeffj', 'coefficient common to qcol_uj and qcol_tj terms.' +\
                           ' == (mi / (gamma - 1) (mi + mj)) * ni * nu_ij. [simu units: length^-3 time^-1]',
                           nfluid=2, **units_qcol)
