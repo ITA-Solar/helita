@@ -737,13 +737,14 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
   if base == 'rij':
     if obj.i_j_same_fluid():      # when ifluid==jfluid, u_j = u_i, so rij = 0.
       return obj.zero_at_mesh_face(x)  # save time by returning 0 without reading any data.
-    # rij = mi ni nu_ij * (u_j - u_i) = nu_ij * (p_j - p_i)
+    # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
+    # (Note: this does NOT equal to nu_ij * (rj u_j - ri u_i))
     ## Scalars are at (0,0,0) so we must shift by xdn to align with face-centered u at (-0.5,0,0)
     nu_ij = obj.get_var('nu_ij' + x+'dn')
-    rhoi = obj.get_var('r' + x+'dn')
-    px_i = obj.get_var('ui'+x)
-    px_j = obj.get_var('ui'+x, ifluid=obj.jfluid)
-    return rhoi * nu_ij * (px_j - px_i) 
+    ri  = obj.get_var('ri' + x+'dn')
+    uix = obj.get_var('ui'+x)
+    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
+    return ri * nu_ij * (ujx - uix)
 
   elif base == 'rijsum':
     result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
