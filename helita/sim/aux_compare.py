@@ -81,6 +81,7 @@ import time
 
 # import internal modules
 from . import fluid_tools
+from . import tools
 
 # import external public modules
 import numpy as np
@@ -342,7 +343,7 @@ def iter_get_var(obj, auxvar, helvar=None, fluids=None, f=lambda fluid: fluid,
             else:
                 helval_ = helval
                 auxval_ = auxval
-            result['ratio'] = np.nanmean(auxval_ / helval_)
+            result['ratio'] = tools.finite_mean(auxval_ / helval_)
         yield result
 
 
