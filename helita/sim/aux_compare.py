@@ -115,6 +115,8 @@ AUXVARS = {
     'mfp_ecdpydt_ef': 'momohmey',    # momentum component of the ohmic term 
     'mfp_ecdpzdt_ef': 'momohmez',    # momentum component of the ohmic term 
     'mfp_ecdpxdt'   : ('rijsumx',-1),# momentum component of the ohmic term 
+    'mm_cdpxdt'     : 'rijx',
+    'mfp_cdpxdt'    : 'rijsumx',
     'mfe_qcolue'    : ('qcol_uj',-1), # energy component of the ohmic term from velocity drift
     'mfe_qcolte'    : ('qcol_tgj',-1),# energy component of the ohmic term from temperature diff
     'mm_qcolt'      : 'qcol_tgj',  # energy component of the coll. term from temperature diff
@@ -129,6 +131,7 @@ AUX_AXIAL_VARS = {
     'bb_bat'    : 'bat',     # "battery" term (contribution to electric field: grad(P_e)/(n_e q_e))
     'mfp_bb_ddp': 'mombat',  # momentum component of the battery term ni*qi*grad(P_e)/(n_e q_e)
     'mfp_ddp'   : 'gradp',   # momentum component of the gradient of pressure
+    'mm_driftu'    : 'uid',
 }
 AXES = ['x', 'y', 'z']
 # add the axial vars to auxvars.
