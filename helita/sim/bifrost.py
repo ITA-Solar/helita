@@ -86,6 +86,10 @@ class BifrostData():
         Do not use at the same time as non-default sel_units.
     squeeze_output - bool, optional. default False
         whether to apply np.squeeze() before returning the result of get_var.
+    print_freq - value, default 2.
+        number of seconds between print statements during get_varTime.
+        == 0 --> print update at every snapshot during get_varTime.
+        < 0  --> never print updates during get_varTime.
 
     Examples
     --------
@@ -113,7 +117,7 @@ class BifrostData():
                  cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
                  use_relpath=False, stagger_kind=stagger.DEFAULT_STAGGER_KIND,
-                 units_output='simu', squeeze_output=False,
+                 units_output='simu', squeeze_output=False, print_freq=2,
                  iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
@@ -133,6 +137,7 @@ class BifrostData():
         self.fast = fast
         self._fast_skip_flag = False if fast else None  # None-> never skip
         self.squeeze_output = squeeze_output
+        self.print_freq = print_freq
 
         # units. Two options for management. Should only use one at a time; leave the other at default value.
         self.units_output = units_output    # < units.py system of managing units.
@@ -645,8 +650,6 @@ class BifrostData():
         """
         # set print_freq
         if print_freq is None:
-            if not self.verbose:
-                print_freq = -1  # never print.
             print_freq = getattr(self, 'print_freq', 2) # default 2
         else:
             setattr(self, 'print_freq', print_freq)
@@ -1520,6 +1523,15 @@ class BifrostData():
     def zero(self, **kw__np_zeros):
         '''return np.zeros() with shape equal to shape of result of get_var()'''
         return np.zeros(self.shape, **kw__np_zeros)
+
+    def get_singlesnap(self):
+        '''return self.snap, or self.snap[0] if self.snap is a list.
+        This is the snap which get_var() will work at, for the given self.snap value.
+        '''
+        try:
+            return self.snap[0]
+        except TypeError:
+            return self.snap
 
     def get_snap_at_time(self, t, units='simu'):
         '''get snap number which is closest to time t.
