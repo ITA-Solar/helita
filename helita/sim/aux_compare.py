@@ -127,7 +127,7 @@ AUX_AXIAL_VARS = {
     'mfp_ddp{x}'      : 'gradp{x}',      # momentum component of the gradient of pressure
     'mm_cdp{x}dt'     : 'rij{x}',        # momentum transfer rate to ifluid due to collisions with jfluid
     'mfp_cdp{x}dt'    : 'rijsum{x}',     # momentum transfer rate to ifluid due to collisions with all other fluids
-    'mfp_ecdp{x}dt'   : ('rijsum{x}',-1),# momentum transfer rate to electrons due to collisions with all other fluids
+    'mfp_ecdp{x}dt'   : ('rij{x}',-1),   # momentum transfer rate to electrons due to collisions with all other fluids
     'mfp_ecdp{x}dt_ef': 'momohme{x}',    # momentum component of the ohmic term 
     'mm_driftu{x}'    : 'uid{x}',        # velocity drifts
 }
