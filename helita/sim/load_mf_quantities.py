@@ -673,7 +673,9 @@ def get_continuity_quant(obj, var, CONTINUITY_QUANT=None):
 
 # default
 _MOMENTUM_QUANT = []
-_MQVECS = ['rij', 'rijsum', 'momflorentz','momohme', 'mombat', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
+_MQVECS = ['rij', 'rijsum', 'momflorentz','momohme', 'mombat', 'gradp',
+        'momrate', 'momdtime', 'umomdtime',
+        '_ueq_scr', 'ueq', 'ueqsimple']
 _MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
 _MOMENTUM_QUANT = ('MOMENTUM_QUANT', _MOMENTUM_QUANT)
 # get value
@@ -692,33 +694,27 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
       docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
                        '[simu. momentum density units / simu. time units]. ' +\
                        'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2, **units_dpdt)
-    for x in AXES:
       docvar('rijsum'+x, x+'-component of momentum density change of ifluid ' +\
                            'due to collisions with all other fluids. = sum_j rij'+x, nfluid=1, **units_dpdt)
-    for x in AXES:
       docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force. ' +\
                            '[simu. momentum density units / simu. time units]. = ni qi (E + ui x B).', nfluid=1, **units_dpdt)
-    for x in AXES:
       docvar('momohme'+x, x+'-component of momentum density change of ifluid due the ohmic term in the electric field. ' +\
                            '[simu. momentum density units / simu. time units]. = ni qi E = ni qi nu_es (ui-epUx) .', nfluid=1, **units_dpdt)
-    for x in AXES:
       docvar('mombat'+x, x+'-component of momentum density change of ifluid due to battery term. ' +\
                            '[simu. momentum density units / simu. time units]. = ni qi grad(P_e) / (ne qe).', nfluid=1, **units_dpdt)
-    for x in AXES:
       docvar('gradp'+x, x+'-component of grad(Pi), face-centered (interp. loc. aligns with momentum).', nfluid=1, uni=UNI.qc(0))
-    for x in AXES:
-      docvar('momrate'+x, x+'-component of rate of change of momentum density. ' +\
-                          '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1, **units_dpdt)
-    for x in AXES:
+      for momrate in ('momdtime', 'momrate'):
+        docvar(momrate+x, x+'-component of rate of change of momentum density. Use momdt to avoid ambiguity with "rat" quant.' +\
+                            '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1, **units_dpdt)
+      docvar('umomdtime'+x, x+'-component of rate of change of velocity of ifluid. ' +\
+                          '= (-gradp + momflorentz + rijsum)_'+x+' / rho_i', nfluid=1, uni=UNI_speed / UNI_time)
       docvar('ueq'+x, x+'-component of equilibrium velocity of ifluid. Ignores derivatives in momentum equation. ' +\
                        '= '+x+'-component of [qs (_ueq_scr x B) + (ms) (sum_{j!=s} nu_sj) (_ueq_scr)] /' +\
                        ' [(qs^2/ms) B^2 + (ms) (sum_{j!=s} nu_sj)^2]. [simu velocity units].', nfluid=1, uni=UNI_speed)
-    for x in AXES:
       docvar('ueqsimple'+x, x+'-component of "simple" equilibrium velocity of ifluid. ' +\
                        'Treats these as 0: derivatives in momentum equation, velocity of jfluid, nu_sb for b not jfluid.' +\
                        '= '+x+'-component of [(qs/(ms nu_sj))^2 (E x B) + qs/(ms nu_sj) E] /' +\
                        ' [( (qs/ms) (|B|/nu_sj) )^2 + 1]. [simu. velocity units].', nfluid=2, uni=UNI_speed)
-    for x in AXES:
       docvar('_ueq_scr'+x, x+'-component of helper term which appears twice in formula for ueq. '+x+'-component of ' +\
                        ' [(qs/ms) E + (sum_{j!=s} nu_sj uj)]. face-centered. [simu velocity units].', nfluid=1, uni=UNI_speed)
     return None
@@ -800,7 +796,7 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     # px is at (-0.5, 0, 0); pressure is at (0, 0, 0), so we do dpdxdn
     return obj.get_var('dpd'+x+'dn')
 
-  elif base == 'momrate':
+  elif base in ['momdtime', 'momrate']:
     if obj.get_param('do_recion', default=False):
       if obj.verbose:
         warnings.warn('momentum contribution from ionization & recombination have not yet been added.')
@@ -808,6 +804,11 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     florentzx = obj.get_var('momflorentz'+x)
     rijsumx   = obj.get_var('rijsum'+x)
     return florentzx - gradpx + rijsumx
+
+  elif base == 'umomdtime':
+    momrate = obj('momrate'+x)
+    ri      = obj('ri'+x+'dn')   # shift down to align with momentum.
+    return momrate / ri
 
   # --- "equilibrium velocity" terms --- #
   elif base == '_ueq_scr':
@@ -880,7 +881,7 @@ _HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
                  'tg_qcol_uj', 'tg_qcol_u', 'tg_qcol_tgj', 'tg_qcol_tg', 'tg_qcol_j', 'tg_qcolj',
                  'qjoulei',
                  'tgdu',
-                 'tg_rate',
+                 'tg_rate', 'tgdtime',   # use tgdtime instead of tg_rate to avoid ambiguity with "rat" quant.
                  'qcol_u_noe', 'qcol_tg_noe',
                  ]
 _TGQCOL_EQUIL  = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
@@ -942,7 +943,9 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
                        'e_ifluid * e_to_tg = tg_ifluid', nfluid=1, **units_e_to_tg)
     # the other heating in the heating equation
     docvar('tgdu', 'rate of change of Ti due to -2/3 * T * div(u).', **units_dtgdt)
-    docvar('tg_rate', 'predicted total rate of change of Ti, including all contributions', **units_dtgdt)
+    for tg_rate in ('tg_rate', 'tgdtime'):
+      docvar(tg_rate, 'predicted total rate of change of Ti, including all contributions. ' +\
+                        'use "tgdtime" to avoid ambiguity with "rat" quant.', **units_dtgdt)
 
     # "simple equilibrium" vars
     equili = '"simple equilibrium" temperature [K] of ifluid (setting sum_j Qcol_ij=0 and solving for Ti)'
@@ -1030,7 +1033,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     divu = obj('divup'+'ui')
     return -2/3 * tg * divu
 
-  elif var == 'tg_rate':
+  elif var in ['tg_rate', 'tgdtime']:
     tgqcol = obj('tg_qcol')
     tgdu = obj('tgdu')
     return tgqcol + tgdu
