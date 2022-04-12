@@ -1,5 +1,6 @@
 # import builtins
 import warnings
+import itertools
 
 # import internal modules
 from . import document_vars
@@ -41,6 +42,7 @@ def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=
                        SPITZERTERM_QUANT=None,
                        COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
                        DRIFT_QUANT=None, MEAN_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
+                       HYPERDIFFUSIVE_QUANT=None,
                        WAVE_QUANT=None, FB_INSTAB_QUANT=None, THERMAL_INSTAB_QUANT=None,
                        **kw__None):
   '''load multifluid quantity indicated by quant.
@@ -76,9 +78,10 @@ def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=
     (get_mean_quant, 'MEAN_QUANT'),
     (get_cfl_quant, 'CFL_QUANT'),
     (get_mf_plasmaparam, 'PLASMA_QUANT'),
+    (get_hyperdiffusive_quant, 'HYPERDIFFUSIVE_QUANT'),
     (get_mf_wavequant, 'WAVE_QUANT'),
     (get_fb_instab_quant, 'FB_INSTAB_QUANT'),
-    (get_thermal_instab_quant, 'THERMAL_INSTAB_QUANT')
+    (get_thermal_instab_quant, 'THERMAL_INSTAB_QUANT'),
   )
 
   val = None
@@ -1654,7 +1657,10 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     docvar('beta_ions', "plasma beta using sum of ion pressures. P / (B^2 / (2 mu0)).", nfluid=0, uni=DIMENSIONLESS)
     docvar('va', "alfven speed [simu. units]", nfluid=0, uni=UNI_speed)
     docvar('va_ions', "alfven speed [simu. units], using density := density of ions.", nfluid=0, uni=UNI_speed)
+    docvar('vai', "alfven speed [simu. units] of ifluid. Vai = sqrt(B^2 / (mu0 * rho_i))", nfluid=1, uni=UNI_speed)
     docvar('cs', "sound speed [simu. units]", nfluid='???', uni=UNI_speed)
+    docvar('csi', "sound speed [simu. units] of ifluid. Csi = sqrt(gamma * pressure_i / rho_i)", nfluid=1, uni=UNI_speed)
+    docvar('cfast', "Cfast for ifluid. == (Csi**2 + Vai**2 + Cse**2)?? NEEDS UPDATING.", nfluid=1, uni=UNI_speed)
     docvar('s', "entropy [log of quantities in simu. units]", nfluid='???', uni=DIMENSIONLESS)
     docvar('mn', "mach number (using sound speed)", nfluid=1, uni=DIMENSIONLESS)
     docvar('man', "mach number (using alfven speed)", nfluid=1, uni=DIMENSIONLESS)
@@ -1691,24 +1697,40 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     elif quant == 's':
       return (np.log(var) - obj.params['gamma'][obj.snapInd] *
               np.log(obj.get_var('totr')))
-    elif quant == 'beta':
+    else: # quant == 'beta':
       return 2 * var / obj.get_var('b2')
 
-  if quant == 'beta_ions':
+  elif quant == 'csi':
+    p = obj('p')
+    r = obj('r')
+    return np.sqrt(obj.uni.gamma * p / r)
+
+  elif quant == 'cfast':
+    warnings.warn('cfast implementation may be using the wrong formula.')
+    speeds = [obj('csi')]   # sound speed
+    i_charged = obj.get_charge(obj.ifluid) != 0
+    if i_charged:
+      speeds.append(obj('vai'))   # alfven speed
+      if not obj.fluids_equal(obj.ifluid, (-1,0)):   # if ifluid is not electrons
+        speeds.append(obj('csi', ifluid=(-1,0)))  # sound speed of electrons
+    result = sum(speed**2 for speed in speeds)
+    return result
+
+  elif quant == 'beta_ions':
     p = obj.zero()
     for fluid in obj.fluids.ions():
       p += obj.get_var('p', ifluid=fluid)
     bp = obj.get_var('b2') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
     return p / bp
 
-  if quant in ['mn', 'man']:
+  elif quant in ['mn', 'man']:
     var = obj.get_var('modu')
     if quant == 'mn':
       return var / (obj.get_var('cs') + 1e-12)
     else:
       return var / (obj.get_var('va') + 1e-12)
 
-  if quant in ['va', 'vax', 'vay', 'vaz']:
+  elif quant in ['va', 'vax', 'vay', 'vaz']:
     var = obj.get_var('totr')
     if len(quant) == 2:
       return obj.get_var('modb') / np.sqrt(var)
@@ -1716,11 +1738,16 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       axis = quant[-1]
       return np.sqrt(obj.get_var('b' + axis + 'c') ** 2 / var)
 
-  if quant in ['va_ions']:
+  elif quant in ['va_ions']:
     r = obj.get_var('rions')
     return obj.get_var('modb') / np.sqrt(r)
 
-  if quant in ['hx', 'hy', 'hz', 'kx', 'ky', 'kz']:
+  elif quant == 'vai':
+    r = obj('r')
+    b = obj('modb')
+    return b / np.sqrt(r)   # [simu speed units]. note: mu0 = 1 in simu units.
+
+  elif quant in ['hx', 'hy', 'hz', 'kx', 'ky', 'kz']:
     axis = quant[-1]
     var = obj.get_var('p' + axis + 'c')
     if quant[0] == 'h':
@@ -1735,21 +1762,21 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     else:
       return obj.get_var('u2') * var * 0.5
 
-  if quant == 'sgyrof':
+  elif quant == 'sgyrof':
     B = obj.get_var('modb')                       # magnitude of B [simu. B-field units]
     q = obj.get_charge(obj.ifluid, units='simu')     #[simu. charge units]
     m = obj.get_mass(obj.mf_ispecies, units='simu')  #[simu. mass units]
     return q * B / m
 
-  if quant == 'gyrof':
+  elif quant == 'gyrof':
     return np.abs(obj.get_var('sgyrof'))
 
-  if quant == 'skappa':
+  elif quant == 'skappa':
     gyrof = obj.get_var('sgyrof') #[simu. freq.]
     nu_sn = obj.get_var('nu_sn')  #[simu. freq.]
     return gyrof / nu_sn 
 
-  if quant == 'kappa':
+  elif quant == 'kappa':
     return np.abs(obj.get_var('skappa'))
 
   elif quant == 'ldebyei':
@@ -1771,6 +1798,120 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
 
   else:
     raise NotImplementedError(f'{repr(quant)} in get_mf_plasmaparam')
+
+
+# default
+_FUNDAMENTALS = ('r', 'px', 'py', 'pz', 'e', 'bx', 'by', 'bz')
+_HD_Fs = ('part',   # part --> only get the internal part. e.g. nu1 * Cfast.
+          *_FUNDAMENTALS)
+_HD_QUANTS  = ['hd1_part', 'hd2_part']       # << without the factor of nu1, nu2
+_HD_QUANTS += ['hd1_partnu', 'hd2_partnu']   # << include the factor of nu1, nu2
+_HD_QUANTS += [f'hd3{x}_part' for x in AXES] + [f'hd3{x}_bpart' for x in AXES]       # << without the factor of nu3
+_HD_QUANTS += [f'hd3{x}_partnu' for x in AXES] + [f'hd3{x}_bpartnu' for x in AXES]   # << include the factor of nu3
+_HD_QUANTS += [f'hd{x}quench_{f}' for x in AXES for f in _FUNDAMENTALS]  # Q(∂f/∂x)
+_HD_QUANTS += [f'hd{x}coeff_{f}' for x in AXES for f in _FUNDAMENTALS]   # nu dx (∂f/∂x) * Q(∂f/∂x)
+_HD_QUANTS += [f'{d}hd{n}{x}_{f}' for d in ('', 'd')       # E.g. hd1x_r == hd1_part * nu dx (∂f/∂x) * Q(∂f/∂x)
+                                  for n in (1,2,3)         # and dhd1x_r == ∂[hd1_part * nu dx (∂f/∂x) * Q(∂f/∂x)]/∂x
+                                  for x in AXES
+                                  for f in _FUNDAMENTALS]
+_HYPERDIFFUSIVE_QUANT = ('HYPERDIFFUSIVE_QUANT', _HD_QUANTS)
+# get value
+@document_vars.quant_tracking_simple(_HYPERDIFFUSIVE_QUANT[0])
+def get_hyperdiffusive_quant(obj, quant, HYPERDIFFUSIVE_QUANT=None):
+  '''hyperdiffusive terms. All in simu units.'''
+  if HYPERDIFFUSIVE_QUANT is None:
+    HYPERDIFFUSIVE_QUANT = _HYPERDIFFUSIVE_QUANT[1]
+
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, _HYPERDIFFUSIVE_QUANT[0], HYPERDIFFUSIVE_QUANT,
+                                           get_hyperdiffusive_quant.__doc__, nfluid=1)
+    docvar('hd1_part'  ,       'Cfast_i', uni=UNI_speed)
+    docvar('hd1_partnu', 'nu1 * Cfast_i', uni=UNI_speed)
+    docvar('hd2_part'  ,       '|ui|'   , uni=UNI_speed)
+    docvar('hd2_partnu', 'nu2 * |ui|'   , uni=UNI_speed)
+    for x in AXES:
+      docvar(f'hd3{x}_part'   ,       f'd{x} * grad1{x}(ui{x})'         , uni=UNI_speed)
+      docvar(f'hd3{x}_partnu' , f'nu3 * d{x} * grad1{x}(ui{x})'         , uni=UNI_speed)
+      docvar(f'hd3{x}_bpart'  ,       f'd{x} * |grad1_perp_to_b(ui{x})|', uni=UNI_speed)
+      docvar(f'hd3{x}_bpartnu', f'nu3 * d{x} * |grad1_perp_to_b(ui{x})|', uni=UNI_speed)
+    for x in AXES:
+      for f in _FUNDAMENTALS:
+        docvar(f'hd{x}quench_{f}', f'Q(∂{f}/∂{x})', uni=DIMENSIONLESS)
+        docvar(f'hd{x}coeff_{f}',  f'nu d{x} (∂{f}/∂{x}) * Q(∂{f}/∂{x})', uni=UNI.qc(0))
+    for x in AXES:
+      for n in (1,2,3):
+        for f in _FUNDAMENTALS:
+          if n==3 and f.startswith('b'):
+            docvar(f'hd{n}{x}_{f}', f'nu{n} * hd{n}_bpart * hd{x}coeff_{f}', ) #uni=[TODO]
+          else:
+            docvar(f'hd{n}{x}_{f}', f'nu{n} * hd{n}_part * hd{x}coeff_{f}', ) #uni=[TODO]
+          docvar(f'dhd{n}{x}_{f}', f'∂[hd{n}{x}_{f}]/∂{x}', )
+    return None
+
+  if quant not in HYPERDIFFUSIVE_QUANT:
+    return None
+
+  # nu1 term
+  if quant == 'hd1_part':
+    return obj('cfast')
+  elif quant == 'hd1_partnu':
+    return obj('hd1_part') * obj.get_param('nu1')
+
+  # nu2 term
+  elif quant == 'hd2_part':
+    return obj('ui_mod')
+  elif quant == 'hd2_partnu':
+    return obj('hd2_part') * obj.get_param('nu2')
+
+  # nu3 term
+  elif quant.startswith('hd3') and quant in (f'hd3{x}_part' for x in AXES):
+    x = quant[len('hd3')+0]  # 'x', 'y', or 'z'
+    # dx * grad1x (uix)
+    raise NotImplementedError(f'hd3{x}_part')
+
+  elif quant.startswith('hd3') and quant in (f'hd3{x}_bpart' for x in AXES):
+    x = quant[len('hd3')+0]  # 'x', 'y', or 'z'
+    # dx * |grad1_perp_to_b(ui{x})|
+    raise NotImplementedError(f'hd3{x}_bpart')
+
+  elif quant.starstwith('hd3') and quant in (f'hd3{x}_{b}partnu' for x in AXES for b in ('', 'b')):
+    part_without_nu = quant[:-len('nu')]
+    return obj(part_without_nu) * obj.get_param('nu3')
+
+  # quench term
+  elif quant.startswith('hd') and quant.partition('_')[0] in (f'hd{x}quench' for x in AXES):
+    base, _, f = quant.partition('_')
+    x = base[len('hd')]  # 'x', 'y', or 'z'
+    fval = obj(f)    # value of f, e.g. value of 'r' or 'bx'
+    # Q(∂f/∂x)
+    raise NotImplementedError(f'hd{x}quench_{f}')
+
+  # coeff term
+  elif quant.startswith('hd') and quant.partition('_')[0] in (f'hd{x}coeff' for x in AXES):
+    base, _, f = quant.partition('_')
+    x = base[len('hd')]  # 'x', 'y', or 'z'
+    nu = NotImplemented  # << TODO
+    dx = obj.dx          # << TODO (allow to vary in space)
+    quench = obj(f'hd{x}quench_{f}')
+    dfdx   = obj(f'd{f}dxdn')
+    return nu * dx * dfdx * quench
+
+  # full hd term
+  elif quant.startswith('hd') and quant.partition('_')[0] in (f'hd{n}{x}' for x in AXES for n in (1,2,3)):
+    base, _, f = quant.partition('_')
+    n, x = base[2:4]
+    nu = obj.get_param(f'nu{n}')
+    if n==3 and f.startswith('b'):
+      hd_part = obj('hd3_bpart')
+    else:
+      hd_part = obj(f'hd{n}_part')
+    coeff = obj(f'hd{x}coeff_{f}')
+    return nu * hd_part * coeff
+
+  # full hd term, with derivative
+  elif quant.startswith('dhd') and quant.partition('_')[0] in (f'dhd{n}{x}' for x in AXES for n in (1,2,3)):
+    quant_str = quant[1:]
+    return obj('d'+quant_str+'dxdn')
 
 
 # default

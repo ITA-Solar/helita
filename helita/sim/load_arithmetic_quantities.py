@@ -35,11 +35,11 @@ from . import document_vars
 try:
   from . import cstagger
 except ImportError:
-  warnings.warn("failed to import helita.sim.cstagger; running stagger with stagger_kind='cstagger' will crash.")
+  cstagger = tools.ImportFailed('cstagger', "This module is required to use stagger_kind='cstagger'.")
 try:
   from . import stagger
 except ImportError:
-  warnings.warn("failed to import helita.sim.stagger; running stagger with stagger_kind='stagger' will crash.")
+  stagger = tools.ImportFailed('stagger')
 
 ## import the relevant things from the internal module "units"
 from .units import (

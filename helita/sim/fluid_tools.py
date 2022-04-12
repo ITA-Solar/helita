@@ -14,7 +14,7 @@ import itertools
 try:
   from at_tools import fluids as fl
 except ImportError:
-  warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.fluid_tools may crash')
+  fl = tools.ImportFailed('at_tools.fluids')
 
 # set defaults
 HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.

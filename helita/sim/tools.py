@@ -1,9 +1,22 @@
-from astropy.io import fits
-import numpy as np
-import os, fnmatch
-from scipy import interpolate
-from scipy import ndimage
+# import built-in modules
+import os
+import fnmatch
+import functools
+import warnings
 
+# import external public modules
+import numpy as np
+from astropy.io import fits
+from scipy import interpolate, ndimage
+
+
+''' --------------------------- defaults --------------------------- '''
+
+IMPORT_FAILURE_WARNINGS = False    # whether to warn (immediately) when an optional module fails to import.
+  # Either way, we will still raise ImportFailedError upon accessing a module which failed to import.
+
+
+''' --------------------------- writing snaps --------------------------- '''
 
 def writefits(obj, varname, snap=None, instrument = 'MURaM', 
               name='ar098192', origin='HGCR    ', z_tau51m = None): 
@@ -307,6 +320,79 @@ def refine(s,q,factor=2,unscale=lambda x:x):
         return ss, qq
 
 
+''' --------------------------- info about arrays --------------------------- '''
+
+def stats(arr, advanced=True, finite_only=True):
+    '''return dict with min, mean, max.
+    if advanced, also include:
+        std, median, size, number of non-finite points (e.g. np.inf or np.nan).
+    if finite_only:
+        only treat the finite parts of arr; ignore nans and infs.
+    '''
+    arr = arr_orig = np.asanyarray(arr)
+    if finite_only or advanced:  # then we need to know np.isfinite(arr)
+        finite = np.isfinite(arr)
+        n_nonfinite = arr.size - np.count_nonzero(finite)
+    if finite_only and n_nonfinite > 0:
+        arr = arr[finite]
+    result = dict(min=np.nanmin(arr), mean=np.nanmean(arr), max=np.nanmax(arr))
+    if advanced:
+        result.update(dict(std=np.nanstd(arr), median=np.nanmedian(arr),
+                           size=arr.size, nonfinite=n_nonfinite))
+    return result
+
+def print_stats(arr_or_stats, advanced=True, fmt='{: .2e}', sep=' | ', return_str=False):
+    '''calculate and prettyprint stats about array.
+    arr_or_stats: dict (stats) or array-like.
+        dict --> treat dict as stats of array.
+        array --> calculate stats(arr, advanced=advanced)
+    fmt: str
+        format string for each stat.
+    sep: str
+        separator string between each stat.
+    return_str: bool
+        whether to return string instead of printing.
+    '''
+    fmtkey = '{:>6s}' if '\n' in sep else '{}'
+    _stats = arr_or_stats if isinstance(arr_or_stats, dict) else stats(arr_or_stats, advanced=advanced)
+    result = sep.join([f'{fmtkey.format(key)}: {fmt.format(val)}' for key, val in _stats.items()])
+    return result if return_str else print(result)
+
+def finite_op(arr, op):
+    '''returns op(arr), hitting only the finite values of arr.
+    if arr has only finite values,
+        finite_op(arr, op) == op(arr).
+    if arr has some nonfinite values (infs or nans),
+        finite_op(arr, op) == op(arr[np.isfinite(arr)])
+    '''
+    arr = np.asanyarray(arr)
+    finite = np.isfinite(arr)
+    if np.count_nonzero(finite) < finite.size:
+        return op(arr[finite])
+    else:
+        return op(arr)
+
+def finite_min(arr):
+    '''returns min of all the finite values of arr.'''
+    return finite_op(arr, np.min)
+
+def finite_mean(arr):
+    '''returns mean of all the finite values of arr.'''
+    return finite_op(arr, np.mean)
+
+def finite_max(arr):
+    '''returns max of all the finite values of arr.'''
+    return finite_op(arr, np.max)
+
+def finite_std(arr):
+    '''returns std of all the finite values of arr.'''
+    return finite_op(arr, np.std)
+
+def finite_median(arr):
+    '''returns median of all the finite values of arr.'''
+    return finite_op(arr, np.median)
+
+
 ''' --------------------------- strings --------------------------- '''
 
 def pretty_nbytes(nbytes, fmt='{:.2f}'):
@@ -323,6 +409,42 @@ def pretty_nbytes(nbytes, fmt='{:.2f}'):
       n_u_bytes = n_next
       u = u_next
   return '{fmt} {u}B'.format(fmt=fmt, u=u).format(n_u_bytes)
+
+
+''' --------------------------- import error handling --------------------------- '''
+
+class ImportFailedError(ImportError):
+  pass
+
+class ImportFailed():
+  '''set modules which fail to import to be instances of this class;
+  initialize with modulename, additional_error_message.
+  when attempting to access any attribute of the ImportFailed object,
+    raises ImportFailedError('. '.join(modulename, additional_error_message)).
+  Also, if IMPORT_FAILURE_WARNINGS, make warning immediately when initialized.
+
+  Example:
+  try:
+    import zarr
+  except ImportError:
+    zarr = ImportFailed('zarr', 'This module is required for compressing data.')
+
+  zarr.load(...)   # << attempt to use zarr
+  # if zarr was imported successfully, it will work fine.
+  # if zarr failed to import, this error will be raised:
+  >>> ImportFailedError: zarr. This module is required for compressing data.
+  '''
+  def __init__(self, modulename, additional_error_message=''):
+    self.modulename = modulename
+    self.additional_error_message = additional_error_message
+    if IMPORT_FAILURE_WARNINGS:
+      warnings.warn(f'Failed to import module {modulename}.{additional_error_message}')
+
+  def __getattr__(self, attr):
+    str_add = str(self.additional_error_message)
+    if len(str_add) > 0:
+      str_add = '. ' + str_add
+    raise ImportFailedError(self.modulename + str_add)
 
 
 ''' --------------------------- vector rotations --------------------------- '''
