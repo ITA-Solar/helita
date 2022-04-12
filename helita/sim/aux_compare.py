@@ -111,29 +111,34 @@ AUXVARS = {
     'mfr_cross'     : ('cross',-1),  # cross section
     'mfr_tgei'      : ('tgij',-1),   # tg+etg weighted. 
     'mfr_p'         : 'p',           # pressure
-    'mfp_ecdpxdt_ef': 'momohmex',    # momentum component of the ohmic term 
-    'mfp_ecdpydt_ef': 'momohmey',    # momentum component of the ohmic term 
-    'mfp_ecdpzdt_ef': 'momohmez',    # momentum component of the ohmic term 
-    'mfp_ecdpxdt'   : ('rijsumx',-1),# momentum component of the ohmic term 
     'mfe_qcolue'    : ('qcol_uj',-1), # energy component of the ohmic term from velocity drift
     'mfe_qcolte'    : ('qcol_tgj',-1),# energy component of the ohmic term from temperature diff
     'mm_qcolt'      : 'qcol_tgj',  # energy component of the coll. term from temperature diff
     'mm_qcolu'      : 'qcol_uj',   # energy component of the coll. term from velocity drift
 }
-# add each of these plus an axis to AUXVARS.
-# e.g. {'e': 'ef'} --> {'ex': 'efx', 'ey': 'efy', 'ez': 'efz'}.
+# add each of these, formatted by x=axis, to AUXVARS.
+# e.g. {'e{x}': 'ef{x}'} --> {'ex': 'efx', 'ey': 'efy', 'ez': 'efz'}.
 AUX_AXIAL_VARS = {
-    'e'         : 'ef',      # electric field
-    'eu'        : 'ue',      # electron velocity
-    'i'         : 'j',       # current density (charge per time per area)
-    'bb_bat'    : 'bat',     # "battery" term (contribution to electric field: grad(P_e)/(n_e q_e))
-    'mfp_bb_ddp': 'mombat',  # momentum component of the battery term ni*qi*grad(P_e)/(n_e q_e)
-    'mfp_ddp'   : 'gradp',   # momentum component of the gradient of pressure
+    'e{x}'            : 'ef{x}',         # electric field
+    'eu{x}'           : 'ue{x}',         # electron velocity
+    'i{x}'            : 'j{x}',          # current density (charge per time per area)
+    'bb_bat{x}'       : 'bat{x}',        # "battery" term (contribution to electric field: grad(P_e)/(n_e q_e))
+    'mfp_bb_ddp{x}'   : 'mombat{x}',     # momentum component of the battery term ni*qi*grad(P_e)/(n_e q_e)
+    'mfp_ddp{x}'      : 'gradp{x}',      # momentum component of the gradient of pressure
+    'mm_cdp{x}dt'     : 'rij{x}',        # momentum transfer rate to ifluid due to collisions with jfluid
+    'mfp_cdp{x}dt'    : 'rijsum{x}',     # momentum transfer rate to ifluid due to collisions with all other fluids
+    'mfp_ecdp{x}dt'   : ('rijsum{x}',-1),# momentum transfer rate to electrons due to collisions with all other fluids
+    'mfp_ecdp{x}dt_ef': 'momohme{x}',    # momentum component of the ohmic term 
 }
-AXES = ['x', 'y', 'z']
 # add the axial vars to auxvars.
+AXES = ['x', 'y', 'z']
+def _format(val, *args, **kw):
+    if isinstance(val, str):
+        return val.format(*args, **kw)
+    else:  # handle tuples
+        return (_format(val[0], *args, **kw), *val[1:])
 for (aux, hel) in AUX_AXIAL_VARS.items():
-    AUXVARS.update({aux+x: hel+x for x in AXES})
+    AUXVARS.update({_format(aux, x=x): _format(hel, x=x) for x in AXES})
 
 def get_helita_var(auxvar):
     return AUXVARS[auxvar]
