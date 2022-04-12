@@ -62,24 +62,24 @@ from .units import (
 try:
   from . import cstagger
 except ImportError:
-  warnings.warn("failed to import helita.sim.cstagger; running stagger with stagger_kind='cstagger' will crash.")
+  cstagger = tools.ImportFailed('cstagger', "This module is required to use stagger_kind='cstagger'.")
 
 # import external public modules
 import numpy as np
 try:
     import zarr
 except ImportError:
-    warnings.warn("failed to import zarr; read_mode='zc' and EbysusData.compress() will be unavailable.")
+    zarr = tools.ImportFailed('zarr')
 
 # import external private modules
 try:
     from at_tools import atom_tools as at
 except ImportError:
-    warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
+    at = tools.ImportFailed('at_tools.atom_tools')
 try:
     from at_tools import fluids as fl
 except ImportError:
-    warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.ebysus may crash')
+    fl = tools.ImportFailed('at_tools.fluids')
 
 # set defaults:
 from .load_mf_quantities import (

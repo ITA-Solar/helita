@@ -90,8 +90,7 @@ import numpy as np
 try:
     from at_tools import fluids as fl
 except ImportError:
-    fl = None
-    warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.aux_compare may crash')
+    fl = tools.ImportFailed('at_tools.fluids')
 
 # set defaults
 DEFAULT_TOLERANCE = 0.05    # the max for (1-abs(X/Y)) before we think X != Y

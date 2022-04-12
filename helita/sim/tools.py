@@ -1,9 +1,22 @@
-from astropy.io import fits
-import numpy as np
-import os, fnmatch
-from scipy import interpolate
-from scipy import ndimage
+# import built-in modules
+import os
+import fnmatch
+import functools
+import warnings
 
+# import external public modules
+import numpy as np
+from astropy.io import fits
+from scipy import interpolate, ndimage
+
+
+''' --------------------------- defaults --------------------------- '''
+
+IMPORT_FAILURE_WARNINGS = False    # whether to warn (immediately) when an optional module fails to import.
+  # Either way, we will still raise ImportFailedError upon accessing a module which failed to import.
+
+
+''' --------------------------- writing snaps --------------------------- '''
 
 def writefits(obj, varname, snap=None, instrument = 'MURaM', 
               name='ar098192', origin='HGCR    ', z_tau51m = None): 
@@ -396,6 +409,42 @@ def pretty_nbytes(nbytes, fmt='{:.2f}'):
       n_u_bytes = n_next
       u = u_next
   return '{fmt} {u}B'.format(fmt=fmt, u=u).format(n_u_bytes)
+
+
+''' --------------------------- import error handling --------------------------- '''
+
+class ImportFailedError(ImportError):
+  pass
+
+class ImportFailed():
+  '''set modules which fail to import to be instances of this class;
+  initialize with modulename, additional_error_message.
+  when attempting to access any attribute of the ImportFailed object,
+    raises ImportFailedError('. '.join(modulename, additional_error_message)).
+  Also, if IMPORT_FAILURE_WARNINGS, make warning immediately when initialized.
+
+  Example:
+  try:
+    import zarr
+  except ImportError:
+    zarr = ImportFailed('zarr', 'This module is required for compressing data.')
+
+  zarr.load(...)   # << attempt to use zarr
+  # if zarr was imported successfully, it will work fine.
+  # if zarr failed to import, this error will be raised:
+  >>> ImportFailedError: zarr. This module is required for compressing data.
+  '''
+  def __init__(self, modulename, additional_error_message=''):
+    self.modulename = modulename
+    self.additional_error_message = additional_error_message
+    if IMPORT_FAILURE_WARNINGS:
+      warnings.warn(f'Failed to import module {modulename}.{additional_error_message}')
+
+  def __getattr__(self, attr):
+    str_add = str(self.additional_error_message)
+    if len(str_add) > 0:
+      str_add = '. ' + str_add
+    raise ImportFailedError(self.modulename + str_add)
 
 
 ''' --------------------------- vector rotations --------------------------- '''
