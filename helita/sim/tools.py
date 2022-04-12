@@ -307,6 +307,79 @@ def refine(s,q,factor=2,unscale=lambda x:x):
         return ss, qq
 
 
+''' --------------------------- info about arrays --------------------------- '''
+
+def stats(arr, advanced=True, finite_only=True):
+    '''return dict with min, mean, max.
+    if advanced, also include:
+        std, median, size, number of non-finite points (e.g. np.inf or np.nan).
+    if finite_only:
+        only treat the finite parts of arr; ignore nans and infs.
+    '''
+    arr = arr_orig = np.asanyarray(arr)
+    if finite_only or advanced:  # then we need to know np.isfinite(arr)
+        finite = np.isfinite(arr)
+        n_nonfinite = arr.size - np.count_nonzero(finite)
+    if finite_only and n_nonfinite > 0:
+        arr = arr[finite]
+    result = dict(min=np.nanmin(arr), mean=np.nanmean(arr), max=np.nanmax(arr))
+    if advanced:
+        result.update(dict(std=np.nanstd(arr), median=np.nanmedian(arr),
+                           size=arr.size, nonfinite=n_nonfinite))
+    return result
+
+def print_stats(arr_or_stats, advanced=True, fmt='{: .2e}', sep=' | ', return_str=False):
+    '''calculate and prettyprint stats about array.
+    arr_or_stats: dict (stats) or array-like.
+        dict --> treat dict as stats of array.
+        array --> calculate stats(arr, advanced=advanced)
+    fmt: str
+        format string for each stat.
+    sep: str
+        separator string between each stat.
+    return_str: bool
+        whether to return string instead of printing.
+    '''
+    fmtkey = '{:>6s}' if '\n' in sep else '{}'
+    _stats = arr_or_stats if isinstance(arr_or_stats, dict) else stats(arr_or_stats, advanced=advanced)
+    result = sep.join([f'{fmtkey.format(key)}: {fmt.format(val)}' for key, val in _stats.items()])
+    return result if return_str else print(result)
+
+def finite_op(arr, op):
+    '''returns op(arr), hitting only the finite values of arr.
+    if arr has only finite values,
+        finite_op(arr, op) == op(arr).
+    if arr has some nonfinite values (infs or nans),
+        finite_op(arr, op) == op(arr[np.isfinite(arr)])
+    '''
+    arr = np.asanyarray(arr)
+    finite = np.isfinite(arr)
+    if np.count_nonzero(finite) < finite.size:
+        return op(arr[finite])
+    else:
+        return op(arr)
+
+def finite_min(arr):
+    '''returns min of all the finite values of arr.'''
+    return finite_op(arr, np.min)
+
+def finite_mean(arr):
+    '''returns mean of all the finite values of arr.'''
+    return finite_op(arr, np.mean)
+
+def finite_max(arr):
+    '''returns max of all the finite values of arr.'''
+    return finite_op(arr, np.max)
+
+def finite_std(arr):
+    '''returns std of all the finite values of arr.'''
+    return finite_op(arr, np.std)
+
+def finite_median(arr):
+    '''returns median of all the finite values of arr.'''
+    return finite_op(arr, np.median)
+
+
 ''' --------------------------- strings --------------------------- '''
 
 def pretty_nbytes(nbytes, fmt='{:.2f}'):
