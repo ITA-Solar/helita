@@ -10,6 +10,9 @@ import functools
 import warnings
 import itertools
 
+# import internal modules
+from . import tools
+
 # import external private modules
 try:
   from at_tools import fluids as fl
@@ -204,12 +207,7 @@ _UseFluids = _UsingFluids  # alias
 
 def maintain_fluids(f):
     '''decorator version of _MaintainFluids. first arg of f must be an EbysusData object.'''
-    @functools.wraps(f)
-    def f_but_maintain_fluids(obj, *args, **kwargs):
-        __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        with _MaintainingFluids(obj):
-            return f(obj, *args, **kwargs)
-    return f_but_maintain_fluids
+    return tools.maintain_attrs('ifluid', 'jfluid')(f)
 
 def use_fluids(**kw__fluids):
     '''returns decorator version of _UseFluids. first arg of f must be an EbysusData object.'''
