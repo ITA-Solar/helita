@@ -109,8 +109,6 @@ class BifrostData():
     >>> vx = a.get_var("ux")
     """
 
-    snap = None
-
     ## CREATION ##
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.', 
                  fast=False, verbose=True, dtype='f4', big_endian=False, 
@@ -212,6 +210,14 @@ class BifrostData():
     @cstagop.setter
     def cstagop(self, value):
         self.do_stagger = value
+
+    @property
+    def snap(self):
+        '''snapshot number, or list of snapshot numbers.'''
+        return getattr(self, '_snap', None)
+    @snap.setter
+    def snap(self, value):
+        self.set_snap(value)
 
     @property
     def snaps(self):
@@ -323,7 +329,7 @@ class BifrostData():
             else:
                 return '_%03i' % snap
 
-        self.snap = snap
+        self._snap = snap
         if np.shape(self.snap) != ():
             self.snap_str = []
             for num in snap:
