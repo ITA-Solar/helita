@@ -1497,7 +1497,7 @@ class BifrostData():
         '''
         KNOWN_METHODS = ('numpy', 'simple')
         method = method.lower()
-        assert method in KNOWN_METHODS, f"Unrecognized method for get_dvardtime: {repr(method)}"
+        assert method in KNOWN_METHODS, f"Unrecognized method for get_dvarTime: {repr(method)}"
         v  = self.get_varTime(var, **kw__get_varTime)
         tt = self.get_coord('t')
         tt = np.expand_dims(tt, axis=tuple(range(0, v.ndim - tt.ndim)))  # e.g. shape (1,1,1,len(self.snaps))
