@@ -36,11 +36,6 @@ import weakref  # for refering to parent in cache without making circular refere
 # import local modules
 from . import document_vars
 
-# import attributes of local modules into this namespace, for historical reasons.
-from .document_vars import (
-    maintain_attrs
-)
-
 # import external public modules
 try:
     import numpy as np

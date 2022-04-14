@@ -49,6 +49,7 @@ import copy   # for deepcopy for QuantTree
 
 # import internal modules
 from . import units       # not used heavily; just here for setting defaults, and setting obj.get_units
+from . import tools
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
@@ -397,33 +398,6 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
     obj.search_vardict = _search_vardict
 
 
-''' --------------------- restore attrs --------------------- '''
-
-# this helper function probably should go in another file, but this is the best place for it for now.
-
-def maintain_attrs(*attrs):
-    '''return decorator which restores attrs of obj after running function.
-    It is assumed that obj is the first arg of function.
-    '''
-    def attr_restorer(f):
-        @functools.wraps(f)
-        def f_but_maintain_attrs(obj, *args, **kwargs):
-            '''f but attrs are maintained.'''
-            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-            memory = dict()  # dict of attrs to maintain
-            for attr in attrs:
-                if hasattr(obj, attr):
-                    memory[attr] = getattr(obj, attr)
-            try:
-                return f(obj, *args, **kwargs)
-            finally:
-                # restore attrs
-                for attr, val in memory.items(): 
-                    setattr(obj, attr, val)
-        return f_but_maintain_attrs
-    return attr_restorer
-
-
 ''' ----------------------------- quant tracking ----------------------------- '''
 
 QuantInfo = collections.namedtuple('QuantInfo', ('varname', 'quant', 'typequant', 'metaquant', 'level'),
@@ -722,7 +696,7 @@ def quant_tree_tracking(f):
 def quant_tracking_top_level(f):
     '''decorator which improves quant tracking. (decorate _load_quantities using this.)'''
     @quant_tree_tracking
-    @maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
+    @tools.maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS

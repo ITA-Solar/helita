@@ -591,7 +591,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     ## READING DATA / DOING CALCULATIONS ##
     @fluid_tools.maintain_fluids
-    @file_memory.maintain_attrs('match_type')
+    @tools.maintain_attrs('match_type')
     @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
     @document_vars.quant_tracking_top_level
     def _load_quantity(self, var, panic=False):

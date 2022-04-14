@@ -320,6 +320,31 @@ def refine(s,q,factor=2,unscale=lambda x:x):
         return ss, qq
 
 
+''' --------------------- restore attrs --------------------- '''
+
+def maintain_attrs(*attrs):
+    '''return decorator which restores attrs of obj after running function.
+    It is assumed that obj is the first arg of function.
+    '''
+    def attr_restorer(f):
+        @functools.wraps(f)
+        def f_but_maintain_attrs(obj, *args, **kwargs):
+            '''f but attrs are maintained.'''
+            __tracebackhide__ = True
+            memory = dict()  # dict of attrs to maintain
+            for attr in attrs:
+                if hasattr(obj, attr):
+                    memory[attr] = getattr(obj, attr)
+            try:
+                return f(obj, *args, **kwargs)
+            finally:
+                # restore attrs
+                for attr, val in memory.items(): 
+                    setattr(obj, attr, val)
+        return f_but_maintain_attrs
+    return attr_restorer
+
+
 ''' --------------------------- info about arrays --------------------------- '''
 
 def stats(arr, advanced=True, finite_only=True):
