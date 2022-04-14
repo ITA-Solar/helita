@@ -344,6 +344,22 @@ def maintain_attrs(*attrs):
         return f_but_maintain_attrs
     return attr_restorer
 
+class MaintainingAttrs():
+    '''context manager which restores attrs of obj to their original values, upon exit.'''
+    def __init__(self, obj, *attrs):
+        self.obj = obj
+        self.attrs = attrs
+
+    def __enter__(self):
+        self.memory = dict()
+        for attr in self.attrs:
+            if hasattr(self.obj, attr):
+                self.memory[attr] = getattr(self.obj, attr)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        for attr, val in self.memory.items():
+            setattr(self.obj, attr, val)
+
 
 ''' --------------------------- info about arrays --------------------------- '''
 
