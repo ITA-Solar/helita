@@ -1449,6 +1449,7 @@ class BifrostData():
             fout2.close()
 
     ## TIME DERIVATIVES ##
+    @tools.maintain_attrs('snap')
     def ddt(self, var, snap=None, *args__get_var, method='forward', **kw__get_var):
         '''time derivative of var, at current snapshot.
         Units are determined by self.units_output (default: [simulation units]).
@@ -1475,6 +1476,41 @@ class BifrostData():
         value1 = self(var, *args__get_var, **kw__get_var)
         time1  = self.get_coord('t')[0]
         return (value1 - value0) / (time1 - time0)
+
+    def get_dvarTime(self, var, method='numpy', kw__gradient=dict(), **kw__get_varTime):
+        '''time derivative of var, across time.
+        Units are determined by self.units_output (default: [simulation units]).
+
+        method: ('numpy', 'simple')
+            tells how to take the time derivative:
+                numpy --> np.gradient(v, axis=-1) / np.gradient(tt, axis=-1)
+                simple --> (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+            where, above, v = self.get_varTime(var);
+            tt=self.get_coord('t'), with dims expanded (np.expand_dims) appropriately.
+        kw__gradient: dict
+            if method=='numpy', kw__gradient are passed to np.gradient.
+            (do not include 'axis' in kw__gradient.)
+        additional **kwargs are passed to self.get_varTime.
+
+        returns: array of shape (..., M),
+        where M=len(self.snap) if method=='numpy', or len(self.snap)-1 if method=='simple'.
+        '''
+        KNOWN_METHODS = ('numpy', 'simple')
+        method = method.lower()
+        assert method in KNOWN_METHODS, f"Unrecognized method for get_dvardtime: {repr(method)}"
+        v  = self.get_varTime(var, **kw__get_varTime)
+        tt = self.get_coord('t')
+        tt = np.expand_dims(tt, axis=tuple(range(0, v.ndim - tt.ndim)))  # e.g. shape (1,1,1,len(self.snaps))
+        method = method.lower()
+        if method == 'numpy':
+            return np.gradient(v, **kw__gradient, axis=-1) / np.gradient(tt, axis=-1)
+        else: # method == 'simple'
+            return (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+
+    def get_atime(self):
+        '''get average time, corresponding to times of derivative from get_dvarTime(..., method='simple').'''
+        tt = self.get_coord('t')
+        return (tt[..., 1:] + tt[..., :-1]) / 2
 
     ## MISC. CONVENIENCE METHODS ##
     def get_varm(self, *args__get_var, **kwargs__get_var):
