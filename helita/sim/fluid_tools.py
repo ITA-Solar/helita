@@ -29,7 +29,7 @@ MULTIFLUID_FUNCS = \
     ['set_mf_fluid', 'set_mfi', 'set_mfj', 'set_fluids',
     'get_species_name', 'get_fluid_name', 'get_mass', 'get_charge',
     'get_cross_tab', 'get_cross_sect', 'get_coll_type',
-    'i_j_same_fluid', 'iter_fluid_SLs']
+    'i_j_same_fluid', 'iter_fluid_SLs', 'iter_fluid_SLs_and_names']
 
 ''' --------------------- setting fluids --------------------- '''
 
@@ -254,8 +254,15 @@ def iter_fluid_SLs(dd, with_electrons=True):
     '''
     if with_electrons:
         yield (-1,0)
-    for fluid in fl.Fluids(dd=dd):
+    for fluid in dd.fluids:
         yield fluid.SL
+
+def iter_fluid_SLs_and_names(dd, with_electrons=True):
+    '''returns and iterator over the fluids of dd, and electrons.
+    yields ((species, level), name)
+    '''
+    for SL in dd.iter_fluid_SLs():
+        yield (SL, dd.get_fluid_name(SL))
 
 ''' --------------------- compare fluids --------------------- '''
 
@@ -273,17 +280,24 @@ def fluid_equals(iSL, jSL):
 ''' --------------------- small helper functions --------------------- '''
 # for each of these functions, obj should be an EbysusData object.
 
-def get_species_name(obj, specie):
-    '''return specie's name: 'e' for electrons; element (atomic symbol) for other fluids.'''
+def get_species_name(obj, specie=None):
+    '''return specie's name: 'e' for electrons; element (atomic symbol) for other fluids.
+    if specie is None, use obj.mf_ispecies.
+    '''
+    if specie is None:
+        species = obj.iS
     if specie < 0:
         return 'e'
     else:
         return obj.att[specie].params.element
 
-def get_fluid_name(obj, fluid):
+def get_fluid_name(obj, fluid=None):
     '''return fluid's name: 'e-' for electrons; element & ionization for other fluids (e.g. 'H II').
     fluid can be at_tools.fluids.Fluid object, (species, level) pair, or -1 (for electrons).
+    if fluid is None, use obj.ifluid.
     '''
+    if fluid is None:
+        fluid = obj.ifluid
     try:
         return fluid.name
     except AttributeError:
@@ -299,17 +313,19 @@ def get_fluid_name(obj, fluid):
         if specie < 0:
             return 'e-'
         else:
-            return fl.Fluids(dd=obj)[fluid].name
+            return obj.fluids[fluid].name
 
-def get_mass(obj, specie, units='amu'):
+def get_mass(obj, specie=None, units='amu'):
     '''return specie's mass [units]. default units is amu.
     units: one of: ['amu', 'g', 'kg', 'cgs', 'si', 'simu']. Default 'amu'
         'amu'        -> mass in amu.    For these units, mH ~= 1
         'g' or 'cgs' -> mass in grams.  For these units, mH ~= 1.66E-24
         'kg' or 'si' -> mass in kg.     For these units, mH ~= 1.66E-27
         'simu'       -> mass in simulation units.
-
+    if specie is None, use specie = obj.mf_ispecies
     '''
+    if specie is None:
+        specie = obj.iS
     # if specie is actually (spec, level) return get_mass(obj, spec) instead.
     try:
         specie = next(iter(specie))
@@ -342,14 +358,17 @@ def get_mass(obj, specie, units='amu'):
         else: # units == 'simu'
             return m_amu * obj.uni.simu_amu
 
-def get_charge(obj, SL, units='e'):
+def get_charge(obj, SL=None, units='e'):
     '''return the charge fluid SL in [units]. default is elementary charge units.
     units: one of ['e', 'elementary', 'esu', 'c', 'cgs', 'si', 'simu']. Default 'elementary'.
         'e' or 'elementary' -> charge in elementary charge units. For these units, qH+ ~= 1.
         'c' or 'si'         -> charge in SI units (Coulombs).     For these units, qH+ ~= 1.6E-19
         'esu' or 'cgs'      -> charge in cgs units (esu).         For these units, qH+ ~= 4.8E-10
         'simu'              -> charge in simulation units.
+    if SL is None, use SL = obj.ifluid.
     '''
+    if SL is None:
+        SL = obj.iSL
     units = units.lower()
     VALID_UNITS = ['e', 'elementary', 'esu', 'c', 'cgs', 'si', 'simu']
     assert units in VALID_UNITS, "Units invalid; got units={}".format(units)
@@ -359,7 +378,7 @@ def get_charge(obj, SL, units='e'):
         charge = -1.
     else:
         # not electron
-        charge = fl.Fluids(dd=obj)[SL].ionization
+        charge = obj.fluids[SL].ionization
     # convert to proper units and return:
     if units in ['e', 'elementary']:
         return charge
