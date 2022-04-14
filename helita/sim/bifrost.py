@@ -1524,7 +1524,7 @@ class BifrostData():
         '''return np.zeros() with shape equal to shape of result of get_var()'''
         return np.zeros(self.shape, **kw__np_zeros)
 
-    def get_singlesnap(self):
+    def get_snap_here(self):
         '''return self.snap, or self.snap[0] if self.snap is a list.
         This is the snap which get_var() will work at, for the given self.snap value.
         '''
@@ -1812,7 +1812,7 @@ def get_snapname(dd=None):
 
 snapname = get_snapname   # alias
 
-def available_snaps(dd=None, snapname=None):
+def get_snaps(dd=None, snapname=None):
     '''list available snap numbers.
     Does look for: snapname_*.idl, snapname.idl (i.e. snap 0)
     Doesn't look for: .pan, .scr, .aux files.
@@ -1827,14 +1827,50 @@ def available_snaps(dd=None, snapname=None):
         snaps = sorted(snaps)
         return snaps
 
-snaps      = available_snaps   # alias
-get_snaps  = available_snaps   # alias
-list_snaps = available_snaps   # alias
+snaps            = get_snaps   # alias
+available_snaps  = get_snaps   # alias
+list_snaps       = get_snaps   # alias
 
-def snaps_info(dd=None, snapname=None):
-    '''returns string with length of snaps, as well as min and max.'''
-    snaps = get_snaps(dd=dd, snapname=snapname)
+def snaps_info(dd=None, snapname=None, snaps=None):
+    '''returns string with length of snaps, as well as min and max.
+    if snaps is None, lookup all available snaps.
+    '''
+    if snaps is None: snaps = get_snaps(dd=dd, snapname=snapname)
     return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
+
+def get_snap_shifted(dd=None, shift=0, snapname=None, snap=None):
+    '''returns snap's number for snap at index (current_snap_index + shift).
+    Must provide dd or snap, so we can figure out current_snap_index.
+    '''
+    snaps = list(get_snaps(dd=dd, snapname=snapname))
+    snap_here = snap if snap is not None else dd.get_snap_here()
+    i_here = snaps.index(snap_here)
+    i_result = i_here + shift
+    if i_result < 0:
+        if shift == -1:
+            raise ValueError(f'No snap found prior to snap={snap_here}')
+        else:
+            raise ValueError(f'No snap found {abs(shift)} prior to snap={snap_here}')
+    elif i_result >= len(snaps):
+        if shift == 1:
+            raise ValueError(f'No snap found after snap={snap_here}')
+        else:
+            raise ValueError(f'No snap found {abs(shift)} after snap={snap_here}')
+    else:
+        return snaps[i_result]
+
+def get_snap_prev(dd=None, snapname=None, snap=None):
+    '''returns previous available snap's number. TODO: implement more efficiently.
+    Must provide dd or snap, so we can figure out the snap here, first.
+    '''
+    return get_snap_shifted(dd=dd, shift=-1, snapname=snapname, snap=snap)
+
+def get_snap_next(dd=None, snapname=None, snap=None):
+    '''returns next available snap's number. TODO: implement more efficiently.
+    Must provide dd or snap, so we can figure out the snap here, first.
+    '''
+    return get_snap_shifted(dd=dd, shift=+1, snapname=snapname, snap=snap)
+
 
 class EnterDir:
     '''context manager for remembering directory.
@@ -1886,7 +1922,9 @@ def _snap_to_N(name, base, sep='_', ext='.idl'):
 BifrostData.get_snapstuff   = get_snapstuff
 BifrostData.get_snapname    = get_snapname
 BifrostData.available_snaps = available_snaps
-BifrostData.get_snaps       = available_snaps
+BifrostData.get_snaps       = get_snaps
+BifrostData.get_snap_prev   = get_snap_prev
+BifrostData.get_snap_next   = get_snap_next
 BifrostData.snaps_info      = snaps_info
 
 
