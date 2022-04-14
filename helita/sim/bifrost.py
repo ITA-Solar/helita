@@ -1229,7 +1229,6 @@ class BifrostData():
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
-
     def get_hydrogen_pops(self, sx=slice(None), sy=slice(None), sz=slice(None)):
         """
         Gets hydrogen populations, or total number of hydrogen atoms,
@@ -1443,8 +1442,35 @@ class BifrostData():
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
-    ## MISC. CONVENIENCE METHODS ##
+    ## TIME DERIVATIVES ##
+    def ddt(self, var, snap=None, *args__get_var, method='forward', **kw__get_var):
+        '''time derivative of var, at current snapshot.
+        Units are determined by self.units_output (default: [simulation units]).
 
+        snap: None or value
+            if provided (not None), first self.set_snap(snap).
+        method: ('forward', 'backward')
+            tells how to take the time derivative.
+            forward  --> (var[snap+1] - var[snap]) / (t[snap+1] - t[snap])
+            backward --> (var[snap] - var[snap-1]) / (t[snap] - t[snap-1])
+        '''
+        if snap is not None: self.set_snap(snap)
+        method = method.lower()
+        if method=='forward':
+            snaps = [self.get_snap_here(), self.get_snap_next()]
+        elif method=='backward':
+            snaps = [self.get_snap_prev(), self.get_snap_here()]
+        else:
+            raise ValueError(f'Unrecognized method in ddt: {repr(method)}')
+        self.set_snap(snaps[0])
+        value0 = self(var, *args__get_var, **kw__get_var)
+        time0  = self.get_coord('t')[0]
+        self.set_snap(snaps[1])
+        value1 = self(var, *args__get_var, **kw__get_var)
+        time1  = self.get_coord('t')[0]
+        return (value1 - value0) / (time1 - time0)
+
+    ## MISC. CONVENIENCE METHODS ##
     def get_varm(self, *args__get_var, **kwargs__get_var):
         '''get_var but returns np.mean() of result.
         provided for convenience for quicker debugging.
@@ -1681,13 +1707,16 @@ class BifrostData():
             result = tuple(result[AXES_LOOKUP[axis]] for axis in axes)
         return result
 
-    def get_coord(self, axis, units='si'):
+    def get_coord(self, axis, units=None):
         '''gets coord for the given axis, in the given unit system.
         axis: string ('x', 'y', 'z', 't') or int (0, 1, 2, 3)
-        units: string ('si', 'cgs', 'simu')   ('simu' for 'simulation units')
+        units: None (default) or string ('si', 'cgs', 'simu')   ('simu' for 'simulation units')
+            None --> use self.units_output.
 
         The result will be an array (possibly with only 1 element).
         '''
+        if units is None:
+            units = self.units_output
         return self.get_coords(units=units, axes=[axis])[0]
 
     def coord_grid(self, axes='xyz', units='si', sparse=True, **kw__meshgrid):
