@@ -1188,7 +1188,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                          f' into {tools.pretty_nbytes(compressed_bytes_total)}' + \
                          f' (net compression ratio = {original_bytes_total/(compressed_bytes_total+1e-10):.2f}).',
                          print_time=True, vreq=1, clearline=40+file_str_len)
-        return f'{SNAPNAME}.zc'
+        return (f'{SNAPNAME}.zc', original_bytes_total, compressed_bytes_total)
 
     def _zc_decompress(self, verbose=1):
         '''use the data from the .zc folder to recreate the original .io folder.
