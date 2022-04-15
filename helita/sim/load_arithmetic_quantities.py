@@ -1006,7 +1006,7 @@ def get_angle(obj,quant):
 
 
 #default
-_STAT_QUANT = ('STAT_QUANT', ['mean_', 'variance_', 'std_'])
+_STAT_QUANT = ('STAT_QUANT', ['mean_', 'variance_', 'std_', 'max_', 'min_', 'abs_'])
 # get value
 def get_stat_quant(obj, quant):
   '''statistics such as mean, std.
@@ -1018,6 +1018,9 @@ def get_stat_quant(obj, quant):
     docvar('mean_', 'mean_v --> np.mean(v)', uni=UNI.qc(0))
     docvar('variance_', 'variance_v --> np.var(v).', uni=UNI.qc(0)**2)
     docvar('std_', 'std_v --> np.std(v)', uni=UNI.qc(0))
+    docvar('max_', 'max_v --> np.max(v)', uni=UNI.qc(0))
+    docvar('min_', 'min_v --> np.min(v)', uni=UNI.qc(0))
+    docvar('abs_', 'abs_v --> np.abs(v)', uni=UNI.qc(0))
     return None
 
   # interpret quant string
@@ -1038,6 +1041,12 @@ def get_stat_quant(obj, quant):
     return np.var(val)
   elif command == 'std_':
     return np.std(val)
+  elif command == 'max_':
+    return np.max(val)
+  elif command == 'min_':
+    return np.min(val)
+  elif command == 'abs_':
+    return np.abs(val)
   else:
     raise NotImplementedError(f'command={repr(command)} in get_stat_quant')
 
