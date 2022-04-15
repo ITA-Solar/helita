@@ -1450,16 +1450,17 @@ class BifrostData():
 
     ## TIME DERIVATIVES ##
     @tools.maintain_attrs('snap')
-    def ddt(self, var, snap=None, *args__get_var, method='forward', **kw__get_var):
+    def ddt(self, var, snap=None, *args__get_var, method='centered', **kw__get_var):
         '''time derivative of var, at current snapshot.
         Units are determined by self.units_output (default: [simulation units]).
 
         snap: None or value
             if provided (not None), first self.set_snap(snap).
-        method: ('forward', 'backward')
+        method: ('forward', 'backward', 'centered')
             tells how to take the time derivative.
             forward  --> (var[snap+1] - var[snap]) / (t[snap+1] - t[snap])
             backward --> (var[snap] - var[snap-1]) / (t[snap] - t[snap-1])
+            centered --> (var[snap+1] - var[snap-1]) / (t[snap+1] - t[snap-1])
         '''
         if snap is not None: self.set_snap(snap)
         method = method.lower()
@@ -1467,6 +1468,8 @@ class BifrostData():
             snaps = [self.get_snap_here(), self.get_snap_next()]
         elif method=='backward':
             snaps = [self.get_snap_prev(), self.get_snap_here()]
+        elif method=='centered':
+            snaps = [self.get_snap_prev(), self.get_snap_next()]
         else:
             raise ValueError(f'Unrecognized method in ddt: {repr(method)}')
         self.set_snap(snaps[0])
@@ -1481,10 +1484,17 @@ class BifrostData():
         '''time derivative of var, across time.
         Units are determined by self.units_output (default: [simulation units]).
 
-        method: ('numpy', 'simple')
+        method: ('numpy', 'simple', 'centered')
             tells how to take the time derivative:
-                numpy --> np.gradient(v, axis=-1) / np.gradient(tt, axis=-1)
-                simple --> (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+                numpy    --> np.gradient(v, axis=-1) / np.gradient(tt, axis=-1)
+                            result will be shape (..., M),
+                            corresponding to times (tt).
+                simple   --> (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+                            result will be shape (..., M-1),
+                            corresponding to times (tt[..., 1:] + tt[..., :-1]) / 2.
+                centered --> (v[..., 2:] - v[..., :-2]) / (tt[..., 2:] - tt[..., :-2])
+                            result will be shape (..., M-2),
+                            corresponding to times (tt[..., 1:-1])
             where, above, v = self.get_varTime(var);
             tt=self.get_coord('t'), with dims expanded (np.expand_dims) appropriately.
         kw__gradient: dict
@@ -1495,7 +1505,7 @@ class BifrostData():
         returns: array of shape (..., M),
         where M=len(self.snap) if method=='numpy', or len(self.snap)-1 if method=='simple'.
         '''
-        KNOWN_METHODS = ('numpy', 'simple')
+        KNOWN_METHODS = ('numpy', 'simple', 'centered')
         method = method.lower()
         assert method in KNOWN_METHODS, f"Unrecognized method for get_dvarTime: {repr(method)}"
         v  = self.get_varTime(var, **kw__get_varTime)
@@ -1504,8 +1514,10 @@ class BifrostData():
         method = method.lower()
         if method == 'numpy':
             return np.gradient(v, **kw__gradient, axis=-1) / np.gradient(tt, axis=-1)
-        else: # method == 'simple'
+        elif method == 'simple':
             return (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+        else: # method == 'centered'
+            return (v[..., 2:] - v[..., :-2]) / (tt[..., 2:] - tt[..., :-2])
 
     def get_atime(self):
         '''get average time, corresponding to times of derivative from get_dvarTime(..., method='simple').'''
@@ -1597,9 +1609,11 @@ class BifrostData():
         This is the snap which get_var() will work at, for the given self.snap value.
         '''
         try:
-            return self.snap[0]
+            iter(self.snap)
         except TypeError:
             return self.snap
+        else:
+            return self.snap[0]
 
     def get_snap_at_time(self, t, units='simu'):
         '''get snap number which is closest to time t.
