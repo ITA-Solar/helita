@@ -26,7 +26,7 @@ from . import tools
 from . import document_vars
 from . import file_memory
 from . import stagger
-from .units import UNITS_OUTPUT_PROPERTY
+from . import units
 
 # defaults
 whsp = '  '
@@ -186,7 +186,7 @@ class BifrostData():
     size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
     ndim  = property(lambda self: 3)
 
-    units_output = UNITS_OUTPUT_PROPERTY(internal_name='_units_output')
+    units_output = units.UNITS_OUTPUT_PROPERTY(internal_name='_units_output')
 
     @property
     def internal_means(self):
@@ -2156,7 +2156,7 @@ class Create_new_br_files:
 #  UNITS   #
 ############
 
-class Bifrost_units(object):
+class BifrostUnits(units.HelitaUnits):
     '''stores units as attributes.
 
     units starting with 'u_' are in cgs. starting with 'usi_' are in SI.
@@ -2190,30 +2190,28 @@ class Bifrost_units(object):
                     if base_units contains ALL of those keys, IGNORE file.
             list -> provides value for u_l, u_t, u_r, gamma; in that order.
         '''
-        import scipy.constants as const
-        from astropy import constants as aconst
-
-        self.doc_units = dict()
-        self.BASE_UNITS = ['u_l', 'u_t', 'u_r', 'gamma']
         DEFAULT_UNITS = dict(u_l=1.0e8, u_t=1.0e2, u_r=1.0e-7, gamma=1.667)
-        _n_base_set = 0  # number of base units which have been set.
+        base_to_use = dict()  # << here we will put the u_l, u_t, u_r, gamma to actually use.
+        _n_base_set = 0  # number of base units set (i.e. assigned in base_to_use)
 
-        # set units from base_units, if applicable
+        # setup units from base_units, if applicable
         if base_units is not None:
             try:
                 items = base_units.items()
             except AttributeError: # base_units is a list
                 for i, val in enumerate(base_units):
-                    setattr(self, self.BASE_UNITS[i], val)
+                    base_to_use[self.BASE_UNITS[i]] = val
+                    _n_base_set += 1
             else:
                 for key, val in base_units.items():
                     if key in DEFAULT_UNITS.keys():
-                        setattr(self, key, val)
+                        base_to_use[key] = val
                         _n_base_set += 1
                     elif verbose:
                         print(('(WWW) the key {} is not a base unit',
                               ' so it was ignored').format(key))
-        # set units from file (or defaults), if still necessary.
+
+        # setup units from file (or defaults), if still necessary.
         if _n_base_set != len(DEFAULT_UNITS):
             if filename is None:
                 file_exists = False
@@ -2224,9 +2222,10 @@ class Bifrost_units(object):
                 # file exists -> set units using file.
                 self.params = read_idl_ascii(file,firstime=True)
                 
-                def set_unit(key):
-                    if getattr(self, key, None) is not None:
+                def setup_unit(key):
+                    if base_to_use.get(key, None) is not None:
                         return
+                    #else:
                     try:
                         value = self.params[key]
                     except Exception:
@@ -2235,284 +2234,24 @@ class Bifrost_units(object):
                             printstr = ("(WWW) the file '{file}' does not contain '{unit}'. "
                                         "Default Solar Bifrost {unit}={value} has been selected.")
                             print(printstr.format(file=file, unit=key, value=value))
-                    setattr(self, key, value)
+                    base_to_use[key] = value
 
                 for unit in DEFAULT_UNITS.keys():
-                    set_unit(unit)
+                    setup_unit(unit)
             else:
-                # file does not exist -> set default units.
+                # file does not exist -> setup default units.
                 units_to_set = {unit: DEFAULT_UNITS[unit] for unit in DEFAULT_UNITS.keys()
                                         if getattr(self, unit, None) is None}
                 if verbose:
                     print("(WWW) selected file '{file}' is not available.".format(file=filename),
                           "Setting the following Default Solar Bifrost units: ", units_to_set)
-                for unit, value in units_to_set.items():
-                    setattr(self, unit, value)
+                for key, value in units_to_set.items():
+                    base_to_use[key] = value
 
-        # I think we shouldn't keep "params" in Bifrost_units anymore. - SE Apr 28 2021
-        ## it obfuscates the contents of Bifrost_units, especially when checking self.__dict__.
-        ## Here I am going to set self.params to an object which, if someone tries to access a key of it,
-        ## will raise an exception with a clear message
-        ## of how to fix it.
-        class params_are_empty():
-            def __init__(self):
-                pass
-                self.errmsg = ('We are testing to remove self.params from Bifrost_units object. '
-                      'If you are seeing this Exception, please consider if your code '
-                      'can be written without doing self.params[key] (e.g. obj.uni.params[key]). '
-                      'A good alternative is probably to use obj.params[key][obj.snapInd]. '
-                      'If you decide you really need to access self.uni.params, then you can '
-                      'remove the line of code which deletes self.params, in helita.sim.bifrost.py.'
-                      '(the line looks like: "self.params = params_are_empty()"')
+        # initialize using instructions from HelitaUnits (see helita.sim.units.py)
+        super().__init__(**base_to_use, verbose=verbose)
 
-            def __contains__(self, i): raise Exception(self.errmsg)
-            def __getitem__(self, i):  raise Exception(self.errmsg)
-            def keys(self):            raise Exception(self.errmsg)
-            def values(self):          raise Exception(self.errmsg)
-            def items(self):           raise Exception(self.errmsg)
-
-        self.params = params_are_empty()  # "delete" self.params
-
-        # set cgs units
-        self.verbose=verbose
-        self.u_u  = self.u_l / self.u_t
-        self.u_p  = self.u_r * (self.u_u)**2           # Pressure [dyne/cm2]
-        self.u_kr = 1 / (self.u_r * self.u_l)         # Rosseland opacity [cm2/g]
-        self.u_ee = self.u_u**2
-        self.u_e  = self.u_p      # energy density units are the same as pressure units.
-        self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
-        self.u_n  = 3.00e+10                      # Density number n_0 * 1/cm^3
-        self.pi   = const.pi
-        self.u_b  = self.u_u * np.sqrt(4. * self.pi * self.u_r)
-
-        # self.uni tells how to convert from simu. units to cgs units, for simple vars.
-        self.uni={}
-        self.uni['l'] = self.u_l
-        self.uni['t'] = self.u_t
-        self.uni['rho'] = self.u_r
-        self.uni['p'] = self.u_r * self.u_u # self.u_p
-        self.uni['u'] = self.u_u
-        self.uni['e'] = self.u_e
-        self.uni['ee'] = self.u_ee
-        self.uni['n'] = self.u_n
-        self.uni['tg'] = 1.0
-        self.uni['b'] = self.u_b
-
-        convertcsgsi(self)
-        globalvars(self)
-  
-        self.u_tg = (self.m_h / self.k_b) * self.u_ee
-        self.u_tge = (self.m_e / self.k_b) * self.u_ee
-
-        # set si units
-        self.usi_t = self.u_t
-        self.usi_l = self.u_l * const.centi                   # 1e-2
-        self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
-        self.usi_u = self.usi_l / self.u_t
-        self.usi_p = self.usi_r * (self.usi_u)**2             # Pressure [N/m2]
-        self.usi_kr = 1 / (self.usi_r * self.usi_l)           # Rosseland opacity [m2/kg]
-        self.usi_ee = self.usi_u**2
-        self.usi_e = self.usi_p    # energy density units are the same as pressure units.
-        self.usi_te = self.usi_e / self.u_t * self.usi_l      # Box therm. em. [J/(s ster m2)]
-        self.ksi_b = aconst.k_B.to_value('J/K')               # Boltzman's cst. [J/K]
-        self.msi_h = const.m_n                                # 1.674927471e-27
-        self.msi_he = 6.65e-27
-        self.msi_p = self.mu * self.msi_h                     # Mass per particle
-        self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
-        self.msi_e = const.m_e  # 9.1093897e-31
-        self.usi_b = self.u_b * 1e-4
-
-        # documentation for units above:
-        self.docu('t', 'time')
-        self.docu('l', 'length')
-        self.docu('r', 'mass density')
-        self.docu('u', 'velocity')
-        self.docu('p', 'pressure')
-        self.docu('kr', 'Rosseland opacity')
-        self.docu('ee', 'energy (total; i.e. not energy density)')
-        self.docu('e', 'energy density')
-        self.docu('te', 'Box therm. em. [J/(s ster m2)]')
-        self.docu('b', 'magnetic field')
-
-        # additional units (added for convenience) - started by SE, Apr 26 2021
-        self.docu('m', 'mass')
-        self.u_m    = self.u_r   * self.u_l**3   # rho = mass / length^3
-        self.usi_m  = self.usi_r * self.usi_l**3 # rho = mass / length^3
-        self.docu('ef', 'electric field')
-        self.u_ef   = self.u_b                   # in cgs: F = q(E + (u/c) x B)
-        self.usi_ef = self.usi_b * self.usi_u    # in SI:  F = q(E + u x B)
-        self.docu('f', 'force')
-        self.u_f    = self.u_p   * self.u_l**2   # pressure = force / area
-        self.usi_f  = self.usi_p * self.usi_l**2 # pressure = force / area
-        self.docu('q', 'charge')
-        self.u_q    = self.u_f   / self.u_ef     # F = q E
-        self.usi_q  = self.usi_f / self.usi_ef   # F = q E
-        self.docu('nr', 'number density')
-        self.u_nr   = self.u_r   / self.u_m      # nr = r / m
-        self.usi_nr = self.usi_r / self.usi_m    # nr = r / m
-        self.docu('nq', 'charge density')
-        self.u_nq   = self.u_q   * self.u_nr
-        self.usi_nq = self.usi_q * self.usi_nr
-        self.docu('pm', 'momentum density')
-        self.u_pm   = self.u_u   * self.u_r      # mom. dens. = mom * nr = u * r
-        self.usi_pm = self.usi_u * self.usi_r
-        self.docu('hz', 'frequency')
-        self.u_hz   = 1./self.u_t
-        self.usi_hz = 1./self.usi_t
-        self.docu('phz', 'momentum density frequency (see e.g. momentum density exchange terms)')
-        self.u_phz  = self.u_pm   * self.u_hz
-        self.usi_phz= self.usi_pm * self.usi_hz
-        self.docu('i', 'current per unit area')
-        self.u_i    = self.u_nq   * self.u_u     # ue = ... + J / (ne qe)
-        self.usi_i  = self.usi_nq * self.usi_u
-
-        # additional constants (added for convenience)
-        ## masses
-        self.simu_amu = self.amu / self.u_m         # 1 amu
-        self.simu_m_e = self.m_electron / self.u_m  # 1 electron mass
-        ## charge (1 elementary charge)
-        self.simu_q_e   = self.q_electron   / self.u_q   # [derived from cgs]
-        self.simu_qsi_e = self.qsi_electron / self.usi_q # [derived from si]
-        ### note simu_q_e != simu_qsi_e because charge is defined
-        ### by different equations, for cgs and si. 
-        ## permeability (magnetic constant) (mu0) (We expect mu0_simu == 1.)
-        self.simu_mu0 = self.mu0si * (1/self.usi_b) * (self.usi_l) * (self.usi_i)
-        ### J = curl(B) / mu0 --> mu0 = curl(B) / J --> [mu0] = [B] [length]^-1 [J]^-1
-        ### --> mu0[simu] / mu0[SI] = (B[simu] / B[SI]) * (L[SI] / L[simu]) * (J[SI]/J[simu])
-        ## boltzmann constant
-        self.simu_kB = self.ksi_b * (self.usi_nr / self.usi_e)   # kB [simu energy / K]
-
-        # update the dict doc_units with the values of units
-        self._update_doc_units_with_values()
-
-
-    def __repr__(self):
-        '''show self in a pretty way (i.e. including info about base units)'''
-        return "<{} with base_units={}>".format(object.__repr__(self),
-                            self.prettyprint_base_units(printout=False))
-
-    def base_units(self):
-        '''returns dict of u_l, u_t, u_r, gamma, for self.'''
-        return {unit: getattr(self, unit) for unit in self.BASE_UNITS}
-
-    def prettyprint_base_units(self, printout=True):
-        '''print (or return, if not printout) prettystring for base_units for self.'''
-        fmt = '{:.2e}'  # formatting for keys (except gamma)
-        fmtgam = '{}'   # formatting for key gamma
-        s = []
-        for unit in self.BASE_UNITS:
-            val = getattr(self,unit)
-            if unit=='gamma':
-                valstr = fmtgam.format(val)
-            else:
-                valstr = fmt.format(val)
-            s += [unit+'='+valstr]
-        result = 'dict({})'.format(', '.join(s))
-        if printout:
-            print(result)
-        else:
-            return(result)
-
-    def _unit_name(self, u):
-        '''returns name of unit u. e.g. u_r -> 'r'; usi_hz -> 'hz', 'nq' -> 'nq'.'''
-        for prefix in ['u_', 'usi_']:
-            if u.startswith(prefix):
-                u = u[len(prefix):]
-                break
-        return u
-
-    def _unit_values(self, u):
-        '''return values of u, as a dict'''
-        u = self._unit_name(u)
-        result = {}
-        u_u   = 'u_'+u
-        usi_u = 'usi_'+u
-        if hasattr(self, u_u):
-            result[u_u] = getattr(self, u_u)
-        if hasattr(self, usi_u):
-            result[usi_u] = getattr(self, usi_u)
-        return result
-
-    def prettyprint_unit_values(self, x, printout=True, fmtname='{:<3s}', fmtval='{:.2e}', sep=' ;  '):
-        '''pretty string for unit values. print if printout, else return string.'''
-        if isinstance(x, str):
-            x = self._unit_values(x)
-        result = []
-        for key, value in x.items():
-            u_, p, name = key.partition('_')
-            result += [u_ + p + fmtname.format(name) + ' = ' + fmtval.format(value)]
-        result = sep.join(result)
-        if printout:
-            print(result)
-        else:
-            return result
-
-    def _update_doc_units_with_values(self, sep=' |  ', fmtdoc='{:20s}'):
-        '''for u in self.doc_units, update self.doc_units[u] with values of u.'''
-        for u, doc in self.doc_units.items():
-            valstr = self.prettyprint_unit_values(u, printout=False)
-            if len(valstr)>0:
-                doc = sep.join([fmtdoc.format(doc), valstr])
-                self.doc_units[u] = doc
-
-    def docu(self, u, doc):
-        '''documents u by adding u=doc to dict self.doc_units'''
-        self.doc_units[u]=doc
-
-    def help(self, u=None, printout=True, fmt='{:3s}: {}'):
-        '''prints documentation for u, or all units if u is None.
-        printout=False --> return dict, instead of printing.
-        '''
-        if u is None:
-            result = self.doc_units
-        else:
-            if isinstance(u, str):
-                u = [u]
-            result = dict()
-            for unit in u:
-                unit = self._unit_name(unit)
-                doc  = self.doc_units.get(unit, "u='{}' is not yet documented!".format(unit))
-                result[unit] = doc
-        if not printout:
-            return result
-        else:
-            for key, doc in result.items():
-                print(fmt.format(key, doc))
-
-    def closest(self, value, sign_sensitive=True, reltol=1e-8):
-        '''returns [(attr, value)] for attr(s) in self whose value is closest to value.
-        sign_sensitive: True (default) or False
-            whether to care about signs (plus or minus) when comparing values
-        reltol: number (default 1e-8)
-            if multiple attrs are closest, and all match (to within reltol)
-            return a list of (attr, value) pairs for all such attrs.
-        closeness is determined by doing ratios.
-        '''
-        result = []
-        best = np.inf
-        for key, val in self.__dict__.items():
-            if val == 0:
-                if value != 0:
-                    continue
-                else:
-                    result += [(key, val)]
-            try:
-                rat = value / val
-            except TypeError:
-                continue
-            if sign_sensitive: 
-                rat = abs(rat)
-            compare_val = abs(rat - 1)
-            if best == 0:  # we handle this separately to prevent division by 0 error.
-                if compare_val < reltol:
-                    result += [(key, val)]
-            elif abs(1 - compare_val / best) < reltol:
-                result += [(key, val)]
-            elif compare_val < best:
-                result = [(key, val)]
-                best = compare_val
-        return result
-
+Bifrost_units = BifrostUnits  # alias (required for historical compatibility)
 
 #####################
 #  CROSS SECTIONS   #

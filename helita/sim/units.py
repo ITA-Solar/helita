@@ -1,7 +1,9 @@
 """
 Created by Sam Evans on Apr 27 2021
 
-purpose: enabling "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
+purpose:
+    1) provides HelitaUnits class
+    2) enable "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
 
 TL;DR:
     >>>> Use obj.get_units() to see the units for the most-recent quantity that obj got with get_var(). <<<< 
@@ -148,6 +150,12 @@ import operator
 import functools
 import collections
 
+# import internal modules
+from . import tools
+
+# import external public modules
+import numpy as np
+
 ''' ----------------------------- Set Defaults ----------------------------- '''
 
 # whether to hide tracebacks from internal funcs in this file when showing error traceback.
@@ -229,6 +237,302 @@ UNITS_KEY_F = '{}_f'
 
 # UNITS_NAME_KEY
 UNITS_KEY_NAME = '{}_name'
+
+
+''' ============================= Helita Units ============================= '''
+
+class HelitaUnits(object):
+    '''stores units as attributes.
+
+    units starting with 'u_' are in cgs. starting with 'usi_' are in SI.
+    Convert to these units by multiplying data by this factor.
+    Example:
+        r    = obj.get_var('r')  # r    = mass density / (simulation units)
+        rcgs = r * obj.uni.u_r   # rcgs = mass density / (cgs units, i.e. (g * cm^-3))
+        rsi  = r * obj.uni.usi_r # rsi  = mass density / (si units, i.e. (kg * m^-3))
+
+    all units are uniquely determined by the following minimal set of units:
+        (length, time, mass density, gamma)
+
+    you can access documentation on the units themselves via:
+        self.help().    (for BifrostData object obj, do obj.uni.help())
+        this documentation is not very detailed, but at least tells you
+        which physical quantity the units are for.
+    '''
+
+    BASE_UNITS = ['u_l', 'u_t', 'u_r', 'gamma']
+
+    def __init__(self, u_l=1.0, u_t=1.0, u_r=1.0, gamma=1.6666666667, verbose=False):
+        '''get units from file (by reading values of u_l, u_t, u_r, gamma).'''
+        self.verbose = verbose
+
+        self.docu('l', 'length')
+        self.u_l = u_l
+        self.docu('t', 'time')
+        self.u_t = u_t
+        self.docu('r', 'mass density')
+        self.u_r = u_r
+        self.docu('gamma', 'adiabatic constant')
+        self.gamma = gamma
+
+        # set many unit constants (e.g. cm_to_m, amu, gsun).
+        tools.globalvars(self)
+
+        # initialize units in other systems.
+        self._initialize_extras()
+
+    @property
+    def doc_units(self):
+        '''dictionary of documentation about the attributes of self.'''
+        if not hasattr(self, '_doc_units'):
+            self._doc_units = dict()
+        return self._doc_units
+
+    def _initialize_extras(self):
+        '''initializes all the units other than the base units.'''
+        import scipy.constants as const          # import here to reduce overhead of the module.
+        from astropy import constants as aconst  # import here to reduce overhead of the module.
+
+        # set cgs units
+        self.u_u  = self.u_l / self.u_t
+        self.u_p  = self.u_r * (self.u_u)**2           # Pressure [dyne/cm2]
+        self.u_kr = 1 / (self.u_r * self.u_l)         # Rosseland opacity [cm2/g]
+        self.u_ee = self.u_u**2
+        self.u_e  = self.u_p      # energy density units are the same as pressure units.
+        self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
+        self.u_n  = 3.00e+10                      # Density number n_0 * 1/cm^3
+        self.pi   = const.pi
+        self.u_b  = self.u_u * np.sqrt(4. * self.pi * self.u_r)
+        self.u_tg = (self.m_h / self.k_b) * self.u_ee
+        self.u_tge = (self.m_e / self.k_b) * self.u_ee
+
+        # set si units
+        self.usi_t = self.u_t
+        self.usi_l = self.u_l * const.centi                   # 1e-2
+        self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
+        self.usi_u = self.usi_l / self.u_t
+        self.usi_p = self.usi_r * (self.usi_u)**2             # Pressure [N/m2]
+        self.usi_kr = 1 / (self.usi_r * self.usi_l)           # Rosseland opacity [m2/kg]
+        self.usi_ee = self.usi_u**2
+        self.usi_e = self.usi_p    # energy density units are the same as pressure units.
+        self.usi_te = self.usi_e / self.u_t * self.usi_l      # Box therm. em. [J/(s ster m2)]
+        self.msi_h = const.m_n                                # 1.674927471e-27
+        self.msi_he = 6.65e-27
+        self.msi_p = self.mu * self.msi_h                     # Mass per particle
+        self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
+        self.msi_e = const.m_e  # 9.1093897e-31
+        self.usi_b = self.u_b * 1e-4
+
+        # documentation for units above:
+        self.docu('u', 'velocity')
+        self.docu('p', 'pressure')
+        self.docu('kr', 'Rosseland opacity')
+        self.docu('ee', 'energy (total; i.e. not energy density)')
+        self.docu('e', 'energy density')
+        self.docu('te', 'Box therm. em. [J/(s ster m2)]')
+        self.docu('b', 'magnetic field')
+
+        # setup self.uni. (tells how to convert from simu. units to cgs units, for simple vars.)
+        self.uni={}
+        self.uni['l'] = self.u_l
+        self.uni['t'] = self.u_t
+        self.uni['rho'] = self.u_r
+        self.uni['p'] = self.u_r * self.u_u # self.u_p
+        self.uni['u'] = self.u_u
+        self.uni['e'] = self.u_e
+        self.uni['ee'] = self.u_ee
+        self.uni['n'] = self.u_n
+        self.uni['tg'] = 1.0
+        self.uni['b'] = self.u_b
+
+        # setup self.unisi
+        tools.convertcsgsi(self)
+
+        # additional units (added for convenience) - started by SE, Apr 26 2021
+        self.docu('m', 'mass')
+        self.u_m    = self.u_r   * self.u_l**3   # rho = mass / length^3
+        self.usi_m  = self.usi_r * self.usi_l**3 # rho = mass / length^3
+        self.docu('ef', 'electric field')
+        self.u_ef   = self.u_b                   # in cgs: F = q(E + (u/c) x B)
+        self.usi_ef = self.usi_b * self.usi_u    # in SI:  F = q(E + u x B)
+        self.docu('f', 'force')
+        self.u_f    = self.u_p   * self.u_l**2   # pressure = force / area
+        self.usi_f  = self.usi_p * self.usi_l**2 # pressure = force / area
+        self.docu('q', 'charge')
+        self.u_q    = self.u_f   / self.u_ef     # F = q E
+        self.usi_q  = self.usi_f / self.usi_ef   # F = q E
+        self.docu('nr', 'number density')
+        self.u_nr   = self.u_r   / self.u_m      # nr = r / m
+        self.usi_nr = self.usi_r / self.usi_m    # nr = r / m
+        self.docu('nq', 'charge density')
+        self.u_nq   = self.u_q   * self.u_nr
+        self.usi_nq = self.usi_q * self.usi_nr
+        self.docu('pm', 'momentum density')
+        self.u_pm   = self.u_u   * self.u_r      # mom. dens. = mom * nr = u * r
+        self.usi_pm = self.usi_u * self.usi_r
+        self.docu('hz', 'frequency')
+        self.u_hz   = 1./self.u_t
+        self.usi_hz = 1./self.usi_t
+        self.docu('phz', 'momentum density frequency (see e.g. momentum density exchange terms)')
+        self.u_phz  = self.u_pm   * self.u_hz
+        self.usi_phz= self.usi_pm * self.usi_hz
+        self.docu('i', 'current per unit area')
+        self.u_i    = self.u_nq   * self.u_u     # ue = ... + J / (ne qe)
+        self.usi_i  = self.usi_nq * self.usi_u
+
+        # additional constants (added for convenience)
+        ## masses
+        self.simu_amu = self.amu / self.u_m         # 1 amu
+        self.simu_m_e = self.m_electron / self.u_m  # 1 electron mass
+        ## charge (1 elementary charge)
+        self.simu_q_e   = self.q_electron   / self.u_q   # [derived from cgs]
+        self.simu_qsi_e = self.qsi_electron / self.usi_q # [derived from si]
+        ### note simu_q_e != simu_qsi_e because charge is defined
+        ### by different equations, for cgs and si. 
+        ## permeability (magnetic constant) (mu0) (We expect mu0_simu == 1.)
+        self.simu_mu0 = self.mu0si * (1/self.usi_b) * (self.usi_l) * (self.usi_i)
+        ### J = curl(B) / mu0 --> mu0 = curl(B) / J --> [mu0] = [B] [length]^-1 [J]^-1
+        ### --> mu0[simu] / mu0[SI] = (B[simu] / B[SI]) * (L[SI] / L[simu]) * (J[SI]/J[simu])
+        ## boltzmann constant
+        self.simu_kB = self.ksi_b * (self.usi_nr / self.usi_e)   # kB [simu energy / K]
+
+        # update the dict doc_units with the values of units
+        self._update_doc_units_with_values()
+
+    def __repr__(self):
+        '''show self in a pretty way (i.e. including info about base units)'''
+        return "<{} with base_units=dict({})>".format(object.__repr__(self),
+                            self.prettyprint_base_units(printout=False))
+
+    def __repr__(self):
+        '''show self in a pretty way (i.e. including info about base units)'''
+        return "<{} with base_units=dict({})>".format(type(self),
+                            self.prettyprint_base_units(printout=False))
+
+    def base_units(self):
+        '''returns dict of u_l, u_t, u_r, gamma, for self.'''
+        return {unit: getattr(self, unit) for unit in self.BASE_UNITS}
+
+    def prettyprint_base_units(self, printout=True):
+        '''print (or return, if not printout) prettystring for base_units for self.'''
+        fmt = '{:.2e}'  # formatting for keys (except gamma)
+        fmtgam = '{}'   # formatting for key gamma
+        s = []
+        for unit in self.BASE_UNITS:
+            val = getattr(self,unit)
+            if unit=='gamma':
+                valstr = fmtgam.format(val)
+            else:
+                valstr = fmt.format(val)
+            s += [unit+'='+valstr]
+        result = ', '.join(s)
+        if printout:
+            print(result)
+        else:
+            return(result)
+
+    def _unit_name(self, u):
+        '''returns name of unit u. e.g. u_r -> 'r'; usi_hz -> 'hz', 'nq' -> 'nq'.'''
+        for prefix in ['u_', 'usi_']:
+            if u.startswith(prefix):
+                u = u[len(prefix):]
+                break
+        return u
+
+    def _unit_values(self, u):
+        '''return values of u, as a dict.
+        (checks u, 'u_'+u, and 'usi_'+u)
+        '''
+        u = self._unit_name(u)
+        result = {}
+        u_u   = 'u_'+u
+        usi_u = 'usi_'+u
+        result = {key: getattr(self, key) for key in [u, u_u, usi_u] if hasattr(self, key)}
+        return result
+
+    def prettyprint_unit_values(self, x, printout=True, fmtname='{:<3s}', fmtval='{:.2e}', sep=' ;  '):
+        '''pretty string for unit values. print if printout, else return string.'''
+        if isinstance(x, str):
+            x = self._unit_values(x)
+        result = []
+        for key, value in x.items():
+            u_, p, name = key.partition('_')
+            result += [u_ + p + fmtname.format(name) + ' = ' + fmtval.format(value)]
+        result = sep.join(result)
+        if printout:
+            print(result)
+        else:
+            return result
+
+    def _update_doc_units_with_values(self, sep=' |  ', fmtdoc='{:20s}'):
+        '''for u in self.doc_units, update self.doc_units[u] with values of u.'''
+        for u, doc in self.doc_units.items():
+            valstr = self.prettyprint_unit_values(u, printout=False)
+            if len(valstr)>0:
+                doc = sep.join([fmtdoc.format(doc), valstr])
+                self.doc_units[u] = doc
+
+    def docu(self, u, doc):
+        '''documents u by adding u=doc to dict self.doc_units'''
+        self.doc_units[u]=doc
+
+    def help(self, u=None, printout=True, fmt='{:5s}: {}'):
+        '''prints documentation for u, or all units if u is None.
+        printout=False --> return dict, instead of printing.
+        '''
+        if u is None:
+            result = self.doc_units
+        else:
+            if isinstance(u, str):
+                u = [u]
+            result = dict()
+            for unit in u:
+                unit = self._unit_name(unit)
+                doc  = self.doc_units.get(unit, "u='{}' is not yet documented!".format(unit))
+                result[unit] = doc
+        if not printout:
+            return result
+        else:
+            for key, doc in result.items():
+                print(fmt.format(key, doc))
+
+    def closest(self, value, sign_sensitive=True, reltol=1e-8):
+        '''returns [(attr, value)] for attr(s) in self whose value is closest to value.
+        sign_sensitive: True (default) or False
+            whether to care about signs (plus or minus) when comparing values
+        reltol: number (default 1e-8)
+            if multiple attrs are closest, and all match (to within reltol)
+            return a list of (attr, value) pairs for all such attrs.
+        closeness is determined by doing ratios.
+        '''
+        result = []
+        best = np.inf
+        for key, val in self.__dict__.items():
+            if val == 0:
+                if value != 0:
+                    continue
+                else:
+                    result += [(key, val)]
+            try:
+                rat = value / val
+            except TypeError:
+                continue
+            if sign_sensitive: 
+                rat = abs(rat)
+            compare_val = abs(rat - 1)
+            if best == 0:  # we handle this separately to prevent division by 0 error.
+                if compare_val < reltol:
+                    result += [(key, val)]
+            elif abs(1 - compare_val / best) < reltol:
+                result += [(key, val)]
+            elif compare_val < best:
+                result = [(key, val)]
+                best = compare_val
+        return result
+
+
+''' ============================= UNITS OUTPUT SYSTEM ============================= '''
+
 
 
 ''' ----------------------------- Hesitant Execution ----------------------------- '''
