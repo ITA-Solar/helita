@@ -336,7 +336,7 @@ def _new_cache_entry_str_(x):
 # actually overwrite the __str__ method for CacheEntry:
 CacheEntry.__str__ = _new_cache_entry_str_
 
-class Cache:
+class Cache():
     '''cache results of get_var.
     can contain up to self.max_MB MB of data, and up to self.max_Narr entries.
     Deletes oldest entries first when needing to free up space.
@@ -496,6 +496,15 @@ class Cache:
         del var_entries[i]
         del self._order[oidx]
         return eid
+
+    def clear(self):
+        '''remove all entries from self.
+        Returns (Original number of entries, Original number of bytes).
+        '''
+        result = (len(self._order), self._nbytes)
+        while len(self._order) > 0:
+            self.remove_one_entry()
+        return result
 
     def __repr__(self):
         '''pretty print of self'''
