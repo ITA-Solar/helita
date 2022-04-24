@@ -549,6 +549,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         They "are consistent" if alt_metadata is a subset of self._metadata().
         i.e. if for all keys in alt_metadata, alt_metadata[key]==self._metadata[key].
         (Even works if contents are numpy arrays. See _dict_is_subset function for details.)
+
+        For developing helita code, it is preferred to use _metadata_matches() instead.
         '''
         return file_memory._dict_is_subset(alt_metadata, self._metadata(none=none))
 
@@ -673,7 +675,35 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
         """     
+        kw__preprocess = dict(snap=snap, iix=iix, iiy=iiy, iiz=iiz,
+                              mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel,
+                              mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel,
+                              ifluid=ifluid, jfluid=jfluid,
+                              panic=panic, match_type=match_type,
+                              check_cache=check_cache, cache=cache,
+                              cache_with_nfluid=cache_with_nfluid,
+                              read_mode=read_mode,
+                              **kwargs,
+                              )
+        # do pre-processing
+        kw__load_quantity, kw__postprocess = self._get_var_preprocess(var, **kw__preprocess)
 
+        # >>>>> actually get the value of var <<<<<
+        val = self._load_quantity(var, **kw__load_quantity)
+
+        # do post-processing (function is defined in bifrost.py)
+        val = self._get_var_postprocess(val, var=var, **kw__postprocess)
+        return val
+
+    def _get_var_preprocess(self, var, snap=None, iix=None, iiy=None, iiz=None,
+                mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
+                ifluid=None, jfluid=None, panic=False, 
+                match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
+                read_mode=None, **kw__fluids):
+        '''preprocessing for get_var.
+        returns ((dict of kwargs to pass to _load_quantity),
+                 (dict of kwargs to pass to _get_var_postprocess))
+        '''
         if var == '' and not document_vars.creating_vardict(self):
             help(self.get_var)
 
@@ -688,7 +718,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # set fluids as appropriate to kwargs
         kw__fluids = dict(mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
                           mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
-                          **kwargs)
+                          **kw__fluids)
         self.set_fluids(**kw__fluids)
 
         # set snapshot as needed
@@ -706,12 +736,10 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
         kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid)
 
-        # >>>>> actually get the value of var <<<<<
-        val = self._load_quantity(var, panic=panic, **kw__caching)
-
-        # do post-processing (function is defined in bifrost.py)
-        val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
-        return val
+        # setup and return result.
+        kw__load_quantity = dict(panic=panic, **kw__caching)
+        kw__postprocess = dict(original_slice = original_slice)
+        return (kw__load_quantity, kw__postprocess)
 
     @document_vars.quant_tracking_simple('SIMPLE_VARS')
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
