@@ -1241,6 +1241,21 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
+    def get_var_nfluid(self, var):
+        '''returns number of fluids which affect self.get_var(var).
+        0 - depends on NEITHER self.ifluid nor self.jfluid.
+        1 - depends on self.ifluid but NOT self.jfluid.
+        2 - depends on BOTH self.ifluid and self.jfluid.
+        None - unknown (var is in vardict, but has undocumented nfluid).
+
+        Only works for var in self.vardict; fails for "constructed" vars, e.g. "b_mod".
+        '''
+        search = self.search_vardict(var)
+        try:
+            return search.result['nfluid']
+        except AttributeError:  # var not found. (search is False)
+            raise ValueError(f"var not documented: '{var}'") from None
+
     def zero_at_meshloc(self, meshloc=[0,0,0], **kw__np_zeros):
         '''return array of zeros, associated with the provided mesh location.
         if not self.mesh_location_tracking, return self.zero() instead.
