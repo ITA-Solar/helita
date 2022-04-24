@@ -3,6 +3,7 @@ import os
 import fnmatch
 import functools
 import warnings
+import collections
 
 # import external public modules
 import numpy as np
@@ -610,3 +611,97 @@ def extent(xcoords, ycoords):
   dy = (ycoords[-1] - ycoords[0])/Ny
   return np.array([*(xcoords[0] + np.array([0 - dx/2, dx * Nx + dx/2])),
                    *(ycoords[0] + np.array([0 - dy/2, dy * Ny + dy/2]))])
+
+
+''' --------------------------- custom versions of builtins --------------------------- '''
+
+class GenericDict(collections.abc.MutableMapping):
+    '''dict allowing for non-hashable keys.
+    Slower than built-in dict, but behaves like a built-in dict.
+    
+    equals: None or function.
+        function used to test equality of keys.
+        None --> use the default: lambda oldkey, newkey: oldkey==newkey
+    '''
+    def __init__(self, iterable=(), equals=None):
+        if equals is None:
+            self.equals = lambda old, new: old==new
+        else:
+            self.equals = equals
+        
+        self._keys   = collections.deque()
+        self._values = collections.deque()
+        
+        for key, value in iterable:
+            self[key] = value
+        for k, v in iterable:
+            self._keys.append(k)
+            self._values.append(v)
+    
+    ## HELPER METHODS ##
+    def _index(self, key):
+        '''return index of key in self._keys.
+        uses self.equals to check equality of keys.
+        raise ValueError if key not in self.
+        '''
+        for i, k in enumerate(self._keys):
+            if self.equals(k, key):
+                return i
+        raise ValueError('Not found in self.keys(): ', key)
+        
+    def _find(self, key):
+        '''return index of key in self.
+        uses self.equals to check equality of keys.
+        return None if key not in self.
+        '''
+        try:
+            return self._index(key)
+        except ValueError:
+            return None
+        
+    ## REQUIRED METHODS ##
+    def __getitem__(self, key):
+        i = self._find(key)
+        if i is None:
+            raise KeyError(key)
+        else:
+            return self._values[i]
+    
+    def __setitem__(self, key, value):
+        i = self._find(key)
+        if i is None:  # new key
+            self._keys.append(key)
+            self._values.append(value)
+        else:          # already existing key
+            self._keys[i] = key
+            self._values[i] = value
+        
+    def __delitem__(self, key):
+        i = self._find(key)
+        if i is None:
+            raise KeyError(key)
+        else:
+            del self._keys[i]
+            del self._values[i]
+    
+    def __iter__(self):
+        return iter(self._keys)
+    
+    def __len__(self):
+        return len(self._keys)
+    
+    ## MIXINS ##
+    # from parent, we automatically get these mixins after defining the methods above:
+    #   __contains__, keys, items, values, get, __eq__, __ne__,
+    #   pop, popitem, clear, update, setdefault,
+    
+    ## PRETTY ##
+    def __repr__(self):
+        return '{' + ', '.join([f'{key}: {value}' for key, value in self.items()]) + '}'
+
+def GenericDict_with_equals(equals):
+    '''return constructor for GenericDict, with 'equals' set to the function provided, by default.'''
+    def _GenericDict_create(*args, equals=equals, **kwargs):
+        '''return GenericDict object.'''
+        return GenericDict(*args, equals=equals, **kwargs)
+    return _GenericDict_create
