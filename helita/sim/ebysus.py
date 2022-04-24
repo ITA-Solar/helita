@@ -562,14 +562,23 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             all other keys in each dict are the same and have the same value.
         '''
         self_metadata = self._metadata(none=none)
-        for ifluid in ['ifluid', 'jfluid']:
-            SL = alt_metadata.get(ifluid, None)
-            if SL is not None:
-                if not fluid_tools.fluid_equals(SL, self_metadata[ifluid]):
+        return self._metadata_equals(self_metadata, alt_metadata)
+
+    def _metadata_equals(self, m1, m2):
+        '''return whether metadata1 == metadata2.
+        They are "equal" if:
+            - for fluid ('ifluid' or 'jfluid') appearing in both m1 and m2: m1[fluid]==m2[fluid]
+            - all other keys in each dict are the same and have the same value.
+        '''
+        for fluid in ['ifluid', 'jfluid']:
+            SL1 = m1.get(fluid, None)
+            SL2 = m2.get(fluid, None)
+            if None not in (SL1, SL2):
+                if not self.fluids_equal(SL1, SL2):
                     return False
-            #else: ifluid is not in alt_metadata, so it doesn't need to be in self_metadata.
+            #else: fluid is missing from m1 and/or m2; at least one of the metadata doesn't care about fluid.
         # << if we reached this line, then we know ifluid and jfluid "match" between alt and self.
-        return file_memory._dict_equals(alt_metadata, self_metadata, ignore_keys=['ifluid', 'jfluid'])
+        return file_memory._dict_equals(m1, m2, ignore_keys=['ifluid', 'jfluid'])
 
     ## MATCH TYPE ##  # (MATCH_AUX --> match simulation values; MATCH_PHYSICS --> match physical values)
     @property 
