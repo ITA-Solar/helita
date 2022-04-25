@@ -183,7 +183,11 @@ def get_deriv(obj,quant):
     if obj.verbose:
       warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
     xidx = dict(x=0, y=1, z=2)[axis]  # axis; 0, 1, or 2.
-    if var.shape[xidx] <= 1:
+    if np.ndim(var) < 3:
+      if obj.verbose:
+        warnings.warn(f"Returning 0 for derivative of quant with ndim<3: {repr(quant)}.")
+      return np.zeros_like(var)
+    elif var.shape[xidx] <= 1:
       return np.zeros_like(var)
     dvar = np.gradient(var, axis=xidx)  # 3D
     dx   = getattr(obj, 'd'+axis+'1d')  # 1D; needs dims to be added. add dims below.
