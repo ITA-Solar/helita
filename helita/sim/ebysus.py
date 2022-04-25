@@ -1552,7 +1552,11 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     # fluid quantities
     fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
     fluids.assign_vectors('v', (np.asarray(v) / uni.usi_u))                    # [ebysus units] velocity
-    fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
+    for fluid in fluids:
+        fluid_v = fluid.v    # want to get to shape (3, Nx, Ny, Nz), or (3, 1, 1, 1) for broadcasting with rho.
+        fluid_v = np.expand_dims(fluid_v, axis=tuple(range(1, 1+4-np.ndim(fluid_v))))   # (if already 4D, does nothing.)
+        fluid.p = fluid_v * fluid.rho
+    #fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
     for x in AXES:
         setattr(fluids, 'p'+x, fluids.p[dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
     # restore original stack, stack_axis of fluids object.
