@@ -58,6 +58,9 @@ import weakref
 import collections
 import warnings
 
+# import internal modules
+from . import tools
+
 # import public external modules
 import numpy as np
 

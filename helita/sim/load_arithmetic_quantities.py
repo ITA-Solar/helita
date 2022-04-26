@@ -31,6 +31,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 import warnings
 
 # import internal modules
+from . import tools
 from . import document_vars
 try:
   from . import cstagger
