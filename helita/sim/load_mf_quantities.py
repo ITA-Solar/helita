@@ -1814,8 +1814,8 @@ _HD_QUANTS += [f'hd3{x}_part' for x in AXES] + [f'hd3{x}_bpart' for x in AXES]  
 _HD_QUANTS += [f'hd3{x}_partnu' for x in AXES] + [f'hd3{x}_bpartnu' for x in AXES]   # << include the factor of nu3
 _HD_QUANTS += [f'hd{x}quench_{f}' for x in AXES for f in _FUNDAMENTALS]  # Q(∂f/∂x)
 _HD_QUANTS += [f'hd{x}coeff_{f}' for x in AXES for f in _FUNDAMENTALS]   # nu dx (∂f/∂x) * Q(∂f/∂x)
-_HD_QUANTS += [f'{d}hd{n}{x}_{f}' for d in ('', 'd')       # E.g. hd1x_r == hd1_part * nu dx (∂f/∂x) * Q(∂f/∂x)
-                                  for n in (1,2,3)         # and dhd1x_r == ∂[hd1_part * nu dx (∂f/∂x) * Q(∂f/∂x)]/∂x
+_HD_QUANTS += [f'{d}hd{n}{x}_{f}' for d in ('', 'd')       # E.g. hd1x_r == hd1_part * nu dx (∂r/∂x) * Q(∂r/∂x)
+                                  for n in (1,2,3)         # and dhd1x_r == ∂[hd1_part * nu dx (∂r/∂x) * Q(∂r/∂x)]/∂x
                                   for x in AXES
                                   for f in _FUNDAMENTALS]
 _HYPERDIFFUSIVE_QUANT = ('HYPERDIFFUSIVE_QUANT', _HD_QUANTS)
