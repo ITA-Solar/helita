@@ -219,8 +219,8 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         if diff is not None:
             raise ValueError(f"diff must not be provided for non-derivative operation: {operation}")
     # make sure var is 3D. make warning then handle appropriately if not.
-    if var.ndim != 3:
-        warnmsg = f'can only stagger 3D array but got {var.ndim}D.'
+    if np.ndim(var) != 3:
+        warnmsg = f'can only stagger 3D array but got {np.ndim(var)}D.'
         if derivative:
             warnings.warn(warnmsg + f' returning 0 for operation {operation_orig}')
             return np.zeros_like(var)
