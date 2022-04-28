@@ -67,6 +67,10 @@ except ImportError:
 # import external public modules
 import numpy as np
 try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = tools.ImportFailed('matplotlib.pyplot')
+try:
     import zarr
 except ImportError:
     zarr = tools.ImportFailed('zarr')
@@ -692,6 +696,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                               check_cache=check_cache, cache=cache,
                               cache_with_nfluid=cache_with_nfluid,
                               read_mode=read_mode,
+                              internal=True,  # we are inside get_var.
                               **kwargs,
                               )
         # do pre-processing
@@ -706,7 +711,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     def _get_var_preprocess(self, var, snap=None, iix=None, iiy=None, iiz=None,
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                ifluid=None, jfluid=None, panic=False, 
+                ifluid=None, jfluid=None, panic=False, internal=False,
                 match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
                 read_mode=None, **kw__fluids):
         '''preprocessing for get_var.
@@ -740,7 +745,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
         original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
                            for slicename, iix in slices_names_and_vals]
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=True)
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=internal)
 
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
         kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid)
@@ -1273,6 +1278,31 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         print_if_verbose('_zc_decompress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
         return f'{SNAPNAME}.io'
+
+    ## PLOTTING ##
+    def plot(self, var, axes=None, nfluid=None):
+        '''make a 1D or 2D plot of var,
+        labeling nicely the axes, the relevant fluids, and var name.
+        var: str or arr
+            str --> plot self.get_var(var). Also use var in the title.
+            arr --> plot this value.
+        axes: None, string, or list of strings, using values in ('x', 'y', 'z')
+            axes to use for this plot.
+            number of axes determines dimensionality of the plot
+                1 axis --> plt.plot(coord, value of var)
+                2 axes --> plt.imshow(value of var, extent=(extent determined by axes))
+            None -->
+                guess based on shape of self
+                e.g. if self has shape (50, 1, 40), use axes=('x', 'z').
+                e.g. if self has shape (1, 700, 1), use axes='y'
+            slice other axes at index 0.
+        nfluid: None, 0, 1, or 2
+            number of fluids related to var.
+            The relevant fluid names will be included in the plot's title.
+            e.g. plot('bz', nfluid=None) --> plt.title('bz')
+            e.g. plot('nr', nfluid=1) --> plt.title('nr (self.get_fluid_name(
+        '''
+        raise NotImplementedError('EbysusData.plot')
 
     ## CONVENIENCE METHODS ##
     def get_nspecies(self):
