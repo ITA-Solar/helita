@@ -66,6 +66,7 @@ class FakeEbysusData(ebysus.EbysusData):
         '''
         # setup memory for fake data
         self.setvars = collections.defaultdict(tools.GenericDict_with_equals(self._metadata_equals))
+        self.nset = 0   # nset tracks the number of times set_var has been called.
 
         # units
         self.units_input = units_input
@@ -122,7 +123,8 @@ class FakeEbysusData(ebysus.EbysusData):
         '''
         pass
 
-    def set_var(self, var, value, *args, nfluid=None, units=None, _skip_preprocess=False, **kwargs):
+    def set_var(self, var, value, *args, nfluid=None, units=None, fundamental=None,
+                _skip_preprocess=False, **kwargs):
         '''set var in memory of self.
         Use this to set the value for some fake data.
         Any time we get var, we will check memory first;
@@ -146,10 +148,23 @@ class FakeEbysusData(ebysus.EbysusData):
              given units_output='simu'. This usually means values are stored in simulation units.)
             None --> use self.units_input.
             else --> use the value of this kwarg.
+        fundamental: None (default), True, or False
+            None --> check first if var is in self.FUNDAMENTAL_SETTABLES.
+                     if it is, use set_fundamental_var instead.
+            True --> immediately call set_fundamental_var instead.
+            False --> do not even consider using set_fundamental_var.
         '''
+        if fundamental is None:
+            if var in self.FUNDAMENTAL_SETTABLES:
+                fundamental = True
+        if fundamental:
+            return self.set_fundamental_var(var, value, *args, units=units, **kwargs)
+
         if not _skip_preprocess:
             self._get_var_preprocess(var, *args, **kwargs)
 
+        # bookkeeping - nset
+        self.nset += 1
         # bookkeeping - nfluid
         if nfluid is None:
             nfluid = self.get_var_nfluid(var)
@@ -268,12 +283,14 @@ class FakeEbysusData(ebysus.EbysusData):
         # set fundamental var
         self.set_var(setting, result / u_res, *args, **kwargs,
                      units='simu',          # we already handled the units; set_var shouldn't mess with them.
+                     fundamental=False,     # we already handled the 'fundamental' possibility.
                      _skip_preprocess=True, # we already handled preprocessing.
                      )
         # set var (the one that was entered to this function)
         if also_set_var:
             self.set_var(var, value / u_var, *args, **kwargs,
                          units='simu',          # we already handled the units; set_var shouldn't mess with them.
+                         fundamental=False,     # we already handled the 'fundamental' possibility.
                          _skip_preprocess=True, # we already handled preprocessing.
                          )
         return (setting, result)
