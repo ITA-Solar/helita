@@ -911,7 +911,6 @@ class BifrostData():
             cgsunits = 1.0
                 
         # get value of variable.
-
         val = self._load_quantity(var, cgsunits=cgsunits, **kwargs)
 
         # do post-processing
@@ -958,9 +957,8 @@ class BifrostData():
             self.set_domain_iiaxes(*original_slice, internal=False)
         
         # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
-        if (np.ndim(val) == self.ndim) and (np.shape(val) != self.shape):
-            def isslice(x): return isinstance(x, slice)
-            if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
+        if (np.ndim(val) >= self.ndim) and (np.shape(val) != self.shape):
+            if all(isinstance(s, slice) for s in (self.iix, self.iiy, self.iiz)):
                 val = val[self.iix, self.iiy, self.iiz]  # we can index all together
             else:  # we need to index separately due to numpy multidimensional index array rules.
                 val = val[self.iix,:,:]

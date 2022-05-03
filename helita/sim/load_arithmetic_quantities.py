@@ -132,6 +132,7 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
     get_square, get_lg, get_numop, get_ratios,
     get_projections, get_angle,
     get_stat_quant, get_fft_quant,
+    get_multi_quant,
   )
 
   val = None
@@ -1124,6 +1125,58 @@ def get_fft_quant(obj, quant):
   else:
     raise NotImplementedError(f'command={repr(command)} in get_fft_quant')
 
+
+#default
+_MULTI_QUANT = ('MULTI_QUANT',
+                [fullcommand
+                  for command in ('vec', 'vecxy', 'vecyz', 'vecxz')
+                  for fullcommand in ('_'+command, command+'_')]
+               )
+# get value
+def get_multi_quant(obj, quant):
+  '''multiple quantities. (last axis will be the multi.)
+  E.g. 'b_vec' --> result.shape=(Nx, Ny, Nz, 3), result[...,0]=bx, result[...,1]=by, result[...,2]=bz.
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, *_MULTI_QUANT, get_multi_quant.__doc__, uni=UNI.qc(0))
+    for fmt in '{var}_{command}', '{command}_{var}':
+      docvar(fmt.format(var='', command='vec'),
+             "'" + fmt.format(var='var', command='vec') + "'" +
+             " --> (varx, vary, varz) stacked along last axis (shape == (Nx, Ny, Nz, 3).")
+      for (x,y) in ('xy', 'yz', 'xz'):
+        docvar(fmt.format(var='', command=f'vec{x}{y}'),
+               "'" + fmt.format(var='var', command=f'vec{x}{y}') + "'" +
+               " --> (var{x}, var{y}) stacked along last axis (shape == (Nx, Ny, Nz, 2).")
+    return None
+
+  # interpret quant string
+  var, _, command = quant.rpartition('_')
+  fullcommand = '_' + command
+
+  if fullcommand not in _MULTI_QUANT[1]:   # quant doesn't look like 'var_command'
+    command, _, var = quant.partition('_')
+    fullcommand = command + '_'
+    if fullcommand not in _MULTI_QUANT[1]:
+      return None
+  # now we have assigned:
+  #  command = command without underscore. e.g. 'vec'
+  #  fullcommand = command with underscore. e.g. '_vec' or 'vec_'
+  #  var = quant without command.
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, command, _MULTI_QUANT[0], delay=True)
+
+  # do calculations and return result
+  if command.startswith('vec'):
+    if command == 'vec':
+      axes = 'xyz'
+    else:   # command is 'vecxy', 'vecyz', or 'vecxz'
+      axes = command[-2:]
+    components = [obj(var+x) for x in axes]
+    return np.stack(components, axis=-1)
+  
+  else:
+    raise NotImplementedError(f'command={repr(fullcommand)} in get_multi_quant')
 
 ''' ------------- End get_quant() functions; Begin helper functions -------------  '''
 
