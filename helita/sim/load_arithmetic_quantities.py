@@ -1129,7 +1129,7 @@ def get_fft_quant(obj, quant):
 #default
 _MULTI_QUANT = ('MULTI_QUANT',
                 [fullcommand
-                  for command in ('vec', 'vecxy', 'vecyz', 'vecxz')
+                  for command in ('vec', 'vecxyz', 'vecxy', 'vecyz', 'vecxz')
                   for fullcommand in ('_'+command, command+'_')]
                )
 # get value
@@ -1140,9 +1140,10 @@ def get_multi_quant(obj, quant):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, *_MULTI_QUANT, get_multi_quant.__doc__, uni=UNI.qc(0))
     for fmt in '{var}_{command}', '{command}_{var}':
-      docvar(fmt.format(var='', command='vec'),
-             "'" + fmt.format(var='var', command='vec') + "'" +
-             " --> (varx, vary, varz) stacked along last axis (shape == (Nx, Ny, Nz, 3).")
+      for command in ('vec', 'vecxyz'):   # 'vec' and 'vecxyz' are aliases for each other.
+        docvar(fmt.format(var='', command=command),
+               "'" + fmt.format(var='var', command=command) + "'" +
+               " --> (varx, vary, varz) stacked along last axis (shape == (Nx, Ny, Nz, 3).")
       for (x,y) in ('xy', 'yz', 'xz'):
         docvar(fmt.format(var='', command=f'vec{x}{y}'),
                "'" + fmt.format(var='var', command=f'vec{x}{y}') + "'" +
@@ -1168,7 +1169,7 @@ def get_multi_quant(obj, quant):
 
   # do calculations and return result
   if command.startswith('vec'):
-    if command == 'vec':
+    if command in ('vec', 'vecxyz'):
       axes = 'xyz'
     else:   # command is 'vecxy', 'vecyz', or 'vecxz'
       axes = command[-2:]
