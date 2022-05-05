@@ -1165,7 +1165,7 @@ def get_multi_quant(obj, quant):
   #  var = quant without command.
 
   # tell obj the quant we are getting by this function.
-  document_vars.setattr_quant_selected(obj, command, _MULTI_QUANT[0], delay=True)
+  document_vars.setattr_quant_selected(obj, fullcommand, _MULTI_QUANT[0], delay=True)
 
   # do calculations and return result
   if command.startswith('vec'):
