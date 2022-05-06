@@ -332,16 +332,8 @@ def maintain_attrs(*attrs):
         def f_but_maintain_attrs(obj, *args, **kwargs):
             '''f but attrs are maintained.'''
             __tracebackhide__ = True
-            memory = dict()  # dict of attrs to maintain
-            for attr in attrs:
-                if hasattr(obj, attr):
-                    memory[attr] = getattr(obj, attr)
-            try:
+            with MaintainingAttrs(obj, *attrs):
                 return f(obj, *args, **kwargs)
-            finally:
-                # restore attrs
-                for attr, val in memory.items(): 
-                    setattr(obj, attr, val)
         return f_but_maintain_attrs
     return attr_restorer
 
@@ -360,6 +352,22 @@ class MaintainingAttrs():
     def __exit__(self, exc_type, exc_value, traceback):
         for attr, val in self.memory.items():
             setattr(self.obj, attr, val)
+
+def with_attrs(**attrs_and_values):
+    '''return decorator which sets attrs of object before running function then restores them after.
+    It is assumed that obj is the first arg of function.
+    '''
+    def attr_setter_then_restorer(f):
+        @functools.wraps(f)
+        def f_but_set_then_restore_attrs(obj, *args, **kwargs):
+            '''f but attrs are set beforehand then restored afterward.'''
+            __tracebackhide__ = True
+            with MaintainingAttrs(obj, *attrs_and_values.keys()):
+                for attr, value in attrs_and_values.items():
+                    setattr(obj, attr, value)
+                return f(obj, *args, **kwargs)
+        return f_but_set_then_restore_attrs
+    return attr_setter_then_restorer
 
 
 ''' --------------------------- info about arrays --------------------------- '''
