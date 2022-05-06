@@ -1305,8 +1305,8 @@ class BifrostData(object):
                 part += 4.0 * self.get_var('nhe3')
             # check units of n
             return np.sqrt(self.uni.permsi / self.uni.qsi_electron**2 /
-                           (self.uni.ksi_b * tg.astype('Float64') *
-                            part.astype('Float64') + 1.0e-20))
+                           (self.uni.ksi_b * tg.astype('float64') *
+                            part.astype('float64') + 1.0e-20))
 
         elif ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
             if quant == 'gfe':
@@ -1331,10 +1331,10 @@ class BifrostData(object):
                              (2.0 * self.uni.ksi_b) ** 3) + 1.0e-20))
 
 
-            return (const * nel.astype('Float64') *
-                    np.log(12.0 * self.uni.pi * nel.astype('Float64') *
-                    self.get_var('debye_ln').astype('Float64') + 1e-50) /
-                    (np.sqrt(tg.astype('Float64')**3) + 1.0e-20))
+            return (const * nel.astype('float64') *
+                    np.log(12.0 * self.uni.pi * nel.astype('float64') *
+                    self.get_var('debye_ln').astype('float64') + 1e-50) /
+                    (np.sqrt(tg.astype('float64')**3) + 1.0e-20))
 
         elif quant in CROSTAB_QUANT:
             tg = self.get_var('tg')
@@ -1606,7 +1606,7 @@ class BifrostData(object):
                 if slice_size == 0:
                     slice_size = n
                 shape.append(slice_size)
-            nh = np.empty(shape, dtype='Float32')
+            nh = np.empty(shape, dtype='float32')
             for k in range(6):
                 nv = self.get_var('n%i' % (k + 1))
                 nh[k] = nv[sx, sy, sz]
