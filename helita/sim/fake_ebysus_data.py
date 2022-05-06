@@ -170,8 +170,6 @@ class FakeEbysusData(ebysus.EbysusData):
         if not _skip_preprocess:
             self._get_var_preprocess(var, *args, **kwargs)
 
-        # bookkeeping - nset
-        self.nset += 1
         # bookkeeping - nfluid
         if nfluid is None:
             nfluid = self.get_var_nfluid(var)
@@ -186,6 +184,15 @@ class FakeEbysusData(ebysus.EbysusData):
         meta = self._metadata(with_nfluid=nfluid)
         self.setvars[var][meta] = value
 
+        # do any updates that we should do whenever a var is set.
+        self._signal_set_var(var=var)
+
+    def _signal_set_var(self, var=None):
+        '''update anything that needs to be updated whenever a var is set.
+        This code should probably be run any time self.setvars is altered in any way.
+        '''
+        # bookkeeping - increment nset
+        self.nset += 1
         # clear the cache.
         if hasattr(self, 'cache'):
             self.cache.clear()
@@ -325,6 +332,82 @@ class FakeEbysusData(ebysus.EbysusData):
           ' the original slices are only applied after completing all other calculations.)'
           f'\n\nGot slices: iix={self.iix}, iiy={self.iiy}, iiz={self.iiz}'
         ))
+
+    ## UNSET_VAR ##
+    def unset_var(self, var):
+        '''unset the value of var if it has been set in setvars.
+        if var hasn't been set, do nothing.
+        returns whether var was previously set.
+        '''
+        try:
+            del self.setvars[var]
+        except KeyError:
+            return False   # var wasn't in self.setvars.
+        else:
+            self._signal_set_var(var=var)
+            return True
+
+    FUNDAMENTAL_VARS = (*(f'b{x}' for x in AXES), 'r', *(f'p{x}' for x in AXES), 'e')
+
+    def unset_extras(self):
+        '''unsets the values of all non-fundamental vars.
+        returns list of vars which were previously set but are no longer set.
+        '''
+        desetted = []
+        for var in iter(set(self.setvars.keys()) - set(self.FUNDAMENTAL_VARS)):
+            u = self.unset_var(var)
+            if u:
+                desetted.append(var)
+        return desetted
+
+    unset_nonfundamentals = unset_non_fundamentals = keep_only_fundamentals = unset_extras   # aliases
+
+    ## ITER FUNDAMENTALS ##
+    def iter_fundamentals(self, b=True, r=True, p=True, e=True, AXES=AXES):
+        '''iterate through fundamental vars:
+            b (per axis)
+            r (per non-electron fluid)
+            p (per axis, per non-electron fluid)
+            e (per fluid (including electrons))
+        during iteration through fluids, set self.ifluid appropriately.
+
+        b, r, p, e: bool
+            whether to iterate through this fundamental var.
+        AXES: string or list of strings from ('x', 'y', 'z')
+            axes to use when iterating through fundamental vars.
+        
+        yields var name. (sets ifluid immediately before yielding each value.)
+        '''
+        if b:
+            for x in AXES:
+                yield f'b{x}'
+        if r:
+            for fluid in self.fluid_SLs(with_electrons=False):
+                self.ifluid = fluid
+                yield 'r'
+        if p:
+            for fluid in self.fluid_SLs(with_electrons=False):
+                for x in AXES:
+                    self.ifluid = fluid   # in inner loop, to set immediately before yielding
+                    yield f'p{x}'
+        if e:
+            for fluid in self.fluid_SLs(with_electrons=True):
+                self.ifluid = fluid
+                yield 'e'
+
+    @tools.maintain_attrs('ifluid')
+    def set_fundamental_means(self):
+        '''sets all fundamental vars to their mean values. (Method provided for convenience.)'''
+        for var in self.iter_fundamentals():
+            self.set_fundamental_var(var, np.mean(self(var)))
+
+    @tools.maintain_attrs('ifluid')
+    def set_fundamental_full(self):
+        '''sets all fundamental vars to their fully-shaped values.
+        (If their shape is not self.shape, add self.zero())
+        '''
+        for var in self.iter_fundamentals():
+            self.set_fundamental_var(var, self.reshape_if_necessary(self(var)))
 
     ## WRITE SNAPSHOT ##
     def write_snap0(self, warning=True):
