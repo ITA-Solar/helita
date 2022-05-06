@@ -608,7 +608,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     def _raw_load_quantity(self, var, panic=False):
         '''load_quantity without any of the wrapper functions.
         Makes it easier to subclass EbysusData:
-        _load_quantity in subclasses can be wrapped and call __raw_load_quantity.
+        _load_quantity in subclasses can be wrapped and call _raw_load_quantity.
         '''
         __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables, if metadata is appropriate.
