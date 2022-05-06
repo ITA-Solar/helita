@@ -639,8 +639,6 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         __tracebackhide__ = True  # hide this func from error traceback stack
         return self._raw_load_quantity(var, panic=panic)
 
-        
-
     def get_var(self, var, snap=None, iix=None, iiy=None, iiz=None,
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                 ifluid=None, jfluid=None, panic=False, 
@@ -1377,9 +1375,9 @@ def write_mf_data(rootname, inputs, mfstr, **kw_ifluid):
     # interpret fluid kwargs
     mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(**kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
-        print('(WWW) species should start with 1')
+        print('(WWW) species should be 1 or larger when writing fluid data. For electrons use mf_e')
     if mf_ilevel < 1:
-        print('(WWW) levels should start with 1')
+        print('(WWW) levels should be 1 or larger when writing fluid data. For electrons use mf_e')
     # check that all arrays are finite; warn if one is not.
     for arr in inputs:
         if not np.isfinite(arr).all():

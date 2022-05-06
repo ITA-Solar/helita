@@ -26,6 +26,9 @@ from . import document_vars
 from . import file_memory
 from . import units
 
+# import external public modules
+import numpy as np
+
 
 AXES = ('x', 'y', 'z')
 
@@ -322,3 +325,85 @@ class FakeEbysusData(ebysus.EbysusData):
           ' the original slices are only applied after completing all other calculations.)'
           f'\n\nGot slices: iix={self.iix}, iiy={self.iiy}, iiz={self.iiz}'
         ))
+
+    ## WRITE SNAPSHOT ##
+    def write_snap0(self, warning=True):
+        '''write data from self to snapshot 0.
+        if warning, first warn user that snapshot 0 will be overwritten, and request confirmation.
+        '''
+        if not self._confirm_write('Snapshot 0', warning):
+            return   # skip writing unless confirmed.
+        self.write_mfr(warning=False)
+        self.write_mfp(warning=False)
+        self.write_mfe(warning=False)
+        self.write_mf_common(warning=False)
+
+    def _confirm_write(self, name, warning=True):
+        '''returns whether user truly wants to write name at self.file_root.
+        if warning==False, return True (i.e. "yes, overwrite") without asking user.
+        '''
+        if warning:
+            confirm = input(f'Write {name} at {self.file_root}? (y/n)')
+            if confirm.lower() not in ('y', 'yes'):
+                print('Aborted. Nothing was written.')
+                return False
+        return True
+
+    @tools.with_attrs(units_output='simu')
+    def write_mfr(self, warning=True):
+        '''write mass densities from self to snapshot 0.'''
+        if not self._confirm_write('Snapshot 0 mass densities', warning):
+            return   # skip writing unless confirmed.
+        for ifluid in self.iter_fluid_SLs(with_electrons=False):
+            r_i = self.reshape_if_necessary( self('r', ifluid=ifluid) )
+            ebysus.write_mfr(self.root_name, r_i, ifluid=ifluid)
+
+    @tools.with_attrs(units_output='simu')
+    def write_mfp(self, warning=True):
+        '''write momentum densitites from self to snapshot 0.'''
+        if not self._confirm_write('Snapshot 0 momentum densities', warning):
+            return   # skip writing unless confirmed.
+        for ifluid in self.iter_fluid_SLs(with_electrons=False):
+            self.ifluid = ifluid
+            p_xyz_i = [self.reshape_if_necessary( self(f'p{x}') ) for x in AXES]
+            ebysus.write_mfr(self.root_name, *p_xyz_i, ifluid=ifluid)
+
+    @tools.with_attrs(units_output='simu')
+    def write_mfe(self, warning=True):
+        '''write energy densitites from self to snapshot 0.
+        Note: if there is only 1 non-electron fluid, this function does nothing and returns None
+            (because ebysus treats e as 'common' in single fluid case. See also: write_common()).
+        '''
+        non_e_fluids = self.fluid_SLs(with_electrons=False)
+        if len(non_e_fluids) == 1:
+            return
+        if not self._confirm_write('Snapshot 0 energy densities', warning):
+            return   # skip writing unless confirmed.
+        for ifluid in non_e_fluids:
+            e_i = self.reshape_if_necessary( self('e', ifluid=ifluid) )
+            ebysus.write_mfe(self.root_name, e_i, ifluid=ifluid)
+        e_e = self.reshape_if_necessary( self('e', ifluid=(-1,0)) )
+        ebysus.write_mf_e(self.root_name, e_e)
+
+    @tools.with_attrs(units_output='simu')
+    def write_mf_common(self):
+        '''write magnetic field from self to snapshot 0. (Also writes energy density if singlefluid.)'''
+        b_xyz = [self.reshape_if_necessary( self(f'b{x}') ) for x in AXES]
+        non_e_fluids = self.fluid_SLs(with_electrons=False)
+        if len(non_e_fluids) == 1:
+            if not self._confirm_write('Snapshot 0 magnetic field and single fluid energy density', warning):
+                return   # skip writing unless confirmed.
+            self.ifluid = non_e_fluids[0]
+            e_singlefluid = self.reshape_if_necessary( self('e') )
+            ebysus.write_mf_common(self.root_name, *b_xyz, e_singlefluid)
+        else:
+            if not self._confirm_write('Snapshot 0 magnetic field', warning):
+                return   # skip writing unless confirmed.
+            ebysus.write_mf_common(self.root_name, *b_xyz)
+
+    ## CONVENIENCE ##
+    def reshape_if_necessary(self, val):
+        '''returns val + self.zero() if shape(val) != self.shape, else val (unchanged)'''
+        if np.shape(val) != self.shape:
+            val = val + self.zero()
+        return val
