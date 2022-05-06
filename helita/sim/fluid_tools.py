@@ -29,7 +29,8 @@ MULTIFLUID_FUNCS = \
     ['set_mf_fluid', 'set_mfi', 'set_mfj', 'set_fluids',
     'get_species_name', 'get_fluid_name', 'get_mass', 'get_charge',
     'get_cross_tab', 'get_cross_sect', 'get_coll_type',
-    'i_j_same_fluid', 'iter_fluid_SLs', 'iter_fluid_SLs_and_names']
+    'i_j_same_fluid', 'fluid_SLs', 'fluid_SLs_and_names',
+    'iter_fluid_SLs', 'iter_fluid_SLs_and_names']
 
 ''' --------------------- setting fluids --------------------- '''
 
@@ -251,18 +252,47 @@ def iter_fluid_SLs(dd, with_electrons=True):
     '''returns an iterator over the fluids of dd, and electrons.
     yields SL pairs; NOT at_tools.fluids.Fluid objects!
     example: list(iter_fluids(dd)) = [(-1,0), (1,1), (1,2)].
+
+    with_electrons: bool
+        True --> electrons are included, first: (-1,0)
+        False --> electrons are not included.
     '''
     if with_electrons:
         yield (-1,0)
     for fluid in dd.fluids:
         yield fluid.SL
 
+def fluid_SLs(dd, with_electrons=True):
+    '''returns list of (species, level) pairs for fluids in dd.
+    See also: iter_fluid_SLs
+
+    with_electrons: bool
+        True --> electrons are included, first: (-1,0)
+        False --> electrons are not included.
+    '''
+    return list(iter_fluid_SLs(dd, with_electrons=with_electrons))
+
 def iter_fluid_SLs_and_names(dd, with_electrons=True):
     '''returns and iterator over the fluids of dd, and electrons.
     yields ((species, level), name)
+
+    with_electrons: bool
+        True --> electrons are included, first: ((-1,0),'e-').
+        False --> electrons are not included.
     '''
     for SL in dd.iter_fluid_SLs():
         yield (SL, dd.get_fluid_name(SL))
+
+def fluid_SLs_and_names(dd, with_electrons=True):
+    '''returns list of ((species, level), name) for fluids in dd.
+    See also: iter_fluid_SLs_and_names
+
+    with_electrons: bool
+        True --> electrons are included, first: ((-1,0),'e-').
+        False --> electrons are not included.
+    '''
+    return list(iter_fluid_SLs_and_names(dd, with_electrons=with_electrons))
+
 
 ''' --------------------- compare fluids --------------------- '''
 
