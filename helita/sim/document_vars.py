@@ -501,7 +501,8 @@ def quant_tracking_simple(typequant, metaquant=None):
         do NOT use this wrapper for get_..._quant functions whose results correspond to
         only a PART of the quant entered. For example, don't use this for get_square() in
         load_arithmetic_quantities, since that function pulls a '2' off the end of quant,
-        E.g. get_var('b2') --> bx**2 + by**2 + bz**2. For this case, see quant_tracker() instead.
+        E.g. get_var('b2') --> bx**2 + by**2 + bz**2.
+        For this case, use settattr_quant_selected. (See load_arithmetic_quantities.py for examples)
     '''
     def decorator(f):
         @functools.wraps(f)
@@ -844,12 +845,24 @@ def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=T
 
 def quant_lookup(obj, quant_info):
     '''returns entry in obj.vardict related to quant_info (a QuantInfo object).
-    if quant_info does not have an entry in obj.vardict, return an empty dict().
+    returns vardict[quant_info.metaquant][quant_info.typequant][quant_info.quant]
+
+    if that cannot be found:
+        if metaquant in obj.VDSEARCH_IF_META return search_vardict(vardict, quant).result if it exists
+
+    default (if we haven't returned anything else): return an empty dict.
     '''
+    quant_dict = dict()  # default value
     vardict = getattr(obj, VARDICT, dict())
-    metaquant_dict = vardict.get(quant_info.metaquant, dict())
-    typequant_dict = metaquant_dict.get(quant_info.typequant, dict())
-    quant_dict     = typequant_dict.get(quant_info.quant, dict())
+    try:
+        metaquant_dict =        vardict[quant_info.metaquant]
+        typequant_dict = metaquant_dict[quant_info.typequant]
+        quant_dict     = typequant_dict[quant_info.quant]
+    except KeyError:
+        if quant_info.metaquant in getattr(obj, 'VDSEARCH_IF_META', []):
+            search = search_vardict(vardict, quant_info.quant)
+            if search:
+                quant_dict = search.result
     return quant_dict
 
 def get_quant_info(obj, lookup_in_vardict=False):

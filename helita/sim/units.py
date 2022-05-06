@@ -383,9 +383,11 @@ class HelitaUnits(object):
         units_output: None, 'simu', 'si', or 'cgs'
             unit system for output of self(ustr) * value.
             if None, use self.units_output.
+            (Note: self.units_output defaults to parent.units_output)
         units_input: None, 'simu', 'si', or 'cgs'
             unit system for input value; output will be self(ustr) * value.
             if None, use self.units_input.
+            (Note: self.units_input always defaults to 'simu')
         '''
         errs = []
         conversion_mode=True

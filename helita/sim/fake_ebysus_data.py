@@ -7,23 +7,24 @@ File purpose:
         - check what would happen if a small number of changes are made to existing data.
 
 [TODO]
-    - properly hook FakeEbysusData._load_quantity into units, caching, etc.
-        (until doing that^, this module is only compatible with 'simu' units,
-        and the self.got_vars_tree() results may be confusing / misleading.)
-    - 'units_input' attribute, which tells the units for 'value' in set_var.
+    - allow FakeEbysusData.set_var to use units other than 'simu'
+      (probably by looking up var in vardict to determine units).
+      Note - this is already allowed in set_var_fundamanetal
+      (which, by default, gets called from set_var for var in FUNDAMENTAL_SETTABLES).
 """
 
 # import built-ins
 import shutil
 import os
 import collections
+import warnings
 
 # import internal modules
 from . import ebysus
 from . import tools
-from .units import (
-    UNIT_SYSTEMS,
-)
+from . import document_vars
+from . import file_memory
+from . import units
 
 
 AXES = ('x', 'y', 'z')
@@ -80,7 +81,7 @@ class FakeEbysusData(ebysus.EbysusData):
             if verbose:
                 print(f"copied 'mhd.in' to '{idlfilename}'")
         # initialize self using method from parent.
-        super(type(self), self).__init__(*args, verbose=verbose, **kw)
+        super(FakeEbysusData, self).__init__(*args, verbose=verbose, **kw)
 
     @property
     def units_input_fundamental(self):
@@ -95,7 +96,7 @@ class FakeEbysusData(ebysus.EbysusData):
     def units_input_fundamental(self, value):
         if value is not None:
             value = value.lower()
-            assert value in UNIT_SYSTEMS, f"invalid units: {repr(value)}. Expected one of {UNIT_SYSTEMS} or None."
+            units.ASSERT_UNIT_SYSTEM(value)
         self._units_input_fundamental = value
 
     @property
@@ -112,7 +113,7 @@ class FakeEbysusData(ebysus.EbysusData):
     def units_input(self, value):
         if value is not None:
             value = value.lower()
-            assert value in UNIT_SYSTEMS, f"invalid units: {repr(value)}. Expected one of {UNIT_SYSTEMS} or None."
+            units.ASSERT_UNIT_SYSTEM(value)
             if value != 'simu':
                 raise NotImplementedError(f'units_input = {repr(value)}')
         self._units_input = value
@@ -123,6 +124,7 @@ class FakeEbysusData(ebysus.EbysusData):
         '''
         pass
 
+    ## SET_VAR ##
     def set_var(self, var, value, *args, nfluid=None, units=None, fundamental=None,
                 _skip_preprocess=False, **kwargs):
         '''set var in memory of self.
@@ -160,6 +162,8 @@ class FakeEbysusData(ebysus.EbysusData):
         if fundamental:
             return self.set_fundamental_var(var, value, *args, units=units, **kwargs)
 
+        self._warning_during_setvar_if_slicing_and_stagger()
+
         if not _skip_preprocess:
             self._get_var_preprocess(var, *args, **kwargs)
 
@@ -173,7 +177,7 @@ class FakeEbysusData(ebysus.EbysusData):
         # bookkeeping - units
         units_input = units if units is not None else self.units_input
         if units_input != 'simu':
-            raise NotImplementedError(f'set_var(..., units={repr(value)})')
+            raise NotImplementedError(f'set_var(..., units={repr(units_input)})')
 
         # save to memory.
         meta = self._metadata(with_nfluid=nfluid)
@@ -183,18 +187,25 @@ class FakeEbysusData(ebysus.EbysusData):
         if hasattr(self, 'cache'):
             self.cache.clear()
 
+    # tell quant lookup to search vardict for var if metaquant == 'setvars'
+    VDSEARCH_IF_META = getattr(ebysus.EbysusData, 'VDSEARCH_IF_META', []) + ['setvars']
+
+    @tools.maintain_attrs('match_type', 'ifluid', 'jfluid')
+    @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
+    @document_vars.quant_tracking_top_level
     def _load_quantity(self, var, *args, **kwargs):
-        '''load quantity, but first check if the value is in memory with the appropriate metadata.
-        [TODO] hook this properly into caching, units, etc.
-        '''
+        '''load quantity, but first check if the value is in memory with the appropriate metadata.'''
         if var in self.setvars:
             meta = self._metadata()
             try:
-                return self.setvars[var][meta]
+                result = self.setvars[var][meta]
+                document_vars.setattr_quant_selected(self, var, 'SET_VAR', metaquant='setvars',
+                                                     varname=var, level='(FROM SETVARS)', delay=False)
+                return result
             except KeyError:  # var is in memory, but not with appropriate metadata.
                 pass          #    e.g. we know some 'nr', but not for the currently-set ifluid.
         # else
-        return super(type(self), self)._load_quantity(var, *args, **kwargs)
+        return self._raw_load_quantity(var, *args, **kwargs)
 
     FUNDAMENTAL_SETTABLES = ('r', 'nr', 'e', 'tg', *(f'{v}{x}' for x in AXES for v in ('p', 'u', 'ui', 'b')))
 
@@ -219,15 +230,18 @@ class FakeEbysusData(ebysus.EbysusData):
         returns (name of fundamental var which was set, value to which it was set)
         '''
         assert var in self.FUNDAMENTAL_SETTABLES, f"I don't know how this var relates to a fundamental var: '{var}'"
+        self._warning_during_setvar_if_slicing_and_stagger()
+
         # preprocess
         self._get_var_preprocess(var, *args, **kwargs)  # sets snap, ifluid, etc.
         also_set_var = (not fundamental_only)
         # units
         units_input = units if units is not None else self.units_input_fundamental
         def ulookup(key):
-            return {'simu': 1,
-                    'si': getattr(self.uni, f'usi_{key}'),
-                    'cgs': getattr(self.uni, f'u_{key}')}[units_input]
+            '''return self.uni(key, units_input, 'simu').
+            if key is for variable (e.g. 'u', 'r'), value [simu] * ulookup(key) == value [units_input]
+            if key is for constant (e.g. 'kB'), ulookup(key) is value of constant in [units_input] system.'''
+            return self.uni(key, units_input, 'simu')
         ## more units: we will set the following values below:
         ###  u_res = divide result by this value to convert to units for internal storage.
         ###  u_var = divide   var  by this value to convert to units for internal storage.
@@ -255,7 +269,7 @@ class FakeEbysusData(ebysus.EbysusData):
             elif var == 'tg':   # T = p / (nr * kB) = (e * (gamma - 1)) / (nr * kB)
                 u_var  = 1   # temperature units always K.
                 nr     = self('nr') * ulookup('nr')
-                kB     = {'simu':self.uni.simu_kB, 'si':self.uni.ksi_b, 'cgs':self.uni.k_b}[units_input]
+                kB     = ulookup('kB')
                 result = value * nr * kB / (self.uni.gamma - 1)
         ## 'p{x}' - momentum density ({x}-component)
         elif var in tuple(f'{v}{x}' for x in AXES for v in ('p', 'u', 'ui')):
@@ -294,3 +308,17 @@ class FakeEbysusData(ebysus.EbysusData):
                          _skip_preprocess=True, # we already handled preprocessing.
                          )
         return (setting, result)
+
+    def _warn_if_slicing_and_stagger(self, message):
+        '''if any slice is not slice(None), and do_stagger=True, warnings.warn(message)'''
+        if self.do_stagger and any(iiax!=slice(None) for iiax in (self.iix, self.iiy, self.iiz)):
+            warnings.warn(message)
+
+    def _warning_during_setvar_if_slicing_and_stagger(self):
+        self._warn_if_slicing_and_stagger((
+          'setting var with iix, iiy, or iiz != slice(None) and do_stagger=True'
+          ' may lead to unexpectedly not using values from setvars. \n\n(Internally,'
+          ' when do_stagger=True, slices are set to slice(None) while getting vars, and'
+          ' the original slices are only applied after completing all other calculations.)'
+          f'\n\nGot slices: iix={self.iix}, iiy={self.iiy}, iiz={self.iiz}'
+        ))

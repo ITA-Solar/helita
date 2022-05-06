@@ -605,19 +605,15 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         return self.match_type == MATCH_AUX
 
     ## READING DATA / DOING CALCULATIONS ##
-    @tools.maintain_attrs('match_type', 'ifluid', 'jfluid')
-    @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
-    @document_vars.quant_tracking_top_level
-    def _load_quantity(self, var, panic=False):
-        '''helper function for get_var; actually calls load_quantities for var.
-        Also, restores self.ifluid and self.jfluid afterwards.
-        Also, restores self.match_type afterwards.
+    def _raw_load_quantity(self, var, panic=False):
+        '''load_quantity without any of the wrapper functions.
+        Makes it easier to subclass EbysusData:
+        _load_quantity in subclasses can be wrapped and call __raw_load_quantity.
         '''
         __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables, if metadata is appropriate.
         if var in self.variables and self._metadata_matches(self.variables.get('metadata', dict())):
             return self.variables[var]
-        
         # load quantities.
         val = load_fromfile_quantities(self, var, panic=panic, save_if_composite=False)
         if val is None:
@@ -631,6 +627,19 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if val is None:
             val = load_arithmetic_quantities(self,var)
         return val
+
+    @tools.maintain_attrs('match_type', 'ifluid', 'jfluid')
+    @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
+    @document_vars.quant_tracking_top_level
+    def _load_quantity(self, var, panic=False):
+        '''helper function for get_var; actually calls load_quantities for var.
+        Also, restores self.ifluid and self.jfluid afterwards.
+        Also, restores self.match_type afterwards.
+        '''
+        __tracebackhide__ = True  # hide this func from error traceback stack
+        return self._raw_load_quantity(var, panic=panic)
+
+        
 
     def get_var(self, var, snap=None, iix=None, iiy=None, iiz=None,
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
