@@ -162,7 +162,7 @@ class BifrostData():
                 except IndexError:
                     raise ValueError(("(EEE) init: no .idl or mhd.in files "
                                       "found"))
-        self.uni = Bifrost_units(filename=tmp, fdir=fdir)
+        self.uni = Bifrost_units(filename=tmp, fdir=fdir, parent=self)
 
         self.set_snap(snap, True, params_only=params_only)
 
@@ -2173,7 +2173,7 @@ class BifrostUnits(units.HelitaUnits):
         which physical quantity the units are for.
     '''
 
-    def __init__(self,filename='mhd.in',fdir='./',verbose=True,base_units=None):
+    def __init__(self,filename='mhd.in',fdir='./',verbose=True,base_units=None, **kw__super_init):
         '''get units from file (by reading values of u_l, u_t, u_r, gamma).
 
         filename: str; name of file. Default 'mhd.in'
@@ -2247,7 +2247,7 @@ class BifrostUnits(units.HelitaUnits):
                     base_to_use[key] = value
 
         # initialize using instructions from HelitaUnits (see helita.sim.units.py)
-        super().__init__(**base_to_use, verbose=verbose)
+        super().__init__(**base_to_use, verbose=verbose, **kw__super_init)
 
 Bifrost_units = BifrostUnits  # alias (required for historical compatibility)
 
