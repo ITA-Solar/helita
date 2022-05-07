@@ -455,6 +455,8 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
   elif var in ['tg', 'temperature']:
     p  = obj.get_var('p') * obj.uni.u_e    # [cgs units]
     nr = obj.get_var('nr') * obj.uni.u_nr  # [cgs units]
+    if getattr(obj, 'debug', False):
+      raise Exception('boom')
     return p / (nr * obj.uni.k_b)          # [K]         # p = n k T
 
   elif var == 'tgjoule':
@@ -1302,7 +1304,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         
       # elastic collisions:
       elif var.endswith('el'):
-        cross    = obj.get_var('cross', match_type=MATCH_PHYSICS)    # [cm^2]
+        cross    = obj.get_var('cross_physical')    # [cm^2]
         tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
         result = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
 
@@ -1477,7 +1479,7 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
 
 
 # default
-_CROSTAB_QUANT = ('CROSTAB_QUANT', ['cross','tgij'])
+_CROSTAB_QUANT = ('CROSTAB_QUANT', ['cross','cross_physical','tgij'])
 # get value
 @document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
 def get_mf_cross(obj, var, CROSTAB_QUANT=None):
@@ -1489,12 +1491,18 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
     docvar = document_vars.vars_documenter(obj, _CROSTAB_QUANT[0], CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
     docvar('cross', 'cross section between ifluid and jfluid [cm^2]. Use species < 0 for electrons.',
                     uni_name=UNI_length.name**2, ucgs_f=UNITS_FACTOR_1, usi_f=UCONST.cm_to_m**2)
+    docvar('cross_physical', "cross section between ifluid and jfluid [cm^2]. " + \
+                  "Always returns physical value, regardless of match_type. (As opposed to 'cross' " +\
+                  "which gives 0 for ifluid > jfluid, in order to match aux.)",
+                  uni_name=UNI_length.name**2, ucgs_f=UNITS_FACTOR_1, usi_f=UCONST.cm_to_m**2)
+    docvar('tgij', 'mass-weighted temperature: (Ti mj + Tj mi) / (mi + mj)',
+                    uni=U_TUPLE(UNITS_FACTOR_1, Usym('K')))
     return None
 
   if var not in CROSTAB_QUANT:
     return None
 
-  if obj.match_aux():
+  if (var == 'cross') and obj.match_aux():
     # return 0 if ifluid > jfluid. (comparing species, then level if species are equal)
     # we do this because mm_cross gives 0 if ifluid > jfluid (and jfluid is not electrons))
     if (obj.ifluid > obj.jfluid) and obj.mf_jspecies > 0:
