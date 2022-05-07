@@ -449,7 +449,7 @@ class FakeEbysusData(ebysus.EbysusData):
         for ifluid in self.iter_fluid_SLs(with_electrons=False):
             self.ifluid = ifluid
             p_xyz_i = [self.reshape_if_necessary( self(f'p{x}') ) for x in AXES]
-            ebysus.write_mfr(self.root_name, *p_xyz_i, ifluid=ifluid)
+            ebysus.write_mfp(self.root_name, *p_xyz_i, ifluid=ifluid)
 
     @tools.with_attrs(units_output='simu')
     def write_mfe(self, warning=True):
@@ -469,7 +469,7 @@ class FakeEbysusData(ebysus.EbysusData):
         ebysus.write_mf_e(self.root_name, e_e)
 
     @tools.with_attrs(units_output='simu')
-    def write_mf_common(self):
+    def write_mf_common(self, warning=True):
         '''write magnetic field from self to snapshot 0. (Also writes energy density if singlefluid.)'''
         b_xyz = [self.reshape_if_necessary( self(f'b{x}') ) for x in AXES]
         non_e_fluids = self.fluid_SLs(with_electrons=False)
