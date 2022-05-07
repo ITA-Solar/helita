@@ -389,29 +389,30 @@ class HelitaUnits(object):
             if None, use self.units_input.
             (Note: self.units_input always defaults to 'simu')
         '''
-        errs = []
-        conversion_mode=True
         try:
-            simu_to_out = self.get_conversion_from_simu(ustr, units_output)
-        except AttributeError as err:
-            errs.append(err)
+            cname = self._constant_name(ustr)
+        except KeyError:
+            conversion_mode=True
+        else:
             conversion_mode=False
         if conversion_mode:
+            if not self._unit_exists(ustr):
+                raise ValueError(f'units do not exist: u_{ustr}, usi_{ustr}. ' +\
+                                 f'And, {ustr} is not a constant from constant_lookup.')
+            simu_to_out = self.get_conversion_from_simu(ustr, units_output)
             if units_input is None: units_input = self.units_input
             ASSERT_UNIT_SYSTEM(units_input)
             simu_to_in  = self.get_conversion_from_simu(ustr, units_input)
             out_from_in = simu_to_out / simu_to_in    # in_to_simu = 1 / simu_to_in.
             return out_from_in
-        #else, "constants mode"
-        try:
-            result = self.get_constant(ustr, units_output)
-        except KeyError as err:
-            errs.append(err)
-            ustr_not_found_errmsg = f'cannot determine units for ustr={ustr}; ' + \
-                     f'checked self.{str(errs[0])} and self.constant_lookup[{str(errs[1])}]'
-            raise ValueError(ustr_not_found_errmsg)
-        else:
-            return result
+        else: # "constants mode"
+            try:
+                result = self.get_constant(ustr, units_output)
+            except KeyError:
+                ustr_not_found_errmsg = f'failed to determine units for ustr={ustr}.'
+                raise ValueError(ustr_not_found_errmsg)
+            else:
+                return result
 
     def get_conversion_from_simu(self, ustr, units_output=None):
         '''get conversion factor from simulation units, to units_system.
@@ -650,6 +651,10 @@ class HelitaUnits(object):
         usi_u = 'usi_'+u
         result = {key: getattr(self, key) for key in [u, u_u, usi_u] if hasattr(self, key)}
         return result
+
+    def _unit_exists(self, ustr):
+        '''returns whether u_ustr or usi_ustr is an attribute of self.'''
+        return hasattr(self, 'u_'+ustr) or hasattr(self, 'usi_'+ustr)
 
     def prettyprint_unit_values(self, x, printout=True, fmtname='{:<3s}', fmtval='{:.2e}', sep=' ;  '):
         '''pretty string for unit values. print if printout, else return string.'''
