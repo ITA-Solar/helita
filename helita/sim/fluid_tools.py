@@ -280,7 +280,7 @@ def iter_fluid_SLs_and_names(dd, with_electrons=True):
         True --> electrons are included, first: ((-1,0),'e-').
         False --> electrons are not included.
     '''
-    for SL in dd.iter_fluid_SLs():
+    for SL in dd.iter_fluid_SLs(with_electrons=with_electrons):
         yield (SL, dd.get_fluid_name(SL))
 
 def fluid_SLs_and_names(dd, with_electrons=True):
