@@ -453,11 +453,11 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     return (gamma - 1) * obj.get_var('e')          # p = (gamma - 1) * internal energy
 
   elif var in ['tg', 'temperature']:
-    p  = obj.get_var('p') * obj.uni.u_e    # [cgs units]
-    nr = obj.get_var('nr') * obj.uni.u_nr  # [cgs units]
+    p  = obj.get_var('p')    # [simu units]
+    nr = obj.get_var('nr')   # [simu units]
     if getattr(obj, 'debug', False):
       raise Exception('boom')
-    return p / (nr * obj.uni.k_b)          # [K]         # p = n k T
+    return p / (nr * obj.uni.simu_kB)          # [K]         # p = n k T
 
   elif var == 'tgjoule':
     return obj.uni.ksi_b * obj('tg')
