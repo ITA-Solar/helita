@@ -149,7 +149,7 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
 
 
 # default
-_DERIV_QUANT = ('DERIV_QUANT', ['d'+x+up for up in ('up', 'dn') for x in AXES])
+_DERIV_QUANT = ('DERIV_QUANT', ['d'+x+up+one for up in ('up', 'dn') for x in AXES for one in ('', '1')])
 # get value
 def get_deriv(obj,quant):
   '''
@@ -159,28 +159,34 @@ def get_deriv(obj,quant):
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_DERIV_QUANT, get_deriv.__doc__,
                                            uni=UNI.quant_child(0) / UNI_length)
-    docvar('dxup',  'spatial derivative in the x axis with half grid up [simu units]')
-    docvar('dyup',  'spatial derivative in the y axis with half grid up [simu units]')
-    docvar('dzup',  'spatial derivative in the z axis with half grid up [simu units]')
-    docvar('dxdn',  'spatial derivative in the x axis with half grid down [simu units]')
-    docvar('dydn',  'spatial derivative in the y axis with half grid down [simu units]')
-    docvar('dzdn',  'spatial derivative in the z axis with half grid down [simu units]')
+    for x in AXES:
+      for up in ('up', 'dn'):
+        docvar(f'd{x}{up}', f'dvard{x}{up}  --> d(var)/d{x}, with half grid {up}, using method implied by stagger_kind.')
+        docvar(f'd{x}{up}1', f'dvard{x}{up}1 --> d(var)/d{x}, with half grid {up}, using first order gradients method.')
     return None
 
-  getq = quant[-4:]   # the quant we are "getting" by this function. (here: dxup, dyup, ..., or dzdn)
+  if quant[-1] == '1':
+    getq = quant[-5:]   # e.g. 'dxup1'
+    dxup = getq[:-1]    # e.g. 'dxup'
+    order = 1      # 1 --> "use first order. Ignore stagger_kind"
+  else:
+    getq = quant[-4:]   # e.g. 'dxup'
+    dxup = getq
+    order = None   # None --> "use whatever order is implied by obj.stagger_kind"
 
-  if not (quant[0] == 'd' and getq in _DERIV_QUANT[1]):
+  if not (quant[0]=='d' and getq[0]=='d' and getq in _DERIV_QUANT[1]):
     return None
 
   # tell obj the quant we are getting by this function.
   document_vars.setattr_quant_selected(obj, getq, _DERIV_QUANT[0], delay=True)
 
   # interpret quant string
-  axis = quant[-3]
-  q    = quant[1:-4]  # base variable 
+  axis = getq[1]      # 'x', 'y', or 'z'
+  q    = quant[ 1 : -len(getq) ]  # base variable 
+  # get value of var (before derivative)
   var  = obj.get_var(q)
 
-  # handle "cant interpolate" case
+  # handle "cant interpolate" case (e.g. if nx < 5 and trying to interpolate in x.)
   if not _can_interp(obj, axis):
     if obj.verbose:
       warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
@@ -197,8 +203,20 @@ def get_deriv(obj,quant):
     dvardx = dvar / dx
     return dvardx
 
-  # calculate derivative with interpolations
-  if obj.numThreads > 1:
+  ## calculate derivative with interpolations
+  # -- bookkeeping:
+  threading = (obj.numThreads > 1)
+  lowbusing = obj.lowbus
+  # -- default case --
+  if not (threading or lowbusing):
+    if order is None:  # default order; order implied by obj.stagger_kind
+      return do_stagger(var, 'd'+dxup, obj=obj)
+    elif order == 1:   # force first order
+      with tools.MaintainingAttrs(obj, 'stagger_kind'):  # reset obj.stagger_kind after this block
+        obj.stagger_kind = 'o1_numpy'  # stagger kind option which causes to use first order method.
+        return do_stagger(var, 'd'+dxup, obj=obj)
+  # -- "using numThreads" case (False by default) --
+  if threading:   
     if obj.verbose:
       print('Threading', whsp*8, end="\r", flush=True)
     quantlist = [quant[-4:] for numb in range(obj.numThreads)]
@@ -208,8 +226,9 @@ def get_deriv(obj,quant):
       return threadQuantity_z(deriv_loop, obj.numThreads, var, quantlist)
     else:
       return threadQuantity_y(deriv_loop, obj.numThreads, var, quantlist)
+  # -- "using lowbus" case (False by default) --
   else:
-    if obj.lowbus:
+    if lowbusing:
       output = np.zeros_like(var)
       if axis != 'z':
         for iiz in range(obj.nz):
@@ -223,8 +242,6 @@ def get_deriv(obj,quant):
           output[slicer] = staggered
 
       return output
-    else:
-      return do_stagger(var, 'd' + quant[-4:], obj=obj)
 
   # if we reach this line, quant is a deriv quant but we did not handle it.
   raise NotImplementedError(f'{repr(getq)} in get_deriv')
