@@ -392,21 +392,6 @@ def _nopython_zshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm
 
 """ ------------------------ numpy stagger ------------------------ """
 
-def slicer_at_ax(slicer, ax):
-    '''return tuple of slices which, when applied to an array, takes slice along axis number <ax>.
-    slicer: a slice object, or integer, or tuple of integers.
-        slice or integer  -> use slicer directly.
-        tuple of integers -> use slice(*slicer).
-    ax: a number (negative ax not supported here).
-    '''
-    try:
-        slicer[0]
-    except TypeError: #slicer is a slice or an integer.
-        pass  
-    else: #assume slicer is a tuple of integers.
-        slicer = slice(*slicer)
-    return (slice(None),)*ax + (slicer,)
-
 ## STAGGER_KIND = NUMPY ##
 def _np_stagger(var, diff, up, derivative, x, order=5):
     """stagger along x axis. x should be 0, 1, or 2."""
@@ -422,7 +407,7 @@ def _np_stagger(var, diff, up, derivative, x, order=5):
     nx = var.shape[x]
     def slx(shift):
         '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
-        return slicer_at_ax((start+shift, nx+end+shift), x)
+        return tools.slicer_at_ax((start+shift, nx+end+shift), x)
     def sgx(shift):
         '''return slicer at x axis from (start + shift + grdshf) to (nx + end + shift + grdshf)'''
         return slx(shift + grdshf)
@@ -452,7 +437,7 @@ def _np_stagger_improved(var, diff, up, derivative, x):
     nx = var.shape[x]
     def slx(shift):
         '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
-        return slicer_at_ax((start+shift, nx+end+shift), x)
+        return tools.slicer_at_ax((start+shift, nx+end+shift), x)
     def sgx(shift):
         '''return slicer at x axis from (start + shift + grdshf) to (nx + end + shift + grdshf)'''
         return slx(shift + grdshf)

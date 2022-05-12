@@ -443,6 +443,24 @@ def finite_median(arr):
     return finite_op(arr, np.median)
 
 
+''' --------------------------- manipulating arrays --------------------------- '''
+
+def slicer_at_ax(slicer, ax):
+    '''return tuple of slices which, when applied to an array, takes slice along axis number <ax>.
+    slicer: a slice object, or integer, or tuple of integers.
+        slice or integer  -> use slicer directly.
+        tuple of integers -> use slice(*slicer).
+    ax: a number (negative ax not supported here).
+    '''
+    try:
+        slicer[0]
+    except TypeError: #slicer is a slice or an integer.
+        pass  
+    else: #assume slicer is a tuple of integers.
+        slicer = slice(*slicer)
+    return (slice(None),)*ax + (slicer,)
+
+
 ''' --------------------------- strings --------------------------- '''
 
 def pretty_nbytes(nbytes, fmt='{:.2f}'):
