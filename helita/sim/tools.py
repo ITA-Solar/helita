@@ -391,7 +391,7 @@ def stats(arr, advanced=True, finite_only=True):
                            size=arr.size, nonfinite=n_nonfinite))
     return result
 
-def print_stats(arr_or_stats, advanced=True, fmt='{: .2e}', sep=' | ', return_str=False):
+def print_stats(arr_or_stats, advanced=True, fmt='{: .2e}', sep=' | ', return_str=False, **kw__print):
     '''calculate and prettyprint stats about array.
     arr_or_stats: dict (stats) or array-like.
         dict --> treat dict as stats of array.
@@ -406,7 +406,7 @@ def print_stats(arr_or_stats, advanced=True, fmt='{: .2e}', sep=' | ', return_st
     fmtkey = '{:>6s}' if '\n' in sep else '{}'
     _stats = arr_or_stats if isinstance(arr_or_stats, dict) else stats(arr_or_stats, advanced=advanced)
     result = sep.join([f'{fmtkey.format(key)}: {fmt.format(val)}' for key, val in _stats.items()])
-    return result if return_str else print(result)
+    return result if return_str else print(result, **kw__print)
 
 def finite_op(arr, op):
     '''returns op(arr), hitting only the finite values of arr.

@@ -90,6 +90,11 @@ class BifrostData():
         number of seconds between print statements during get_varTime.
         == 0 --> print update at every snapshot during get_varTime.
         < 0  --> never print updates during get_varTime.
+    printing_stats - bool or dict, optional. default False
+        whether to print stats about values of var upon completing a(n external) call to get_var.
+        False --> don't print stats.
+        True  --> do print stats.
+        dict  --> do print stats, passing this dictionary as kwargs.
 
     Examples
     --------
@@ -115,7 +120,8 @@ class BifrostData():
                  cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
                  use_relpath=False, stagger_kind=stagger.DEFAULT_STAGGER_KIND,
-                 units_output='simu', squeeze_output=False, print_freq=2,
+                 units_output='simu', squeeze_output=False,
+                 print_freq=2, printing_stats=False,
                  iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
@@ -136,6 +142,7 @@ class BifrostData():
         self._fast_skip_flag = False if fast else None  # None-> never skip
         self.squeeze_output = squeeze_output
         self.print_freq = print_freq
+        self.printing_stats = printing_stats
 
         # units. Two options for management. Should only use one at a time; leave the other at default value.
         self.units_output = units_output    # < units.py system of managing units.
@@ -182,6 +189,8 @@ class BifrostData():
         document_vars.set_vardocs(self)
 
     ## PROPERTIES ##
+    help  = property(lambda self: self.vardoc)
+
     shape = property(lambda self: (self.xLength, self.yLength, self.zLength))
     size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
     ndim  = property(lambda self: 3)
@@ -201,6 +210,24 @@ class BifrostData():
     @internal_means.setter
     def internal_means(self, value):
         self._internal_means = value
+
+    @property
+    def printing_stats(self):
+        '''whether to print stats about values of var upon completing a(n external) call to get_var.
+
+        Options:
+        False (default) --> don't print stats.
+        True --> do print stats.
+        dict --> call print stats with these kwargs 
+                e.g. printing_stats=dict(fmt='{:.3e}') --> self.print_stats(fmt='{:.3e}')
+        
+        This is useful especially while investigating just the approximate values for each quantity. 
+        '''
+        return getattr(self, '_printing_stats', False)
+    @printing_stats.setter
+    def printing_stats(self, value):
+        self._printing_stats = value
+
 
     stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
 
@@ -629,7 +656,7 @@ class BifrostData():
         return self.get_var(var, *args, **kwargs)
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
-                    print_freq=None, 
+                    print_freq=None, printing_stats=None,
                     *args__get_var, **kw__get_var):
         """
         Reads a given variable as a function of time.
@@ -651,6 +678,12 @@ class BifrostData():
             print progress update every print_freq seconds.
             Use print_freq < 0 to never print update.
             Use print_freq ==0 to print all updates.
+        printing_stats - None, bool, or dict
+            whether to print stats of result (via self.print_stats).
+            None  --> use value of self.printing_stats.
+            False --> don't print stats. (This is the default value for self.printing_stats.)
+            True  --> do print stats.
+            dict  --> do print stats, passing this dictionary as kwargs.
 
         additional *args and **kwargs are passed to get_var.
         """
@@ -676,11 +709,12 @@ class BifrostData():
         self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
         snapLen = np.size(self.snap)
 
-        # bookkeeping - maintain self.snap; handle self.recoverData; track timing.
+        # bookkeeping - maintain self.snap; handle self.recoverData; don't print stats in the middle; track timing.
         remembersnaps = self.snap                   # remember self.snap (restore later if crash)
         if hasattr(self, 'recoverData'):
             delattr(self, 'recoverData')            # smash any existing saved data
-        timestart = now = time.time()               # track timing, so we can make updates.
+        kw__get_var.update(printing_stats=False)   # never print_stats in the middle of get_varTime.
+        timestart = now = time.time()           # track timing, so we can make updates.
         printed_update  = False
         def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
             print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
@@ -723,6 +757,7 @@ class BifrostData():
                 _print_clearline()
                 print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
         
+        self.print_stats(value, printing_stats=printing_stats)
         return value
 
     def set_domain_iiaxis(self, iinum=None, iiaxis='x'):
@@ -859,7 +894,7 @@ class BifrostData():
 
         return val
 
-    def get_var(self, var, snap=None, *args, iix=None, iiy=None, iiz=None, **kwargs):
+    def get_var(self, var, snap=None, *args, iix=None, iiy=None, iiz=None, printing_stats=None, **kwargs):
         """
         Reads a variable from the relevant files.
 
@@ -914,10 +949,10 @@ class BifrostData():
         val = self._load_quantity(var, cgsunits=cgsunits, **kwargs)
 
         # do post-processing
-        val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
+        val = self._get_var_postprocess(val, var=var, original_slice=original_slice, printing_stats=printing_stats)
         return val
 
-    def _get_var_postprocess(self, val, var='', original_slice=[slice(None) for x in ('x', 'y', 'z')]):
+    def _get_var_postprocess(self, val, var='', printing_stats=None, original_slice=[slice(None) for x in ('x', 'y', 'z')]):
         '''does post-processing for get_var.
         This includes:
             - handle "creating documentation" or "var==''" case
@@ -929,6 +964,7 @@ class BifrostData():
                 - default is to keep result in simulation units, doing no conversions.
                 - if converting, note that any caching would happen in _load_quantity,
                   outside this function. The cache will always be in simulation units.
+            - print stats if printing_stats or ((printing_stats is None) and self.printing_stats).
         returns val after the processing is complete.
         '''
         # handle documentation case
@@ -981,6 +1017,9 @@ class BifrostData():
                 units_f, units_name = self.get_units(mode=self.units_output, _force_from_simu=True)
                 self.got_units_name = units_name   # << this line is just for reference. Not used internally.
                 val = val * units_f   # can't do *= in case val is a read-only memmap.
+
+            # print stats if self.printing_stats
+            self.print_stats(val, printing_stats=printing_stats)
 
         return val
 
@@ -1523,6 +1562,20 @@ class BifrostData():
         return (tt[..., 1:] + tt[..., :-1]) / 2
 
     ## MISC. CONVENIENCE METHODS ##
+    def print_stats(self, value, *args, printing_stats=None, **kwargs):
+        '''print stats of value, via tools.print_stats.
+        printing_stats: None, bool, or dict.
+            None  --> use value of self.printing_stats.
+            False --> don't print stats.
+            True  --> do print stats.
+            dict  --> do print stats, passing this dictionary as kwargs.
+        '''
+        if printing_stats is None:
+            printing_stats = self.printing_stats
+        if printing_stats:
+            kw__print_stats = printing_stats if isinstance(printing_stats, dict) else dict()
+            tools.print_stats(value, **kw__print_stats)
+
     def get_varm(self, *args__get_var, **kwargs__get_var):
         '''get_var but returns np.mean() of result.
         provided for convenience for quicker debugging.

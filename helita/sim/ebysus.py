@@ -643,7 +643,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                 ifluid=None, jfluid=None, panic=False, 
                 match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
-                read_mode=None,
+                read_mode=None, printing_stats=None,
                 *args, **kwargs):
         """
         Reads a given variable from the relevant files.
@@ -713,7 +713,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         val = self._load_quantity(var, **kw__load_quantity)
 
         # do post-processing (function is defined in bifrost.py)
-        val = self._get_var_postprocess(val, var=var, **kw__postprocess)
+        val = self._get_var_postprocess(val, var=var, printing_stats=printing_stats, **kw__postprocess)
         return val
 
     def _get_var_preprocess(self, var, snap=None, iix=None, iiy=None, iiz=None,
