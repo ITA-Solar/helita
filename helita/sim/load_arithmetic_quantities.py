@@ -129,7 +129,7 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
     get_module, get_horizontal_average,
     get_gradients_vect, get_gradients_scalar,
     get_vector_product, get_dot_product,
-    get_square, get_lg, get_numop, get_ratios,
+    get_square, get_lg, get_numop, get_ratios, get_parens,
     get_projections, get_angle,
     get_stat_quant, get_fft_quant,
     get_multi_quant,
@@ -750,6 +750,46 @@ def get_ratios(obj,quant):
   qA_val = obj.get_var(qA)
   qB_val = obj.get_var(qB)
   return qA_val / (qB_val + EPSILON)
+
+# default
+_PARENS_QUANT = ('PARENS_QUANT', ['()', '()x', '()y', '()z'])
+# get value
+def get_parens(obj,quant):
+  '''parentheses (in the sense of "order of operations").
+  E.g. mean_(b_mod) --> mean |B|
+  E.g. (mean_b)_mod --> |(mean Bx, mean By, mean Bz)|
+  E.g. curvec(u_facecrosstoface_b)x --> x component of (curl of (u cross b)).
+  E.g. (curvecu)_facecrosstoface_bx --> x component of ((curl of u) cross b).
+  '''
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_PARENS_QUANT, get_parens.__doc__, uni=UNI.qc(0))
+    docvar('()',  "(s) --> get_var(s).")
+    for x in AXES:
+      docvar('()'+x, f"(s){x} --> get_var(sx).")
+    return None
+
+  # interpret quant string
+  if quant[0] != '(':
+    return None
+  if quant[-1] == ')':
+    getting = '()'
+    var     = quant[1 : -1]
+    axis    = None
+  elif quant[-2] == ')':
+    axis = quant[-1]
+    if axis not in AXES:
+      return None
+    getting = '()'+axis
+    var     = quant[1 : -2] + axis
+  else:
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getting, _PARENS_QUANT[0], delay=True)
+
+  # do calculations and return result
+  val = obj(var)
+  return val
 
 
 # default
