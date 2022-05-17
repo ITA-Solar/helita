@@ -975,6 +975,10 @@ class Funclike:
                     self._required_args, self._required_kwargs)
 
     def __repr__(self):
+        return f'(Funclike with operation {repr(self.__name__)})'
+
+    def _repr_adv_(self):
+        '''very detailed repr of self.'''
         return '<{} named {} with {}>'.format(
                 object.__repr__(self), repr(self.__name__), self._strinfo())
 
@@ -1068,7 +1072,7 @@ def _join_strs(strs, sep=' '):
         return sep.join(ss)
 
 
-class UnitsExpression:
+class UnitsExpression():
     '''expression of units.
 
     Parameters
@@ -1165,7 +1169,10 @@ class UnitsExpression:
         return result
 
     def __repr__(self):
-        '''repr of self.'''
+        return repr(str(self))
+
+    def _repr_adv_(self):
+        '''very detailed repr of self.'''
         return "<{} with content = '{}'>".format(object.__repr__(self), str(self))
 
     def __mul__(self, b):
@@ -1277,7 +1284,7 @@ class UnitsExpressionDict(UnitsExpression):
                 self.contents[key] = UnitsExpression.__init__(val, **kw__units_expression_init)
         self._kw__units_expression_init = kw__units_expression_init
 
-    def __str__(self):
+    def __repr__(self):
         '''pretty string of self.'''
         return str({key: str(val) for (key, val) in self.contents.items()})
 
@@ -1440,6 +1447,10 @@ class UnitsTuple(UnitsTupleBase):
             name = self.name                     # so, don't call it.
         factor = self.f(*args, **kwargs)
         return UnitsTuple(factor, name, evaluated=True)
+
+    # representation
+    def __repr__(self):
+        return f'{type(self).__name__}(f={self.f}, name={repr(self.name)}, evaluated={self.evaluated})'
 
 ''' ----------------------------- Dimensionless Tuple ----------------------------- '''
 # in this section is a units tuple which should be used for dimensionless quantities.
