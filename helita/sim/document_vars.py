@@ -154,18 +154,32 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
         write = True
     if write:
         # define function (which will be returned)
-        def document_var(varname, vardoc, nfluid=nfluid, **kw__more_info_about_var):
-            '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].'''
+        def document_var(varname, vardoc, nfluid=nfluid, copy=False, **kw__more_info_about_var):
+            '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].
+            copy: bool, default False
+                False --> ignore this kwarg.
+                True --> instead of usual behavior, look up vardoc in vardict and copy the info to varname.
+                        Example:
+                            document_var('myvar', 'the documentation for myvar', nfluid=N, **kw_original)
+                            # now, these two options are equivalent:
+                            1) document_var('myvar_alias', 'the documentation for myvar', nfluid=N, **kw_original)
+                            2) document_var('myvar_alias', 'myvar', copy=True)
+            '''
             if (QUANT_VARS is not None) and (varname not in QUANT_VARS):
                 return
+            
             tqd = vardict[TYPE_QUANT]
-            var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__defaults, **kw__more_info_about_var}
+            if not copy: # case "basic usage" (copy=False)
+                var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__defaults, **kw__more_info_about_var}
+            else:        # case "aliasing" (copy=True)
+                var_info_dict = tqd[vardoc]   # obj(varname) == obj(args[1]). (but for "basic" case, args[1]==vardoc.)
             try:
                 vd = tqd[varname]   # vd = vardict[TYPE_QUANT][varname] (if it already exists)
             except KeyError:        # else, initialize tqd[varname]:
                 tqd[varname] = var_info_dict
             else:                   # if vd assignment was successful, set info.
                 vd.update(var_info_dict)
+
 
         # initialize documentation to NONEDOC for var in QUANT_VARS
         if QUANT_VARS is not None:
