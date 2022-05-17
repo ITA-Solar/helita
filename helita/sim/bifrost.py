@@ -655,111 +655,6 @@ class BifrostData():
         __tracebackhide__ = True  # hide this func from error traceback stack
         return self.get_var(var, *args, **kwargs)
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
-                    print_freq=None, printing_stats=None,
-                    *args__get_var, **kw__get_var):
-        """
-        Reads a given variable as a function of time.
-
-        Parameters
-        ----------
-        var - string
-            Name of the variable to read. Must be a valid Bifrost variable name,
-            see Bifrost.get_var().
-        snap - array of integers
-            Snapshot numbers to read.
-        iix -- integer or array of integers, optional
-            reads yz slices.
-        iiy -- integer or array of integers, optional
-            reads xz slices.
-        iiz -- integer or array of integers, optional
-            reads xy slices.
-        print_freq - number, default 2
-            print progress update every print_freq seconds.
-            Use print_freq < 0 to never print update.
-            Use print_freq ==0 to print all updates.
-        printing_stats - None, bool, or dict
-            whether to print stats of result (via self.print_stats).
-            None  --> use value of self.printing_stats.
-            False --> don't print stats. (This is the default value for self.printing_stats.)
-            True  --> do print stats.
-            dict  --> do print stats, passing this dictionary as kwargs.
-
-        additional *args and **kwargs are passed to get_var.
-        """
-        # set print_freq
-        if print_freq is None:
-            print_freq = getattr(self, 'print_freq', 2) # default 2
-        else:
-            setattr(self, 'print_freq', print_freq)
-
-        # set snap
-        if snap is None:
-            snap = kw__get_var.pop('snaps', None) # look for 'snaps' kwarg
-            if snap is None:
-                snap = self.snap
-        snap = np.array(snap, copy=False)
-        if len(snap.shape)==0:
-            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
-            self.variables={}
-
-        # set iix,iiy,iiz.
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
-        snapLen = np.size(self.snap)
-
-        # bookkeeping - maintain self.snap; handle self.recoverData; don't print stats in the middle; track timing.
-        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
-        if hasattr(self, 'recoverData'):
-            delattr(self, 'recoverData')            # smash any existing saved data
-        kw__get_var.update(printing_stats=False)   # never print_stats in the middle of get_varTime.
-        timestart = now = time.time()           # track timing, so we can make updates.
-        printed_update  = False
-        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
-            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
-
-        try:
-            firstit = True
-            for it in range(0, snapLen):
-                self.snapInd = it
-                # print update if it is time to print update
-                if (print_freq >= 0) and (time.time() - now > print_freq):
-                    _print_clearline()
-                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
-                                    var,     snap[it],         it,    snapLen        ), end='')
-                    now = time.time()
-                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
-                    printed_update=True
-                    
-                # actually get the values here:
-                if firstit:
-                    # get value at first snap
-                    val0 = self.get_var(var, snap=snap[it], *args__get_var, **kw__get_var)
-                    # figure out dimensions and initialize the output array.
-                    value = np.empty_like(val0, shape=[*np.shape(val0), snapLen])
-                    value[..., 0] = val0
-                    firstit = False
-                else:
-                    value[..., it] = self.get_var(var, snap=snap[it],
-                                                 *args__get_var, **kw__get_var)
-        except:   # here it is ok to except all errors, because we always raise.
-            if it > 0:
-                self.recoverData = value[..., :it]   # save data 
-                if self.verbose:
-                    print(('Crashed during get_varTime, but managed to get data from {} '
-                           'snaps before crashing. Data was saved and can be recovered '
-                           'via self.recoverData.'.format(it)))
-            raise
-        finally:
-            self.set_snap(remembersnaps)             # restore snaps
-            if printed_update:
-                _print_clearline()
-                print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
-        
-        self.print_stats(value, printing_stats=printing_stats)
-        return value
-
     def set_domain_iiaxis(self, iinum=None, iiaxis='x'):
         """
         Sets iix=iinum and xLength=len(iinum). (x=iiaxis)
@@ -1485,9 +1380,115 @@ class BifrostData():
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
-    ## TIME DERIVATIVES ##
+    ## VALUES OVER TIME, and TIME DERIVATIVES ##
+
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
+                    print_freq=None, printing_stats=None,
+                    *args__get_var, **kw__get_var):
+        """
+        Reads a given variable as a function of time.
+
+        Parameters
+        ----------
+        var - string
+            Name of the variable to read. Must be a valid Bifrost variable name,
+            see Bifrost.get_var().
+        snap - array of integers
+            Snapshot numbers to read.
+        iix -- integer or array of integers, optional
+            reads yz slices.
+        iiy -- integer or array of integers, optional
+            reads xz slices.
+        iiz -- integer or array of integers, optional
+            reads xy slices.
+        print_freq - number, default 2
+            print progress update every print_freq seconds.
+            Use print_freq < 0 to never print update.
+            Use print_freq ==0 to print all updates.
+        printing_stats - None, bool, or dict
+            whether to print stats of result (via self.print_stats).
+            None  --> use value of self.printing_stats.
+            False --> don't print stats. (This is the default value for self.printing_stats.)
+            True  --> do print stats.
+            dict  --> do print stats, passing this dictionary as kwargs.
+
+        additional *args and **kwargs are passed to get_var.
+        """
+        # set print_freq
+        if print_freq is None:
+            print_freq = getattr(self, 'print_freq', 2) # default 2
+        else:
+            setattr(self, 'print_freq', print_freq)
+
+        # set snap
+        if snap is None:
+            snap = kw__get_var.pop('snaps', None) # look for 'snaps' kwarg
+            if snap is None:
+                snap = self.snap
+        snap = np.array(snap, copy=False)
+        if len(snap.shape)==0:
+            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
+            self.variables={}
+
+        # set iix,iiy,iiz.
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
+        snapLen = np.size(self.snap)
+
+        # bookkeeping - maintain self.snap; handle self.recoverData; don't print stats in the middle; track timing.
+        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
+        if hasattr(self, 'recoverData'):
+            delattr(self, 'recoverData')            # smash any existing saved data
+        kw__get_var.update(printing_stats=False)   # never print_stats in the middle of get_varTime.
+        timestart = now = time.time()           # track timing, so we can make updates.
+        printed_update  = False
+        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
+            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
+
+        try:
+            firstit = True
+            for it in range(0, snapLen):
+                self.snapInd = it
+                # print update if it is time to print update
+                if (print_freq >= 0) and (time.time() - now > print_freq):
+                    _print_clearline()
+                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
+                                    var,     snap[it],         it,    snapLen        ), end='')
+                    now = time.time()
+                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                    printed_update=True
+                    
+                # actually get the values here:
+                if firstit:
+                    # get value at first snap
+                    val0 = self.get_var(var, snap=snap[it], *args__get_var, **kw__get_var)
+                    # figure out dimensions and initialize the output array.
+                    value = np.empty_like(val0, shape=[*np.shape(val0), snapLen])
+                    value[..., 0] = val0
+                    firstit = False
+                else:
+                    value[..., it] = self.get_var(var, snap=snap[it],
+                                                 *args__get_var, **kw__get_var)
+        except:   # here it is ok to except all errors, because we always raise.
+            if it > 0:
+                self.recoverData = value[..., :it]   # save data 
+                if self.verbose:
+                    print(('Crashed during get_varTime, but managed to get data from {} '
+                           'snaps before crashing. Data was saved and can be recovered '
+                           'via self.recoverData.'.format(it)))
+            raise
+        finally:
+            self.set_snap(remembersnaps)             # restore snaps
+            if printed_update:
+                _print_clearline()
+                print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
+        
+        self.print_stats(value, printing_stats=printing_stats)
+        return value
+
     @tools.maintain_attrs('snap')
-    def ddt(self, var, snap=None, *args__get_var, method='centered', **kw__get_var):
+    def ddt(self, var, snap=None, *args__get_var, method='centered', printing_stats=None, **kw__get_var):
         '''time derivative of var, at current snapshot.
         Units are determined by self.units_output (default: [simulation units]).
 
@@ -1509,15 +1510,18 @@ class BifrostData():
             snaps = [self.get_snap_prev(), self.get_snap_next()]
         else:
             raise ValueError(f'Unrecognized method in ddt: {repr(method)}')
+        kw__get_var.update(printing_stats=False)   # never print_stats in the middle of ddt.
         self.set_snap(snaps[0])
         value0 = self(var, *args__get_var, **kw__get_var)
         time0  = self.get_coord('t')[0]
         self.set_snap(snaps[1])
         value1 = self(var, *args__get_var, **kw__get_var)
         time1  = self.get_coord('t')[0]
-        return (value1 - value0) / (time1 - time0)
+        result = (value1 - value0) / (time1 - time0)
+        self.print_stats(result, printing_stats=printing_stats)   # print stats iff self.printing_stats.
+        return result
 
-    def get_dvarTime(self, var, method='numpy', kw__gradient=dict(), **kw__get_varTime):
+    def get_dvarTime(self, var, method='numpy', kw__gradient=dict(), printing_stats=None, **kw__get_varTime):
         '''time derivative of var, across time.
         Units are determined by self.units_output (default: [simulation units]).
 
@@ -1545,16 +1549,18 @@ class BifrostData():
         KNOWN_METHODS = ('numpy', 'simple', 'centered')
         method = method.lower()
         assert method in KNOWN_METHODS, f"Unrecognized method for get_dvarTime: {repr(method)}"
-        v  = self.get_varTime(var, **kw__get_varTime)
+        v  = self.get_varTime(var, printing_stats=False, **kw__get_varTime)
         tt = self.get_coord('t')
         tt = np.expand_dims(tt, axis=tuple(range(0, v.ndim - tt.ndim)))  # e.g. shape (1,1,1,len(self.snaps))
         method = method.lower()
         if method == 'numpy':
-            return np.gradient(v, **kw__gradient, axis=-1) / np.gradient(tt, axis=-1)
+            result = np.gradient(v, **kw__gradient, axis=-1) / np.gradient(tt, axis=-1)
         elif method == 'simple':
-            return (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+            result = (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
         else: # method == 'centered'
-            return (v[..., 2:] - v[..., :-2]) / (tt[..., 2:] - tt[..., :-2])
+            result = (v[..., 2:] - v[..., :-2]) / (tt[..., 2:] - tt[..., :-2])
+        self.print_stats(result, printing_stats=printing_stats)
+        return result
 
     def get_atime(self):
         '''get average time, corresponding to times of derivative from get_dvarTime(..., method='simple').'''
@@ -1562,7 +1568,7 @@ class BifrostData():
         return (tt[..., 1:] + tt[..., :-1]) / 2
 
     ## MISC. CONVENIENCE METHODS ##
-    def print_stats(self, value, *args, printing_stats=None, **kwargs):
+    def print_stats(self, value, *args, printing_stats=True, **kwargs):
         '''print stats of value, via tools.print_stats.
         printing_stats: None, bool, or dict.
             None  --> use value of self.printing_stats.
