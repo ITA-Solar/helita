@@ -674,42 +674,66 @@ def get_continuity_quant(obj, var, CONTINUITY_QUANT=None):
     raise NotImplementedError(f'{repr(var)} in get_momentum_quant')
 
 # default
-_MOMENTUM_QUANT = []
-_MQVECS = ['rij', 'rijsum', 'momflorentz','momohme', 'mombat', 'gradp',
-        'momrate', 'momdtime', 'umomdtime',
-        '_ueq_scr', 'ueq', 'ueqsimple']
-_MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
-_MOMENTUM_QUANT = ('MOMENTUM_QUANT', _MOMENTUM_QUANT)
+_MQUVECS = [  # momentum quantities that will have 'x', 'y', or 'z' after, and can have 'u' before.
+            'rijsum', 'rij',
+            'momflorentz', 'momfef', 'momfb',
+            'mompg',
+            'momdtime',
+            ]
+_MQVECS  = [  # momentum quantities that will have 'x', 'y', or 'z' after.
+            'momohme', 'mombat', 'gradp',
+            'momrate',
+            'ueq', 'ueqsimple', '_ueq_scr',
+            *_MQUVECS,
+            *('u'+v for v in _MQUVECS),
+            ]
+_MOMENTUM_QUANT = ('MOMENTUM_QUANT', [v + x for v in _MQVECS for x in AXES])
 # get value
 @document_vars.quant_tracking_simple(_MOMENTUM_QUANT[0])
 def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
   '''terms related to momentum equations of fluids.
-  The units for these quantities are [simu. momentum density units / simu. time units].
+  The units are:
+    - for "momentum density rate of change" quantities -- [simu. momentum density units / simu. time units].
+    - for "velocity rate of change" quantities -- [simu. velocity units / simu. time units].
   '''
   if MOMENTUM_QUANT is None:
     MOMENTUM_QUANT = _MOMENTUM_QUANT[1]
 
   if var == '':
     docvar = document_vars.vars_documenter(obj, _MOMENTUM_QUANT[0], MOMENTUM_QUANT, get_momentum_quant.__doc__)
+    # "helper" units
     units_dpdt = dict(uni_f=UNI.phz, uni_name=UNI_rho.name * UNI_speed.name / UNI_time.name)
+    units_dudt = dict(uni=UNI_speed / UNI_time)
+    # begin documenting
     for x in AXES:
-      docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
-                       '[simu. momentum density units / simu. time units]. ' +\
-                       'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2, **units_dpdt)
-      docvar('rijsum'+x, x+'-component of momentum density change of ifluid ' +\
-                           'due to collisions with all other fluids. = sum_j rij'+x, nfluid=1, **units_dpdt)
-      docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force. ' +\
-                           '[simu. momentum density units / simu. time units]. = ni qi (E + ui x B).', nfluid=1, **units_dpdt)
-      docvar('momohme'+x, x+'-component of momentum density change of ifluid due the ohmic term in the electric field. ' +\
-                           '[simu. momentum density units / simu. time units]. = ni qi E = ni qi nu_es (ui-epUx) .', nfluid=1, **units_dpdt)
-      docvar('mombat'+x, x+'-component of momentum density change of ifluid due to battery term. ' +\
-                           '[simu. momentum density units / simu. time units]. = ni qi grad(P_e) / (ne qe).', nfluid=1, **units_dpdt)
-      docvar('gradp'+x, x+'-component of grad(Pi), face-centered (interp. loc. aligns with momentum).', nfluid=1, uni=UNI.qc(0))
-      for momrate in ('momdtime', 'momrate'):
-        docvar(momrate+x, x+'-component of rate of change of momentum density. Use momdt to avoid ambiguity with "rat" quant.' +\
-                            '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1, **units_dpdt)
-      docvar('umomdtime'+x, x+'-component of rate of change of velocity of ifluid. ' +\
-                          '= (-gradp + momflorentz + rijsum)_'+x+' / rho_i', nfluid=1, uni=UNI_speed / UNI_time)
+      # "helper" strings
+      momratex_i = f'{x}-component of momentum density rate of change of ifluid'
+      velratex_i = f'{x}-component of velocity rate of change of ifluid'
+      # documentation of variables
+      ## Collisions ##
+      docvar(f'rij{x}',    f'{momratex_i} due to collisions with jfluid. = mi ni nu_ij * (u{x}_j - u{x}_i)', nfluid=2, **units_dpdt)
+      docvar(f'urij{x}',   f'{velratex_i} due to collisions with jfluid. = nu_ij * (u{x}_j - u{x}_i)',       nfluid=2, **units_dudt)
+      docvar(f'rijsum{x}', f'{momratex_i} due to collisions with all other fluids. = sum_j rij{x}',  nfluid=1, **units_dpdt)
+      docvar(f'urijsum{x}',f'{velratex_i} due to collisions with all other fluids. = sum_j urij{x}', nfluid=1, **units_dudt)
+      ## Lorentz force ##
+      docvar(f'momfef{x}',  f'{momratex_i} due to electric field. = ni qi E{x}',   nfluid=1, **units_dpdt)
+      docvar(f'umomfef{x}', f'{velratex_i} due to electric field. = (qi/mi) E{x}', nfluid=1, **units_dudt)
+      docvar(f'momfb{x}',   f'{momratex_i} due to magnetic field. = ni qi (ui x B)_{x}',   nfluid=1, **units_dpdt)
+      docvar(f'umomfb{x}',  f'{velratex_i} due to magnetic field. = (qi/mi) (ui x B)_{x}', nfluid=1, **units_dudt)
+      docvar(f'momflorentz{x}',  f'{momratex_i} due to Lorentz force. = ni qi (E + ui x B)_{x}.',   nfluid=1, **units_dpdt)
+      docvar(f'umomflorentz{x}', f'{velratex_i} due to Lorentz force. = (qi/mi) (E + ui x B)_{x}.', nfluid=1, **units_dudt)
+      ### electric field sub-terms ###
+      docvar(f'momohme{x}',  f'{momratex_i} due the ohmic term in the electric field. = ni qi nu_es (ui-epUx) .',   nfluid=1, **units_dpdt)
+      docvar(f'mombat{x}',  f'{momratex_i} due to battery term. = ni qi grad(P_e) / (ne qe).',   nfluid=1, **units_dpdt)
+      ## Pressure ##
+      docvar(f'gradp{x}', f'{x}-component of grad(Pi), face-centered (mesh location aligns with momentum).', nfluid=1, uni=UNI.qc(0))
+      docvar(f'mompg{x}',  f'{momratex_i} due to pressure. = -grad(P_i) dot {x}',           nfluid=1, **units_dpdt)
+      docvar(f'umompg{x}', f'{velratex_i} due to pressure. = -grad(P_i) dot {x} / (ni mi)', nfluid=1, **units_dudt)
+      ## TOTAL d/dt ##
+      docvar(f'momdtime{x}',  f'{momratex_i}, total. = (-gradp + momflorentz + rijsum)_{x}',           nfluid=1, **units_dpdt)
+      docvar(f'umomdtime{x}', f'{velratex_i}, total. = (-gradp + momflorentz + rijsum)_{x} / (mi ni)', nfluid=1, **units_dudt)
+      docvar(f'momrate{x}', f'momdtime{x}', copy=True)   # alias momratex <--> momdtimex, for historical reasons. (prefer: momdtime)
+      ## "equilibrium" velocities ##
       docvar('ueq'+x, x+'-component of equilibrium velocity of ifluid. Ignores derivatives in momentum equation. ' +\
                        '= '+x+'-component of [qs (_ueq_scr x B) + (ms) (sum_{j!=s} nu_sj) (_ueq_scr)] /' +\
                        ' [(qs^2/ms) B^2 + (ms) (sum_{j!=s} nu_sj)^2]. [simu velocity units].', nfluid=1, uni=UNI_speed)
@@ -732,43 +756,65 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
   else:
     base = var
 
-  if base == 'rij':
+  umom  = (base[0] == 'u')  # whether we are doign 'umom' version of quant.
+  ubase = (base[1:] if umom else base)   # e.g., 'rijx' given base='urijx' or base='rijx'.
+
+  ## COLLISIONS ##
+  if ubase == 'rij':
     if obj.i_j_same_fluid():      # when ifluid==jfluid, u_j = u_i, so rij = 0.
       return obj.zero_at_mesh_face(x)  # save time by returning 0 without reading any data.
     # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
     # (Note: this does NOT equal to nu_ij * (rj u_j - ri u_i))
     ## Scalars are at (0,0,0) so we must shift by xdn to align with face-centered u at (-0.5,0,0)
     nu_ij = obj.get_var('nu_ij' + x+'dn')
-    ri  = obj.get_var('ri' + x+'dn')
     uix = obj.get_var('ui'+x)
-    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
-    return ri * nu_ij * (ujx - uix)
+    with obj.MaintainFluids():
+      ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
+    if umom:
+      return nu_ij * (ujx - uix)
+    else:
+      ri  = obj.get_var('ri' + x+'dn')
+      return ri * nu_ij * (ujx - uix)
 
-  elif base == 'rijsum':
-    result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
-    for fluid in obj.fluids:
-      result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
-    return result
+  elif ubase == 'rijsum':
+    u = 'u' if umom else ''
+    return sum(obj(f'{u}rij{x}', jfluid=jSL) for jSL in obj.fluid_SLs(with_electrons=True))
 
-  elif base == 'rejsum':
-    result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
-    return result
-
-  elif base == 'momflorentz':
-    # momflorentz = ni qi (E + ui x B)
+  ## LORENTZ FORCE ##
+  elif ubase in ('momfef', 'momfb', 'momflorentz'):
+    # momflorentz  = (qi*ni) (E + ui x B)
+    # umomflorentz = (qi/mi) (E + ui x B)
+    # all of these quants are proportional to qi; get that first (if 0, return 0 to save time)
     qi = obj.get_charge(obj.ifluid, units='simu')
     if qi == 0:
       return obj.zero_at_mesh_face(x)    # no lorentz force for neutrals - save time by just returning 0 here :)
-    # make sure we get the interpolation correct:
-    ## B and ui are face-centered vectors, and we want a face-centered result to align with p.
-    ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
-    ## Meanwhile, E is edge-centered, so we must shift all three coords.
-    ## And n is fully centered, so we shift by xdn.
-    ni = obj.get_var('nr'+x+'dn')
-    Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
-    uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
-    return ni * qi * (Ex + uxB__x)
+    # factor in front. (qi*ni) for 'mom'; (qi/mi) for 'umom'
+    if umom:
+      mi = obj.get_mass(obj.ifluid, units='simu')
+      front = qi / mi
+    else:
+      ni = obj('nr'+x+'dn')    # n, aligned with velocity
+      front = qi * ni
+    ## specific quantities (E, u x B, or E + u x B) ##
+    if ubase in ('momfef', 'momflorentz'):
+      # E interpolation notes:
+      ## Ex is at (0, -0.5, -0.5); we shift to align with ux at (-0.5, 0, 0)
+      Ex = obj('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)   # caching improves speed if calculation is repeated.
+      if ubase == 'momfef':
+        return front * Ex           # (qi ni) E  or  (qi/mi) E
+    if ubase in ('momfb', 'momflorentz'):
+      # B, ui interpolation notes:
+      ## B and ui are face-centered vectors, and we want a face-centered result to align with u.
+      ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
+      uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
+      if ubase == 'momfb':
+        return front * uxB__x       # (qi ni) u x B  or  (qi/mi) u x B
+    if ubase == 'momflorentz':
+      return front * (Ex + uxB__x)  # (qi ni) (E + u x B)  or  (qi/mi) (E + u x B)
+    else:
+      raise NotImplementedError(f"all ubase cases should have been handled, but got ubase={repr(ubase)}")
 
+  ### ELECTRIC FIELD SUB-TERMS ###
   elif base == 'momohme':
     # momflorentz = ni qi (E + ui x B)
     qi = obj.get_charge(obj.ifluid, units='simu')
@@ -794,23 +840,30 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
       gradPe_x = obj('gradp'+x)  # gradp handles the interpolation already.
     return (niqi / neqe) * gradPe_x
 
+  ## PRESSURE ##
   elif base == 'gradp':
     # px is at (-0.5, 0, 0); pressure is at (0, 0, 0), so we do dpdxdn
     return obj.get_var('dpd'+x+'dn')
 
-  elif base in ['momdtime', 'momrate']:
+  elif ubase == 'mompg':
+    gradpx = obj('dpd'+x+'dn')
+    mompgx = - gradpx
+    if umom:
+      ri = obj('ri'+x+'dn')   # rho_i, shifted to align with u
+      return mompgx / ri
+    else:
+      return mompgx
+
+  ## TOTAL ##
+  elif (ubase=='momdtime') or (base=='momrate'):
     if obj.get_param('do_recion', default=False):
       if obj.verbose:
         warnings.warn('momentum contribution from ionization & recombination have not yet been added.')
-    gradpx    = obj.get_var('gradp'+x)
-    florentzx = obj.get_var('momflorentz'+x)
-    rijsumx   = obj.get_var('rijsum'+x)
-    return florentzx - gradpx + rijsumx
-
-  elif base == 'umomdtime':
-    momrate = obj('momrate'+x)
-    ri      = obj('ri'+x+'dn')   # shift down to align with momentum.
-    return momrate / ri
+    u = 'u' if umom else ''
+    mompgx    = obj(f'{u}mompg{x}')
+    florentzx = obj(f'{u}momflorentz{x}')
+    rijsumx   = obj(f'{u}rijsum{x}')
+    return mompgx + florentzx + rijsumx
 
   # --- "equilibrium velocity" terms --- #
   elif base == '_ueq_scr':
