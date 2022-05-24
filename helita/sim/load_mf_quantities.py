@@ -1234,7 +1234,7 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
 # default
 _COLFRE_QUANT = ('COLFRE_QUANT',
                  ['nu_ij','nu_sj',                                 # basics: frequencies
-                  'nu_si','nu_sn','nu_ei','nu_en',                 # sum of frequencies
+                  'nu_si','nu_sn','nu_ei','nu_en','nu_ssum',       # sum of frequencies
                   'nu_ij_el', 'nu_ij_mx', 'nu_ij_cl',              # colfreq by type
                   'nu_ij_res', 'nu_se_spitzcoul', 'nu_ij_capcoul', # alternative colfreq formulae
                   'nu_ij_to_ji', 'nu_sj_to_js',                    # conversion factor nu_ij --> nu_ji
@@ -1265,6 +1265,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
     docvar('nu_en', sstr.format('electrons', 'neutral fluids'), nfluid=0)
+    docvar('nu_ssum', sstr.format('ifluid', 'all other fluids'), nfluid=1)
     docvar('nu_ij_el', 'Elastic ' + mtra, nfluid=2)
     docvar('nu_ij_mx', 'Maxwell ' + mtra + 'NOTE: assumes maxwell molecules; result independent of temperatures. '+\
                         'presently, only properly implemented when ifluid=H or jfluid=H.', nfluid=2)
@@ -1406,6 +1407,12 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
   elif var == 'nu_en':
     return obj.get_var('nu_sn', mf_ispecies=-1)
+
+  # sum of collision frequencies: sum_{s != ifluid} (nu_{ifluid, s})
+  elif var == 'nu_ssum':
+    return sum(obj('nu_ij', jSL=SL)
+               for SL in obj.fluid_SLs(with_electrons=True)
+               if not obj.fluids_equal(obj.ifluid, SL))
 
   # collision frequency - resonant charge exchange for H, H+
   elif var == 'nu_ij_res':
@@ -1704,9 +1711,10 @@ def get_cfl_quant(obj, quant, CFL_QUANT=None):
 
 # default
 _PLASMA_QUANT = ('PLASMA_QUANT',
-                 ['beta', 'beta_ions', 'va', 'va_ions', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+                 ['beta', 'beta_ions', 'va', 'va_ions', 'vai', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                   'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                   'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei',
+                  'meanfreepath', 
                  ]
                 )
 # get value
@@ -1744,6 +1752,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     docvar('ldebye', "debye length of plasma [simu. length units]. " +\
                      "sqrt(kB eps0 e^-2 / (ne/Te + sum_j(Zj^2 * nj / Tj)) ); Zj = qj/e"+\
                      "1/sum_j( (1/ldebye_j) for j in fluids and electrons)", nfluid=0, uni=UNI_length)
+    docvar('meanfreepath', "mean free path of particles of ifluid. = |ui| / sum_j(nu_ij).", nfluid=1, uni=UNI_length)
     return None
 
   if quant not in PLASMA_QUANT:
@@ -1860,6 +1869,11 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     for fluid in obj.fluids.ions():
       ldeb_inv_sum += 1/obj.get_var('ldebyei', ifluid=fluid.SL)
     return 1/ldeb_inv_sum
+
+  elif quant == 'meanfreepath':
+    ui = obj('ui_mod')
+    nu = obj('nu_ssum')
+    return ui / nu
 
   else:
     raise NotImplementedError(f'{repr(quant)} in get_mf_plasmaparam')
