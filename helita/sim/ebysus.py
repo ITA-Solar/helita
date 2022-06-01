@@ -41,6 +41,7 @@ from .bifrost import (
     # for historical reasons / convenience, also import directly:
     get_snapstuff, snapstuff, get_snapname, snapname,
     available_snaps, snaps, get_snaps, list_snaps, snaps_info,
+    _N_to_snapstr,
     EnterDir, EnterDirectory,
 )
 from .load_mf_quantities         import load_mf_quantities
@@ -1286,6 +1287,26 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         print_if_verbose('_zc_decompress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
         return f'{SNAPNAME}.io'
 
+    ## SNAPSHOT FILES - SELECTING / MOVING ##
+    def get_snap_files(self, snap=None, include_aux=True):
+        '''returns the minimal list of filenames for all files specific to this snap.
+        Directories containing solely files for this snap will be reported as the directory, not all contents.
+        (e.g. for zarray "files", which are directories, the zarray directory will be reported, not all its contents.)
+
+        include_aux: whether to include aux files in the result.
+        '''
+        snap = snap if snap is not None else self.get_snap_here()
+        with tools.EnterDirectory(self.fdir):
+            return get_snap_files(snap, dd=self, include_aux=include_aux)
+
+    def get_snaps_files(self, snaps=None, include_aux=True):
+        '''returns a dict of {snap number: minimal list of filenames for all files specific to this snap},
+        for the snaps provided (or self.snaps if snaps is not provided).
+        '''
+        snaps = snaps if snaps is not None else self.snaps
+        result = {snap: self.get_snap_files(snap=snap, include_aux=include_aux) for snap in snaps}
+        return result
+
     ## PLOTTING ##
     def plot(self, var, axes=None, nfluid=None):
         '''make a 1D or 2D plot of var,
@@ -1781,6 +1802,98 @@ def read_mftab_ascii(filename):
     return params
 
 read_mf_param_file = read_mftab_ascii   # alias
+
+####################
+#  LOCATING SNAPS  #
+####################
+
+class SnapfileNotFoundError(FileNotFoundError):
+    '''custom error class for reporting snap not found; subclass of FileNotFoundError.'''
+    pass
+
+def get_snap_files(snap, snapname=None, read_mode=None, dd=None, include_aux=True):
+    '''returns the minimal list of filenames for all files specific to this snap (a number).
+    if no data for snap is found, raises SnapfileNotFoundError (subclass of FileNotFoundError).
+    Directories containing solely files for this snap will be reported as the directory, not all contents.
+    (e.g. for zarray "files", which are directories, the zarray directory will be reported, not all its contents.)
+    
+    read_mode  : string (e.g. 'io' or 'zc') or None; see EbysusData.read_mode. Defaults to 'io'.
+    snapname   : snapshot name, or None.
+    dd         : EbysusData object or None. If provided, used to guess snapname & read_mode as necessary.
+    include_aux: whether to include aux files in the result.
+
+    This method expects to be called with the working directory set to the "main folder" for the run,
+        i.e. the directory containing the .idl files with parameters and the .io folder with snapshot data.
+    '''
+    result = []
+    # snapname, read_mode. set default values if not provided; use dd to help if dd is provided.
+    if snapname is None:
+        snapname = get_snapname(dd=dd)
+    if read_mode is None:
+        read_mode = 'io' if dd is None else dd.read_mode
+    # snapdir (e.g. 'snapname.io')
+    snapdir = f'{snapname}.{read_mode}'
+    if not os.path.isdir(snapdir):
+        raise SnapfileNotFoundError(repr(snapdir))
+    # snapidl (e.g. 'snapname_072.idl')
+    Nstr    = _N_to_snapstr(snap)   
+    snapidl = f'{snapname}{Nstr}.idl'
+    if not os.path.isfile(snapidl):
+        raise SnapfileNotFoundError(repr(snapidl))
+    else:
+        result.append(snapidl)
+    # snapshot data - checking
+    def _is_snapN_data(name):
+        return _is_Nstr_snapfile(Nstr, name, '.snap') or (include_aux and _is_Nstr_snapfile(Nstr, name, '.aux'))
+    # looping through files & directories
+    for dirpath, dirnames, filenames in os.walk(snapdir, topdown=True):   # topdown=True required for "skip popped dirnames" behavior.
+        # check if files are snapshot data files.
+        for fname in filenames:
+            if _is_snapN_data(fname):
+                result.append(os.path.join(dirpath, fname))
+        # check if directories are snapshot data files (e.g. this will be the case for "zarray" storage system, read_mode='zc').
+        i = 0
+        while i < len(dirnames):
+            dname = dirnames[i]   
+            if dname.endswith(f'.snap') or dname.endswith(f'.aux'):
+                del dirnames[i]  # we don't need to os.walk any further down from a directory ending with '.snap' or '.aux'
+                if _is_snapN_data(dname):
+                    result.append(os.path.join(dirpath, dname))
+            else:
+                i += 1
+    return result
+
+def _is_Nstr_snapfile(Nstr, filename, ext='.snap'):
+    '''returns whether filename is a '.snap' file associated with snap indicated by Nstr.
+    This is only difficult when Nstr==''; else we just check if filename looks like '{stuff}{Nstr}.snap'.
+    For '.aux' checking, use ext='.aux' instead of the default '.snap'.
+    '''
+    # pop extension
+    if filename.endswith(ext):
+        basename = filename[ : -len(ext)]
+    else:
+        return False   # << proper extension is required, otherwise not a snap file.
+    # handle "easy" case (Nstr != '')
+    if Nstr != '':
+        return basename.endswith(f'{Nstr}')
+    # else: Nstr == '', so we need to do a lot more work.
+    ## in particular, we recognize snap 0 only in these cases:
+    ##   case A) 'stuff{C}.ext' with C non-numeric
+    ##   case B) 'stuff{C}_{SS}_{LL}.ext' with C non-numeric, SS numeric, LL numeric
+    ## all other cases are considered to be a snap other than 0, so we ignore them.
+    if not basename[-1].isdigit():
+        return True   # << we are in case A. "no-fluid" case.
+    # consider case B:
+    stuffC_SS, underscore, LL = basename.rpartition('_')
+    if not (underscore=='_' and LL.isdigit()):
+        return False
+    stuffC, underscore, SS = stuffC_SS.rpartition('_')
+    if not (underscore=='_' and SS.isdigit()):
+        return False
+    if stuffC[-1].isdigit():
+        return False
+    return True   # << we are in case B.
+
 
 #############################
 #  WRITING PARAMETER FILES  #
