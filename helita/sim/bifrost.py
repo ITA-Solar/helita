@@ -228,7 +228,6 @@ class BifrostData():
     def printing_stats(self, value):
         self._printing_stats = value
 
-
     stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
 
     @property
@@ -255,6 +254,12 @@ class BifrostData():
         except TypeError:
             raise TypeError(f'self.snap (={self.snap}) is not a list!') from None
         return snaps
+
+    @property
+    def snapname(self):
+        '''alias for self.root_name. Set by 'snapname' in mhd.in / .idl files.'''
+        return self.root_name
+
 
     kx = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.xLength, self.dx)),
                   doc='kx coordinates [simulation units] (fftshifted such that 0 is in the middle).')
@@ -350,19 +355,13 @@ class BifrostData():
                         raise ValueError(("(EEE) set_snap: snapshot not defined "
                                       "and no .idl files found"))
 
-        def snap_str_from_snap(snap):
-            if snap == 0:
-                return ''
-            else:
-                return '_%03i' % snap
-
         self._snap = snap
         if np.shape(self.snap) != ():
             self.snap_str = []
             for num in snap:
-                self.snap_str.append(snap_str_from_snap(num))
+                self.snap_str.append(_N_to_snapstr(num))
         else:
-            self.snap_str = snap_str_from_snap(snap)
+            self.snap_str = _N_to_snapstr(snap)
         self.snapInd = 0
 
         self._read_params(firstime=firstime)
@@ -1947,10 +1946,12 @@ def get_snapstuff(dd=None):
 snapstuff = get_snapstuff   # alias
 
 def get_snapname(dd=None):
-    '''gets snapname by reading it from mhd.in'''
-    with EnterDirectory(_get_dd_fdir(dd)):
+    '''gets snapname by reading it from local mhd.in, or dd.snapname if dd is provided.'''
+    if dd is None:
         mhdin_ascii = read_idl_ascii('mhd.in')
         return mhdin_ascii['snapname']
+    else:
+        return dd.snapname
 
 snapname = get_snapname   # alias
 
@@ -1962,7 +1963,7 @@ def get_snaps(dd=None, snapname=None):
         snapname parameter from mhd.in. If None, get snapname.
     if dd is not None, look in dd.fdir.
     '''
-    with EnterDirectory(_get_dd_fdir(dd)):
+    with tools.EnterDirectory(_get_dd_fdir(dd)):
         snapname = snapname if snapname is not None else get_snapname()
         snaps = [_snap_to_N(f, snapname) for f in os.listdir()]
         snaps = [s for s in snaps if s is not None]
@@ -2013,23 +2014,6 @@ def get_snap_next(dd=None, snapname=None, snap=None):
     '''
     return get_snap_shifted(dd=dd, shift=+1, snapname=snapname, snap=snap)
 
-
-class EnterDir:
-    '''context manager for remembering directory.
-    upon enter, cd to directory. upon exit, restore original working directory.
-    '''
-    def __init__(self, directory=os.curdir):
-        self.cwd       = os.path.abspath(os.getcwd())
-        self.directory = directory
-
-    def __enter__ (self):
-        os.chdir(self.directory)
-
-    def __exit__ (self, exc_type, exc_value, traceback):
-        os.chdir(self.cwd)
-
-EnterDirectory = EnterDir  #alias
-
 def _get_dd_fdir(dd=None):
     '''return dd.fdir if dd is not None, else os.curdir.'''
     if dd is not None:
@@ -2059,6 +2043,13 @@ def _snap_to_N(name, base, sep='_', ext='.idl'):
             return None
         else:
             return snapN
+
+def _N_to_snapstr(N):
+    '''return string representing snap number N.'''
+    if N == 0:
+        return ''
+    else:
+        return '_%03i' % N
 
 # include methods (and some aliases) for getting snaps in BifrostData object
 BifrostData.get_snapstuff   = get_snapstuff

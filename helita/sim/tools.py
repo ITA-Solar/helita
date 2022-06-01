@@ -370,6 +370,48 @@ def with_attrs(**attrs_and_values):
     return attr_setter_then_restorer
 
 
+class EnterDir:
+    '''context manager for remembering directory.
+    upon enter, cd to directory (default os.curdir, i.e. no change in directory)
+    upon exit, original working directory will be restored.
+
+    For function decorator, see QOL.maintain_cwd.
+    '''
+    def __init__(self, directory=os.curdir):
+        self.cwd       = os.path.abspath(os.getcwd())
+        self.directory = directory
+
+    def __enter__ (self):
+        os.chdir(self.directory)
+
+    def __exit__ (self, exc_type, exc_value, traceback):
+        os.chdir(self.cwd)
+
+RememberDir    = EnterDir  #alias
+EnterDirectory = EnterDir  #alias
+
+def with_dir(directory):
+    '''returns a function decorator which:
+    - changes current directory to <directory>.
+    - runs function
+    - changes back to original directory.
+    '''
+    def decorator(f):
+        @functools.wraps(f)
+        def f_but_enter_dir(*args, **kwargs):
+            with EnterDir(directory):
+                return f(*args, **kwargs)
+        return f_but_enter_dir
+    return decorator
+
+withdir = with_dir #alias
+
+# define a new function decorator, maintain_cwd, which maintains current directory:
+maintain_cwd = with_dir(os.curdir)
+
+maintain_directory = maintain_cwd  # alias
+maintain_dir       = maintain_cwd  # alias
+
 ''' --------------------------- info about arrays --------------------------- '''
 
 def stats(arr, advanced=True, finite_only=True):
