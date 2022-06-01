@@ -1714,7 +1714,7 @@ _PLASMA_QUANT = ('PLASMA_QUANT',
                  ['beta', 'beta_ions', 'va', 'va_ions', 'vai', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                   'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                   'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei',
-                  'meanfreepath', 
+                  'meanfreepath', 'gyroradius',
                  ]
                 )
 # get value
@@ -1753,6 +1753,7 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
                      "sqrt(kB eps0 e^-2 / (ne/Te + sum_j(Zj^2 * nj / Tj)) ); Zj = qj/e"+\
                      "1/sum_j( (1/ldebye_j) for j in fluids and electrons)", nfluid=0, uni=UNI_length)
     docvar('meanfreepath', "mean free path of particles of ifluid. = |ui| / sum_j(nu_ij).", nfluid=1, uni=UNI_length)
+    docvar('gyroradius', "gyroradius for ifluid. I.e. |ui| / abs(qi * |B| / mi)", nfluid=1, uni=UNI_length)
     return None
 
   if quant not in PLASMA_QUANT:
@@ -1874,6 +1875,11 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     ui = obj('ui_mod')
     nu = obj('nu_ssum')
     return ui / nu
+
+  elif quant == 'gyroradius':
+    ui = obj('ui_mod')
+    omega = obj('gyrof')
+    return ui / omega
 
   else:
     raise NotImplementedError(f'{repr(quant)} in get_mf_plasmaparam')
