@@ -557,6 +557,15 @@ class ImportFailed():
     raise ImportFailedError(self.modulename + str_add)
 
 
+def boring_decorator(*args, **kw):
+    '''returns the identity wrapper (returns the function it wraps, without any changes).
+    This is useful when importing function wrappers; use boring_decorator if ImportError occurs.
+    '''
+    def boring_wrapper(f):
+        return f
+    return boring_wrapper
+
+
 ''' --------------------------- vector rotations --------------------------- '''
 
 def rotation_align(vecs_source, vecs_destination):

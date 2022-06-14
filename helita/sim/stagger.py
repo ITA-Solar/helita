@@ -68,12 +68,7 @@ try:
     from numba import jit, njit, prange
 except ImportError:
     numba = prange = tools.ImportFailed('numba', "This module is required to use stagger_kind='numba'.")
-    # we still need to set jit and njit, since they are used in top-level of this module as decorators.
-    def boring_decorator_factory(*args, **kw):
-        def boring_decorator(f):
-            return f
-        return boring_decorator
-    jit = njit = boring_decorator_factory
+    jit   = njit   = tools.boring_decorator
 
 
 """ ------------------------ defaults ------------------------ """

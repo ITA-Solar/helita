@@ -10,7 +10,11 @@ from .load_arithmetic_quantities import do_stagger
 # import external public modules
 import numpy as np
 
-from numba import jit, njit, prange
+try:
+    from numba import jit, njit, prange
+except ImportError:
+    numba = prange = tools.ImportFailed('numba', "This module is required to use stagger_kind='numba'.")
+    jit   = njit   = tools.boring_decorator
 
 ## import the potentially-relevant things from the internal module "units"
 from .units import (
