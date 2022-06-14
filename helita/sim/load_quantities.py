@@ -6,6 +6,7 @@ import warnings
 # import internal modules
 from . import document_vars
 from .load_arithmetic_quantities import do_stagger
+from . import tools
 
 # import external public modules
 import numpy as np
