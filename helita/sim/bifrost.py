@@ -93,7 +93,7 @@ class BifrostData(object):
         self.heion = False
         self.set_snap(snap)
         try:
-            tmp = find_first_match("%s*%d*.idl" % (file_root, snap) fdir)
+            tmp = find_first_match("%s*%d*.idl" % (file_root, snap), fdir)
         except IndexError:
             try:
                 tmp = find_first_match("%s*idl" % file_root, fdir)
