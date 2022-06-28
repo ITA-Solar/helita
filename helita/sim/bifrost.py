@@ -2049,6 +2049,7 @@ def _N_to_snapstr(N):
     if N == 0:
         return ''
     else:
+        assert tools.is_integer(N), f"snap values must be integers! (snap={N})"
         return '_%03i' % N
 
 # include methods (and some aliases) for getting snaps in BifrostData object
