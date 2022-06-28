@@ -282,7 +282,7 @@ def apply(x, fstr, *args, **kwargs):
         return x
 
 def is_integer(x):
-    return isinstance(x, int) or apply(x, 'is_integer', default=False)
+    return isinstance(x, (int, np.integer)) or apply(x, 'is_integer', default=False)
 
 ''' --------------------------- coordinate transformations --------------------------- '''
 
