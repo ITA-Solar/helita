@@ -398,7 +398,7 @@ class AtomFile:
                     result['data'] = tmp.reshape((rows, tmp.shape[0] // rows))
                     counter += 1
                 else:  # For RH, values written in matrix form
-                    tmp = data[counter + 1: counter + 1 + rows]
+                    tmp = collision_data[counter + 1: counter + 1 + rows]
                     result['data'] = np.array([l.split() for l in tmp]).astype('d')
                     counter += rows
             elif key == "GENCOL":
