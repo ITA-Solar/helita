@@ -1008,7 +1008,7 @@ class BifrostData():
           if self.sel_units == 'cgs':
             cte=1.0
           else: 
-            cte=1.0e8
+            cte=self.uni.u_l #not sure if this works, u_l seems to be 1.e8
           self.x = self.x*cte
           self.dx = self.dx*cte
           self.y = self.y*cte
@@ -1023,7 +1023,7 @@ class BifrostData():
           if self.sel_units == 'cgs':
             cte=1.0
           else: 
-            cte=1.0e8
+            cte=self.uni.u_l
           self.x =  self.x/cte
           self.dx =  self.dx/cte
           self.y =  self.y/cte
