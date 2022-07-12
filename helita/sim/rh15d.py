@@ -221,6 +221,7 @@ class AtomFile:
 
     def read_atom(self, filename, format='RH'):
         self.format = format.upper()
+        self.filename = filename
         data = []
         counter = 0
         with open(filename, 'r') as atom_file:
@@ -266,6 +267,7 @@ class AtomFile:
         # read lines
         tmp = StringIO('\n'.join(data[counter:counter + nline]))
         if self.format == "RH":
+            ncol = 15
             data_type = [('level_start', 'i4'), ('level_end', 'i4'),
                          ('f_value', 'f8'), ('type', 'U10'), ('nlambda', 'i'),
                          ('symmetric', 'U10'), ('qcore', 'f8'), ('qwing', 'f8'),
@@ -273,13 +275,14 @@ class AtomFile:
                          ('radiative_broadening', 'f8'),
                          ('stark_broadening', 'f8')]
         elif self.format == "MULTI":
+            ncol = 11
             data_type = [('level_start', 'i4'), ('level_end', 'i4'),
                          ('f_value', 'f8'), ('nlambda', 'i'),
                          ('qwing', 'f8'), ('qcore', 'f8'), ('iw', 'i4'),
                          ('radiative_broadening', 'f8'),
                          ('vdWaals', 'f8', (1,)), ('stark_broadening', 'f8'),
                          ('type', 'U10')]
-        self.lines = np.genfromtxt(tmp, dtype=data_type)
+        self.lines = np.loadtxt(tmp, dtype=data_type, ndmin=1, usecols=range(ncol))
         counter += nline
         # read continua
         self.continua = []
@@ -323,14 +326,14 @@ class AtomFile:
         self.collision_temperatures = []
         self.collision_tables = []
         # Keys for rates given as function of temperature
-        COLLISION_KEYS_TEMP = ['OHMEGA', 'OMEGA', 'CE', 'CI', 'CP', 'CH',
+        self.COLLISION_KEYS_TEMP = ['OHMEGA', 'OMEGA', 'CE', 'CI', 'CP', 'CH',
                                'CH0', 'CH+', 'CR', 'TEMP']
         # Keys for rates written as single line
-        COLLISION_KEYS_LINE = ['AR85-CEA', 'AR85-CHP', 'AR85-CHH', 'SHULL82',
+        self.COLLISION_KEYS_LINE = ['AR85-CEA', 'AR85-CHP', 'AR85-CHH', 'SHULL82',
                                'BURGESS', 'SUMMERS']
-        COLLISION_KEYS_OTHER = ['AR85-CDI', 'BADNELL']
-        ALL_KEYS = (COLLISION_KEYS_TEMP + COLLISION_KEYS_LINE +
-                        COLLISION_KEYS_OTHER)
+        self.COLLISION_KEYS_OTHER = ['AR85-CDI', 'BADNELL']
+        self.ALL_KEYS = (self.COLLISION_KEYS_TEMP + self.COLLISION_KEYS_LINE +
+                        self.COLLISION_KEYS_OTHER)
         SINGLE_KEYS = ['GENCOL', 'END']
 
         if self.format == 'MULTI':   # merge lines in free FORMAT
@@ -338,12 +341,12 @@ class AtomFile:
             while counter < len(data):
                 line = data[counter]
                 key = data[counter].split()[0].upper().strip()
-                if key in ALL_KEYS:
+                if key in self.ALL_KEYS:
                     tmp = line
                     while True:
                         counter += 1
                         key = data[counter].split()[0].upper().strip()
-                        if key in ALL_KEYS + SINGLE_KEYS:
+                        if key in self.ALL_KEYS + SINGLE_KEYS:
                             collision_data.append(tmp)
                             break
                         else:
@@ -356,7 +359,7 @@ class AtomFile:
 
         unread_lines = False
         counter = 0
-        while counter < len(collision_data) - 1:
+        while counter < len(collision_data):
             line = collision_data[counter].split()
             key = line[0].upper()
             result = {}
@@ -366,7 +369,7 @@ class AtomFile:
                 temp_tmp = np.array(line[2:]).astype('f')
                 self.collision_temperatures.append(temp_tmp)
             # Collision rates given as function of temperature
-            elif key in COLLISION_KEYS_TEMP:
+            elif key in self.COLLISION_KEYS_TEMP:
                 assert self.collision_temperatures, ('No temperature block'
                          ' found before %s table' % (key))
                 ntemp = len(self.collision_temperatures[-1])
@@ -376,13 +379,13 @@ class AtomFile:
                           'data': np.array(line[3:3 + ntemp]).astype('d')}  # this will not work in MULTI
                 assert len(result['data']) == len(temp_tmp), ('Inconsistent '
                     'number of points between temperature and collision table')
-            elif key in COLLISION_KEYS_LINE:
+            elif key in self.COLLISION_KEYS_LINE:
                 if key == "SUMMERS":
                     result = {'type': key, 'data': float(line[1])}
                 else:
                     result = {'type': key, 'level_start': int(line[1]),
                               'level_end': int(line[2]),
-                              'data': np.array(line[2:]).astype('f')}
+                              'data': np.array(line[3:]).astype('f')}
             elif key in ["AR85-CDI", "BADNELL"]:
                 assert len(line) >= 4, '%s must have >3 elements' % key
                 result = {'type': key, 'level_start': int(line[1]),
@@ -413,6 +416,397 @@ class AtomFile:
         if unread_lines:
             warnings.warn("Some lines in collision section were not understood",
                           RuntimeWarning)
+    
+    def write_yaml(self, output_filename):
+        """
+        Writes the content of the atom file object
+        to "output_filename" in yaml format.
+        """
+        if self.nfixed != 0:
+            raise NotImplementedError(output_filename 
+                        + " not written: Writing of fixed transitions to YAML is not implemented.")
+        UNITS = dict()
+        # Levels:
+        UNITS['energy'] = 'cm^-1'
+        # Lines:
+        UNITS['vmicro_char'] = 'km / s'
+        UNITS['natural_broadening'] = 's^-1'
+        UNITS['vdW_broadening'] = {'ABO_σ':'a_0^2'}
+        UNITS['vdW_broadening']['ABO_α'] = 'm/m'
+        UNITS['vdW_broadening']['RR_α'] = {'h':'1.0e-8*cm^3/s', 'he':'1.0e-9*cm^3/s'}
+        # Collisions:
+        UNITS['coll_temp'] = 'K'
+        UNITS['coll_data'] = {'Omega':'m/m'}
+        COLL_GROUP_1 = ['CE', 'CI']
+        COLL_GROUP_2 = ['CP', 'CH', 'CH0', 'CH+', 'CR']
+        if self.format == 'RH':
+            # Continua (EXPLICIT):
+            UNITS['radiative_bound_free'] = {'cross_section':['nm', 'm^2']}
+            # Continua (HYDROGENIC):
+            UNITS['radiative_bound_free']['α_peak'] = 'm^2'
+            UNITS['radiative_bound_free']['λ_min'] = 'nm'
+            # Collisions:
+            UNITS['coll_data']['group_1'] = 's^-1 * K^-1/2 * m^3'
+            UNITS['coll_data']['group_2'] = 's^-1 * m^3'
+        elif self.format == 'MULTI':
+            # Continua (EXPLICIT):
+            UNITS['radiative_bound_free'] = {'cross_section':['Å', 'cm^2']}
+            # Continua (HYDROGENIC):
+            UNITS['radiative_bound_free']['α_peak'] = 'cm^2'
+            UNITS['radiative_bound_free']['λ_min'] = 'Å' 
+            # Collisions:
+            UNITS['coll_data']['group_1'] = 's^-1 * K^-1/2 * cm^3'
+            UNITS['coll_data']['group_2'] = 's^-1 * cm^3'
+
+        ###
+        ### Sorting and renaming things to make writing to file easier: 
+        ###
+
+        # LEVELS:
+        levels_dict = dict()
+        def level_str(level_i, type=self.format):
+            if (type == 'RH'):
+                level_i += 1
+            num = str(level_i)
+            return 'lev'+ num
+        for i in range(self.nlevel):
+            values = self.levels[i]
+            if self.format=='RH':
+                num = values[4]+1
+            else:
+                num = i+1
+            key = 'lev'+str(num)
+            energy_dict = {'value': values[0], 'unit': UNITS['energy']}
+            g = values[1]; label = values[2]; 
+            if self.format =='RH':
+                stage = values[3]+1
+            else:
+                stage = values[3]
+            levels_dict[key] = {'energy': energy_dict,  'g': g, 
+                                'stage': stage,         'label': label}
+
+        # LINES:
+        lines_list = []
+        if self.format == 'RH':
+            ityp =  3
+            igr  = 10 ; ibs  = 11
+            idWt =  8 ; ivdW =  9
+            inw  =  4 ; iqw  =  7 ; iqc = 6
+        elif self.format == 'MULTI':
+            ityp = 10
+            igr  =  7    ; ibs  = 9
+            idWt =  None ; ivdW = 8
+            inw  =  3    ; iqw  = 4  ; iqc = 5
+        for i in range(self.nline):
+            line_dict = dict()
+            line_i = self.lines[i]
+            line_dict['transition'] = [level_str(line_i[0]), 
+                                        level_str(line_i[1])]
+            line_dict['f_value'] = line_i[2]
+            if line_i[ityp] == 'PRD':
+                line_dict['type_profile'] = 'PRD'
+            else:
+                line_dict['type_profile'] = (line_i[ityp][0] 
+                                                + line_i[ityp][1:].lower())
+            line_dict['γ_rad'] = {'value': line_i[igr], 
+                                  'unit': UNITS['natural_broadening']}
+            line_dict['broadening_stark'] = {'coefficient':line_i[ibs]}
+            if self.format=='RH':
+                vdWtype = line_i[idWt]
+                vdWval = line_i[ivdW]
+                if vdWtype == 'UNSOLD':
+                    line_dict['broadening_vanderwaals'] = {
+                        'type': 'Unsold', 
+                        'h_coefficient': vdWval[0], 
+                        'he_coefficient': vdWval[2]}
+                elif vdWtype == 'PARAMTR':
+                    line_dict['broadening_vanderwaals'] = {
+                        'type': 'Ridder_Rensbergen', 
+                        'h':{'α': {'value': vdWval[0], 
+                                   'unit': UNITS['vdW_broadening']['RR_α']['h']},
+                             'β': vdWval[1]},
+                        'he': {'α': {'value': vdWval[2], 
+                                     'unit': UNITS['vdW_broadening']['RR_α']['he']},
+                               'β': vdWval[3]}
+                    }
+                elif vdWtype == 'BARKLEM':
+                    line_dict['broadening_vanderwaals'] = [{
+                        'type': 'ABO', 
+                        'σ': {'value': vdWval[0], 
+                              'unit': UNITS['vdW_broadening']['ABO_σ']}, 
+                        'α': {'value': vdWval[1], 
+                              'unit': UNITS['vdW_broadening']['ABO_α']}
+                    }]
+                    line_dict['broadening_vanderwaals'] += [{
+                        'type': 'Unsold',
+                        'he_coefficient': vdWval[2]
+                    }]
+                else:
+                    raise NotImplementedError(
+                            'vdWtype not recognized: %s'%vdWtype)
+            else:
+                coeff = line_i[ivdW][0]
+                if coeff >= 20:
+                    # Recipe from MULTI
+                    sigma=int(coeff)*2.80028E-21
+                    alpha=coeff-int(coeff)
+                    line_dict['broadening_vanderwaals'] = [{
+                        'type': 'ABO', 
+                        'σ': {'value': sigma, 
+                              'unit': UNITS['vdW_broadening']['ABO_σ']}, 
+                        'α': {'value': alpha, 
+                              'unit': UNITS['vdW_broadening']['ABO_α']}}]
+                else:
+                    line_dict['broadening_vanderwaals'] = {
+                            'type': 'Unsold', 
+                            'h_coefficient': coeff, 
+                            'he_coefficient': 0.0}
+            line_dict['wavelengths'] = {'type': self.format, 
+                                        'nλ': line_i[inw], 
+                                        'qwing': line_i[iqw], 
+                                        'qcore': line_i[iqc], 
+                                        'vmicro_char': {
+                                            'value': 8.0, # In RH is set to 2.5 #
+                                            'unit': UNITS['vmicro_char']}
+            }
+            if self.format=='RH': 
+                line_dict['wavelengths']['vmicro_char']['value'] = 2.5 # 
+                line_dict['wavelengths']['asymmetric'] = ((line_i[5])=='ASYMM')
+            lines_list += [line_dict]
+
+        # CONTINUA:
+        # self.continua directly used in writing to file later
+        for continuum in self.continua:
+            assert (continuum['wavelength_dependence'] in ['EXPLICIT', 'HYDROGENIC']), (
+                'Wavelength dependence type not understood: %s' %continuum)['wavelength_dependence']
+
+        # COLLISIONS:
+        # self.collision_tables sorted by transition here:
+        nc = len(self.collision_tables)
+        collisions_list = []
+        transitions_list = []
+        summers = None
+        for i in range(nc):
+            collision = self.collision_tables[i]
+            transition_data = dict() # Store the collision table here
+            if collision['type'] == 'SUMMERS':
+                summers = collision['data']
+                continue
+            # Store the name in lowercase or uppercase:
+            if collision['type'] in ['OMEGA','OHMEGA', 'OHM']: # MULTI
+                transition_data['type'] = 'Omega'
+            elif collision['type'] in ['TEMP', 'BURGESS', 
+                                       'BADNELL', 'SHULL82']:
+                transition_data['type'] = (
+                    collision['type'][0] + collision['type'][1:].lower())
+            else:
+                transition_data['type'] = collision['type']
+            # The tables with temperature dependence:
+            if collision['type'] in self.COLLISION_KEYS_TEMP:
+                # Store temperature:
+                transition_data['temperature'] = {
+                    'value': self.collision_temperatures[collision['temp_index']], 
+                    'unit': UNITS['coll_temp']} 
+                # Store data:
+                transition_data['data'] = {'value':collision['data']} 
+                # Store data unit:
+                if transition_data['type'] == 'Omega':
+                    transition_data['data']['unit'] = (
+                        UNITS['coll_data']['Omega'])
+                elif transition_data['type'] in COLL_GROUP_1:
+                    transition_data['data']['unit'] = (
+                        UNITS['coll_data']['group_1'])
+                elif transition_data['type'] in COLL_GROUP_2:
+                    transition_data['data']['unit'] = (
+                        UNITS['coll_data']['group_2'])
+            # Store these in dictionaries:
+            elif collision['type'] in self.COLLISION_KEYS_LINE:
+                if collision['type'] == 'SHULL82':
+                    transition_data['data'] = { 
+                                'a_col': collision['data'][0], 
+                                't_col': collision['data'][1], 
+                                'a_rad': collision['data'][2], 
+                                'x_rad': collision['data'][3], 
+                                'a_di' : collision['data'][4], 
+                                'b_di' : collision['data'][5], 
+                                't0'   : collision['data'][6], 
+                                't1'   : collision['data'][7]
+                    }
+                elif collision['type'] in ['AR85-CEA', 'BURGESS']:
+                    transition_data['data'] = {
+                        'coefficient': collision['data'][0]}
+                elif collision['type'] in ['AR85-CHP', 'AR85-CHH']:
+                    transition_data['data'] = { 
+                                't1': collision['data'][0], 
+                                't2': collision['data'][1], 
+                                'a': collision['data'][2], 
+                                'b': collision['data'][3], 
+                                'c' : collision['data'][4], 
+                                'd' : collision['data'][5], 
+                    }
+                else: 
+                    transition_data['data'] = collision['data']
+            # Store these in nested lists/arrays -- as they are:
+            elif collision['type'] in self.COLLISION_KEYS_OTHER:
+                transition_data['data'] = collision['data']
+            else:
+                raise NotImplementedError(
+                    'Collision data type not understood! type: %s' %collision['type'])
+            # Place the data in correct transition:
+            tr = [level_str(collision['level_start']), 
+                  level_str(collision['level_end'])]
+            if tr in transitions_list:
+                # append data to that transition
+                idx = transitions_list.index(tr)
+                collisions_list[idx]['data'] += [transition_data]
+            else: 
+                # Make new transition entry
+                transitions_list += [tr]
+                coll_dict = {'transition':tr, 'data':[transition_data]}
+                collisions_list += [coll_dict]
+
+        ###
+        ### Write to file:
+        ###
+
+        output_file = open(output_filename, 'w')
+        output_file.write(
+                '# Converted to YAML from %s '%((self.filename).split('/')[-1])
+                + 'using helita.sim.rh15d.AtomFile.\n'
+        )
+        tab2 = 2* ' '
+        tab4 = 4* ' '
+        tab6 = 6* ' '
+        tab8 = 8* ' '
+
+        # Header:
+        element = self.element[0].upper()
+        if len(self.element) > 1: 
+            if ' ' in self.element: # Removes roman numerals if separated
+                words = self.element.split() 
+                element += words[0][1:].lower()
+            else:
+                element += self.element[1:].lower()
+
+        output_file.write('element:\n')
+        output_file.write(tab2 + 'symbol: %s'%(element) +'\n')
+
+        # Atomic levels:
+        output_file.write('\n\natomic_levels:\n')
+        for key, val in levels_dict.items():
+            output_file.write(tab2 + '%s: '%key + str(val) +'\n')
+
+        # Radiative bound-bound:
+        output_file.write('\n\nradiative_bound_bound:\n')
+        for line in lines_list:
+            output_file.write(
+                tab2 + '- transition: ' + str(line['transition']) +'\n')
+            del line['transition']
+            output_file.write(tab4 + 'f_value: %.5e \n'%(line['f_value']))
+            del line['f_value']
+            for key, val in line.items():
+                if key == 'γ_rad': 
+                    output_file.write(
+                        tab4 + '%s: '%key + '{'
+                        + 'value: %.5e, unit:%s}'%(
+                            val['value'],val['unit']) +'\n')
+                else:
+                    output_file.write(tab4 + '%s: '%key + str(val) +'\n')
+
+        # Radiative bound-free:
+        output_file.write('\n\nradiative_bound_free:\n')
+        for continuum in self.continua:
+            tr = [level_str(continuum['level_start']), 
+                  level_str(continuum['level_end'])]
+            output_file.write(tab2 + '- transition: ' + str(tr) +'\n')
+
+            if continuum['wavelength_dependence'] == 'EXPLICIT':
+                output_file.write(tab4 + 'cross_section: \n')
+                output_file.write(tab6 + 'unit: ' 
+                    + str(UNITS['radiative_bound_free']['cross_section']) +'\n')
+                output_file.write(tab6 + 'value: \n')
+                for val in continuum['cross_section']:
+                    output_file.write(tab8
+                        +'- [%.4f, %.4e]\n'%(val[0], val[1]))                
+                
+            elif continuum['wavelength_dependence'] == 'HYDROGENIC':
+                output_file.write(tab4 + 'cross_section_hydrogenic: \n')
+                val = {'value':continuum['edge_cross_section'], 
+                        'unit':UNITS['radiative_bound_free']['α_peak']} 
+                output_file.write(tab6 
+                    + 'α_peak: {value: %.5e, unit: %s'%(
+                        val['value'], val['unit']) + '}\n')
+                val = {'value': continuum['wave_min'], 
+                        'unit':UNITS['radiative_bound_free']['λ_min']}
+                output_file.write(tab6 + 'λ_min: ' + str(val) + '\n')
+                val = {'value':continuum['edge_cross_section'], 
+                        'unit':UNITS['radiative_bound_free']['α_peak']} 
+                output_file.write(
+                    tab6 + 'nλ: ' + str(continuum['nlambda']) + '\n')
+
+        # Collisional:
+        output_file.write('\n\ncollisional:\n')
+        for collisions in collisions_list:
+            output_file.write(
+                tab2 + '- transition: ' + str(collisions['transition']) +'\n')
+            output_file.write(tab4 + 'data: \n')
+            for data in collisions['data']:
+                output_file.write(tab6 + '- type: ' + str(data['type']) +'\n')
+                # If summers:
+                if (data['type'] in ['Badnell', 'Shull82']) and (summers != None):
+                    output_file.write(
+                        tab8 + 'scaling_summers: '+ str(summers) +'\n')
+                # If temperature:
+                if 'temperature' in data.keys():
+                    output_file.write(tab8 + 'temperature: \n')
+                    output_file.write(
+                        tab8 + tab2 + 'unit: ' + data['temperature']['unit'] +'\n')
+                    output_file.write(tab8 + tab2 + 'value: [ ')
+                    for i in range(len(data['temperature']['value'])-1):
+                        output_file.write(
+                            ' %.1f, '%data['temperature']['value'][i])
+                    output_file.write(
+                        '%.1f ] \n' %data['temperature']['value'][-1])
+
+                ## Data:
+                output_file.write(tab8 + 'data: \n')
+
+                # Temp dependent, dict with newlines, nested list:
+                if data['type'].upper() in self.COLLISION_KEYS_TEMP:
+                    if 'unit' in data['data'].keys():
+                        output_file.write(
+                            tab8 + tab2 + 'unit: ' + data['data']['unit'] +'\n')
+                    output_file.write(tab8 + tab2 + 'value: [')
+                    for i in range(len(data['data']['value'])-1):
+                        output_file.write(' %.4e, '%data['data']['value'][i])
+                    output_file.write('%.4e ] \n'%data['data']['value'][-1])
+
+
+                # Single line versions - dictionaries on one line
+                elif data['type'].upper() in self.COLLISION_KEYS_LINE:
+                    output_file.write(tab8 + tab2 + '{ ')
+                    k = list(data['data'].keys()); v = list(data['data'].values())
+                    for i in range(len(k) - 1):
+                        output_file.write('%s: %.4e, '%(k[i], v[i]))
+                    output_file.write('%s: %.4e }\n'%(k[-1], v[-1]))
+                
+                # Nested lists
+                else: # self.COLLISION_KEYS_OTHER
+                    assert data['type'].upper() in self.COLLISION_KEYS_OTHER, (
+                                    'Data type not in ALL_KEYS? %s'%data['type'])
+                    for elem in data['data']:
+                        output_file.write(tab8 + tab2 + '- [')
+                        if data['type'] == 'AR85-CDI':
+                            for i in range(len(elem) -1 ):
+                                output_file.write(' %2.2f, '%elem[i])
+                            output_file.write('%2.2f ] \n'%(elem[-1]))
+                        else: # Badnell
+                            for i in range(len(elem) - 1 ):
+                                output_file.write(' %.4e, '%elem[i])
+                            output_file.write('%.4e ] \n'%(elem[-1]))
+        
+        output_file.close()
+                
 
 
 def read_hdf5(inclass, infile):
