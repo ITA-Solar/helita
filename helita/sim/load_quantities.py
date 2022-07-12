@@ -6,11 +6,16 @@ import warnings
 # import internal modules
 from . import document_vars
 from .load_arithmetic_quantities import do_stagger
+from . import tools
 
 # import external public modules
 import numpy as np
 
-from numba import jit, njit, prange
+try:
+    from numba import jit, njit, prange
+except ImportError:
+    numba = prange = tools.ImportFailed('numba', "This module is required to use stagger_kind='numba'.")
+    jit   = njit   = tools.boring_decorator
 
 ## import the potentially-relevant things from the internal module "units"
 from .units import (
@@ -107,8 +112,10 @@ def set_elemlist_as_needed(obj, elemlist=None, ELEMLIST=None, **kwargs):
   else:
     return set_elemlist(obj, elemlist)
 
-def set_elemlist(obj, elemlist):
-  ''' sets all things which depend on elemlist, as attrs of data_object. '''
+def set_elemlist(obj, elemlist=DEFAULT_ELEMLIST):
+  ''' sets all things which depend on elemlist, as attrs of obj.
+  Also sets obj.set_elemlist to partial(set_elemlist(obj)).
+  '''
   obj.ELEMLIST = elemlist
   obj.CROSTAB_LIST = ['e_'+elem for elem in obj.ELEMLIST]   \
                 + [elem+'_e' for elem in obj.ELEMLIST]   \
@@ -134,7 +141,11 @@ def set_elemlist(obj, elemlist):
   obj.IONP_QUANT = ['n' + elem + '-' for elem in obj.ELEMLIST]  \
                + ['r' + elem + '-' for elem in obj.ELEMLIST]  \
                + ['rneu', 'rion', 'nion', 'nneu', 'nelc'] \
-               + ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']         
+               + ['rneu_nomag', 'rion_nomag', 'nion_nomag', 'nneu_nomag']       
+  def _set_elemlist(elemlist=DEFAULT_ELEMLIST):
+    '''sets all things which depend on elemlist, as attrs of self.'''
+    set_elemlist(obj, elemlist)
+  obj.set_elemlist = _set_elemlist
 
 def set_crossdict_as_needed(obj, **kwargs):
   '''sets all things related to cross_dict.
@@ -277,9 +288,9 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
 
 
 # default
-_CROSTAB_QUANT = ('CROSTAB_QUANT')
+_CROSTAB_QUANT0 = ('CROSTAB_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
+@document_vars.quant_tracking_simple(_CROSTAB_QUANT0)
 def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
   '''
   Computes cross section between species in cgs
@@ -298,7 +309,7 @@ def get_crossections(obj, quant, CROSTAB_QUANT=None, **kwargs):
     CROSTAB_QUANT = obj.CROSTAB_LIST
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _CROSTAB_QUANT[0], CROSTAB_QUANT, get_crossections.__doc__)
+    docvar = document_vars.vars_documenter(obj, _CROSTAB_QUANT0, CROSTAB_QUANT, get_crossections.__doc__)
  
   quant_elem = ''.join([i for i in quant if not i.isdigit()])
 
@@ -406,11 +417,10 @@ def get_eosparam(obj, quant, EOSTAB_QUANT=None, **kwargs):
     return obj.rhoee.tab_interp(
       rho, ee, order=1, out=quant) * fac
 
-
 # default
-_COLFRE_QUANT = ('COLFRE_QUANT')
+_COLFRE_QUANT0 = ('COLFRE_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLFRE_QUANT[0])
+@document_vars.quant_tracking_simple(_COLFRE_QUANT0)
 def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
   '''
   Collision frequency between different species in (cgs)
@@ -422,10 +432,11 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
     COLFRE_QUANT = obj.COLFRE_QUANT#_COLFRE_QUANT[1]
 
   if quant=='':  
-    docvar = document_vars.vars_documenter(obj, _COLFRE_QUANT[0], COLFRE_QUANT, get_collision.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLFRE_QUANT0, COLFRE_QUANT, get_collision.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFRE_QUANT:
     return None
+
 
   elem = quant.split('_')
   spic1 = ''.join([i for i in elem[0] if not i.isdigit()])
@@ -460,9 +471,9 @@ def get_collision(obj, quant, COLFRE_QUANT=None, **kwargs):
 
 
 # default
-_COLFREMX_QUANT = ('COLFREMX_QUANT')
+_COLFREMX_QUANT0 = ('COLFREMX_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLFREMX_QUANT[0])
+@document_vars.quant_tracking_simple(_COLFREMX_QUANT0)
 def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
   '''
   Maxwell molecular collision frequency 
@@ -471,7 +482,7 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
     COLFREMX_QUANT = obj.COLFREMX_QUANT
   
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLFREMX_QUANT[0], COLFREMX_QUANT, get_collision_maxw.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLFREMX_QUANT0, COLFREMX_QUANT, get_collision_maxw.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLFREMX_QUANT:
     return None
@@ -520,9 +531,9 @@ def get_collision_maxw(obj, quant, COLFREMX_QUANT=None, **kwargs):
 
 
 # default
-_COLCOU_QUANT = ('COLCOU_QUANT')
+_COLCOU_QUANT0 = ('COLCOU_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLCOU_QUANT[0])
+@document_vars.quant_tracking_simple(_COLCOU_QUANT0)
 def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
   '''
   Coulomb Collision frequency between different ionized species (cgs)
@@ -532,7 +543,7 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
     COLCOU_QUANT = obj.COLCOU_QUANT
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLCOU_QUANT[0], COLCOU_QUANT, get_collcoul.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLCOU_QUANT0, COLCOU_QUANT, get_collcoul.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLCOU_QUANT:
     return None
@@ -559,9 +570,9 @@ def get_collcoul(obj, quant, COLCOU_QUANT=None, **kwargs):
 
 
 # default
-_COLCOUMS_QUANT = ('COLCOUMS_QUANT')
+_COLCOUMS_QUANT0 = ('COLCOUMS_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLCOUMS_QUANT[0])
+@document_vars.quant_tracking_simple(_COLCOUMS_QUANT0)
 def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
   '''
   Coulomb collision between for a specific ionized species (or electron) with 
@@ -571,7 +582,7 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
     COLCOUMS_QUANT =  obj.COLCOUMS_QUANT
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLCOUMS_QUANT[0], COLCOUMS_QUANT, get_collcoul_ms.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLCOUMS_QUANT0, COLCOUMS_QUANT, get_collcoul_ms.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in COLCOUMS_QUANT:
     return None
@@ -603,21 +614,31 @@ def get_collcoul_ms(obj, quant, COLCOUMS_QUANT=None, **kwargs):
 
 
 # default
-_COLFRI_QUANT = ('COLFRI_QUANT')
+_COLFRI_QUANT0 = ('COLFRI_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COLFRI_QUANT[0])
+@document_vars.quant_tracking_simple(_COLFRI_QUANT0)
 def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
   '''
   Sum of collision frequencies (cgs). 
+
+  Formats (with <A>, <B> replaced by elements, e.g. '<A>' --> 'he'):
+  - nu<A>_n   :  sum of collision frequencies between A2 and neutrals
+    nuA2_h1 + nuA2_he1 + ...
+  - nu<A>_i   :  sum of collision frequencies between A1 and once-ionized ions
+    nuA1_h2 + nuA1_he2 + ...
+
+  For more precise control over which collision frequencies are summed,
+  refer to obj.ELEMLIST, and/or obj.set_elemlist().
   '''
 
   if (COLFRI_QUANT == None):
     COLFRI_QUANT = obj.COLFRI_QUANT 
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COLFRI_QUANT[0], COLFRI_QUANT, get_collision_ms.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COLFRI_QUANT0, COLFRI_QUANT, get_collision_ms.__doc__)
+    return None
 
-  if quant not in COLFRI_QUANT:
+  if (quant[0:2] != 'nu') or (not ''.join([i for i in quant if not i.isdigit()]) in COLFRI_QUANT):
     return None
 
   elif quant in ('nu_ni_mag', 'nu_ni', 'numx_ni_mag', 'numx_ni'):
@@ -680,33 +701,31 @@ def get_collision_ms(obj, quant, COLFRI_QUANT=None, **kwargs):
                        ('nue', ielem, lvl), **kwargs)
 
   elif (quant[0:2]=='nu' and (quant[-2:] == '_i' or quant[-2:] == '_n' or quant[-6:] == '_i_mag' or quant[-6:] == '_n_mag')):
-    addtxt = ''
-    if quant[-4:] == '_mag':
-      addtxt = '_mag'
-    if '_i' in quant:
-      lvl = '2'
-      lvl_a = '1'
-    else:
-      lvl = '1'
-      lvl_a = '2'
-    elem = quant.split('_')
+    nu = 'numx' if quant.startswith('numx') else 'nu'
+    qrem = quant[len(nu):]   # string remaining in quant, after taking away nu (either 'nu' or 'numx').
+    elem, _, qrem = qrem.partition('_')   # e.g. 'h2', '_', 'n_mag'    # or, e.g. 'he', '_', 'i'
+    n, _, mag = qrem.partition('_')       # e.g. 'n', '_', 'mag'       # or, e.g. 'i', '', ''
+    if mag!='': mag = '_' + mag
+
+    if not elem[-1].isdigit():   # Didn't provide level for elem; we infer it to be 1 or 2 based on '_i' or '_n'.
+      elemlvl = {'n':2, 'i':1}[n]  # elemlvl is 2 for nu<elem>_n; 1 for nu<elem>_i.
+      elem = '{elem}{lvl}'.format(elem=elem, lvl=elemlvl)
+    jlvl = {'n':1, 'i':2}[n]   # level of second species will be 1 for nu<elem>_n, 2 for nu<elem>_i.
+
     result = obj.zero()
-    for ielem in obj.ELEMLIST:
-      if elem[0][2:] != '%s%s' % (ielem, lvl):
-        result += obj.get_var('%s%s_%s%s%s' %
-                (elem[0], lvl_a, ielem, lvl, addtxt), **kwargs) #* obj.uni.weightdic[ielem] /\
-                #(obj.uni.weightdic[ielem] + obj.uni.weightdic[elem[0][2:-1]])
-    #if obj.heion and quant[-3:] == '_i':
-      #result += obj.get_var('%s_%s%s' % (elem[0], 'he3', addtxt)) * obj.uni.weightdic['he'] /\
-      #        (obj.uni.weightdic['he'] + obj.uni.weightdic[elem[0][2:-1]])
+    for ielem in obj.ELEMLIST:   # e.g. ielem == 'he'
+      ielem = '{elem}{lvl}'.format(elem=ielem, lvl=jlvl)
+      if ielem != elem:
+        getting = '{nu}{elem}_{ielem}{mag}'.format(nu=nu, elem=elem, ielem=ielem, mag=mag)
+        result += obj.get_var(getting, **kwargs)
 
   return result
 
 
 #default
-_COULOMB_COL_QUANT = ('COULOMB_COL_QUANT')
+_COULOMB_COL_QUANT0 = ('COULOMB_COL_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_COULOMB_COL_QUANT[0])
+@document_vars.quant_tracking_simple(_COULOMB_COL_QUANT0)
 def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
   '''
   Coulomb collision frequency in Hz
@@ -716,7 +735,7 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
     COULOMB_COL_QUANT = obj.COULOMB_COL_QUANT
   
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _COULOMB_COL_QUANT[0], COULOMB_COL_QUANT, get_coulomb.__doc__)
+    docvar = document_vars.vars_documenter(obj, _COULOMB_COL_QUANT0, COULOMB_COL_QUANT, get_coulomb.__doc__)
 
   if (quant == '') or not quant in COULOMB_COL_QUANT:
     return None
@@ -906,7 +925,7 @@ def get_ponderomotive(obj, quant, POND_QUANT=None, **kwargs):
 
 # default
 _PLASMA_QUANT = ('PLASMA_QUANT',
-                 ['beta', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp', 'nr',
+                 ['beta', 'beta_ion', 'va', 'cs', 's', 'ke', 'mn', 'man', 'hp', 'nr',
                   'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                  ]
                 )
@@ -921,7 +940,8 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
 
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _PLASMA_QUANT[0], PLASMA_QUANT, get_plasmaparam.__doc__)
-    docvar('beta', "plasma beta")
+    docvar('beta', "plasma beta: P / (B / (2 mu0)), where P is the single-fluid pressure.")
+    docvar('beta_ion', "plasma beta: Pi / (B / (2 mu0)), where Pi is the pressure from ions, only.")
     docvar('va', "alfven speed [simu. units]")
     docvar('cs', "sound speed [simu. units]")
     docvar('s', "entropy [log of quantities in simu. units]")
@@ -954,6 +974,15 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
               np.log(obj.get_var('r')))
     elif quant == 'beta':
       return 2 * var / obj.get_var('b2')
+
+  elif quant == 'beta_ion':
+    ni = obj.get_var('nion') / (obj.uni.cm_to_m**3)    # [1/m^3]
+    kB = obj.uni.ksi_b
+    Ti = obj.get_var('tg')    # [K]
+    Pi = ni * kB * Ti         # [SI pressure units]
+    B2 = obj.get_var('b2') * obj.uni.usi_b **2   # [T^2]
+    mu0 = obj.uni.mu0si
+    return Pi / (B2 / (2 * mu0))   # [dimensionless]
 
   if quant in ['mn', 'man']:
     var = obj.get_var('modu')
@@ -1087,9 +1116,9 @@ def get_cyclo_res(obj, quant, CYCL_RES=None, **kwargs):
 
 
 # default
-_GYROF_QUANT = ('GYROF_QUANT')
+_GYROF_QUANT0 = ('GYROF_QUANT')
 # get value
-@document_vars.quant_tracking_simple(_GYROF_QUANT[0])
+@document_vars.quant_tracking_simple(_GYROF_QUANT0)
 def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
   '''
   gyro freqency are (Hz)
@@ -1100,7 +1129,7 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
     GYROF_QUANT = obj.GYROF_QUANT
   
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _GYROF_QUANT[0], GYROF_QUANT, get_gyrof.__doc__)
+    docvar = document_vars.vars_documenter(obj, _GYROF_QUANT0, GYROF_QUANT, get_gyrof.__doc__)
 
   if (quant == '') or not ''.join([i for i in quant if not i.isdigit()]) in GYROF_QUANT:
     return None
@@ -1109,9 +1138,11 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
     return obj.get_var('modb') * obj.uni.usi_b * \
             obj.uni.qsi_electron / (obj.uni.msi_e)
   else:
-    ion = float(''.join([i for i in quant if i.isdigit()]))
+    ion_level = ''.join([i for i in quant if i.isdigit()])  # 1-indexed ionization level (e.g. H+ --> ion_level=2)
+    assert ion_level!='', "Expected 'gf<A><N>' with A an element, N a number (ionization level), but got '{quant}'".format(quant)
+    ion_Z = float(ion_level) - 1.0   # 0-indexed ionization level. (e.g. H+ --> ion_Z = 1. He++ --> ion_Z=2.)
     return obj.get_var('modb') * obj.uni.usi_b * \
-        obj.uni.qsi_electron * (ion - 1.0) / \
+        obj.uni.qsi_electron * ion_Z / \
         (obj.uni.weightdic[quant[2:-1]] * obj.uni.amusi)
 
 
@@ -1120,9 +1151,9 @@ def get_gyrof(obj, quant, GYROF_QUANT=None, **kwargs):
 #_KAPPA_QUANT = ['kappanorm_', 'kappae'] + _KAPPA_QUANT 
 ## I suspect that ^^^ should be kappanorm_ + elem for elem in ELEMLIST,
 ## but I don't know what kappanorm is supposed to mean, so I'm not going to change it now. -SE June 28 2021
-_KAPPA_QUANT = ('KAPPA_QUANT')
+_KAPPA_QUANT0 = ('KAPPA_QUANT')
 # set value
-@document_vars.quant_tracking_simple(_KAPPA_QUANT[0])
+@document_vars.quant_tracking_simple(_KAPPA_QUANT0)
 def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
   '''
   kappa, i.e., magnetization (adimensional)
@@ -1134,7 +1165,7 @@ def get_kappa(obj, quant, KAPPA_QUANT=None, **kwargs):
         
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _KAPPA_QUANT[0], KAPPA_QUANT, get_kappa.__doc__)
+    docvar = document_vars.vars_documenter(obj, _KAPPA_QUANT0, KAPPA_QUANT, get_kappa.__doc__)
 
   if (quant == ''):
     return None
@@ -1188,9 +1219,9 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
 
 
 # default
-_IONP_QUANT = ('IONP_QUANT')
+_IONP_QUANT0 = ('IONP_QUANT')
 # set value
-@document_vars.quant_tracking_simple(_IONP_QUANT[0])
+@document_vars.quant_tracking_simple(_IONP_QUANT0)
 def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
   '''
   densities for specific ionized species.
@@ -1200,7 +1231,7 @@ def get_ionpopulations(obj, quant, IONP_QUANT=None, **kwargs):
     IONP_QUANT = obj.IONP_QUANT
 
   if quant=='':
-    docvar = document_vars.vars_documenter(obj, _IONP_QUANT[0], IONP_QUANT, get_ionpopulations.__doc__)
+    docvar = document_vars.vars_documenter(obj, _IONP_QUANT0, IONP_QUANT, get_ionpopulations.__doc__)
 
   if (quant == ''):
       return None
@@ -1482,7 +1513,7 @@ def get_ambparam(obj, quant, AMB_QUANT=None, **kwargs):
 
 
 # default
-_HALL_QUANT = ('HAL_QUANT',
+_HALL_QUANT = ('HALL_QUANT',
                ['uhallx', 'uhally', 'uhallz', 'hallx', 'hally', 'hallz',
                 'eta_hall', 'eta_hallb']
               )
@@ -1789,8 +1820,9 @@ def ionpopulation(obj, rho, nel, tg, elem='h', lvl='1', dens=True, **kwargs):
   The output, is in cgs
   '''
 
-  print('ionpopulation: reading species %s and level %s' % (elem, lvl), whsp,
-      end="\r", flush=True)
+  if getattr(obj, 'verbose', True):
+    print('ionpopulation: reading species %s and level %s' % (elem, lvl), whsp,
+        end="\r", flush=True)
   '''
   fdir = '.'
   try:

@@ -22,14 +22,17 @@ from .load_quantities import *
 from .load_arithmetic_quantities import *
 from . import load_fromfile_quantities 
 from .tools import *
+from . import tools
 from . import document_vars
 from . import file_memory
 from . import stagger
-from .units import UNITS_OUTPUT_PROPERTY
+from . import units
 
+# defaults
 whsp = '  '
+AXES = ('x', 'y', 'z')
 
-
+# BifrostData class
 class BifrostData():
     """
     Reads data from Bifrost simulations in native format.
@@ -81,6 +84,17 @@ class BifrostData():
         Only affects final values from (external calls to) get_var.
         if not 'simu', self.got_units_name will store units string from latest get_var.
         Do not use at the same time as non-default sel_units.
+    squeeze_output - bool, optional. default False
+        whether to apply np.squeeze() before returning the result of get_var.
+    print_freq - value, default 2.
+        number of seconds between print statements during get_varTime.
+        == 0 --> print update at every snapshot during get_varTime.
+        < 0  --> never print updates during get_varTime.
+    printing_stats - bool or dict, optional. default False
+        whether to print stats about values of var upon completing a(n external) call to get_var.
+        False --> don't print stats.
+        True  --> do print stats.
+        dict  --> do print stats, passing this dictionary as kwargs.
 
     Examples
     --------
@@ -100,15 +114,14 @@ class BifrostData():
     >>> vx = a.get_var("ux")
     """
 
-    snap = None
-
     ## CREATION ##
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.', 
                  fast=False, verbose=True, dtype='f4', big_endian=False, 
                  cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False, 
                  numThreads=1, params_only=False, sel_units=None, 
                  use_relpath=False, stagger_kind=stagger.DEFAULT_STAGGER_KIND,
-                 units_output='simu',
+                 units_output='simu', squeeze_output=False,
+                 print_freq=2, printing_stats=False,
                  iix=None, iiy=None, iiz=None):
         """
         Loads metadata and initialises variables.
@@ -127,6 +140,9 @@ class BifrostData():
         self.numThreads = numThreads
         self.fast = fast
         self._fast_skip_flag = False if fast else None  # None-> never skip
+        self.squeeze_output = squeeze_output
+        self.print_freq = print_freq
+        self.printing_stats = printing_stats
 
         # units. Two options for management. Should only use one at a time; leave the other at default value.
         self.units_output = units_output    # < units.py system of managing units.
@@ -153,7 +169,7 @@ class BifrostData():
                 except IndexError:
                     raise ValueError(("(EEE) init: no .idl or mhd.in files "
                                       "found"))
-        self.uni = Bifrost_units(filename=tmp, fdir=fdir)
+        self.uni = Bifrost_units(filename=tmp, fdir=fdir, parent=self)
 
         self.set_snap(snap, True, params_only=params_only)
 
@@ -173,12 +189,46 @@ class BifrostData():
         document_vars.set_vardocs(self)
 
     ## PROPERTIES ##
+    help  = property(lambda self: self.vardoc)
+
     shape = property(lambda self: (self.xLength, self.yLength, self.zLength))
     size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
     ndim  = property(lambda self: 3)
 
+    units_output = units.UNITS_OUTPUT_PROPERTY(internal_name='_units_output')
+
+    @property
+    def internal_means(self):
+        '''whether to take means of get_var internally, immediately (for simple vars).
+        DISABLED by default.
+
+        E.g. if enabled, self.get_var('r') will be single-valued, not an array.
+        Note this will have many consequences. E.g. derivatives will all be 0.
+        Original intent: analyzing simulations with just a small perturbation around the mean.
+        '''
+        return getattr(self, '_internal_means', False)
+    @internal_means.setter
+    def internal_means(self, value):
+        self._internal_means = value
+
+    @property
+    def printing_stats(self):
+        '''whether to print stats about values of var upon completing a(n external) call to get_var.
+
+        Options:
+        False (default) --> don't print stats.
+        True --> do print stats.
+        dict --> call print stats with these kwargs 
+                e.g. printing_stats=dict(fmt='{:.3e}') --> self.print_stats(fmt='{:.3e}')
+        
+        This is useful especially while investigating just the approximate values for each quantity. 
+        '''
+        return getattr(self, '_printing_stats', False)
+    @printing_stats.setter
+    def printing_stats(self, value):
+        self._printing_stats = value
+
     stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
-    units_output = UNITS_OUTPUT_PROPERTY(internal_name='_units_output')
 
     @property
     def cstagop(self): # cstagop is an alias to do_stagger. Maintained for backwards compatibility.
@@ -186,6 +236,14 @@ class BifrostData():
     @cstagop.setter
     def cstagop(self, value):
         self.do_stagger = value
+
+    @property
+    def snap(self):
+        '''snapshot number, or list of snapshot numbers.'''
+        return getattr(self, '_snap', None)
+    @snap.setter
+    def snap(self, value):
+        self.set_snap(value)
 
     @property
     def snaps(self):
@@ -196,6 +254,20 @@ class BifrostData():
         except TypeError:
             raise TypeError(f'self.snap (={self.snap}) is not a list!') from None
         return snaps
+
+    @property
+    def snapname(self):
+        '''alias for self.root_name. Set by 'snapname' in mhd.in / .idl files.'''
+        return self.root_name
+
+
+    kx = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.xLength, self.dx)),
+                  doc='kx coordinates [simulation units] (fftshifted such that 0 is in the middle).')
+    ky = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.yLength, self.dy)),
+                  doc='ky coordinates [simulation units] (fftshifted such that 0 is in the middle).')
+    kz = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.zLength, self.dz)),
+                  doc='kz coordinates [simulation units] (fftshifted such that 0 is in the middle).')
+    # ^ convert k to physical units by dividing by self.uni.usi_l  (or u_l for cgs)
 
     ## SET SNAPSHOT ##
     def __getitem__(self, i):
@@ -283,19 +355,13 @@ class BifrostData():
                         raise ValueError(("(EEE) set_snap: snapshot not defined "
                                       "and no .idl files found"))
 
-        def snap_str_from_snap(snap):
-            if snap == 0:
-                return ''
-            else:
-                return '_%03i' % snap
-
-        self.snap = snap
+        self._snap = snap
         if np.shape(self.snap) != ():
             self.snap_str = []
             for num in snap:
-                self.snap_str.append(snap_str_from_snap(num))
+                self.snap_str.append(_N_to_snapstr(num))
         else:
-            self.snap_str = snap_str_from_snap(snap)
+            self.snap_str = _N_to_snapstr(snap)
         self.snapInd = 0
 
         self._read_params(firstime=firstime)
@@ -588,105 +654,6 @@ class BifrostData():
         __tracebackhide__ = True  # hide this func from error traceback stack
         return self.get_var(var, *args, **kwargs)
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
-                    print_freq=None, 
-                    *args__get_var, **kw__get_var):
-        """
-        Reads a given variable as a function of time.
-
-        Parameters
-        ----------
-        var - string
-            Name of the variable to read. Must be a valid Bifrost variable name,
-            see Bifrost.get_var().
-        snap - array of integers
-            Snapshot numbers to read.
-        iix -- integer or array of integers, optional
-            reads yz slices.
-        iiy -- integer or array of integers, optional
-            reads xz slices.
-        iiz -- integer or array of integers, optional
-            reads xy slices.
-        print_freq - number, default 2
-            print progress update every print_freq seconds.
-            Use print_freq < 0 to never print update.
-            Use print_freq ==0 to print all updates.
-
-        additional *args and **kwargs are passed to get_var.
-        """
-        # set print_freq
-        if print_freq is None:
-            if not self.verbose:
-                print_freq = -1  # never print.
-            print_freq = getattr(self, 'print_freq', 2) # default 2
-        else:
-            setattr(self, 'print_freq', print_freq)
-
-        # set snap
-        if snap is None:
-            snap = kw__get_var.pop('snaps', None) # look for 'snaps' kwarg
-            if snap is None:
-                snap = self.snap
-        snap = np.array(snap, copy=False)
-        if len(snap.shape)==0:
-            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
-        if not np.array_equal(snap, self.snap):
-            self.set_snap(snap)
-            self.variables={}
-
-        # set iix,iiy,iiz.
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
-        snapLen = np.size(self.snap)
-
-        # bookkeeping - maintain self.snap; handle self.recoverData; track timing.
-        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
-        if hasattr(self, 'recoverData'):
-            delattr(self, 'recoverData')            # smash any existing saved data
-        timestart = now = time.time()               # track timing, so we can make updates.
-        printed_update  = False
-        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
-            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
-
-        try:
-            firstit = True
-            for it in range(0, snapLen):
-                self.snapInd = it
-                # print update if it is time to print update
-                if (print_freq >= 0) and (time.time() - now > print_freq):
-                    _print_clearline()
-                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
-                                    var,     snap[it],         it,    snapLen        ), end='')
-                    now = time.time()
-                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
-                    printed_update=True
-                    
-                # actually get the values here:
-                if firstit:
-                    # get value at first snap
-                    val0 = self.get_var(var, snap=snap[it], *args__get_var, **kw__get_var)
-                    # figure out dimensions and initialize the output array.
-                    value = np.empty([*np.shape(val0), snapLen], dtype=self.dtype)
-                    value[..., 0] = val0
-                    firstit = False
-                else:
-                    value[..., it] = self.get_var(var, snap=snap[it],
-                                                 *args__get_var, **kw__get_var)
-        except:   # here it is ok to except all errors, because we always raise.
-            if it > 0:
-                self.recoverData = value[..., :it]   # save data 
-                if self.verbose:
-                    print(('Crashed during get_varTime, but managed to get data from {} '
-                           'snaps before crashing. Data was saved and can be recovered '
-                           'via self.recoverData.'.format(it)))
-            raise
-        finally:
-            self.set_snap(remembersnaps)             # restore snaps
-            if printed_update:
-                _print_clearline()
-                print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
-        
-        return value
-
     def set_domain_iiaxis(self, iinum=None, iiaxis='x'):
         """
         Sets iix=iinum and xLength=len(iinum). (x=iiaxis)
@@ -769,7 +736,6 @@ class BifrostData():
 
         updates x, y, z, dx1d, dy1d, dz1d afterwards, if any domains were changed.
         '''
-        AXES = ('x', 'y', 'z')
         if internal and self.do_stagger:
             # we slice at the end, only. For now, set all to slice(None)
             slices = (slice(None), slice(None), slice(None))
@@ -822,7 +788,7 @@ class BifrostData():
 
         return val
 
-    def get_var(self, var, snap=None, *args, iix=None, iiy=None, iiz=None, **kwargs):
+    def get_var(self, var, snap=None, *args, iix=None, iiy=None, iiz=None, printing_stats=None, **kwargs):
         """
         Reads a variable from the relevant files.
 
@@ -874,23 +840,25 @@ class BifrostData():
             cgsunits = 1.0
                 
         # get value of variable.
-
         val = self._load_quantity(var, cgsunits=cgsunits, **kwargs)
 
         # do post-processing
-        val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
+        val = self._get_var_postprocess(val, var=var, original_slice=original_slice, printing_stats=printing_stats)
         return val
 
-    def _get_var_postprocess(self, val, var='', original_slice=[slice(None) for x in ('x', 'y', 'z')]):
+    def _get_var_postprocess(self, val, var='', printing_stats=None, original_slice=[slice(None) for x in ('x', 'y', 'z')]):
         '''does post-processing for get_var.
         This includes:
             - handle "creating documentation" or "var==''" case
             - handle "don't know how to get this var" case
             - reshape result as appropriate (based on iix,iiy,iiz)
+            - take mean if self.internal_means (disabled by default).
+            - squeeze if self.squeeze_output (disabled by default).
             - convert units as appropriate (based on self.units_output.)
                 - default is to keep result in simulation units, doing no conversions.
                 - if converting, note that any caching would happen in _load_quantity,
                   outside this function. The cache will always be in simulation units.
+            - print stats if printing_stats or ((printing_stats is None) and self.printing_stats).
         returns val after the processing is complete.
         '''
         # handle documentation case
@@ -919,20 +887,33 @@ class BifrostData():
             self.set_domain_iiaxes(*original_slice, internal=False)
         
         # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
-        if (np.ndim(val) == self.ndim) and (np.shape(val) != self.shape):
-            def isslice(x): return isinstance(x, slice)
-            if isslice(self.iix) and isslice(self.iiy) and isslice(self.iiz):
+        if (np.ndim(val) >= self.ndim) and (np.shape(val) != self.shape):
+            if all(isinstance(s, slice) for s in (self.iix, self.iiy, self.iiz)):
                 val = val[self.iix, self.iiy, self.iiz]  # we can index all together
             else:  # we need to index separately due to numpy multidimensional index array rules.
                 val = val[self.iix,:,:]
                 val = val[:,self.iiy,:]
                 val = val[:,:,self.iiz]
 
-        # convert units if this was a top-level call to get_var, and we are using units_output != 'simu'.
-        if (not self._getting_internal_var()) and (self.units_output != 'simu'):
-            units_f, units_name = self.get_units(mode=self.units_output, _force_from_simu=True)
-            self.got_units_name = units_name   # << this line is just for reference. Not used internally.
-            val *= units_f   # we can use *=, overwriting the original val, since no one else is using it.
+        # take mean if self.internal_means (disabled by default)
+        if self.internal_means:
+            val = val.mean()
+
+        # handle post-processing steps which we only do for top-level calls to get_var:
+        if not self._getting_internal_var():
+            
+            # squeeze if self.squeeze_output (disabled by default)
+            if self.squeeze_output and (np.ndim(val) > 0):
+                val = val.squeeze()
+
+            # convert units if we are using units_output != 'simu'.
+            if self.units_output != 'simu':
+                units_f, units_name = self.get_units(mode=self.units_output, _force_from_simu=True)
+                self.got_units_name = units_name   # << this line is just for reference. Not used internally.
+                val = val * units_f   # can't do *= in case val is a read-only memmap.
+
+            # print stats if self.printing_stats
+            self.print_stats(val, printing_stats=printing_stats)
 
         return val
 
@@ -1185,7 +1166,6 @@ class BifrostData():
             ne = eostab.tab_interp(rho, ee, order=1)
         return Quantity(ne, unit='1/cm3')
 
-
     def get_hydrogen_pops(self, sx=slice(None), sy=slice(None), sz=slice(None)):
         """
         Gets hydrogen populations, or total number of hydrogen atoms,
@@ -1399,7 +1379,207 @@ class BifrostData():
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
 
+    ## VALUES OVER TIME, and TIME DERIVATIVES ##
+
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
+                    print_freq=None, printing_stats=None,
+                    *args__get_var, **kw__get_var):
+        """
+        Reads a given variable as a function of time.
+
+        Parameters
+        ----------
+        var - string
+            Name of the variable to read. Must be a valid Bifrost variable name,
+            see Bifrost.get_var().
+        snap - array of integers
+            Snapshot numbers to read.
+        iix -- integer or array of integers, optional
+            reads yz slices.
+        iiy -- integer or array of integers, optional
+            reads xz slices.
+        iiz -- integer or array of integers, optional
+            reads xy slices.
+        print_freq - number, default 2
+            print progress update every print_freq seconds.
+            Use print_freq < 0 to never print update.
+            Use print_freq ==0 to print all updates.
+        printing_stats - None, bool, or dict
+            whether to print stats of result (via self.print_stats).
+            None  --> use value of self.printing_stats.
+            False --> don't print stats. (This is the default value for self.printing_stats.)
+            True  --> do print stats.
+            dict  --> do print stats, passing this dictionary as kwargs.
+
+        additional *args and **kwargs are passed to get_var.
+        """
+        # set print_freq
+        if print_freq is None:
+            print_freq = getattr(self, 'print_freq', 2) # default 2
+        else:
+            setattr(self, 'print_freq', print_freq)
+
+        # set snap
+        if snap is None:
+            snap = kw__get_var.pop('snaps', None) # look for 'snaps' kwarg
+            if snap is None:
+                snap = self.snap
+        snap = np.array(snap, copy=False)
+        if len(snap.shape)==0:
+            raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
+        if not np.array_equal(snap, self.snap):
+            self.set_snap(snap)
+            self.variables={}
+
+        # set iix,iiy,iiz.
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
+        snapLen = np.size(self.snap)
+
+        # bookkeeping - maintain self.snap; handle self.recoverData; don't print stats in the middle; track timing.
+        remembersnaps = self.snap                   # remember self.snap (restore later if crash)
+        if hasattr(self, 'recoverData'):
+            delattr(self, 'recoverData')            # smash any existing saved data
+        kw__get_var.update(printing_stats=False)   # never print_stats in the middle of get_varTime.
+        timestart = now = time.time()           # track timing, so we can make updates.
+        printed_update  = False
+        def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
+            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
+
+        try:
+            firstit = True
+            for it in range(0, snapLen):
+                self.snapInd = it
+                # print update if it is time to print update
+                if (print_freq >= 0) and (time.time() - now > print_freq):
+                    _print_clearline()
+                    print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
+                                    var,     snap[it],         it,    snapLen        ), end='')
+                    now = time.time()
+                    print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
+                    printed_update=True
+                    
+                # actually get the values here:
+                if firstit:
+                    # get value at first snap
+                    val0 = self.get_var(var, snap=snap[it], *args__get_var, **kw__get_var)
+                    # figure out dimensions and initialize the output array.
+                    value = np.empty_like(val0, shape=[*np.shape(val0), snapLen])
+                    value[..., 0] = val0
+                    firstit = False
+                else:
+                    value[..., it] = self.get_var(var, snap=snap[it],
+                                                 *args__get_var, **kw__get_var)
+        except:   # here it is ok to except all errors, because we always raise.
+            if it > 0:
+                self.recoverData = value[..., :it]   # save data 
+                if self.verbose:
+                    print(('Crashed during get_varTime, but managed to get data from {} '
+                           'snaps before crashing. Data was saved and can be recovered '
+                           'via self.recoverData.'.format(it)))
+            raise
+        finally:
+            self.set_snap(remembersnaps)             # restore snaps
+            if printed_update:
+                _print_clearline()
+                print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
+        
+        self.print_stats(value, printing_stats=printing_stats)
+        return value
+
+    @tools.maintain_attrs('snap')
+    def ddt(self, var, snap=None, *args__get_var, method='centered', printing_stats=None, **kw__get_var):
+        '''time derivative of var, at current snapshot.
+        Units are determined by self.units_output (default: [simulation units]).
+
+        snap: None or value
+            if provided (not None), first self.set_snap(snap).
+        method: ('forward', 'backward', 'centered')
+            tells how to take the time derivative.
+            forward  --> (var[snap+1] - var[snap]) / (t[snap+1] - t[snap])
+            backward --> (var[snap] - var[snap-1]) / (t[snap] - t[snap-1])
+            centered --> (var[snap+1] - var[snap-1]) / (t[snap+1] - t[snap-1])
+        '''
+        if snap is not None: self.set_snap(snap)
+        method = method.lower()
+        if method=='forward':
+            snaps = [self.get_snap_here(), self.get_snap_next()]
+        elif method=='backward':
+            snaps = [self.get_snap_prev(), self.get_snap_here()]
+        elif method=='centered':
+            snaps = [self.get_snap_prev(), self.get_snap_next()]
+        else:
+            raise ValueError(f'Unrecognized method in ddt: {repr(method)}')
+        kw__get_var.update(printing_stats=False)   # never print_stats in the middle of ddt.
+        self.set_snap(snaps[0])
+        value0 = self(var, *args__get_var, **kw__get_var)
+        time0  = self.get_coord('t')[0]
+        self.set_snap(snaps[1])
+        value1 = self(var, *args__get_var, **kw__get_var)
+        time1  = self.get_coord('t')[0]
+        result = (value1 - value0) / (time1 - time0)
+        self.print_stats(result, printing_stats=printing_stats)   # print stats iff self.printing_stats.
+        return result
+
+    def get_dvarTime(self, var, method='numpy', kw__gradient=dict(), printing_stats=None, **kw__get_varTime):
+        '''time derivative of var, across time.
+        Units are determined by self.units_output (default: [simulation units]).
+
+        method: ('numpy', 'simple', 'centered')
+            tells how to take the time derivative:
+                numpy    --> np.gradient(v, axis=-1) / np.gradient(tt, axis=-1)
+                            result will be shape (..., M),
+                            corresponding to times (tt).
+                simple   --> (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+                            result will be shape (..., M-1),
+                            corresponding to times (tt[..., 1:] + tt[..., :-1]) / 2.
+                centered --> (v[..., 2:] - v[..., :-2]) / (tt[..., 2:] - tt[..., :-2])
+                            result will be shape (..., M-2),
+                            corresponding to times (tt[..., 1:-1])
+            where, above, v = self.get_varTime(var);
+            tt=self.get_coord('t'), with dims expanded (np.expand_dims) appropriately.
+        kw__gradient: dict
+            if method=='numpy', kw__gradient are passed to np.gradient.
+            (do not include 'axis' in kw__gradient.)
+        additional **kwargs are passed to self.get_varTime.
+
+        returns: array of shape (..., M),
+        where M=len(self.snap) if method=='numpy', or len(self.snap)-1 if method=='simple'.
+        '''
+        KNOWN_METHODS = ('numpy', 'simple', 'centered')
+        method = method.lower()
+        assert method in KNOWN_METHODS, f"Unrecognized method for get_dvarTime: {repr(method)}"
+        v  = self.get_varTime(var, printing_stats=False, **kw__get_varTime)
+        tt = self.get_coord('t')
+        tt = np.expand_dims(tt, axis=tuple(range(0, v.ndim - tt.ndim)))  # e.g. shape (1,1,1,len(self.snaps))
+        method = method.lower()
+        if method == 'numpy':
+            result = np.gradient(v, **kw__gradient, axis=-1) / np.gradient(tt, axis=-1)
+        elif method == 'simple':
+            result = (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
+        else: # method == 'centered'
+            result = (v[..., 2:] - v[..., :-2]) / (tt[..., 2:] - tt[..., :-2])
+        self.print_stats(result, printing_stats=printing_stats)
+        return result
+
+    def get_atime(self):
+        '''get average time, corresponding to times of derivative from get_dvarTime(..., method='simple').'''
+        tt = self.get_coord('t')
+        return (tt[..., 1:] + tt[..., :-1]) / 2
+
     ## MISC. CONVENIENCE METHODS ##
+    def print_stats(self, value, *args, printing_stats=True, **kwargs):
+        '''print stats of value, via tools.print_stats.
+        printing_stats: None, bool, or dict.
+            None  --> use value of self.printing_stats.
+            False --> don't print stats.
+            True  --> do print stats.
+            dict  --> do print stats, passing this dictionary as kwargs.
+        '''
+        if printing_stats is None:
+            printing_stats = self.printing_stats
+        if printing_stats:
+            kw__print_stats = printing_stats if isinstance(printing_stats, dict) else dict()
+            tools.print_stats(value, **kw__print_stats)
 
     def get_varm(self, *args__get_var, **kwargs__get_var):
         '''get_var but returns np.mean() of result.
@@ -1479,6 +1659,17 @@ class BifrostData():
     def zero(self, **kw__np_zeros):
         '''return np.zeros() with shape equal to shape of result of get_var()'''
         return np.zeros(self.shape, **kw__np_zeros)
+
+    def get_snap_here(self):
+        '''return self.snap, or self.snap[0] if self.snap is a list.
+        This is the snap which get_var() will work at, for the given self.snap value.
+        '''
+        try:
+            iter(self.snap)
+        except TypeError:
+            return self.snap
+        else:
+            return self.snap[0]
 
     def get_snap_at_time(self, t, units='simu'):
         '''get snap number which is closest to time t.
@@ -1580,7 +1771,6 @@ class BifrostData():
             scaling = 1.0
         else:
             scaling = self.uni.u_l / u_l
-        AXES = ('x', 'y', 'z')
         kw_x    = {  x   : getattr(self,    x      ) * scaling for x in AXES}
         kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') / scaling for x in AXES}
         kw_nx   = {'n'+x : getattr(self, x+'Length')           for x in AXES}
@@ -1590,9 +1780,9 @@ class BifrostData():
 
     write_meshfile = write_mesh_file  # alias
 
-    def get_coords(self, mode='si', axes=None):
+    def get_coords(self, units='si', axes=None, mode=None):
         '''returns dict of coords, with keys ['x', 'y', 'z', 't'].
-        coords units are based on mode.
+        units:
             'si' (default) -> [meters] for x,y,z; [seconds] for t.
             'cgs'     ->      [cm] for x,y,z;  [seconds] for t.
             'simu'    ->      [simulation units] for all coords.
@@ -1604,7 +1794,11 @@ class BifrostData():
             For example:
                 c = self.get_coords()
                 c['y'], c['t'] == self.get_coords(axes=('y', 'z'))
+                c['z'], c['x'], c['y'] == self.get_coords(axes='zxy')
+        mode: alias for units. (for backwards compatibility)
+            if entered, ignore units kwarg; use mode instead.
         '''
+        if mode is None: mode = units
         mode = mode.lower()
         VALIDMODES = ('si', 'cgs', 'simu')
         assert mode in VALIDMODES, "Invalid mode ({})! Expected one of {}".format(repr(mode), VALIDMODES)
@@ -1624,6 +1818,109 @@ class BifrostData():
             AXES_LOOKUP = {'x':'x', 0:'x', 'y':'y', 1:'y', 'z':'z', 2:'z', 't':'t', 3:'t'}
             result = tuple(result[AXES_LOOKUP[axis]] for axis in axes)
         return result
+
+    def get_coord(self, axis, units=None):
+        '''gets coord for the given axis, in the given unit system.
+        axis: string ('x', 'y', 'z', 't') or int (0, 1, 2, 3)
+        units: None (default) or string ('si', 'cgs', 'simu')   ('simu' for 'simulation units')
+            None --> use self.units_output.
+
+        The result will be an array (possibly with only 1 element).
+        '''
+        if units is None:
+            units = self.units_output
+        return self.get_coords(units=units, axes=[axis])[0]
+
+    def coord_grid(self, axes='xyz', units='si', sparse=True, **kw__meshgrid):
+        '''returns grid of coords for self along the given axes.
+
+        axes: list of strings ('x', 'y', 'z', 't'), or ints (0, 1, 2, 3)
+        units: string ('si', 'cgs', 'simu')   ('simu' for 'simulation units')
+        sparse: bool. Example:
+            coord_grid('xyz', sparse=True)[0].shape == (Nx, 1, 1)
+            coord_grid('xyz', sparse=False)[0].shape == (Nx, Ny, Nz)
+
+        This function basically just calls np.meshgrid, using coords from self.get_coords.
+
+        Example:
+            xx, yy, zz = self.coord_grid('xyz', sparse=True)
+            # yy.shape == (1, self.yLength, 1)
+            # yy[0, i, 0] == self.get_coord('x')[i]
+
+            xx, tt = self.coord_grid('xt', sparse=False)
+            # xx.shape == (self.xLength, len(self.time))
+            # tt.shape == (self.XLength, len(self.time))
+        '''
+        coords = self.get_coords(axes=axes, units=units)
+        indexing = kw__meshgrid.pop('indexing', 'ij')  # default 'ij' indexing
+        return np.meshgrid(*coords, sparse=sparse, indexing=indexing, **kw__meshgrid)
+
+    def get_kcoords(self, units='si', axes=None):
+        '''returns dict of k-space coords, with keys ['kx', 'ky', 'kz']
+        coords units are based on mode.
+            'si' (default) -> [ 1 / m]
+            'cgs'     ->      [ 1 / cm]
+            'simu'    ->      [ 1 / simulation unit length]
+        if axes is not None:
+            instead of returning a dict, return coords for the axes provided, in the order listed.
+            axes can be provided in either of these formats:
+                strings: 'x', 'y', 'z'
+                ints:     0 ,  1 ,  2
+        '''
+        # units
+        units = units.lower()
+        assert units in ('si', 'cgs', 'simu')
+        u_l = {'si': self.uni.usi_l, 'cgs': self.uni.u_l, 'simu': 1}[units]
+        # axes bookkeeping
+        if axes is None:
+            axes = AXES
+            return_dict = True
+        else:
+            AXES_LOOKUP = {'x':'x', 0:'x', 'y':'y', 1:'y', 'z':'z', 2:'z'}
+            axes = [AXES_LOOKUP[x] for x in axes]
+            return_dict = False
+        result = {f'k{x}': getattr(self, f'k{x}') for x in axes}   # get k
+        result = {key: val / u_l for key, val in result.items()}  # convert units
+        # return
+        if return_dict:
+            return result
+        else:
+            return [result[f'k{x}'] for x in axes]
+
+    def get_extent(self, axes, units='si'):
+        '''use plt.imshow(extent=get_extent()) to make a 2D plot in x,y,z,t coords.
+        (Be careful if coords are unevenly spaced; imshow assumes even spacing.)
+        units: 'si' (default), 'cgs', or 'simu'
+            unit system for result
+        axes: None, strings (e.g. ('x', 'z') or 'xz'), or list of indices (e.g. (0, 2))
+            which axes to get the extent for.
+            first axis will be the plot's x axis; second will be the plot's y axis.
+            E.g. axes='yz' means 'y' as the horizontal axis, 'z' as the vertical axis.
+        '''
+        assert len(axes) == 2, f"require exactly 2 axes for get_extent, but got {len(axes)}"
+        x, y = self.get_coords(units=units, axes=axes)
+        return tools.extent(x, y)
+
+    def get_kextent(self, axes=None, units='si'):
+        '''use plt.imshow(extent=get_kextent()) to make a plot in k-space.
+        units: 'si' (default), 'cgs', or 'simu'
+            unit system for result
+        axes: None, strings (e.g. ('x', 'z') or 'xz'), or list of indices (e.g. (0, 2))
+            which axes to get the extent for.
+            if None, use obj._latest_fft_axes (see helita.sim.load_arithmetic_quantities.get_fft_quant)
+            first axis will be the plot's x axis; second will be the plot's y axis.
+            E.g. axes='yz' means 'y' as the horizontal axis, 'z' as the vertical axis.
+        '''
+        if axes is None:
+            try:
+                axes = self._latest_fft_axes
+            except AttributeError:
+                errmsg = "self._latest_fft_axes not set; maybe you meant to get a quant from " +\
+                         "FFT_QUANT first? Use self.vardoc('FFT_QUANT') to see list of options."
+                raise AttributeError(errmsg) from None
+        assert len(axes) == 2, f"require exactly 2 axes for get_kextent, but got {len(axes)}"
+        kx, ky = self.get_kcoords(units=units, axes=axes)
+        return tools.extent(kx, ky)
 
     if file_memory.DEBUG_MEMORY_LEAK:
         def __del__(self):
@@ -1649,14 +1946,16 @@ def get_snapstuff(dd=None):
 snapstuff = get_snapstuff   # alias
 
 def get_snapname(dd=None):
-    '''gets snapname by reading it from mhd.in'''
-    with EnterDirectory(_get_dd_fdir(dd)):
+    '''gets snapname by reading it from local mhd.in, or dd.snapname if dd is provided.'''
+    if dd is None:
         mhdin_ascii = read_idl_ascii('mhd.in')
         return mhdin_ascii['snapname']
+    else:
+        return dd.snapname
 
 snapname = get_snapname   # alias
 
-def available_snaps(dd=None, snapname=None):
+def get_snaps(dd=None, snapname=None):
     '''list available snap numbers.
     Does look for: snapname_*.idl, snapname.idl (i.e. snap 0)
     Doesn't look for: .pan, .scr, .aux files.
@@ -1664,37 +1963,56 @@ def available_snaps(dd=None, snapname=None):
         snapname parameter from mhd.in. If None, get snapname.
     if dd is not None, look in dd.fdir.
     '''
-    with EnterDirectory(_get_dd_fdir(dd)):
+    with tools.EnterDirectory(_get_dd_fdir(dd)):
         snapname = snapname if snapname is not None else get_snapname()
         snaps = [_snap_to_N(f, snapname) for f in os.listdir()]
         snaps = [s for s in snaps if s is not None]
         snaps = sorted(snaps)
         return snaps
 
-snaps      = available_snaps   # alias
-get_snaps  = available_snaps   # alias
-list_snaps = available_snaps   # alias
+snaps            = get_snaps   # alias
+available_snaps  = get_snaps   # alias
+list_snaps       = get_snaps   # alias
 
-def snaps_info(dd=None, snapname=None):
-    '''returns string with length of snaps, as well as min and max.'''
-    snaps = get_snaps(dd=dd, snapname=snapname)
+def snaps_info(dd=None, snapname=None, snaps=None):
+    '''returns string with length of snaps, as well as min and max.
+    if snaps is None, lookup all available snaps.
+    '''
+    if snaps is None: snaps = get_snaps(dd=dd, snapname=snapname)
     return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
 
-class EnterDir:
-    '''context manager for remembering directory.
-    upon enter, cd to directory. upon exit, restore original working directory.
+def get_snap_shifted(dd=None, shift=0, snapname=None, snap=None):
+    '''returns snap's number for snap at index (current_snap_index + shift).
+    Must provide dd or snap, so we can figure out current_snap_index.
     '''
-    def __init__(self, directory=os.curdir):
-        self.cwd       = os.path.abspath(os.getcwd())
-        self.directory = directory
+    snaps = list(get_snaps(dd=dd, snapname=snapname))
+    snap_here = snap if snap is not None else dd.get_snap_here()
+    i_here = snaps.index(snap_here)
+    i_result = i_here + shift
+    if i_result < 0:
+        if shift == -1:
+            raise ValueError(f'No snap found prior to snap={snap_here}')
+        else:
+            raise ValueError(f'No snap found {abs(shift)} prior to snap={snap_here}')
+    elif i_result >= len(snaps):
+        if shift == 1:
+            raise ValueError(f'No snap found after snap={snap_here}')
+        else:
+            raise ValueError(f'No snap found {abs(shift)} after snap={snap_here}')
+    else:
+        return snaps[i_result]
 
-    def __enter__ (self):
-        os.chdir(self.directory)
+def get_snap_prev(dd=None, snapname=None, snap=None):
+    '''returns previous available snap's number. TODO: implement more efficiently.
+    Must provide dd or snap, so we can figure out the snap here, first.
+    '''
+    return get_snap_shifted(dd=dd, shift=-1, snapname=snapname, snap=snap)
 
-    def __exit__ (self, exc_type, exc_value, traceback):
-        os.chdir(self.cwd)
-
-EnterDirectory = EnterDir  #alias
+def get_snap_next(dd=None, snapname=None, snap=None):
+    '''returns next available snap's number. TODO: implement more efficiently.
+    Must provide dd or snap, so we can figure out the snap here, first.
+    '''
+    return get_snap_shifted(dd=dd, shift=+1, snapname=snapname, snap=snap)
 
 def _get_dd_fdir(dd=None):
     '''return dd.fdir if dd is not None, else os.curdir.'''
@@ -1726,11 +2044,21 @@ def _snap_to_N(name, base, sep='_', ext='.idl'):
         else:
             return snapN
 
+def _N_to_snapstr(N):
+    '''return string representing snap number N.'''
+    if N == 0:
+        return ''
+    else:
+        assert tools.is_integer(N), f"snap values must be integers! (snap={N})"
+        return '_%03i' % N
+
 # include methods (and some aliases) for getting snaps in BifrostData object
 BifrostData.get_snapstuff   = get_snapstuff
 BifrostData.get_snapname    = get_snapname
 BifrostData.available_snaps = available_snaps
-BifrostData.get_snaps       = available_snaps
+BifrostData.get_snaps       = get_snaps
+BifrostData.get_snap_prev   = get_snap_prev
+BifrostData.get_snap_next   = get_snap_next
 BifrostData.snaps_info      = snaps_info
 
 
@@ -1877,7 +2205,7 @@ class Create_new_br_files:
 #  UNITS   #
 ############
 
-class Bifrost_units(object):
+class BifrostUnits(units.HelitaUnits):
     '''stores units as attributes.
 
     units starting with 'u_' are in cgs. starting with 'usi_' are in SI.
@@ -1896,7 +2224,7 @@ class Bifrost_units(object):
         which physical quantity the units are for.
     '''
 
-    def __init__(self,filename='mhd.in',fdir='./',verbose=True,base_units=None):
+    def __init__(self,filename='mhd.in',fdir='./',verbose=True,base_units=None, **kw__super_init):
         '''get units from file (by reading values of u_l, u_t, u_r, gamma).
 
         filename: str; name of file. Default 'mhd.in'
@@ -1911,30 +2239,28 @@ class Bifrost_units(object):
                     if base_units contains ALL of those keys, IGNORE file.
             list -> provides value for u_l, u_t, u_r, gamma; in that order.
         '''
-        import scipy.constants as const
-        from astropy import constants as aconst
-
-        self.doc_units = dict()
-        self.BASE_UNITS = ['u_l', 'u_t', 'u_r', 'gamma']
         DEFAULT_UNITS = dict(u_l=1.0e8, u_t=1.0e2, u_r=1.0e-7, gamma=1.667)
-        _n_base_set = 0  # number of base units which have been set.
+        base_to_use = dict()  # << here we will put the u_l, u_t, u_r, gamma to actually use.
+        _n_base_set = 0  # number of base units set (i.e. assigned in base_to_use)
 
-        # set units from base_units, if applicable
+        # setup units from base_units, if applicable
         if base_units is not None:
             try:
                 items = base_units.items()
             except AttributeError: # base_units is a list
                 for i, val in enumerate(base_units):
-                    setattr(self, self.BASE_UNITS[i], val)
+                    base_to_use[self.BASE_UNITS[i]] = val
+                    _n_base_set += 1
             else:
                 for key, val in base_units.items():
                     if key in DEFAULT_UNITS.keys():
-                        setattr(self, key, val)
+                        base_to_use[key] = val
                         _n_base_set += 1
                     elif verbose:
                         print(('(WWW) the key {} is not a base unit',
                               ' so it was ignored').format(key))
-        # set units from file (or defaults), if still necessary.
+
+        # setup units from file (or defaults), if still necessary.
         if _n_base_set != len(DEFAULT_UNITS):
             if filename is None:
                 file_exists = False
@@ -1945,9 +2271,10 @@ class Bifrost_units(object):
                 # file exists -> set units using file.
                 self.params = read_idl_ascii(file,firstime=True)
                 
-                def set_unit(key):
-                    if getattr(self, key, None) is not None:
+                def setup_unit(key):
+                    if base_to_use.get(key, None) is not None:
                         return
+                    #else:
                     try:
                         value = self.params[key]
                     except Exception:
@@ -1956,278 +2283,24 @@ class Bifrost_units(object):
                             printstr = ("(WWW) the file '{file}' does not contain '{unit}'. "
                                         "Default Solar Bifrost {unit}={value} has been selected.")
                             print(printstr.format(file=file, unit=key, value=value))
-                    setattr(self, key, value)
+                    base_to_use[key] = value
 
                 for unit in DEFAULT_UNITS.keys():
-                    set_unit(unit)
+                    setup_unit(unit)
             else:
-                # file does not exist -> set default units.
+                # file does not exist -> setup default units.
                 units_to_set = {unit: DEFAULT_UNITS[unit] for unit in DEFAULT_UNITS.keys()
                                         if getattr(self, unit, None) is None}
                 if verbose:
                     print("(WWW) selected file '{file}' is not available.".format(file=filename),
                           "Setting the following Default Solar Bifrost units: ", units_to_set)
-                for unit, value in units_to_set.items():
-                    setattr(self, unit, value)
+                for key, value in units_to_set.items():
+                    base_to_use[key] = value
 
-        # I think we shouldn't keep "params" in Bifrost_units anymore. - SE Apr 28 2021
-        ## it obfuscates the contents of Bifrost_units, especially when checking self.__dict__.
-        ## Here I am going to set self.params to an object which, if someone tries to access a key of it,
-        ## will raise an exception with a clear message
-        ## of how to fix it.
-        class params_are_empty():
-            def __init__(self):
-                pass
-                self.errmsg = ('We are testing to remove self.params from Bifrost_units object. '
-                      'If you are seeing this Exception, please consider if your code '
-                      'can be written without doing self.params[key] (e.g. obj.uni.params[key]). '
-                      'A good alternative is probably to use obj.params[key][obj.snapInd]. '
-                      'If you decide you really need to access self.uni.params, then you can '
-                      'remove the line of code which deletes self.params, in helita.sim.bifrost.py.'
-                      '(the line looks like: "self.params = params_are_empty()"')
+        # initialize using instructions from HelitaUnits (see helita.sim.units.py)
+        super().__init__(**base_to_use, verbose=verbose, **kw__super_init)
 
-            def __contains__(self, i): raise Exception(self.errmsg)
-            def __getitem__(self, i):  raise Exception(self.errmsg)
-            def keys(self):            raise Exception(self.errmsg)
-            def values(self):          raise Exception(self.errmsg)
-            def items(self):           raise Exception(self.errmsg)
-
-        self.params = params_are_empty()  # "delete" self.params
-
-        # set cgs units
-        self.verbose=verbose
-        self.u_u  = self.u_l / self.u_t
-        self.u_p  = self.u_r * (self.u_u)**2           # Pressure [dyne/cm2]
-        self.u_kr = 1 / (self.u_r * self.u_l)         # Rosseland opacity [cm2/g]
-        self.u_ee = self.u_u**2
-        self.u_e  = self.u_p      # energy density units are the same as pressure units.
-        self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
-        self.u_n  = 3.00e+10                      # Density number n_0 * 1/cm^3
-        self.pi   = const.pi
-        self.u_b  = self.u_u * np.sqrt(4. * self.pi * self.u_r)
-
-        # self.uni tells how to convert from simu. units to cgs units, for simple vars.
-        self.uni={}
-        self.uni['l'] = self.u_l
-        self.uni['t'] = self.u_t
-        self.uni['rho'] = self.u_r
-        self.uni['p'] = self.u_r * self.u_u # self.u_p
-        self.uni['u'] = self.u_u
-        self.uni['e'] = self.u_e
-        self.uni['ee'] = self.u_ee
-        self.uni['n'] = self.u_n
-        self.uni['tg'] = 1.0
-        self.uni['b'] = self.u_b
-
-        convertcsgsi(self)
-        globalvars(self)
-  
-        self.u_tg = (self.m_h / self.k_b) * self.u_ee
-        self.u_tge = (self.m_e / self.k_b) * self.u_ee
-
-        # set si units
-        self.usi_t = self.u_t
-        self.usi_l = self.u_l * const.centi                   # 1e-2
-        self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
-        self.usi_u = self.usi_l / self.u_t
-        self.usi_p = self.usi_r * (self.usi_u)**2             # Pressure [N/m2]
-        self.usi_kr = 1 / (self.usi_r * self.usi_l)           # Rosseland opacity [m2/kg]
-        self.usi_ee = self.usi_u**2
-        self.usi_e = self.usi_p    # energy density units are the same as pressure units.
-        self.usi_te = self.usi_e / self.u_t * self.usi_l      # Box therm. em. [J/(s ster m2)]
-        self.ksi_b = aconst.k_B.to_value('J/K')               # Boltzman's cst. [J/K]
-        self.msi_h = const.m_n                                # 1.674927471e-27
-        self.msi_he = 6.65e-27
-        self.msi_p = self.mu * self.msi_h                     # Mass per particle
-        self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
-        self.msi_e = const.m_e  # 9.1093897e-31
-        self.usi_b = self.u_b * 1e-4
-
-        # documentation for units above:
-        self.docu('t', 'time')
-        self.docu('l', 'length')
-        self.docu('r', 'mass density')
-        self.docu('u', 'velocity')
-        self.docu('p', 'pressure')
-        self.docu('kr', 'Rosseland opacity')
-        self.docu('ee', 'energy (total; i.e. not energy density)')
-        self.docu('e', 'energy density')
-        self.docu('te', 'Box therm. em. [J/(s ster m2)]')
-        self.docu('b', 'magnetic field')
-
-        # additional units (added for convenience) - started by SE, Apr 26 2021
-        self.docu('m', 'mass')
-        self.u_m    = self.u_r   * self.u_l**3   # rho = mass / length^3
-        self.usi_m  = self.usi_r * self.usi_l**3 # rho = mass / length^3
-        self.docu('ef', 'electric field')
-        self.u_ef   = self.u_b                   # in cgs: F = q(E + (u/c) x B)
-        self.usi_ef = self.usi_b * self.usi_u    # in SI:  F = q(E + u x B)
-        self.docu('f', 'force')
-        self.u_f    = self.u_p   * self.u_l**2   # pressure = force / area
-        self.usi_f  = self.usi_p * self.usi_l**2 # pressure = force / area
-        self.docu('q', 'charge')
-        self.u_q    = self.u_f   / self.u_ef     # F = q E
-        self.usi_q  = self.usi_f / self.usi_ef   # F = q E
-        self.docu('nr', 'number density')
-        self.u_nr   = self.u_r   / self.u_m      # nr = r / m
-        self.usi_nr = self.usi_r / self.usi_m    # nr = r / m
-        self.docu('nq', 'charge density')
-        self.u_nq   = self.u_q   * self.u_nr
-        self.usi_nq = self.usi_q * self.usi_nr
-        self.docu('pm', 'momentum density')
-        self.u_pm   = self.u_u   * self.u_r      # mom. dens. = mom * nr = u * r
-        self.usi_pm = self.usi_u * self.usi_r
-        self.docu('hz', 'frequency')
-        self.u_hz   = 1./self.u_t
-        self.usi_hz = 1./self.usi_t
-        self.docu('phz', 'momentum density frequency (see e.g. momentum density exchange terms)')
-        self.u_phz  = self.u_pm   * self.u_hz
-        self.usi_phz= self.usi_pm * self.usi_hz
-        self.docu('i', 'current per unit area')
-        self.u_i    = self.u_nq   * self.u_u     # ue = ... + J / (ne qe)
-        self.usi_i  = self.usi_nq * self.usi_u
-
-        # additional constants (added for convenience)
-        ## masses
-        self.simu_amu = self.amu / self.u_m         # 1 amu
-        self.simu_m_e = self.m_electron / self.u_m  # 1 electron mass
-        ## charge (1 elementary charge)
-        self.simu_q_e   = self.q_electron   / self.u_q   # [derived from cgs]
-        self.simu_qsi_e = self.qsi_electron / self.usi_q # [derived from si]
-        ### note simu_q_e != simu_qsi_e because charge is defined
-        ### by different equations, for cgs and si. 
-
-        # update the dict doc_units with the values of units
-        self._update_doc_units_with_values()
-
-
-    def __repr__(self):
-        '''show self in a pretty way (i.e. including info about base units)'''
-        return "<{} with base_units={}>".format(object.__repr__(self),
-                            self.prettyprint_base_units(printout=False))
-
-    def base_units(self):
-        '''returns dict of u_l, u_t, u_r, gamma, for self.'''
-        return {unit: getattr(self, unit) for unit in self.BASE_UNITS}
-
-    def prettyprint_base_units(self, printout=True):
-        '''print (or return, if not printout) prettystring for base_units for self.'''
-        fmt = '{:.2e}'  # formatting for keys (except gamma)
-        fmtgam = '{}'   # formatting for key gamma
-        s = []
-        for unit in self.BASE_UNITS:
-            val = getattr(self,unit)
-            if unit=='gamma':
-                valstr = fmtgam.format(val)
-            else:
-                valstr = fmt.format(val)
-            s += [unit+'='+valstr]
-        result = 'dict({})'.format(', '.join(s))
-        if printout:
-            print(result)
-        else:
-            return(result)
-
-    def _unit_name(self, u):
-        '''returns name of unit u. e.g. u_r -> 'r'; usi_hz -> 'hz', 'nq' -> 'nq'.'''
-        for prefix in ['u_', 'usi_']:
-            if u.startswith(prefix):
-                u = u[len(prefix):]
-                break
-        return u
-
-    def _unit_values(self, u):
-        '''return values of u, as a dict'''
-        u = self._unit_name(u)
-        result = {}
-        u_u   = 'u_'+u
-        usi_u = 'usi_'+u
-        if hasattr(self, u_u):
-            result[u_u] = getattr(self, u_u)
-        if hasattr(self, usi_u):
-            result[usi_u] = getattr(self, usi_u)
-        return result
-
-    def prettyprint_unit_values(self, x, printout=True, fmtname='{:<3s}', fmtval='{:.2e}', sep=' ;  '):
-        '''pretty string for unit values. print if printout, else return string.'''
-        if isinstance(x, str):
-            x = self._unit_values(x)
-        result = []
-        for key, value in x.items():
-            u_, p, name = key.partition('_')
-            result += [u_ + p + fmtname.format(name) + ' = ' + fmtval.format(value)]
-        result = sep.join(result)
-        if printout:
-            print(result)
-        else:
-            return result
-
-    def _update_doc_units_with_values(self, sep=' |  ', fmtdoc='{:20s}'):
-        '''for u in self.doc_units, update self.doc_units[u] with values of u.'''
-        for u, doc in self.doc_units.items():
-            valstr = self.prettyprint_unit_values(u, printout=False)
-            if len(valstr)>0:
-                doc = sep.join([fmtdoc.format(doc), valstr])
-                self.doc_units[u] = doc
-
-    def docu(self, u, doc):
-        '''documents u by adding u=doc to dict self.doc_units'''
-        self.doc_units[u]=doc
-
-    def help(self, u=None, printout=True, fmt='{:3s}: {}'):
-        '''prints documentation for u, or all units if u is None.
-        printout=False --> return dict, instead of printing.
-        '''
-        if u is None:
-            result = self.doc_units
-        else:
-            if isinstance(u, str):
-                u = [u]
-            result = dict()
-            for unit in u:
-                unit = self._unit_name(unit)
-                doc  = self.doc_units.get(unit, "u='{}' is not yet documented!".format(unit))
-                result[unit] = doc
-        if not printout:
-            return result
-        else:
-            for key, doc in result.items():
-                print(fmt.format(key, doc))
-
-    def closest(self, value, sign_sensitive=True, reltol=1e-8):
-        '''returns [(attr, value)] for attr(s) in self whose value is closest to value.
-        sign_sensitive: True (default) or False
-            whether to care about signs (plus or minus) when comparing values
-        reltol: number (default 1e-8)
-            if multiple attrs are closest, and all match (to within reltol)
-            return a list of (attr, value) pairs for all such attrs.
-        closeness is determined by doing ratios.
-        '''
-        result = []
-        best = np.inf
-        for key, val in self.__dict__.items():
-            if val == 0:
-                if value != 0:
-                    continue
-                else:
-                    result += [(key, val)]
-            try:
-                rat = value / val
-            except TypeError:
-                continue
-            if sign_sensitive: 
-                rat = abs(rat)
-            compare_val = abs(rat - 1)
-            if best == 0:  # we handle this separately to prevent division by 0 error.
-                if compare_val < reltol:
-                    result += [(key, val)]
-            elif abs(1 - compare_val / best) < reltol:
-                result += [(key, val)]
-            elif compare_val < best:
-                result = [(key, val)]
-                best = compare_val
-        return result
-
+Bifrost_units = BifrostUnits  # alias (required for historical compatibility)
 
 #####################
 #  CROSS SECTIONS   #
@@ -2683,15 +2756,15 @@ class Cross_sect:
         if out in ['se el vi mt'.split()] and not self.load_cross_tables:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
 
-        finterp = interpolate.interp1d(self.cross_tab[itab]['tg'],
-                                          self.cross_tab[itab][out])
+        finterp = interpolate.interp1d(np.log(self.cross_tab[itab]['tg']),
+                                          self.cross_tab[itab][out]) 
         tgreg = np.array(tg, copy=True)
         max_temp = np.max(self.cross_tab[itab]['tg'])
         tgreg[tg > max_temp] = max_temp
         min_temp = np.min(self.cross_tab[itab]['tg'])
         tgreg[tg < min_temp] = min_temp
 
-        return finterp(tgreg)
+        return finterp(np.log(tgreg))
 
     def __call__(self, tg, *args, **kwargs):
         '''alias for self.tab_interp.'''

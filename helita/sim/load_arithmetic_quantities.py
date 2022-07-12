@@ -31,15 +31,16 @@ from multiprocessing.dummy import Pool as ThreadPool
 import warnings
 
 # import internal modules
+from . import tools
 from . import document_vars
 try:
   from . import cstagger
 except ImportError:
-  warnings.warn("failed to import helita.sim.cstagger; running stagger with stagger_kind='cstagger' will crash.")
+  cstagger = tools.ImportFailed('cstagger', "This module is required to use stagger_kind='cstagger'.")
 try:
   from . import stagger
 except ImportError:
-  warnings.warn("failed to import helita.sim.stagger; running stagger with stagger_kind='stagger' will crash.")
+  stagger = tools.ImportFailed('stagger')
 
 ## import the relevant things from the internal module "units"
 from .units import (
@@ -126,10 +127,12 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
   _getter_funcs = (
     get_center, get_deriv, get_interp,
     get_module, get_horizontal_average,
-    get_gradients_vect, get_gradients_scalar, get_vector_product,
-    get_square, get_lg, get_numop, get_ratios,
+    get_gradients_vect, get_gradients_scalar,
+    get_vector_product, get_dot_product,
+    get_square, get_lg, get_numop, get_ratios, get_parens,
     get_projections, get_angle,
-    get_stat_quant
+    get_stat_quant, get_fft_quant,
+    get_multi_quant,
   )
 
   val = None
@@ -146,7 +149,7 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
 
 
 # default
-_DERIV_QUANT = ('DERIV_QUANT', ['d'+x+up for up in ('up', 'dn') for x in AXES])
+_DERIV_QUANT = ('DERIV_QUANT', ['d'+x+up+one for up in ('up', 'dn') for x in AXES for one in ('', '1')])
 # get value
 def get_deriv(obj,quant):
   '''
@@ -156,33 +159,43 @@ def get_deriv(obj,quant):
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_DERIV_QUANT, get_deriv.__doc__,
                                            uni=UNI.quant_child(0) / UNI_length)
-    docvar('dxup',  'spatial derivative in the x axis with half grid up [simu units]')
-    docvar('dyup',  'spatial derivative in the y axis with half grid up [simu units]')
-    docvar('dzup',  'spatial derivative in the z axis with half grid up [simu units]')
-    docvar('dxdn',  'spatial derivative in the x axis with half grid down [simu units]')
-    docvar('dydn',  'spatial derivative in the y axis with half grid down [simu units]')
-    docvar('dzdn',  'spatial derivative in the z axis with half grid down [simu units]')
+    for x in AXES:
+      for up in ('up', 'dn'):
+        docvar(f'd{x}{up}', f'dvard{x}{up}  --> d(var)/d{x}, with half grid {up}, using method implied by stagger_kind.')
+        docvar(f'd{x}{up}1', f'dvard{x}{up}1 --> d(var)/d{x}, with half grid {up}, using first order gradients method.')
     return None
 
-  getq = quant[-4:]   # the quant we are "getting" by this function. (here: dxup, dyup, ..., or dzdn)
+  if quant[-1] == '1':
+    getq = quant[-5:]   # e.g. 'dxup1'
+    dxup = getq[:-1]    # e.g. 'dxup'
+    order = 1      # 1 --> "use first order. Ignore stagger_kind"
+  else:
+    getq = quant[-4:]   # e.g. 'dxup'
+    dxup = getq
+    order = None   # None --> "use whatever order is implied by obj.stagger_kind"
 
-  if not (quant[0] == 'd' and getq in _DERIV_QUANT[1]):
+  if not (quant[0]=='d' and getq[0]=='d' and getq in _DERIV_QUANT[1]):
     return None
 
   # tell obj the quant we are getting by this function.
   document_vars.setattr_quant_selected(obj, getq, _DERIV_QUANT[0], delay=True)
 
   # interpret quant string
-  axis = quant[-3]
-  q    = quant[1:-4]  # base variable 
+  axis = getq[1]      # 'x', 'y', or 'z'
+  q    = quant[ 1 : -len(getq) ]  # base variable 
+  # get value of var (before derivative)
   var  = obj.get_var(q)
 
-  # handle "cant interpolate" case
+  # handle "cant interpolate" case (e.g. if nx < 5 and trying to interpolate in x.)
   if not _can_interp(obj, axis):
     if obj.verbose:
       warnings.warn("Can't interpolate; using np.gradient to take derivative, instead.")
     xidx = dict(x=0, y=1, z=2)[axis]  # axis; 0, 1, or 2.
-    if var.shape[xidx] <= 1:
+    if np.ndim(var) < 3:
+      if obj.verbose:
+        warnings.warn(f"Returning 0 for derivative of quant with ndim<3: {repr(quant)}.")
+      return np.zeros_like(var)
+    elif var.shape[xidx] <= 1:
       return np.zeros_like(var)
     dvar = np.gradient(var, axis=xidx)  # 3D
     dx   = getattr(obj, 'd'+axis+'1d')  # 1D; needs dims to be added. add dims below.
@@ -190,8 +203,20 @@ def get_deriv(obj,quant):
     dvardx = dvar / dx
     return dvardx
 
-  # calculate derivative with interpolations
-  if obj.numThreads > 1:
+  ## calculate derivative with interpolations
+  # -- bookkeeping:
+  threading = (obj.numThreads > 1)
+  lowbusing = obj.lowbus
+  # -- default case --
+  if not (threading or lowbusing):
+    if order is None:  # default order; order implied by obj.stagger_kind
+      return do_stagger(var, 'd'+dxup, obj=obj)
+    elif order == 1:   # force first order
+      with tools.MaintainingAttrs(obj, 'stagger_kind'):  # reset obj.stagger_kind after this block
+        obj.stagger_kind = 'o1_numpy'  # stagger kind option which causes to use first order method.
+        return do_stagger(var, 'd'+dxup, obj=obj)
+  # -- "using numThreads" case (False by default) --
+  if threading:   
     if obj.verbose:
       print('Threading', whsp*8, end="\r", flush=True)
     quantlist = [quant[-4:] for numb in range(obj.numThreads)]
@@ -201,8 +226,9 @@ def get_deriv(obj,quant):
       return threadQuantity_z(deriv_loop, obj.numThreads, var, quantlist)
     else:
       return threadQuantity_y(deriv_loop, obj.numThreads, var, quantlist)
+  # -- "using lowbus" case (False by default) --
   else:
-    if obj.lowbus:
+    if lowbusing:
       output = np.zeros_like(var)
       if axis != 'z':
         for iiz in range(obj.nz):
@@ -216,8 +242,9 @@ def get_deriv(obj,quant):
           output[slicer] = staggered
 
       return output
-    else:
-      return do_stagger(var, 'd' + quant[-4:], obj=obj)
+
+  # if we reach this line, quant is a deriv quant but we did not handle it.
+  raise NotImplementedError(f'{repr(getq)} in get_deriv')
 
 
 # default
@@ -387,12 +414,17 @@ def get_horizontal_average(obj,quant):
     for iix in range(0, getattr(obj, 'nx')):
       for iiy in range(0, getattr(obj, 'ny')):
         result[iix, iiy, :] = result[iix, iiy, :] / horv[:]
-  return result
+    return result
+  else:
+    # quant is a horizontal_average quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_horizontal_average')
 
 
 # default
 _GRADVECT_QUANT = ('GRADVECT_QUANT',
-                   ['div', 'divup', 'divdn',
+                   ['divup', 'divdn', 'div',  # note: div must come after divup and divdn,
+                          # since to check which quant to get we are checking .startswith,
+                          # and 'divup' and 'divdn' both start with 'div'.
                    'rot', 'she', 'curlcc', 'curvec',
                    'chkdiv', 'chbdiv', 'chhdiv']
                   )
@@ -551,6 +583,10 @@ def get_gradients_vect(obj,quant):
           result += obj.get_var('d' + q + 'xdyup')
     return result
 
+  else:
+    # if we reach this line, quant is a gradients_vect quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_gradients_vect')
+
 
 # default
 _GRADSCAL_QUANT = ('GRADSCAL_QUANT', ['gra'])
@@ -579,7 +615,10 @@ def get_gradients_scalar(obj,quant):
     result = obj.get_var('d' + q + 'dxup')
     result += obj.get_var('d' + q + 'dyup')
     result += obj.get_var('d' + q + 'dzup')
-  return result
+    return result
+  else:
+    # if we reach this line, quant is a gradients_scalar quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_gradients_scalar')
 
 
 # default
@@ -610,16 +649,19 @@ def get_square(obj,quant):
     result += obj.get_var(q + 'yc') ** 2
     result += obj.get_var(q + 'zc') ** 2
     return result
+  else:
+    # if we reach this line, quant is a square quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_square')
 
 
 # default
-_LOG_QUANT = ('LOG_QUANT', ['lg', 'log_', 'ln_'])
+_LOG_QUANT = ('LOG_QUANT', ['lg', 'log_', 'log10_', 'ln_'])
 # get value
 def get_lg(obj,quant):
   '''Logarithm of a variable. E.g. log_r --> log10(r)'''
   if quant == '':
     docvar = document_vars.vars_documenter(obj, *_LOG_QUANT, get_lg.__doc__, uni=DIMENSIONLESS)
-    for lg in ['lg', 'log_']:
+    for lg in ['lg', 'log_', 'log10_']:
       docvar(lg,  'starting with, logarithm base 10 of a variable expressed in [simu. units].')
     docvar('ln_', 'starting with, logarithm base e  of a variable expressed in [simu. units].')
     return None
@@ -637,10 +679,14 @@ def get_lg(obj,quant):
   document_vars.setattr_quant_selected(obj, getq, _LOG_QUANT[0], delay=True)
 
   # do calculations and return result
-  if getq in ['lg', 'log_']:
+  if getq in ['lg', 'log_', 'log10_']:
     return np.log10(obj.get_var(q))
   elif getq == 'ln_':
     return np.log(obj.get_var(q))
+  else:
+    # if we reach this line, quant is a lg quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_lg')
+
 
 
 # default
@@ -675,6 +721,9 @@ def get_numop(obj,quant):
     return (v / np.mean(v)) - 1
   elif getq == 'abs_':
     return np.abs(v)
+  else:
+    # if we reach this line, quant is a numop quant but we did not handle it.
+    raise NotImplementedError(f'{repr(getq)} in get_numop')
 
 # default
 _RATIO_QUANT = ('RATIO_QUANT', ['rat'])
@@ -701,6 +750,46 @@ def get_ratios(obj,quant):
   qA_val = obj.get_var(qA)
   qB_val = obj.get_var(qB)
   return qA_val / (qB_val + EPSILON)
+
+# default
+_PARENS_QUANT = ('PARENS_QUANT', ['()', '()x', '()y', '()z'])
+# get value
+def get_parens(obj,quant):
+  '''parentheses (in the sense of "order of operations").
+  E.g. mean_(b_mod) --> mean |B|
+  E.g. (mean_b)_mod --> |(mean Bx, mean By, mean Bz)|
+  E.g. curvec(u_facecrosstoface_b)x --> x component of (curl of (u cross b)).
+  E.g. (curvecu)_facecrosstoface_bx --> x component of ((curl of u) cross b).
+  '''
+  if quant == '':
+    docvar = document_vars.vars_documenter(obj, *_PARENS_QUANT, get_parens.__doc__, uni=UNI.qc(0))
+    docvar('()',  "(s) --> get_var(s).")
+    for x in AXES:
+      docvar('()'+x, f"(s){x} --> get_var(sx).")
+    return None
+
+  # interpret quant string
+  if quant[0] != '(':
+    return None
+  if quant[-1] == ')':
+    getting = '()'
+    var     = quant[1 : -1]
+    axis    = None
+  elif quant[-2] == ')':
+    axis = quant[-1]
+    if axis not in AXES:
+      return None
+    getting = '()'+axis
+    var     = quant[1 : -2] + axis
+  else:
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, getting, _PARENS_QUANT[0], delay=True)
+
+  # do calculations and return result
+  val = obj(var)
+  return val
 
 
 # default
@@ -785,7 +874,8 @@ def get_vector_product(obj,quant):
                            'result is fully centered. E.g. result_x is at ( 0  ,  0  ,  0  ).'
                            ' For most cases, it is better to use _facecrosstoface_'))
     docvar('_facecrosstoface_', ('cross product for two face-centered vectors such as B, u. '
-                           'result is face-centered E.g. result_x is at (-0.5,  0 ,  0  ).'), uni=UNI.quant_child(0))
+                           'result is face-centered E.g. result_x is at (-0.5,  0 ,  0  ).'),
+                            uni=UNI.quant_child(0))   # quant_child(0) will be _facecrosstocenter_ for this one.
     return None
 
   # interpret quant string
@@ -795,7 +885,7 @@ def get_vector_product(obj,quant):
       B, x = q[:-1], q[-1]
       y, z = YZ_FROM_X[x]
       break
-  else:  # if we did not break, we did not match any RAT to quant, so we return None.
+  else:  # if we did not break, we did not match any TIMES to quant, so we return None.
     return None
 
   # tell obj the quant we are getting by this function.
@@ -866,6 +956,63 @@ def get_vector_product(obj,quant):
     ## '_facecrosstocenter_' gives result at (0, 0, 0) so we shift by xdn to align.
     return obj.get_var(A+'_facecrosstocenter_'+B+x + x+'dn')
 
+  else:
+    # if we reach this line, quant is a vector_product but we did not handle it.
+    raise NotImplementedError(f'{repr(cross)} in get_vector_product')
+
+
+# default
+_DOT_PRODUCT_QUANT = \
+          ('DOT_PRODUCT_QUANT',
+            ['_dot_', '_facedot_', '_edgedot_']
+          )
+# get value
+def get_dot_product(obj,quant):
+  '''dot product between two vectors.
+  call via <v1><dot><v2>
+  Example, u dot ue, you should call get_var('u_facedot_ue').
+  Result will always be centered on the meshgrid.
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, *_DOT_PRODUCT_QUANT, get_dot_product.__doc__,
+                                           uni=UNI.quant_child(0) * UNI.quant_child(1))
+    docvar('_dot_',  '"smart" dot product between two vectors. centers all values before dotting.')
+    docvar('_facedot_', 'dot product between two face-centered vectors, such as B, u.')
+    docvar('_edgedot_', 'dot product between two edge-centered vectors, such as E, I.')
+    return None
+
+  # interpret quant string
+  for TIMES in _DOT_PRODUCT_QUANT[1]:
+    A, dot, B = quant.partition(TIMES)
+    if B != '':
+      break
+  else:  # if we did not break, we did not match any TIMES to quant, so we return None.
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, dot, _DOT_PRODUCT_QUANT[0], delay=True)
+
+  # at this point, we know quant looked like <A><dot><B>
+
+  if dot == '_dot_':
+    return obj(A+'xc') * obj(B+'xc') + \
+           obj(A+'yc') * obj(B+'yc') + \
+           obj(A+'zc') * obj(B+'zc')
+
+  elif dot == '_facedot_':
+    return obj(A+'xxup') * obj(B+'xxup') + \
+           obj(A+'yyup') * obj(B+'yyup') + \
+           obj(A+'zzup') * obj(B+'zzup')
+
+  elif dot == '_edgedot_':
+    return obj(A+'xyupzup') * obj(B+'xyupzup') + \
+           obj(A+'yzupxup') * obj(B+'yzupxup') + \
+           obj(A+'zxupyup') * obj(B+'zxupyup')
+
+  else:
+    # if we reach this line, quant is a dot_product quant but we did not handle it.
+    raise NotImplementedError(f'{repr(dot)} in get_dot_product')
+
 
 # default
 _HATS = ['_hat'+x for x in AXES]
@@ -910,15 +1057,19 @@ def get_angle(obj,quant):
     varhatx = obj.get_var(var+x) / obj.get_var('mod'+var)
     return varhatx
 
-  if command in _ANGLES_XXY:
+  elif command in _ANGLES_XXY:
     x, y = command[-2], command[-1] # _angle_xxy[-3] == _angle_xxy[-1]
     varx = obj.get_var(var + x)
     vary = obj.get_var(var + y)
     return np.arctan2(vary, varx)
 
+  else:
+    # if we reach this line, quant is an angle quant but we did not handle it.
+    raise NotImplementedError(f'{repr(command)} in get_angle')
+
 
 #default
-_STAT_QUANT = ('STAT_QUANT', ['mean_', 'variance_', 'std_'])
+_STAT_QUANT = ('STAT_QUANT', ['mean_', 'variance_', 'std_', 'max_', 'min_', 'abs_'])
 # get value
 def get_stat_quant(obj, quant):
   '''statistics such as mean, std.
@@ -930,6 +1081,9 @@ def get_stat_quant(obj, quant):
     docvar('mean_', 'mean_v --> np.mean(v)', uni=UNI.qc(0))
     docvar('variance_', 'variance_v --> np.var(v).', uni=UNI.qc(0)**2)
     docvar('std_', 'std_v --> np.std(v)', uni=UNI.qc(0))
+    docvar('max_', 'max_v --> np.max(v)', uni=UNI.qc(0))
+    docvar('min_', 'min_v --> np.min(v)', uni=UNI.qc(0))
+    docvar('abs_', 'abs_v --> np.abs(v)', uni=UNI.qc(0))
     return None
 
   # interpret quant string
@@ -950,10 +1104,137 @@ def get_stat_quant(obj, quant):
     return np.var(val)
   elif command == 'std_':
     return np.std(val)
+  elif command == 'max_':
+    return np.max(val)
+  elif command == 'min_':
+    return np.min(val)
+  elif command == 'abs_':
+    return np.abs(val)
   else:
     raise NotImplementedError(f'command={repr(command)} in get_stat_quant')
 
 
+#default
+_FFT_QUANT = ('FFT_QUANT', ['fft2_', 'fftxy_', 'fftyz_', 'fftxz_'])
+# get value
+def get_fft_quant(obj, quant):
+  '''Fourier transform, using np.fft.fft2, and shifting using np.fft.fftshift.
+
+  result will be complex-valued. (consider get_var('abs_fft2_quant') to convert to magnitude.)
+
+  See obj.kx, ky, kz for the corresponding coordinates in k-space.
+  See obj.get_kextent for the extent to use if plotting k-space via imshow.
+
+  Also sets obj._latest_fft_axes = ('x', 'y'), ('x', 'z') or ('y', 'z') as appropriate.
+
+  Note that for plotting with imshow, you will likely want to transpose and use origin='lower'.
+  Example, making a correctly labeled and aligned plot of FFT(r[:, 0, :]):
+    dd = BifrostData(...)
+    val = dd('abs_fftxz_r')[:, 0, :]    # == |FFT(dd('r')[:, 0, :])|
+    extent = dd.get_kextent('xz', units='si')
+    plt.imshow(val.T, origin='lower', extent=extent)
+    plt.xlabel('kx [1/m]'); plt.ylabel('kz [1/m]')
+    plt.xlim([0, None])   # <-- not necessary, however numpy's FFT of real-valued input
+        # will be symmetric under rotation by 180 degrees, so half the spectrum is redundant.
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, *_FFT_QUANT, get_fft_quant.__doc__, uni=UNI.qc(0))
+    shifted = ' result will be shifted so that the zero-frequency component is in the middle (via np.fft.fftshift).'
+    docvar('fft2_', '2D fft. requires 2D data (i.e. x, y, or z with length 1). result will be 2D.' + shifted)
+    docvar('fftxy_', '2D fft in (x, y) plane, at each z. result will be 3D.' + shifted)
+    docvar('fftyz_', '2D fft in (y, z) plane, at each x. result will be 3D.' + shifted)
+    docvar('fftxz_', '2D fft in (x, z) plane, at each y. result will be 3D.' + shifted)
+    return None
+
+  # interpret quant string
+  command, _, var = quant.partition('_')
+  command = command + '_'
+
+  if command not in _FFT_QUANT[1]:
+    return None
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, command, _FFT_QUANT[0], delay=True)
+
+  # do calculations and return result
+  val = obj(var)
+  if command == 'fft2_':
+    if np.shape(val) != obj.shape:
+      raise NotImplementedError(f'fft2_ for {repr(var)} with shape {np.shape(val)} not equal to obj.shape {obj.shape}')
+    if obj.xLength == 1:
+      return obj(f'fftyz_{var}')[0, :, :]
+    elif obj.yLength == 1:
+      return obj(f'fftxz_{var}')[:, 0, :]
+    elif obj.zLength == 1:
+      return obj(f'fftxy_{var}')[:, :, 0]
+    else:
+      errmsg = f'fft2_ requires x, y, or z to have length 1, but obj.shape = {obj.shape}.' +\
+                'maybe you meant to specify axes, via fftxy_, fftyz, or fftxz_?'
+      raise ValueError(errmsg)
+  elif command in ('fftxy_', 'fftyz_', 'fftxz_'):
+    x, y = command[3:5]
+    obj._latest_fft_axes = (x, y)    # <-- bookkeeping
+    AX_STR_TO_I = {'x': 0, 'y': 1, 'z': 2}
+    xi = AX_STR_TO_I[x]
+    yi = AX_STR_TO_I[y]
+    fft_unshifted = np.fft.fft2(val, axes=(xi, yi))
+    return np.fft.fftshift(fft_unshifted)
+  else:
+    raise NotImplementedError(f'command={repr(command)} in get_fft_quant')
+
+
+#default
+_MULTI_QUANT = ('MULTI_QUANT',
+                [fullcommand
+                  for command in ('vec', 'vecxyz', 'vecxy', 'vecyz', 'vecxz')
+                  for fullcommand in ('_'+command, command+'_')]
+               )
+# get value
+def get_multi_quant(obj, quant):
+  '''multiple quantities. (last axis will be the multi.)
+  E.g. 'b_vec' --> result.shape=(Nx, Ny, Nz, 3), result[...,0]=bx, result[...,1]=by, result[...,2]=bz.
+  '''
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, *_MULTI_QUANT, get_multi_quant.__doc__, uni=UNI.qc(0))
+    for fmt in '{var}_{command}', '{command}_{var}':
+      for command in ('vec', 'vecxyz'):   # 'vec' and 'vecxyz' are aliases for each other.
+        docvar(fmt.format(var='', command=command),
+               "'" + fmt.format(var='var', command=command) + "'" +
+               " --> (varx, vary, varz) stacked along last axis (shape == (Nx, Ny, Nz, 3).")
+      for (x,y) in ('xy', 'yz', 'xz'):
+        docvar(fmt.format(var='', command=f'vec{x}{y}'),
+               "'" + fmt.format(var='var', command=f'vec{x}{y}') + "'" +
+               " --> (var{x}, var{y}) stacked along last axis (shape == (Nx, Ny, Nz, 2).")
+    return None
+
+  # interpret quant string
+  var, _, command = quant.rpartition('_')
+  fullcommand = '_' + command
+
+  if fullcommand not in _MULTI_QUANT[1]:   # quant doesn't look like 'var_command'
+    command, _, var = quant.partition('_')
+    fullcommand = command + '_'
+    if fullcommand not in _MULTI_QUANT[1]:
+      return None
+  # now we have assigned:
+  #  command = command without underscore. e.g. 'vec'
+  #  fullcommand = command with underscore. e.g. '_vec' or 'vec_'
+  #  var = quant without command.
+
+  # tell obj the quant we are getting by this function.
+  document_vars.setattr_quant_selected(obj, fullcommand, _MULTI_QUANT[0], delay=True)
+
+  # do calculations and return result
+  if command.startswith('vec'):
+    if command in ('vec', 'vecxyz'):
+      axes = 'xyz'
+    else:   # command is 'vecxy', 'vecyz', or 'vecxz'
+      axes = command[-2:]
+    components = [obj(var+x) for x in axes]
+    return np.stack(components, axis=-1)
+  
+  else:
+    raise NotImplementedError(f'command={repr(fullcommand)} in get_multi_quant')
 
 ''' ------------- End get_quant() functions; Begin helper functions -------------  '''
 

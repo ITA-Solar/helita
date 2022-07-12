@@ -1,9 +1,23 @@
-from astropy.io import fits
-import numpy as np
-import os, fnmatch
-from scipy import interpolate
-from scipy import ndimage
+# import built-in modules
+import os
+import fnmatch
+import functools
+import warnings
+import collections
 
+# import external public modules
+import numpy as np
+from astropy.io import fits
+from scipy import interpolate, ndimage
+
+
+''' --------------------------- defaults --------------------------- '''
+
+IMPORT_FAILURE_WARNINGS = False    # whether to warn (immediately) when an optional module fails to import.
+  # Either way, we will still raise ImportFailedError upon accessing a module which failed to import.
+
+
+''' --------------------------- writing snaps --------------------------- '''
 
 def writefits(obj, varname, snap=None, instrument = 'MURaM', 
               name='ar098192', origin='HGCR    ', z_tau51m = None): 
@@ -242,6 +256,34 @@ def globalvars(obj):
            'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
 
 
+''' --------------------------- API --------------------------- '''
+
+def apply(x, fstr, *args, **kwargs):
+    '''return x.fstr(*args, **kwargs), or x if x doesn't have an 'fstr' attribute.
+    default can be returned instead for x without 'fstr' attribute, if default is entered in kwargs.
+
+    Examples:
+        apply(x, 'test1', 3, 7, mykwarg=8)
+        >>> x.test1(3, 7, mykwarg=8) if hasattr(x, 'test1') else x
+        apply(x, 'test2', mykwarg=8, default=None)
+        >>> x.test2(mykwarg=8) if hasattr(x, 'test2') else None
+    '''
+    __tracebackhide__ = True
+    # pop default if it was provided.
+    doing_default = 'default' in kwargs
+    if doing_default:
+        default = kwargs.pop('default')
+    # call x.fstr(*args, **kwargs)   # (kwargs with 'default' popped.)
+    if hasattr(x, fstr):
+        return getattr(x, fstr)(*args, **kwargs)
+    elif doing_default:
+        return default
+    else:
+        return x
+
+def is_integer(x):
+    return isinstance(x, (int, np.integer)) or apply(x, 'is_integer', default=False)
+
 ''' --------------------------- coordinate transformations --------------------------- '''
 
 def polar2cartesian(r, t, grid, x, y, order=3):
@@ -305,6 +347,251 @@ def refine(s,q,factor=2,unscale=lambda x:x):
         qq = unscale(np.interp(ss[::-1], s[::-1], q[::-1]))
         qq = qq[::-1]
         return ss, qq
+
+
+''' --------------------- restore attrs --------------------- '''
+
+def maintain_attrs(*attrs):
+    '''return decorator which restores attrs of obj after running function.
+    It is assumed that obj is the first arg of function.
+    '''
+    def attr_restorer(f):
+        @functools.wraps(f)
+        def f_but_maintain_attrs(obj, *args, **kwargs):
+            '''f but attrs are maintained.'''
+            __tracebackhide__ = True
+            with MaintainingAttrs(obj, *attrs):
+                return f(obj, *args, **kwargs)
+        return f_but_maintain_attrs
+    return attr_restorer
+
+class MaintainingAttrs():
+    '''context manager which restores attrs of obj to their original values, upon exit.'''
+    def __init__(self, obj, *attrs):
+        self.obj = obj
+        self.attrs = attrs
+
+    def __enter__(self):
+        self.memory = dict()
+        for attr in self.attrs:
+            if hasattr(self.obj, attr):
+                self.memory[attr] = getattr(self.obj, attr)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        for attr, val in self.memory.items():
+            setattr(self.obj, attr, val)
+
+def with_attrs(**attrs_and_values):
+    '''return decorator which sets attrs of object before running function then restores them after.
+    It is assumed that obj is the first arg of function.
+    '''
+    def attr_setter_then_restorer(f):
+        @functools.wraps(f)
+        def f_but_set_then_restore_attrs(obj, *args, **kwargs):
+            '''f but attrs are set beforehand then restored afterward.'''
+            __tracebackhide__ = True
+            with MaintainingAttrs(obj, *attrs_and_values.keys()):
+                for attr, value in attrs_and_values.items():
+                    setattr(obj, attr, value)
+                return f(obj, *args, **kwargs)
+        return f_but_set_then_restore_attrs
+    return attr_setter_then_restorer
+
+
+class EnterDir:
+    '''context manager for remembering directory.
+    upon enter, cd to directory (default os.curdir, i.e. no change in directory)
+    upon exit, original working directory will be restored.
+
+    For function decorator, see QOL.maintain_cwd.
+    '''
+    def __init__(self, directory=os.curdir):
+        self.cwd       = os.path.abspath(os.getcwd())
+        self.directory = directory
+
+    def __enter__ (self):
+        os.chdir(self.directory)
+
+    def __exit__ (self, exc_type, exc_value, traceback):
+        os.chdir(self.cwd)
+
+RememberDir    = EnterDir  #alias
+EnterDirectory = EnterDir  #alias
+
+def with_dir(directory):
+    '''returns a function decorator which:
+    - changes current directory to <directory>.
+    - runs function
+    - changes back to original directory.
+    '''
+    def decorator(f):
+        @functools.wraps(f)
+        def f_but_enter_dir(*args, **kwargs):
+            with EnterDir(directory):
+                return f(*args, **kwargs)
+        return f_but_enter_dir
+    return decorator
+
+withdir = with_dir #alias
+
+# define a new function decorator, maintain_cwd, which maintains current directory:
+maintain_cwd = with_dir(os.curdir)
+
+maintain_directory = maintain_cwd  # alias
+maintain_dir       = maintain_cwd  # alias
+
+''' --------------------------- info about arrays --------------------------- '''
+
+def stats(arr, advanced=True, finite_only=True):
+    '''return dict with min, mean, max.
+    if advanced, also include:
+        std, median, size, number of non-finite points (e.g. np.inf or np.nan).
+    if finite_only:
+        only treat the finite parts of arr; ignore nans and infs.
+    '''
+    arr = arr_orig = np.asanyarray(arr)
+    if finite_only or advanced:  # then we need to know np.isfinite(arr)
+        finite = np.isfinite(arr)
+        n_nonfinite = arr.size - np.count_nonzero(finite)
+    if finite_only and n_nonfinite > 0:
+        arr = arr[finite]
+    result = dict(min=np.nanmin(arr), mean=np.nanmean(arr), max=np.nanmax(arr))
+    if advanced:
+        result.update(dict(std=np.nanstd(arr), median=np.nanmedian(arr),
+                           size=arr.size, nonfinite=n_nonfinite))
+    return result
+
+def print_stats(arr_or_stats, advanced=True, fmt='{: .2e}', sep=' | ', return_str=False, **kw__print):
+    '''calculate and prettyprint stats about array.
+    arr_or_stats: dict (stats) or array-like.
+        dict --> treat dict as stats of array.
+        array --> calculate stats(arr, advanced=advanced)
+    fmt: str
+        format string for each stat.
+    sep: str
+        separator string between each stat.
+    return_str: bool
+        whether to return string instead of printing.
+    '''
+    fmtkey = '{:>6s}' if '\n' in sep else '{}'
+    _stats = arr_or_stats if isinstance(arr_or_stats, dict) else stats(arr_or_stats, advanced=advanced)
+    result = sep.join([f'{fmtkey.format(key)}: {fmt.format(val)}' for key, val in _stats.items()])
+    return result if return_str else print(result, **kw__print)
+
+def finite_op(arr, op):
+    '''returns op(arr), hitting only the finite values of arr.
+    if arr has only finite values,
+        finite_op(arr, op) == op(arr).
+    if arr has some nonfinite values (infs or nans),
+        finite_op(arr, op) == op(arr[np.isfinite(arr)])
+    '''
+    arr = np.asanyarray(arr)
+    finite = np.isfinite(arr)
+    if np.count_nonzero(finite) < finite.size:
+        return op(arr[finite])
+    else:
+        return op(arr)
+
+def finite_min(arr):
+    '''returns min of all the finite values of arr.'''
+    return finite_op(arr, np.min)
+
+def finite_mean(arr):
+    '''returns mean of all the finite values of arr.'''
+    return finite_op(arr, np.mean)
+
+def finite_max(arr):
+    '''returns max of all the finite values of arr.'''
+    return finite_op(arr, np.max)
+
+def finite_std(arr):
+    '''returns std of all the finite values of arr.'''
+    return finite_op(arr, np.std)
+
+def finite_median(arr):
+    '''returns median of all the finite values of arr.'''
+    return finite_op(arr, np.median)
+
+
+''' --------------------------- manipulating arrays --------------------------- '''
+
+def slicer_at_ax(slicer, ax):
+    '''return tuple of slices which, when applied to an array, takes slice along axis number <ax>.
+    slicer: a slice object, or integer, or tuple of integers.
+        slice or integer  -> use slicer directly.
+        tuple of integers -> use slice(*slicer).
+    ax: a number (negative ax not supported here).
+    '''
+    try:
+        slicer[0]
+    except TypeError: #slicer is a slice or an integer.
+        pass  
+    else: #assume slicer is a tuple of integers.
+        slicer = slice(*slicer)
+    return (slice(None),)*ax + (slicer,)
+
+
+''' --------------------------- strings --------------------------- '''
+
+def pretty_nbytes(nbytes, fmt='{:.2f}'):
+  '''returns nbytes as a string with units for improved readability.
+  E.g. pretty_nbytes(20480, fmt='{:.1f}') --> '10.0 kB'.
+  '''
+  n_u_bytes = nbytes
+  u = ''
+  for u_next in ['k', 'M', 'G', 'T']:
+    n_next = n_u_bytes / 1024
+    if n_next < 1:
+      break
+    else:
+      n_u_bytes = n_next
+      u = u_next
+  return '{fmt} {u}B'.format(fmt=fmt, u=u).format(n_u_bytes)
+
+
+''' --------------------------- import error handling --------------------------- '''
+
+class ImportFailedError(ImportError):
+  pass
+
+class ImportFailed():
+  '''set modules which fail to import to be instances of this class;
+  initialize with modulename, additional_error_message.
+  when attempting to access any attribute of the ImportFailed object,
+    raises ImportFailedError('. '.join(modulename, additional_error_message)).
+  Also, if IMPORT_FAILURE_WARNINGS, make warning immediately when initialized.
+
+  Example:
+  try:
+    import zarr
+  except ImportError:
+    zarr = ImportFailed('zarr', 'This module is required for compressing data.')
+
+  zarr.load(...)   # << attempt to use zarr
+  # if zarr was imported successfully, it will work fine.
+  # if zarr failed to import, this error will be raised:
+  >>> ImportFailedError: zarr. This module is required for compressing data.
+  '''
+  def __init__(self, modulename, additional_error_message=''):
+    self.modulename = modulename
+    self.additional_error_message = additional_error_message
+    if IMPORT_FAILURE_WARNINGS:
+      warnings.warn(f'Failed to import module {modulename}.{additional_error_message}')
+
+  def __getattr__(self, attr):
+    str_add = str(self.additional_error_message)
+    if len(str_add) > 0:
+      str_add = '. ' + str_add
+    raise ImportFailedError(self.modulename + str_add)
+
+
+def boring_decorator(*args, **kw):
+    '''returns the identity wrapper (returns the function it wraps, without any changes).
+    This is useful when importing function wrappers; use boring_decorator if ImportError occurs.
+    '''
+    def boring_wrapper(f):
+        return f
+    return boring_wrapper
 
 
 ''' --------------------------- vector rotations --------------------------- '''
@@ -409,3 +696,117 @@ def rotation_apply(rotations, vecs):
   returns rotated vectors.
   '''
   return np.sum(rotations * np.expand_dims(vecs, axis=(-2)), axis=-1)
+
+
+''' --------------------------- plotting --------------------------- '''
+
+def extent(xcoords, ycoords):
+  '''returns extent (to go to imshow), given xcoords, ycoords. Assumes origin='lower'.
+  Use this method to properly align extent with middle of pixels.
+  (Noticeable when imshowing few enough pixels that individual pixels are visible.)
+  
+  xcoords and ycoords should be arrays.
+  (This method uses their first & last values, and their lengths.)
+
+  returns extent == np.array([left, right, bottom, top]).
+  '''
+  Nx = len(xcoords)
+  Ny = len(ycoords)
+  dx = (xcoords[-1] - xcoords[0])/Nx
+  dy = (ycoords[-1] - ycoords[0])/Ny
+  return np.array([*(xcoords[0] + np.array([0 - dx/2, dx * Nx + dx/2])),
+                   *(ycoords[0] + np.array([0 - dy/2, dy * Ny + dy/2]))])
+
+
+''' --------------------------- custom versions of builtins --------------------------- '''
+
+class GenericDict(collections.abc.MutableMapping):
+    '''dict allowing for non-hashable keys.
+    Slower than built-in dict, but behaves like a built-in dict.
+    
+    equals: None or function.
+        function used to test equality of keys.
+        None --> use the default: lambda oldkey, newkey: oldkey==newkey
+    '''
+    def __init__(self, iterable=(), equals=None):
+        if equals is None:
+            self.equals = lambda old, new: old==new
+        else:
+            self.equals = equals
+        
+        self._keys   = collections.deque()
+        self._values = collections.deque()
+        
+        for key, value in iterable:
+            self[key] = value
+        for k, v in iterable:
+            self._keys.append(k)
+            self._values.append(v)
+    
+    ## HELPER METHODS ##
+    def _index(self, key):
+        '''return index of key in self._keys.
+        uses self.equals to check equality of keys.
+        raise ValueError if key not in self.
+        '''
+        for i, k in enumerate(self._keys):
+            if self.equals(k, key):
+                return i
+        raise ValueError('Not found in self.keys(): ', key)
+        
+    def _find(self, key):
+        '''return index of key in self.
+        uses self.equals to check equality of keys.
+        return None if key not in self.
+        '''
+        try:
+            return self._index(key)
+        except ValueError:
+            return None
+        
+    ## REQUIRED METHODS ##
+    def __getitem__(self, key):
+        i = self._find(key)
+        if i is None:
+            raise KeyError(key)
+        else:
+            return self._values[i]
+    
+    def __setitem__(self, key, value):
+        i = self._find(key)
+        if i is None:  # new key
+            self._keys.append(key)
+            self._values.append(value)
+        else:          # already existing key
+            self._keys[i] = key
+            self._values[i] = value
+        
+    def __delitem__(self, key):
+        i = self._find(key)
+        if i is None:
+            raise KeyError(key)
+        else:
+            del self._keys[i]
+            del self._values[i]
+    
+    def __iter__(self):
+        return iter(self._keys)
+    
+    def __len__(self):
+        return len(self._keys)
+    
+    ## MIXINS ##
+    # from parent, we automatically get these mixins after defining the methods above:
+    #   __contains__, keys, items, values, get, __eq__, __ne__,
+    #   pop, popitem, clear, update, setdefault,
+    
+    ## PRETTY ##
+    def __repr__(self):
+        return '{' + ', '.join([f'{key}: {value}' for key, value in self.items()]) + '}'
+
+def GenericDict_with_equals(equals):
+    '''return constructor for GenericDict, with 'equals' set to the function provided, by default.'''
+    def _GenericDict_create(*args, equals=equals, **kwargs):
+        '''return GenericDict object.'''
+        return GenericDict(*args, equals=equals, **kwargs)
+    return _GenericDict_create

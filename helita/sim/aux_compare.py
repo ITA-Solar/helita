@@ -81,13 +81,16 @@ import time
 
 # import internal modules
 from . import fluid_tools
+from . import tools
+
+# import external public modules
+import numpy as np
 
 # import external private modules
 try:
     from at_tools import fluids as fl
 except ImportError:
-    fl = None
-    warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.aux_compare may crash')
+    fl = tools.ImportFailed('at_tools.fluids')
 
 # set defaults
 DEFAULT_TOLERANCE = 0.05    # the max for (1-abs(X/Y)) before we think X != Y
@@ -97,28 +100,46 @@ DEFAULT_TOLERANCE = 0.05    # the max for (1-abs(X/Y)) before we think X != Y
 
 # dict of defaults for converting from auxvar to helita var (aka "helvar").
 AUXVARS = {
-    # aux var   : helita var. if tuple, v[1] is required ifluid or mf_ispecies.
-                                     #  v[2] (if it exists) jfluid or mf_jspecies.
-    'etg'       : ('tg', -1),    # electron temperature
-    'mfe_tg'    : 'tg',          #  fluid   temperature
-    'mfr_nu_es' : ('nu_ij', -1), # electron-fluid collision frequency
-    'mm_cnu'    : 'nu_ij',       #  fluid - fluid collision frequency
-    'mm_cross'  : 'cross',       # cross section
-    'mfr_p'     : 'p',           # pressure
-    
+    # aux var   : helita var. if tuple, v[1] tells required fluid.
+    #                         v[1] tells jfluid for 2-fluid vars (such as 'nu_ij');
+    #                                    ifluid for 1-fluid vars (such as 'tg').
+    'etg'           : ('tg', -1),    # electron temperature
+    'mfe_tg'        : 'tg',          #  fluid   temperature
+    'mfr_nu_es'     : ('nu_ij', -1), # electron-fluid collision frequency
+    'mm_cnu'        : 'nu_ij',       #  fluid - fluid collision frequency
+    'mm_cross'      : 'cross',       # cross section
+    'mfr_cross'     : ('cross',-1),  # cross section
+    'mfr_tgei'      : ('tgij',-1),   # tg+etg weighted. 
+    'mfr_p'         : 'p',           # pressure
+    'mfe_qcolue'    : ('qcol_uj',-1), # energy component of the ohmic term from velocity drift
+    'mfe_qcolte'    : ('qcol_tgj',-1),# energy component of the ohmic term from temperature diff
+    'mm_qcolt'      : 'qcol_tgj',  # energy component of the coll. term from temperature diff
+    'mm_qcolu'      : 'qcol_uj',   # energy component of the coll. term from velocity drift
 }
-# add each of these plus an axis to AUXVARS.
-# e.g. {'e': 'ef'} --> {'ex': 'efx', 'ey': 'efy', 'ez': 'efz'}.
+# add each of these, formatted by x=axis, to AUXVARS.
+# e.g. {'e{x}': 'ef{x}'} --> {'ex': 'efx', 'ey': 'efy', 'ez': 'efz'}.
 AUX_AXIAL_VARS = {
-    'e'         : 'ef',      # electric field
-    'eu'        : 'ue',      # electron velocity
-    'i'         : 'j',       # current density (charge per time per area)
-    'bb_bat'    : 'bat',     # "battery" term (contribution to electric field: grad(P_e)/(n_e q_e))
+    'e{x}'            : 'ef{x}',         # electric field
+    'eu{x}'           : 'ue{x}',         # electron velocity
+    'i{x}'            : 'j{x}',          # current density (charge per time per area)
+    'bb_bat{x}'       : 'bat{x}',        # "battery" term (contribution to electric field: grad(P_e)/(n_e q_e))
+    'mfp_bb_ddp{x}'   : 'mombat{x}',     # momentum component of the battery term ni*qi*grad(P_e)/(n_e q_e)
+    'mfp_ddp{x}'      : 'gradp{x}',      # momentum component of the gradient of pressure
+    'mm_cdp{x}dt'     : 'rij{x}',        # momentum transfer rate to ifluid due to collisions with jfluid
+    'mfp_cdp{x}dt'    : 'rijsum{x}',     # momentum transfer rate to ifluid due to collisions with all other fluids
+    'mfp_ecdp{x}dt'   : ('rij{x}',-1),   # momentum transfer rate to electrons due to collisions with ifluid
+    'mfp_ecdp{x}dt_ef': 'momohme{x}',    # momentum component of the ohmic term 
+    'mm_driftu{x}'    : 'uid{x}',        # velocity drifts
 }
-AXES = ['x', 'y', 'z']
 # add the axial vars to auxvars.
+AXES = ['x', 'y', 'z']
+def _format(val, *args, **kw):
+    if isinstance(val, str):
+        return val.format(*args, **kw)
+    else:  # handle tuples
+        return (_format(val[0], *args, **kw), *val[1:])
 for (aux, hel) in AUX_AXIAL_VARS.items():
-    AUXVARS.update({aux+x: hel+x for x in AXES})
+    AUXVARS.update({_format(aux, x=x): _format(hel, x=x) for x in AXES})
 
 def get_helita_var(auxvar):
     return AUXVARS[auxvar]
@@ -260,37 +281,40 @@ def _get_fluids_and_f(obj, fluids=None, f=lambda fluid: fluid):
     return (fluids, f)
 
 def iter_get_var(obj, auxvar, helvar=None, fluids=None, f=lambda fluid: fluid,
-                 ordered=False, allow_same=False, **kw__get_var):
+                 ordered=False, allow_same=False, quick_ratio=False, **kw__get_var):
     '''gets values for auxvar and helita var.
     
-        yields dict(vars   = dict(aux=auxvar,          hel=helita var name),
-                    vals   = dict(aux=get_var(auxvar), hel=get_var(helvar)),
-                    fluids = dict(aux=auxfluids_dict,  hel=helfluids_dict)),
-                    SLs    = dict(aux=auxfluidsSL,     hel=helfluidsSL))   ,
-                    )
+    yields dict(vars   = dict(aux=auxvar,          hel=helita var name),
+                vals   = dict(aux=get_var(auxvar), hel=get_var(helvar)),
+                fluids = dict(aux=auxfluids_dict,  hel=helfluids_dict)),
+                SLs    = dict(aux=auxfluidsSL,     hel=helfluidsSL))   ,
+                )
 
-        obj: EbysusData object
-            we will do obj.get_var(...) to get the values.
-        auxvar: str
-            name of var in aux. e.g. 'mfe_tg' for temperature.
-        helvar: None (default), or str, or tuple
-            None -> lookup helvar using helita.sim.aux_compare.AUXVARS.
-            str  -> use this as helvar. Impose no required fluids on helvar.
-            tuple -> use helvar[0] as helvar. Impose required fluids:
-                        helvar[1] imposes ifluid or mf_ispecies.
-                        helvar[2] imposes jfluid or mf_jspecies (if helvar[2] exists).
-        fluids: None (default) or list of fluids
-            None -> use fluids = fl.Fluids(dd=obj).
-        f: function which converts fluid to (species, level) tuple
-            if fluids is None, f is ignored, we will instead use f = lambda fluid: fluid.SL
-            otherwise, we apply f to each fluid in fluids, before putting it into get_var.
-            Note: auxfluids_dict and helfluids_dict contain fluids before f is applied.
-        if iterating over fluid pairs, the following kwargs also matter:
-            ordered: False (default) or True
-                whether to only yield ordered combinations of fluid pairs (AB but not BA)
-            allow_same: False (default) or True
-                whether to also yield pairs of fluids which are the same (AA, BB, etc.)
-        **kw__get_var goes to obj.get_var().
+    obj: EbysusData object
+        we will do obj.get_var(...) to get the values.
+    auxvar: str
+        name of var in aux. e.g. 'mfe_tg' for temperature.
+    helvar: None (default), or str, or tuple
+        None -> lookup helvar using helita.sim.aux_compare.AUXVARS.
+        str  -> use this as helvar. Impose no required fluids on helvar.
+        tuple -> use helvar[0] as helvar. Impose required fluids:
+                    helvar[1] imposes ifluid or mf_ispecies.
+                    helvar[2] imposes jfluid or mf_jspecies (if helvar[2] exists).
+    fluids: None (default) or list of fluids
+        None -> use fluids = fl.Fluids(dd=obj).
+    f: function which converts fluid to (species, level) tuple
+        if fluids is None, f is ignored, we will instead use f = lambda fluid: fluid.SL
+        otherwise, we apply f to each fluid in fluids, before putting it into get_var.
+        Note: auxfluids_dict and helfluids_dict contain fluids before f is applied.
+    if iterating over fluid pairs, the following kwargs also matter:
+        ordered: False (default) or True
+            whether to only yield ordered combinations of fluid pairs (AB but not BA)
+        allow_same: False (default) or True
+            whether to also yield pairs of fluids which are the same (AA, BB, etc.)
+    quick_ratio: False (default) or True
+        whether to calculate (aux/hel) using means (if True) or full arrays (if False)
+
+    **kw__get_var goes to obj.get_var().
     '''
     if helvar is None: helvar = get_helita_var(auxvar)
     callsig    = _callsig(helvar)
@@ -313,7 +337,19 @@ def iter_get_var(obj, auxvar, helvar=None, fluids=None, f=lambda fluid: fluid,
         valdict = dict(aux=auxval,         hel=helval)
         fludict = dict(aux=auxfluids_dict, hel=helfluids_dict)
         SLsdict = dict(aux=auxfluidsSL,    hel=helfluidsSL)
-        yield dict(vars=vardict, vals=valdict, fluids=fludict, SLs=SLsdict)
+        result = dict(vars=vardict, vals=valdict, fluids=fludict, SLs=SLsdict)
+        if not quick_ratio:
+            vals_equal = (helval == auxval)   # handle "both equal to 0" case.
+            if np.count_nonzero(vals_equal) > 0:
+                helval_ = np.copy(helval)
+                auxval_ = np.copy(auxval)
+                helval_[vals_equal] = 1
+                auxval_[vals_equal] = 1
+            else:
+                helval_ = helval
+                auxval_ = auxval
+            result['ratio'] = tools.finite_mean(auxval_ / helval_)
+        yield result
 
 
 ''' ----------------------------- prettyprint comparison ----------------------------- '''
@@ -402,7 +438,9 @@ def prettyprint_comparison(x, printout=True, prefix=True, underline=True,
     svals   = _strvals(  x['vals'])
     meanaux = svals['stats']['aux']['mean']
     meanhel = svals['stats']['hel']['mean']
-    if meanaux==0.0 and meanhel==0.0:
+    if 'ratio' in x:
+        ratio = x['ratio']
+    elif meanaux==0.0 and meanhel==0.0:
         ratio = 1.0
     else:
         ratio = meanaux / meanhel
@@ -414,7 +452,7 @@ def prettyprint_comparison(x, printout=True, prefix=True, underline=True,
     key = 'hel'
     s += ' '.join([svars[key], sfluids[key], svals[key]]) + ';   '
     s += ratstr
-    if abs(1 - ratio) > rattol:  # then, add warning!
+    if (not np.isfinite(ratio)) or (abs(1 - ratio) > rattol):  # then, add warning!
         s += '\n' + ' '*(lline) + '>>> WARNING: RATIO DIFFERS FROM 1.000 <<<<'
         warned = True
     else:

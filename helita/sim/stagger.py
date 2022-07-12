@@ -56,6 +56,10 @@ TODO:
 import time
 import weakref
 import collections
+import warnings
+
+# import internal modules
+from . import tools
 
 # import public external modules
 import numpy as np
@@ -63,14 +67,8 @@ import numpy as np
 try:
     from numba import jit, njit, prange
 except ImportError:
-    import warnings
-    warnings.warn("failed to import numba; using stagger_kind='numba' will cause crashes.")
-    # we still need to set jit and njit to something so that the rest of the module can be imported.
-    def boring_decorator_factory(*args, **kw):
-        def boring_decorator(f):
-            return f
-        return boring_decorator
-    jit = njit = boring_decorator_factory
+    numba = prange = tools.ImportFailed('numba', "This module is required to use stagger_kind='numba'.")
+    jit   = njit   = tools.boring_decorator
 
 
 """ ------------------------ defaults ------------------------ """
@@ -166,6 +164,9 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     ----------
     var : 3D array
         Variable to work on.
+        if not 3D, makes a warning but still tries to return a reasonable result:
+            for non-derivatives, return var (unchanged).
+            for derivatives, return 0 (as an array with same shape as var).
     operation: str
         Type of operation. Currently supported values are
         * 'xup', 'xdn', 'yup', 'ydn', 'zup', 'zdn'
@@ -194,7 +195,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     """
     # initial bookkeeping
     AXES = ('x', 'y', 'z')
-    operation = operation.lower()
+    operation = operation_orig = operation.lower()
     stagger_kind = ALIAS_STAGGER_KIND[stagger_kind]
     # order
     if stagger_kind == 'o1_numpy':
@@ -202,7 +203,25 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         stagger_kind = 'numpy'
     else:
         order = 5
-
+    # derivative, diff
+    if operation[:2] == 'dd':  # For derivative operations
+        derivative = True
+        operation = operation[2:]
+        if diff is None:
+            raise ValueError(f"diff not provided for derivative operation: {operation_orig}")
+    else:
+        derivative = False
+        if diff is not None:
+            raise ValueError(f"diff must not be provided for non-derivative operation: {operation}")
+    # make sure var is 3D. make warning then handle appropriately if not.
+    if np.ndim(var) != 3:
+        warnmsg = f'can only stagger 3D array but got {np.ndim(var)}D.'
+        if derivative:
+            warnings.warn(warnmsg + f' returning 0 for operation {operation_orig}')
+            return np.zeros_like(var)
+        else:
+            warnings.warn(warnmsg + f' returning original array for operation {operation_orig}')
+            return var
     # up/dn
     up_str = operation[-2:]  # 'up' or 'dn'
     if up_str == 'up':
@@ -211,16 +230,6 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         up = False
     else: 
         raise ValueError(f"Invalid operation; must end in 'up' or 'dn': {operation}")
-    # derivative, diff
-    if operation[:2] == 'dd':  # For derivative operations
-        derivative = True
-        operation = operation[2:]
-        if diff is None:
-            raise ValueError(f"diff not provided for derivative operation: {operation}")
-    else:
-        derivative = False
-        if diff is not None:
-            raise ValueError(f"diff must not be provided for non-derivative operation: {operation}")
     # x, dim_index (0 for x, 1 for y, 2 for z)
     x = operation[:-2]
     if x not in AXES:
@@ -378,21 +387,6 @@ def _nopython_zshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm
 
 """ ------------------------ numpy stagger ------------------------ """
 
-def slicer_at_ax(slicer, ax):
-    '''return tuple of slices which, when applied to an array, takes slice along axis number <ax>.
-    slicer: a slice object, or integer, or tuple of integers.
-        slice or integer  -> use slicer directly.
-        tuple of integers -> use slice(*slicer).
-    ax: a number (negative ax not supported here).
-    '''
-    try:
-        slicer[0]
-    except TypeError: #slicer is a slice or an integer.
-        pass  
-    else: #assume slicer is a tuple of integers.
-        slicer = slice(*slicer)
-    return (slice(None),)*ax + (slicer,)
-
 ## STAGGER_KIND = NUMPY ##
 def _np_stagger(var, diff, up, derivative, x, order=5):
     """stagger along x axis. x should be 0, 1, or 2."""
@@ -408,7 +402,7 @@ def _np_stagger(var, diff, up, derivative, x, order=5):
     nx = var.shape[x]
     def slx(shift):
         '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
-        return slicer_at_ax((start+shift, nx+end+shift), x)
+        return tools.slicer_at_ax((start+shift, nx+end+shift), x)
     def sgx(shift):
         '''return slicer at x axis from (start + shift + grdshf) to (nx + end + shift + grdshf)'''
         return slx(shift + grdshf)
@@ -438,7 +432,7 @@ def _np_stagger_improved(var, diff, up, derivative, x):
     nx = var.shape[x]
     def slx(shift):
         '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
-        return slicer_at_ax((start+shift, nx+end+shift), x)
+        return tools.slicer_at_ax((start+shift, nx+end+shift), x)
     def sgx(shift):
         '''return slicer at x axis from (start + shift + grdshf) to (nx + end + shift + grdshf)'''
         return slx(shift + grdshf)

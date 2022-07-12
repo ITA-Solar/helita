@@ -41,6 +41,7 @@ from .bifrost import (
     # for historical reasons / convenience, also import directly:
     get_snapstuff, snapstuff, get_snapname, snapname,
     available_snaps, snaps, get_snaps, list_snaps, snaps_info,
+    _N_to_snapstr,
     EnterDir, EnterDirectory,
 )
 from .load_mf_quantities         import load_mf_quantities
@@ -51,6 +52,7 @@ from . import document_vars
 from . import file_memory
 from . import fluid_tools
 from . import stagger
+from . import tools
 from .units import (
     UNI, USI, UCGS, UCONST,
     Usym, Usyms, UsymD,
@@ -61,24 +63,28 @@ from .units import (
 try:
   from . import cstagger
 except ImportError:
-  warnings.warn("failed to import helita.sim.cstagger; running stagger with stagger_kind='cstagger' will crash.")
+  cstagger = tools.ImportFailed('cstagger', "This module is required to use stagger_kind='cstagger'.")
 
 # import external public modules
 import numpy as np
 try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = tools.ImportFailed('matplotlib.pyplot')
+try:
     import zarr
 except ImportError:
-    warnings.warn("failed to import zarr; read_mode='zc' and EbysusData.compress() will be unavailable.")
+    zarr = tools.ImportFailed('zarr')
 
 # import external private modules
 try:
     from at_tools import atom_tools as at
 except ImportError:
-    warnings.warn('failed to import at_tools.atom_tools; some functions in helita.sim.ebysus may crash')
+    at = tools.ImportFailed('at_tools.atom_tools')
 try:
     from at_tools import fluids as fl
 except ImportError:
-    warnings.warn('failed to import at_tools.fluids; some functions in helita.sim.ebysus may crash')
+    fl = tools.ImportFailed('at_tools.fluids')
 
 # set defaults:
 from .load_mf_quantities import (
@@ -548,6 +554,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         They "are consistent" if alt_metadata is a subset of self._metadata().
         i.e. if for all keys in alt_metadata, alt_metadata[key]==self._metadata[key].
         (Even works if contents are numpy arrays. See _dict_is_subset function for details.)
+
+        For developing helita code, it is preferred to use _metadata_matches() instead.
         '''
         return file_memory._dict_is_subset(alt_metadata, self._metadata(none=none))
 
@@ -559,14 +567,23 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             all other keys in each dict are the same and have the same value.
         '''
         self_metadata = self._metadata(none=none)
-        for ifluid in ['ifluid', 'jfluid']:
-            SL = alt_metadata.get(ifluid, None)
-            if SL is not None:
-                if not fluid_tools.fluid_equals(SL, self_metadata[ifluid]):
+        return self._metadata_equals(self_metadata, alt_metadata)
+
+    def _metadata_equals(self, m1, m2):
+        '''return whether metadata1 == metadata2.
+        They are "equal" if:
+            - for fluid ('ifluid' or 'jfluid') appearing in both m1 and m2: m1[fluid]==m2[fluid]
+            - all other keys in each dict are the same and have the same value.
+        '''
+        for fluid in ['ifluid', 'jfluid']:
+            SL1 = m1.get(fluid, None)
+            SL2 = m2.get(fluid, None)
+            if None not in (SL1, SL2):
+                if not self.fluids_equal(SL1, SL2):
                     return False
-            #else: ifluid is not in alt_metadata, so it doesn't need to be in self_metadata.
+            #else: fluid is missing from m1 and/or m2; at least one of the metadata doesn't care about fluid.
         # << if we reached this line, then we know ifluid and jfluid "match" between alt and self.
-        return file_memory._dict_equals(alt_metadata, self_metadata, ignore_keys=['ifluid', 'jfluid'])
+        return file_memory._dict_equals(m1, m2, ignore_keys=['ifluid', 'jfluid'])
 
     ## MATCH TYPE ##  # (MATCH_AUX --> match simulation values; MATCH_PHYSICS --> match physical values)
     @property 
@@ -589,20 +606,15 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         return self.match_type == MATCH_AUX
 
     ## READING DATA / DOING CALCULATIONS ##
-    @fluid_tools.maintain_fluids
-    @file_memory.maintain_attrs('match_type')
-    @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
-    @document_vars.quant_tracking_top_level
-    def _load_quantity(self, var, panic=False):
-        '''helper function for get_var; actually calls load_quantities for var.
-        Also, restores self.ifluid and self.jfluid afterwards.
-        Also, restores self.match_type afterwards.
+    def _raw_load_quantity(self, var, panic=False):
+        '''load_quantity without any of the wrapper functions.
+        Makes it easier to subclass EbysusData:
+        _load_quantity in subclasses can be wrapped and call _raw_load_quantity.
         '''
         __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables, if metadata is appropriate.
         if var in self.variables and self._metadata_matches(self.variables.get('metadata', dict())):
             return self.variables[var]
-        
         # load quantities.
         val = load_fromfile_quantities(self, var, panic=panic, save_if_composite=False)
         if val is None:
@@ -617,11 +629,22 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             val = load_arithmetic_quantities(self,var)
         return val
 
+    @tools.maintain_attrs('match_type', 'ifluid', 'jfluid')
+    @file_memory.with_caching(cache=False, check_cache=True, cache_with_nfluid=None)
+    @document_vars.quant_tracking_top_level
+    def _load_quantity(self, var, panic=False):
+        '''helper function for get_var; actually calls load_quantities for var.
+        Also, restores self.ifluid and self.jfluid afterwards.
+        Also, restores self.match_type afterwards.
+        '''
+        __tracebackhide__ = True  # hide this func from error traceback stack
+        return self._raw_load_quantity(var, panic=panic)
+
     def get_var(self, var, snap=None, iix=None, iiy=None, iiz=None,
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
                 ifluid=None, jfluid=None, panic=False, 
                 match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
-                read_mode=None,
+                read_mode=None, printing_stats=None,
                 *args, **kwargs):
         """
         Reads a given variable from the relevant files.
@@ -673,7 +696,36 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
         """     
+        kw__preprocess = dict(snap=snap, iix=iix, iiy=iiy, iiz=iiz,
+                              mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel,
+                              mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel,
+                              ifluid=ifluid, jfluid=jfluid,
+                              panic=panic, match_type=match_type,
+                              check_cache=check_cache, cache=cache,
+                              cache_with_nfluid=cache_with_nfluid,
+                              read_mode=read_mode,
+                              internal=True,  # we are inside get_var.
+                              **kwargs,
+                              )
+        # do pre-processing
+        kw__load_quantity, kw__postprocess = self._get_var_preprocess(var, **kw__preprocess)
 
+        # >>>>> actually get the value of var <<<<<
+        val = self._load_quantity(var, **kw__load_quantity)
+
+        # do post-processing (function is defined in bifrost.py)
+        val = self._get_var_postprocess(val, var=var, printing_stats=printing_stats, **kw__postprocess)
+        return val
+
+    def _get_var_preprocess(self, var, snap=None, iix=None, iiy=None, iiz=None,
+                mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
+                ifluid=None, jfluid=None, panic=False, internal=False,
+                match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
+                read_mode=None, **kw__fluids):
+        '''preprocessing for get_var.
+        returns ((dict of kwargs to pass to _load_quantity),
+                 (dict of kwargs to pass to _get_var_postprocess))
+        '''
         if var == '' and not document_vars.creating_vardict(self):
             help(self.get_var)
 
@@ -691,7 +743,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # set fluids as appropriate to kwargs
         kw__fluids = dict(mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, ifluid=ifluid,
                           mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel, jfluid=jfluid,
-                          **kwargs)
+                          **kw__fluids)
         self.set_fluids(**kw__fluids)
 
         # set snapshot as needed
@@ -704,17 +756,15 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
         original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
                            for slicename, iix in slices_names_and_vals]
-        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=True)
+        self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=internal)
 
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
         kw__caching = dict(check_cache=check_cache, cache=cache, cache_with_nfluid=cache_with_nfluid)
 
-        # >>>>> actually get the value of var <<<<<
-        val = self._load_quantity(var, panic=panic, **kw__caching)
-
-        # do post-processing (function is defined in bifrost.py)
-        val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
-        return val
+        # setup and return result.
+        kw__load_quantity = dict(panic=panic, **kw__caching)
+        kw__postprocess = dict(original_slice = original_slice)
+        return (kw__load_quantity, kw__postprocess)
     
     
     
@@ -808,7 +858,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         return self.simple_trans2comm(varname, snap, *args, **kwargs)
     
     
-    
+
 
     @document_vars.quant_tracking_simple('SIMPLE_VARS')
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
@@ -1107,10 +1157,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # calculate info which numpy needs to read file as memmap.
         dsize  = np.dtype(self.dtype).itemsize
         offset = self.nxb * self.nyb * self.nzb * dsize * (idx * mf_arr_size + jdx)
-        if mf_arr_size == 1:
-            shape = (self.nxb, self.nyb, self.nzb)
-        else:
-            shape = (self.nxb, self.nyb, self.nzb, mf_arr_size)
+        shape  = (self.nxb, self.nyb, self.nzb)
         obj = self if (self.N_memmap != 0) else None    # for memmap memory management; popped before np.memmap(**kw).
 
         # kwargs which will be passed to get_numpy_memmap.
@@ -1129,7 +1176,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             return None  
 
     ## COMPRESSION ALGORITHMS ##
-    def compress(self, mode='zc', smash_mode=None, warn=True, kw_smash=dict(), **kwargs):
+    def compress(self, mode='zc', smash_mode=None, warn=True, kw_smash=dict(), skip_existing=False, **kwargs):
         '''compress the direct output of an ebysus simulation (the .io folder).
 
         mode tells what type of compression to use.
@@ -1152,13 +1199,17 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             CAUTION: be very careful about using warn=False!
         kw_smash: dict
             additional kwargs to pass to smash_folder().
+        skip_existing: bool, default False
+            if True, skip compressing each file for which a compressed version exists
+            (only checking destination filepath to determine existence.)
 
         returns name of created folder.
         '''
+        assert (smash_mode is None) or (not skip_existing), "smash_mode and skip_existing are incompatible."  # for safety reasons. 
         mode = mode.lower()
         try:    # put the compression algorithms in a try..except block to make a warning if error is encountered.
             if mode == 'zc':
-                result   = self._zc_compress(**kwargs)
+                result   = self._zc_compress(skip_existing=skip_existing, **kwargs)
             else:
                 raise NotImplementedError(f"EbysusData.compress(mode={repr(mode)})")
         except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
@@ -1212,12 +1263,16 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 smash_folder(ORIGINAL, mode=smash_mode, warn=warn, **kw_smash)
             return result
 
-    def _zc_compress(self, verbose=1, **kw__zarr):
+    def _zc_compress(self, verbose=1, skip_existing=False, **kw__zarr):
         '''compress the .io folder into a .zc folder.
         Converts data to format readable by zarr.
         Testing indicates the .zc data usually takes less space AND is faster to read.
 
-        returns the name of the new folder.
+        skip_existing: bool, default False
+            if True, skip compressing each file for which a compressed version exists
+            (only checking destination filepath to determine existence.)
+
+        returns (the name of the new folder, the number of bytes originally, the number of bytes after compression)
         '''
         # bookkeeping - parameters
         SNAPNAME = self.get_param('snapname')
@@ -1226,9 +1281,30 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         ORDER    = 'F'        # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
         DTYPE    = '<f4'
 
+        # iterator through existing files
+        def snapfiles_iter(makedirs=False):
+            '''returns iterator through files to be compressed, yielding (src, dst).
+            where src is name of (existing) source file to be compressed;
+            dst is name of (possibly not existing) destination for compressed file.
+
+            if makedirs, also make any directories required for dst, as necessary.
+            '''
+            for root, dirs, files in os.walk(f'{SNAPNAME}.io'):
+                if len(files) > 0:
+                    new_dir = root.replace(f'{SNAPNAME}.io', f'{SNAPNAME}.zc')
+                    if makedirs:
+                        os.makedirs(new_dir, exist_ok=True)
+                    for base in files:
+                        src = os.path.join(root,    base)
+                        dst = os.path.join(new_dir, base)
+                        if skip_existing and os.path.exists(dst):
+                            continue
+                        else:
+                            yield (src, dst)
+
         # bookkeeping - printing updates
         if verbose >= 1:   # calculate total number of files and print progress as fraction.
-            nfiles = sum(len(files) for _, _, files in os.walk(f'{SNAPNAME}.io'))
+            nfiles = sum(1 for src, dst in snapfiles_iter(makedirs=False))
             nfstr = len(str(nfiles))
             start_time = time.time()
 
@@ -1243,23 +1319,23 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             print(*args, **kw)
 
         # the actual compression happens in this loop.
-        file_n = 0
         file_str_len = 0
-        for root, dirs, files in os.walk(f'{SNAPNAME}.io'):
-            if len(files) > 0:
-                new_dir = root.replace(f'{SNAPNAME}.io', f'{SNAPNAME}.zc')
-                os.makedirs(new_dir, exist_ok=True)
-                for base in files:
-                    file_n += 1   # bookkeeping
-                    src = os.path.join(root,    base)
-                    dst = os.path.join(new_dir, base)
-                    save_filebinary_to_filezarr(src, dst, shape=SHAPE, dtype=DTYPE, order=ORDER, chunks=CHUNKS, **kw__zarr)
-                    # printing updates
-                    if verbose: file_str_len = max(file_str_len, len(dst))
-                    print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
+        original_bytes_total   = 0
+        compressed_bytes_total = 0
+        for file_n, (src, dst) in enumerate(snapfiles_iter(makedirs=True)):
+            z = save_filebinary_to_filezarr(src, dst, shape=SHAPE, dtype=DTYPE, order=ORDER, chunks=CHUNKS, **kw__zarr)
+            original_bytes_total   += z.nbytes
+            compressed_bytes_total += z.nbytes_stored
+            # printing updates
+            if verbose: file_str_len = max(file_str_len, len(dst))
+            print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
 
-        print_if_verbose('_zc_compress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
-        return f'{SNAPNAME}.zc'
+        print_if_verbose('_zc_compress complete!'  + \
+                         f' Compressed {tools.pretty_nbytes(original_bytes_total)}' + \
+                         f' into {tools.pretty_nbytes(compressed_bytes_total)}' + \
+                         f' (net compression ratio = {original_bytes_total/(compressed_bytes_total+1e-10):.2f}).',
+                         print_time=True, vreq=1, clearline=40+file_str_len)
+        return (f'{SNAPNAME}.zc', original_bytes_total, compressed_bytes_total)
 
     def _zc_decompress(self, verbose=1):
         '''use the data from the .zc folder to recreate the original .io folder.
@@ -1308,9 +1384,69 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         print_if_verbose('_zc_decompress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
         return f'{SNAPNAME}.io'
 
+    ## SNAPSHOT FILES - SELECTING / MOVING ##
+    def get_snap_files(self, snap=None, include_aux=True):
+        '''returns the minimal list of filenames for all files specific to this snap.
+        Directories containing solely files for this snap will be reported as the directory, not all contents.
+        (e.g. for zarray "files", which are directories, the zarray directory will be reported, not all its contents.)
+
+        include_aux: whether to include aux files in the result.
+        '''
+        snap = snap if snap is not None else self.get_snap_here()
+        with tools.EnterDirectory(self.fdir):
+            return get_snap_files(snap, dd=self, include_aux=include_aux)
+
+    def get_snaps_files(self, snaps=None, include_aux=True):
+        '''returns a dict of {snap number: minimal list of filenames for all files specific to this snap},
+        for the snaps provided (or self.snaps if snaps is not provided).
+        '''
+        snaps = snaps if snaps is not None else self.snaps
+        result = {snap: self.get_snap_files(snap=snap, include_aux=include_aux) for snap in snaps}
+        return result
+
+    ## PLOTTING ##
+    def plot(self, var, axes=None, nfluid=None):
+        '''make a 1D or 2D plot of var,
+        labeling nicely the axes, the relevant fluids, and var name.
+        var: str or arr
+            str --> plot self.get_var(var). Also use var in the title.
+            arr --> plot this value.
+        axes: None, string, or list of strings, using values in ('x', 'y', 'z')
+            axes to use for this plot.
+            number of axes determines dimensionality of the plot
+                1 axis --> plt.plot(coord, value of var)
+                2 axes --> plt.imshow(value of var, extent=(extent determined by axes))
+            None -->
+                guess based on shape of self
+                e.g. if self has shape (50, 1, 40), use axes=('x', 'z').
+                e.g. if self has shape (1, 700, 1), use axes='y'
+            slice other axes at index 0.
+        nfluid: None, 0, 1, or 2
+            number of fluids related to var.
+            The relevant fluid names will be included in the plot's title.
+            e.g. plot('bz', nfluid=None) --> plt.title('bz')
+            e.g. plot('nr', nfluid=1) --> plt.title('nr (self.get_fluid_name(
+        '''
+        raise NotImplementedError('EbysusData.plot')
+
     ## CONVENIENCE METHODS ##
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
+
+    def get_var_nfluid(self, var):
+        '''returns number of fluids which affect self.get_var(var).
+        0 - depends on NEITHER self.ifluid nor self.jfluid.
+        1 - depends on self.ifluid but NOT self.jfluid.
+        2 - depends on BOTH self.ifluid and self.jfluid.
+        None - unknown (var is in vardict, but has undocumented nfluid).
+
+        Only works for var in self.vardict; fails for "constructed" vars, e.g. "b_mod".
+        '''
+        search = self.search_vardict(var)
+        try:
+            return search.result['nfluid']
+        except AttributeError:  # var not found. (search is False)
+            raise ValueError(f"var not documented: '{var}'") from None
 
     def zero_at_meshloc(self, meshloc=[0,0,0], **kw__np_zeros):
         '''return array of zeros, associated with the provided mesh location.
@@ -1357,9 +1493,9 @@ def write_mf_data(rootname, inputs, mfstr, **kw_ifluid):
     # interpret fluid kwargs
     mf_ispecies, mf_ilevel = fluid_tools._interpret_kw_ifluid(**kw_ifluid, None_ok=False)
     if mf_ispecies < 1:
-        print('(WWW) species should start with 1')
+        print('(WWW) species should be 1 or larger when writing fluid data. For electrons use mf_e')
     if mf_ilevel < 1:
-        print('(WWW) levels should start with 1')
+        print('(WWW) levels should be 1 or larger when writing fluid data. For electrons use mf_e')
     # check that all arrays are finite; warn if one is not.
     for arr in inputs:
         if not np.isfinite(arr).all():
@@ -1571,7 +1707,11 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     # fluid quantities
     fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
     fluids.assign_vectors('v', (np.asarray(v) / uni.usi_u))                    # [ebysus units] velocity
-    fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
+    for fluid in fluids:
+        fluid_v = fluid.v    # want to get to shape (3, Nx, Ny, Nz), or (3, 1, 1, 1) for broadcasting with rho.
+        fluid_v = np.expand_dims(fluid_v, axis=tuple(range(1, 1+4-np.ndim(fluid_v))))   # (if already 4D, does nothing.)
+        fluid.p = fluid_v * fluid.rho
+    #fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
     for x in AXES:
         setattr(fluids, 'p'+x, fluids.p[dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
     # restore original stack, stack_axis of fluids object.
@@ -1759,6 +1899,98 @@ def read_mftab_ascii(filename):
     return params
 
 read_mf_param_file = read_mftab_ascii   # alias
+
+####################
+#  LOCATING SNAPS  #
+####################
+
+class SnapfileNotFoundError(FileNotFoundError):
+    '''custom error class for reporting snap not found; subclass of FileNotFoundError.'''
+    pass
+
+def get_snap_files(snap, snapname=None, read_mode=None, dd=None, include_aux=True):
+    '''returns the minimal list of filenames for all files specific to this snap (a number).
+    if no data for snap is found, raises SnapfileNotFoundError (subclass of FileNotFoundError).
+    Directories containing solely files for this snap will be reported as the directory, not all contents.
+    (e.g. for zarray "files", which are directories, the zarray directory will be reported, not all its contents.)
+    
+    read_mode  : string (e.g. 'io' or 'zc') or None; see EbysusData.read_mode. Defaults to 'io'.
+    snapname   : snapshot name, or None.
+    dd         : EbysusData object or None. If provided, used to guess snapname & read_mode as necessary.
+    include_aux: whether to include aux files in the result.
+
+    This method expects to be called with the working directory set to the "main folder" for the run,
+        i.e. the directory containing the .idl files with parameters and the .io folder with snapshot data.
+    '''
+    result = []
+    # snapname, read_mode. set default values if not provided; use dd to help if dd is provided.
+    if snapname is None:
+        snapname = get_snapname(dd=dd)
+    if read_mode is None:
+        read_mode = 'io' if dd is None else dd.read_mode
+    # snapdir (e.g. 'snapname.io')
+    snapdir = f'{snapname}.{read_mode}'
+    if not os.path.isdir(snapdir):
+        raise SnapfileNotFoundError(repr(snapdir))
+    # snapidl (e.g. 'snapname_072.idl')
+    Nstr    = _N_to_snapstr(snap)   
+    snapidl = f'{snapname}{Nstr}.idl'
+    if not os.path.isfile(snapidl):
+        raise SnapfileNotFoundError(repr(snapidl))
+    else:
+        result.append(snapidl)
+    # snapshot data - checking
+    def _is_snapN_data(name):
+        return _is_Nstr_snapfile(Nstr, name, '.snap') or (include_aux and _is_Nstr_snapfile(Nstr, name, '.aux'))
+    # looping through files & directories
+    for dirpath, dirnames, filenames in os.walk(snapdir, topdown=True):   # topdown=True required for "skip popped dirnames" behavior.
+        # check if files are snapshot data files.
+        for fname in filenames:
+            if _is_snapN_data(fname):
+                result.append(os.path.join(dirpath, fname))
+        # check if directories are snapshot data files (e.g. this will be the case for "zarray" storage system, read_mode='zc').
+        i = 0
+        while i < len(dirnames):
+            dname = dirnames[i]   
+            if dname.endswith(f'.snap') or dname.endswith(f'.aux'):
+                del dirnames[i]  # we don't need to os.walk any further down from a directory ending with '.snap' or '.aux'
+                if _is_snapN_data(dname):
+                    result.append(os.path.join(dirpath, dname))
+            else:
+                i += 1
+    return result
+
+def _is_Nstr_snapfile(Nstr, filename, ext='.snap'):
+    '''returns whether filename is a '.snap' file associated with snap indicated by Nstr.
+    This is only difficult when Nstr==''; else we just check if filename looks like '{stuff}{Nstr}.snap'.
+    For '.aux' checking, use ext='.aux' instead of the default '.snap'.
+    '''
+    # pop extension
+    if filename.endswith(ext):
+        basename = filename[ : -len(ext)]
+    else:
+        return False   # << proper extension is required, otherwise not a snap file.
+    # handle "easy" case (Nstr != '')
+    if Nstr != '':
+        return basename.endswith(f'{Nstr}')
+    # else: Nstr == '', so we need to do a lot more work.
+    ## in particular, we recognize snap 0 only in these cases:
+    ##   case A) 'stuff{C}.ext' with C non-numeric
+    ##   case B) 'stuff{C}_{SS}_{LL}.ext' with C non-numeric, SS numeric, LL numeric
+    ## all other cases are considered to be a snap other than 0, so we ignore them.
+    if not basename[-1].isdigit():
+        return True   # << we are in case A. "no-fluid" case.
+    # consider case B:
+    stuffC_SS, underscore, LL = basename.rpartition('_')
+    if not (underscore=='_' and LL.isdigit()):
+        return False
+    stuffC, underscore, SS = stuffC_SS.rpartition('_')
+    if not (underscore=='_' and SS.isdigit()):
+        return False
+    if stuffC[-1].isdigit():
+        return False
+    return True   # << we are in case B.
+
 
 #############################
 #  WRITING PARAMETER FILES  #

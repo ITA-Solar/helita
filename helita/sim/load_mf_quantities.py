@@ -1,5 +1,6 @@
 # import builtins
 import warnings
+import itertools
 
 # import internal modules
 from . import document_vars
@@ -36,10 +37,12 @@ units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
 
 
 def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=None,
-                       ONEFLUID_QUANT=None, ELECTRON_QUANT=None, MOMENTUM_QUANT=None,
-                       HEATING_QUANT=None, SPITZERTERM_QUANT=None,
+                       ONEFLUID_QUANT=None, ELECTRON_QUANT=None,
+                       CONTINUITY_QUANT=None, MOMENTUM_QUANT=None, HEATING_QUANT=None,
+                       SPITZERTERM_QUANT=None,
                        COLFRE_QUANT=None, LOGCUL_QUANT=None, CROSTAB_QUANT=None, 
                        DRIFT_QUANT=None, MEAN_QUANT=None, CFL_QUANT=None, PLASMA_QUANT=None,
+                       HYPERDIFFUSIVE_QUANT=None,
                        WAVE_QUANT=None, FB_INSTAB_QUANT=None, THERMAL_INSTAB_QUANT=None,
                        **kw__None):
   '''load multifluid quantity indicated by quant.
@@ -64,6 +67,7 @@ def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=
     (get_efield_var, 'EFIELD_QUANT'),
     (get_onefluid_var, 'ONEFLUID_QUANT'),
     (get_electron_var, 'ELECTRON_QUANT'),
+    (get_continuity_quant, 'CONTINUITY_QUANT'),
     (get_momentum_quant, 'MOMENTUM_QUANT'),
     (get_heating_quant, 'HEATING_QUANT'),
     (get_spitzerterm, 'SPITZERTERM_QUANT'),
@@ -74,9 +78,10 @@ def load_mf_quantities(obj, quant, *args__None, GLOBAL_QUANT=None, EFIELD_QUANT=
     (get_mean_quant, 'MEAN_QUANT'),
     (get_cfl_quant, 'CFL_QUANT'),
     (get_mf_plasmaparam, 'PLASMA_QUANT'),
+    (get_hyperdiffusive_quant, 'HYPERDIFFUSIVE_QUANT'),
     (get_mf_wavequant, 'WAVE_QUANT'),
     (get_fb_instab_quant, 'FB_INSTAB_QUANT'),
-    (get_thermal_instab_quant, 'THERMAL_INSTAB_QUANT')
+    (get_thermal_instab_quant, 'THERMAL_INSTAB_QUANT'),
   )
 
   val = None
@@ -257,6 +262,9 @@ def get_global_var(obj, var, GLOBAL_QUANT=None):
     jx = curlb_x / obj.uni.mu0si   # j [si units]
     jx = jx / obj.uni.usi_i        # j [simu. units]
     return ic_ix + jx              # j [simu. units]
+  else:
+    # if we reach this line, var is a global_var quant but we did not handle it.
+    raise NotImplementedError(f'{repr(var)} in get_global_var')
 
 
 # default
@@ -318,6 +326,7 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
       else:
         ue = 'ue'   # include the full ue term, in our ef calculation.
       B_cross_ue__x = -1 * obj.get_var(ue+'xb'+x)
+
       # ----- grad Pe contribution ----- #
       battery_x = obj.get_var('bat'+x)
       # ----- calculate ionization & recombination effects ----- #
@@ -369,6 +378,9 @@ def get_efield_var(obj, var, EFIELD_QUANT=None):
     ## to align with efx, we shift ne by ydn zdn
     interp = y+'dn'+z+'dn'
     result = obj.get_var('nq'+interp, iS=-1)   # [simu. charge density units]  (Note: 'nq' < 0 for electrons)
+
+  else:
+    raise NotImplementedError(f'{repr(base)} in get_efield_var')
 
   return result
 
@@ -441,9 +453,11 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
     return (gamma - 1) * obj.get_var('e')          # p = (gamma - 1) * internal energy
 
   elif var in ['tg', 'temperature']:
-    p  = obj.get_var('p') * obj.uni.u_e    # [cgs units]
-    nr = obj.get_var('nr') * obj.uni.u_nr  # [cgs units]
-    return p / (nr * obj.uni.k_b)          # [K]         # p = n k T
+    p  = obj.get_var('p')    # [simu units]
+    nr = obj.get_var('nr')   # [simu units]
+    if getattr(obj, 'debug', False):
+      raise Exception('boom')
+    return p / (nr * obj.uni.simu_kB)          # [K]         # p = n k T
 
   elif var == 'tgjoule':
     return obj.uni.ksi_b * obj('tg')
@@ -472,6 +486,9 @@ def get_onefluid_var(obj, var, ONEFLUID_QUANT=None):
       else:                    # not electrons
         f_var = var.replace('i', '')
         return obj.get_var(f_var)
+
+    else:
+      raise NotImplementedError(f'{repr(var)} in get_onefluid_var')
 
 
 # default
@@ -589,7 +606,7 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
         ux   = obj.get_var('u'+x, ifluid=fluid.SL)          # [simu. velocity units]
         output -= nq * ux                                   # [simu. current per area units]
         nqe    -= nq                                        # [simu. charge density units]
-      output = output / nqe
+      output = output / nqe 
       cache(var, output)
       return output  # [simu velocity units]
 
@@ -604,52 +621,126 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
     uex = obj.get_var('ue'+x)       # [simu. velocity units]
     return re * uex                 # [simu. momentum density units]
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_electron_var')
+
 
 # default
-_MOMENTUM_QUANT = []
-_MQVECS = ['rij', 'rijsum', 'momflorentz', 'mombat', 'gradp', 'momrate', '_ueq_scr', 'ueq', 'ueqsimple']
-_MOMENTUM_QUANT += [v + x for v in _MQVECS for x in AXES]
-_MOMENTUM_QUANT = ('MOMENTUM_QUANT', _MOMENTUM_QUANT)
+_CONTINUITY_QUANT = ('CONTINUITY_QUANT',
+                     ['ndivu', 'udivn', 'udotgradn', 'flux_nu', 'flux_un',
+                     'gradnx', 'gradny', 'gradnz']
+                     )
+# get value
+@document_vars.quant_tracking_simple(_CONTINUITY_QUANT[0])
+def get_continuity_quant(obj, var, CONTINUITY_QUANT=None):
+  '''terms related to the continuity equation.
+  In the simple case (e.g. no ionization), expect dn/dt + flux_un = 0.
+  '''
+  if CONTINUITY_QUANT is None:
+    CONTINUITY_QUANT = _CONTINUITY_QUANT[1]
+
+  if var == '':
+    docvar = document_vars.vars_documenter(obj, _CONTINUITY_QUANT[0], CONTINUITY_QUANT,
+                                           get_continuity_quant.__doc__, nfluid=1, uni=UNI_nr * UNI_hz)
+    docvar('ndivu', 'number density times divergence of velocity')
+    for udivn in ('udivn', 'udotgradn'):
+      docvar(udivn, 'velocity dotted with gradient of number density')
+    for x in AXES:
+      docvar('gradn'+x, x+'-component of grad(nr), face-centered.', nfluid=1, uni=UNI.qc(0)) # qc0 will be e.g. dnrdxdn.
+    for flux_un in ('flux_un', 'flux_nu'):
+      docvar(flux_un, 'divergence of (velocity times number density). Calculated via ndivu + udotgradn.')
+    docvar('flux_p', 'divergence of momentum density')
+    return None
+
+  if var not in CONTINUITY_QUANT:
+    return None
+
+  # --- continuity equation terms --- #
+  if var == 'ndivu':
+    n    = obj('nr')
+    divu = obj('divupui')  # divup(ui). up to align with n.
+    return n * divu
+
+  elif var in ('gradnx', 'gradny', 'gradnz'):
+    return obj(f'dnrd{var[-1]}dn')
+
+  elif var in ('udivn', 'udotgradn'):
+    return obj('ui_facedot_gradn')
+
+  elif var in ('flux_nu', 'flux_un'):
+    return obj('ndivu') + obj('udivn')
+
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_momentum_quant')
+
+# default
+_MQUVECS = [  # momentum quantities that will have 'x', 'y', or 'z' after, and can have 'u' before.
+            'rijsum', 'rij',
+            'momflorentz', 'momfef', 'momfb',
+            'mompg',
+            'momdtime',
+            ]
+_MQVECS  = [  # momentum quantities that will have 'x', 'y', or 'z' after.
+            'momohme', 'mombat', 'gradp',
+            'momrate',
+            'ueq', 'ueqsimple', '_ueq_scr',
+            *_MQUVECS,
+            *('u'+v for v in _MQUVECS),
+            ]
+_MOMENTUM_QUANT = ('MOMENTUM_QUANT', [v + x for v in _MQVECS for x in AXES])
 # get value
 @document_vars.quant_tracking_simple(_MOMENTUM_QUANT[0])
 def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
   '''terms related to momentum equations of fluids.
-  The units for these quantities are [simu. momentum density units / simu. time units].
+  The units are:
+    - for "momentum density rate of change" quantities -- [simu. momentum density units / simu. time units].
+    - for "velocity rate of change" quantities -- [simu. velocity units / simu. time units].
   '''
   if MOMENTUM_QUANT is None:
     MOMENTUM_QUANT = _MOMENTUM_QUANT[1]
 
   if var == '':
     docvar = document_vars.vars_documenter(obj, _MOMENTUM_QUANT[0], MOMENTUM_QUANT, get_momentum_quant.__doc__)
+    # "helper" units
     units_dpdt = dict(uni_f=UNI.phz, uni_name=UNI_rho.name * UNI_speed.name / UNI_time.name)
+    units_dudt = dict(uni=UNI_speed / UNI_time)
+    # begin documenting
     for x in AXES:
-      docvar('rij'+x, ('{x:}-component of momentum density exchange between ifluid and jfluid ' +\
-                       '[simu. momentum density units / simu. time units]. ' +\
-                       'rij{x:} = R_i^(ij) {x:} = mi ni nu_ij * (u{x:}_j - u{x:}_i)').format(x=x), nfluid=2, **units_dpdt)
-    for x in AXES:
-      docvar('rijsum'+x, x+'-component of momentum density change of ifluid ' +\
-                           'due to collisions with all other fluids. = sum_j rij'+x, nfluid=1, **units_dpdt)
-    for x in AXES:
-      docvar('momflorentz'+x, x+'-component of momentum density change of ifluid due to Lorentz force. ' +\
-                           '[simu. momentum density units / simu. time units]. = ni qi (E + ui x B).', nfluid=1, **units_dpdt)
-    for x in AXES:
-      docvar('mombat'+x, x+'-component of momentum density change of ifluid due to battery term. ' +\
-                           '[simu. momentum density units / simu. time units]. = ni qi grad(P_e) / (ne qe).', nfluid=1, **units_dpdt)
-    for x in AXES:
-      docvar('gradp'+x, x+'-component of grad(Pi), face-centered (interp. loc. aligns with momentum).', nfluid=1, uni=UNI.qc(0))
-    for x in AXES:
-      docvar('momrate'+x, x+'-component of rate of change of momentum. ' +\
-                          '= (-gradp + momflorentz + rijsum)_'+x, nfluid=1, **units_dpdt)
-    for x in AXES:
+      # "helper" strings
+      momratex_i = f'{x}-component of momentum density rate of change of ifluid'
+      velratex_i = f'{x}-component of velocity rate of change of ifluid'
+      # documentation of variables
+      ## Collisions ##
+      docvar(f'rij{x}',    f'{momratex_i} due to collisions with jfluid. = mi ni nu_ij * (u{x}_j - u{x}_i)', nfluid=2, **units_dpdt)
+      docvar(f'urij{x}',   f'{velratex_i} due to collisions with jfluid. = nu_ij * (u{x}_j - u{x}_i)',       nfluid=2, **units_dudt)
+      docvar(f'rijsum{x}', f'{momratex_i} due to collisions with all other fluids. = sum_j rij{x}',  nfluid=1, **units_dpdt)
+      docvar(f'urijsum{x}',f'{velratex_i} due to collisions with all other fluids. = sum_j urij{x}', nfluid=1, **units_dudt)
+      ## Lorentz force ##
+      docvar(f'momfef{x}',  f'{momratex_i} due to electric field. = ni qi E{x}',   nfluid=1, **units_dpdt)
+      docvar(f'umomfef{x}', f'{velratex_i} due to electric field. = (qi/mi) E{x}', nfluid=1, **units_dudt)
+      docvar(f'momfb{x}',   f'{momratex_i} due to magnetic field. = ni qi (ui x B)_{x}',   nfluid=1, **units_dpdt)
+      docvar(f'umomfb{x}',  f'{velratex_i} due to magnetic field. = (qi/mi) (ui x B)_{x}', nfluid=1, **units_dudt)
+      docvar(f'momflorentz{x}',  f'{momratex_i} due to Lorentz force. = ni qi (E + ui x B)_{x}.',   nfluid=1, **units_dpdt)
+      docvar(f'umomflorentz{x}', f'{velratex_i} due to Lorentz force. = (qi/mi) (E + ui x B)_{x}.', nfluid=1, **units_dudt)
+      ### electric field sub-terms ###
+      docvar(f'momohme{x}',  f'{momratex_i} due the ohmic term in the electric field. = ni qi nu_es (ui-epUx) .',   nfluid=1, **units_dpdt)
+      docvar(f'mombat{x}',  f'{momratex_i} due to battery term. = ni qi grad(P_e) / (ne qe).',   nfluid=1, **units_dpdt)
+      ## Pressure ##
+      docvar(f'gradp{x}', f'{x}-component of grad(Pi), face-centered (mesh location aligns with momentum).', nfluid=1, uni=UNI.qc(0))
+      docvar(f'mompg{x}',  f'{momratex_i} due to pressure. = -grad(P_i) dot {x}',           nfluid=1, **units_dpdt)
+      docvar(f'umompg{x}', f'{velratex_i} due to pressure. = -grad(P_i) dot {x} / (ni mi)', nfluid=1, **units_dudt)
+      ## TOTAL d/dt ##
+      docvar(f'momdtime{x}',  f'{momratex_i}, total. = (-gradp + momflorentz + rijsum)_{x}',           nfluid=1, **units_dpdt)
+      docvar(f'umomdtime{x}', f'{velratex_i}, total. = (-gradp + momflorentz + rijsum)_{x} / (mi ni)', nfluid=1, **units_dudt)
+      docvar(f'momrate{x}', f'momdtime{x}', copy=True)   # alias momratex <--> momdtimex, for historical reasons. (prefer: momdtime)
+      ## "equilibrium" velocities ##
       docvar('ueq'+x, x+'-component of equilibrium velocity of ifluid. Ignores derivatives in momentum equation. ' +\
                        '= '+x+'-component of [qs (_ueq_scr x B) + (ms) (sum_{j!=s} nu_sj) (_ueq_scr)] /' +\
                        ' [(qs^2/ms) B^2 + (ms) (sum_{j!=s} nu_sj)^2]. [simu velocity units].', nfluid=1, uni=UNI_speed)
-    for x in AXES:
       docvar('ueqsimple'+x, x+'-component of "simple" equilibrium velocity of ifluid. ' +\
                        'Treats these as 0: derivatives in momentum equation, velocity of jfluid, nu_sb for b not jfluid.' +\
                        '= '+x+'-component of [(qs/(ms nu_sj))^2 (E x B) + qs/(ms nu_sj) E] /' +\
                        ' [( (qs/ms) (|B|/nu_sj) )^2 + 1]. [simu. velocity units].', nfluid=2, uni=UNI_speed)
-    for x in AXES:
       docvar('_ueq_scr'+x, x+'-component of helper term which appears twice in formula for ueq. '+x+'-component of ' +\
                        ' [(qs/ms) E + (sum_{j!=s} nu_sj uj)]. face-centered. [simu velocity units].', nfluid=1, uni=UNI_speed)
     return None
@@ -665,24 +756,66 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
   else:
     base = var
 
-  if base == 'rij':
+  umom  = (base[0] == 'u')  # whether we are doign 'umom' version of quant.
+  ubase = (base[1:] if umom else base)   # e.g., 'rijx' given base='urijx' or base='rijx'.
+
+  ## COLLISIONS ##
+  if ubase == 'rij':
     if obj.i_j_same_fluid():      # when ifluid==jfluid, u_j = u_i, so rij = 0.
       return obj.zero_at_mesh_face(x)  # save time by returning 0 without reading any data.
     # rij = mi ni nu_ij * (u_j - u_i) = ri nu_ij * (u_j - u_i)
+    # (Note: this does NOT equal to nu_ij * (rj u_j - ri u_i))
     ## Scalars are at (0,0,0) so we must shift by xdn to align with face-centered u at (-0.5,0,0)
     nu_ij = obj.get_var('nu_ij' + x+'dn')
-    ri  = obj.get_var('ri' + x+'dn')
     uix = obj.get_var('ui'+x)
-    ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
-    return ri * nu_ij * (ujx - uix)
+    with obj.MaintainFluids():
+      ujx = obj.get_var('ui'+x, ifluid=obj.jfluid)
+    if umom:
+      return nu_ij * (ujx - uix)
+    else:
+      ri  = obj.get_var('ri' + x+'dn')
+      return ri * nu_ij * (ujx - uix)
 
-  elif base == 'rijsum':
-    result = obj.get_var('rij'+x, jS=-1)            # rijx for j=electrons
-    for fluid in obj.fluids:
-      result += obj.get_var('rij'+x, jfluid=fluid)  # rijx for j=fluid
-    return result
+  elif ubase == 'rijsum':
+    u = 'u' if umom else ''
+    return sum(obj(f'{u}rij{x}', jfluid=jSL) for jSL in obj.fluid_SLs(with_electrons=True))
 
-  elif base == 'momflorentz':
+  ## LORENTZ FORCE ##
+  elif ubase in ('momfef', 'momfb', 'momflorentz'):
+    # momflorentz  = (qi*ni) (E + ui x B)
+    # umomflorentz = (qi/mi) (E + ui x B)
+    # all of these quants are proportional to qi; get that first (if 0, return 0 to save time)
+    qi = obj.get_charge(obj.ifluid, units='simu')
+    if qi == 0:
+      return obj.zero_at_mesh_face(x)    # no lorentz force for neutrals - save time by just returning 0 here :)
+    # factor in front. (qi*ni) for 'mom'; (qi/mi) for 'umom'
+    if umom:
+      mi = obj.get_mass(obj.ifluid, units='simu')
+      front = qi / mi
+    else:
+      ni = obj('nr'+x+'dn')    # n, aligned with velocity
+      front = qi * ni
+    ## specific quantities (E, u x B, or E + u x B) ##
+    if ubase in ('momfef', 'momflorentz'):
+      # E interpolation notes:
+      ## Ex is at (0, -0.5, -0.5); we shift to align with ux at (-0.5, 0, 0)
+      Ex = obj('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)   # caching improves speed if calculation is repeated.
+      if ubase == 'momfef':
+        return front * Ex           # (qi ni) E  or  (qi/mi) E
+    if ubase in ('momfb', 'momflorentz'):
+      # B, ui interpolation notes:
+      ## B and ui are face-centered vectors, and we want a face-centered result to align with u.
+      ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
+      uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
+      if ubase == 'momfb':
+        return front * uxB__x       # (qi ni) u x B  or  (qi/mi) u x B
+    if ubase == 'momflorentz':
+      return front * (Ex + uxB__x)  # (qi ni) (E + u x B)  or  (qi/mi) (E + u x B)
+    else:
+      raise NotImplementedError(f"all ubase cases should have been handled, but got ubase={repr(ubase)}")
+
+  ### ELECTRIC FIELD SUB-TERMS ###
+  elif base == 'momohme':
     # momflorentz = ni qi (E + ui x B)
     qi = obj.get_charge(obj.ifluid, units='simu')
     if qi == 0:
@@ -693,9 +826,9 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     ## Thus we use ui_facecrosstoface_b (which gives a face-centered result).
     ## Meanwhile, E is edge-centered, so we must shift all three coords.
     ## Ex is at (0, -0.5, -0.5), so we shift by xdn, yup, zup
-    Ex = obj.get_var('ef'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
-    uxB__x = obj.get_var('ui_facecrosstoface_b'+x)
-    return ni * qi * (Ex + uxB__x)
+    Ex = obj.get_var('emom'+x + x+'dn' + y+'up' + z+'up', cache_with_nfluid=0)
+
+    return ni * qi * Ex
 
   elif base == 'mombat':
     # px is at (-0.5, 0, 0); nq is at (0, 0, 0), so we shift by xdn
@@ -707,18 +840,30 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
       gradPe_x = obj('gradp'+x)  # gradp handles the interpolation already.
     return (niqi / neqe) * gradPe_x
 
+  ## PRESSURE ##
   elif base == 'gradp':
     # px is at (-0.5, 0, 0); pressure is at (0, 0, 0), so we do dpdxdn
     return obj.get_var('dpd'+x+'dn')
 
-  elif base == 'momrate':
+  elif ubase == 'mompg':
+    gradpx = obj('dpd'+x+'dn')
+    mompgx = - gradpx
+    if umom:
+      ri = obj('ri'+x+'dn')   # rho_i, shifted to align with u
+      return mompgx / ri
+    else:
+      return mompgx
+
+  ## TOTAL ##
+  elif (ubase=='momdtime') or (base=='momrate'):
     if obj.get_param('do_recion', default=False):
       if obj.verbose:
         warnings.warn('momentum contribution from ionization & recombination have not yet been added.')
-    gradpx    = obj.get_var('gradp'+x)
-    florentzx = obj.get_var('momflorentz'+x)
-    rijsumx   = obj.get_var('rijsum'+x)
-    return florentzx - gradpx + rijsumx
+    u = 'u' if umom else ''
+    mompgx    = obj(f'{u}mompg{x}')
+    florentzx = obj(f'{u}momflorentz{x}')
+    rijsumx   = obj(f'{u}rijsum{x}')
+    return mompgx + florentzx + rijsumx
 
   # --- "equilibrium velocity" terms --- #
   elif base == '_ueq_scr':
@@ -779,13 +924,21 @@ def get_momentum_quant(obj, var, MOMENTUM_QUANT=None):
     denom = q_over_m_nu__squared * B2 + 1
     return numer / denom
 
+  else:
+    raise NotImplementedError(f'{repr(base)} in get_momentum_quant')
+
 
 # default
 _HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
                  'qcol_u', 'qcol_tg', 'qcol',
                  'e_to_tg',
                  'tg_qcol',  # TODO: add tg_qcol_... for as many of the qcol terms as applicable.
-                 'qjoulei']
+                 'tg_qcol_uj', 'tg_qcol_u', 'tg_qcol_tgj', 'tg_qcol_tg', 'tg_qcol_j', 'tg_qcolj',
+                 'qjoulei',
+                 'tgdu',
+                 'tg_rate', 'tgdtime',   # use tgdtime instead of tg_rate to avoid ambiguity with "rat" quant.
+                 'qcol_u_noe', 'qcol_tg_noe',
+                 ]
 _TGQCOL_EQUIL  = ['tgqcol_equil' + x for x in ('_uj', '_tgj', '_j', '_u', '_tg', '')]
 _HEATING_QUANT += _TGQCOL_EQUIL
 _HEATING_QUANT = ('HEATING_QUANT', _HEATING_QUANT)
@@ -814,26 +967,41 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
 
   if var=='':
     docvar = document_vars.vars_documenter(obj, _HEATING_QUANT[0], HEATING_QUANT, get_heating_quant.__doc__)
+    units_qcol    = dict(uni_f=UNI.e / UNI.t, usi_name=Usym('J')/(Usym('m')**3 * Usym('s')))
+    units_e_to_tg = dict(uni_f=UNITS_FACTOR_1 / UNI.e, usi_name=Usym('K') / (Usym('J') / Usym('m')**3))
+    units_tg      = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
+    units_dtgdt   = dict(uni_f=UNI.hz, uni_name=Usym('K')/Usym('s'))
+
+    # docs for qcol and tg_qcol terms.
+    qcol_docdict = {
+      'qcol_uj'    : ('{heati} due to collisions with jfluid, and velocity drifts.', dict(nfluid=2)),
+      'qcol_u'     :              ('{heati} due to collisions and velocity drifts.', dict(nfluid=1)),
+      'qcol_u_noe' :              ('{heati} due to collisions and velocity drifts without electrons.', dict(nfluid=1)),
+      'qcol_tgj'   : ('{heati} due to collisions with jfluid, and temperature differences.', dict(nfluid=2)),
+      'qcol_tg'    :              ('{heati} due to collisions and temperature differences.', dict(nfluid=1)),
+      'qcol_tg_noe':              ('{heati} due to collisions and temperature differences without electrons.', dict(nfluid=1)),
+      'qcolj'      : ('total {heati} due to collisions with jfluid.', dict(nfluid=2)),
+      'qcol'       : ('total {heati} due to collisions.', dict(nfluid=1)),
+    }
+    qcol_docdict['qcol_j'] = qcol_docdict['qcolj']  # alias
+    
     # qcol: heating due to collisions in addition to velocity and/or temperature differences
     ## qcol tells the energy density change per unit time.
-    heati = 'heating of ifluid [simu. energy density per time]'
-    units_qcol = dict(uni_f=UNI.e / UNI.t, usi_name=Usym('J')/(Usym('m')**3 * Usym('s')))
-    docvar('qcol_uj',  heati + ' due to jfluid, due to collisions and velocity drifts.', nfluid=2, **units_qcol)
-    docvar('qcol_tgj', heati + ' due to jfluid, due to collisions and temperature differences.', nfluid=2, **units_qcol)
+    ## tg_qcol tells the temperature change per unit time.
+    for vname, (vdoc, kw_nfluid) in qcol_docdict.items():
+      docvar(vname, vdoc.format(heati='heating of ifluid [simu. energy density per time]'), **kw_nfluid, **units_qcol)
+      docvar('tg_'+vname, vdoc.format(heati='heating of ifluid [Kelvin per simu. time]'), **kw_nfluid, **units_dtgdt)
     docvar('qcol_coeffj', 'coefficient common to qcol_uj and qcol_tj terms.' +\
-                          ' == (mi / (gamma - 1) (mi + mj)) * ni * nu_ij. [simu units: length^-3 time^-1]', nfluid=2, **units_qcol)
-    for qcolj in ['qcolj', 'qcol_j']:
-      docvar(qcolj,    'total '+heati+' due to jfluid.', nfluid=2, **units_qcol)
-    docvar('qcol_u',   heati + ' due to collisions and velocity drifts.', nfluid=1, **units_qcol)
-    docvar('qcol_tg',  heati + ' due to collisions and temperature differences.', nfluid=1, **units_qcol)
-    docvar('qcol',     'total '+heati+'.', nfluid=1, **units_qcol)
-    # converting from qcol (energy density per time) to tg_qcol (temperature per time)
-    units_e_to_tg = dict(uni_f=UNITS_FACTOR_1 / UNI.e, usi_name=Usym('K') / (Usym('J') / Usym('m')**3))
+                          ' == (mi / (gamma - 1) (mi + mj)) * ni * nu_ij. [simu units: length^-3 time^-1]',
+                          nfluid=2, **units_qcol)
     docvar('e_to_tg',  'conversion factor from energy density to temperature for ifluid. '+\
                        'e_ifluid * e_to_tg = tg_ifluid', nfluid=1, **units_e_to_tg)
-    tg_heati = 'heating of ifluid [Kelvin per simu. time]'
-    units_tg = dict(uni_f=UNITS_FACTOR_1, uni_name=Usym('K'))
-    docvar('tg_qcol',  'total '+tg_heati+'.', nfluid=1, uni_f=UNI.hz, uni_name=Usym('K') / Usym('s'))
+    # the other heating in the heating equation
+    docvar('tgdu', 'rate of change of Ti due to -2/3 * T * div(u).', **units_dtgdt)
+    for tg_rate in ('tg_rate', 'tgdtime'):
+      docvar(tg_rate, 'predicted total rate of change of Ti, including all contributions. ' +\
+                        'use "tgdtime" to avoid ambiguity with "rat" quant.', **units_dtgdt)
+
     # "simple equilibrium" vars
     equili = '"simple equilibrium" temperature [K] of ifluid (setting sum_j Qcol_ij=0 and solving for Ti)'
     ## note: these all involve setting sum_j Qcol_ij = 0 and solving for Ti.
@@ -848,7 +1016,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     docvar('tgqcol_equil_tg', equili + ', due only to contribution from temperature of fluids.', nfluid=1, **units_tg)
     docvar('tgqcol_equil', equili + '.', nfluid=1, **units_tg)
     # "ohmic heating" (obsolete (?) - nonphysical to include this qjoule and the qcol_u term as it appears here.)
-    docvar('qjoulei',  heati + ' due to Ji dot E. (Ji = qi ni ui).', nfluid=1, **units_qcol)
+    docvar('qjoulei',  'qi ni ui dot E. (obsolete, nonphysical to include this term and the qcol_u term)', nfluid=1, **units_qcol)
     return None
 
   if var not in HEATING_QUANT:
@@ -871,7 +1039,7 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     mi = obj.get_mass(obj.mf_ispecies) # [amu]
     mj = obj.get_mass(obj.mf_jspecies) # [amu]
     nu_ij = obj.get_var('nu_ij')       # [simu. units]
-    coeff = (1 / (obj.uni.gamma - 1)) * (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
+    coeff = (mi / (mi + mj)) * ni * nu_ij   # [simu units: length^-3 time^-1]
     return coeff
 
   if var in ['qcol_uj', 'qcol_tgj']:
@@ -880,12 +1048,12 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     coeff = obj.get_var('qcol_coeffj')
     if var == 'qcol_uj':
       mj_simu = obj.get_mass(obj.mf_jspecies, units='simu') # [simu mass]
-      energy = (2/3) * mj_simu * obj.get_var('uid2')        # [simu energy]
+      energy = mj_simu * obj.get_var('uid2')        # [simu energy]
     elif var == 'qcol_tgj':
       simu_kB = obj.uni.ksi_b * (obj.uni.usi_nr / obj.uni.usi_e)   # kB [simu energy / K]
       tgi = obj.get_var('tg')                       # [K]
       tgj = obj.get_var('tg', ifluid=obj.jfluid)    # [K]
-      energy = 2 * simu_kB * (tgj - tgi)
+      energy = 3. * simu_kB * (tgj - tgi)
     return coeff * energy  # [simu energy density / time]
 
   elif var in ['qcolj', 'qcol_j']:
@@ -901,9 +1069,29 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
         output += obj.get_var(varj, jfluid=fluid)
     return output
 
+  elif var in ['qcol_u_noe', 'qcol_tg_noe']:
+    output = obj.zero_at_mesh_center()
+    if heating_is_off(): return obj.zero_at_mesh_center()
+    varj   = var[:-4] + 'j'   # qcol_uj or qcol_tgj
+    for fluid in obj.fluids:
+      if fluid.SL != obj.ifluid:        # exclude varj for j = i  # not necessary but doesn't hurt.
+        output += obj.get_var(varj, jfluid=fluid)
+    return output
+
   elif var == 'qcol':
     if heating_is_off(): return obj.zero_at_mesh_center()
     return obj.get_var('qcol_u') + obj.get_var('qcol_tg')
+
+  # rate of change of T, terms
+  elif var == 'tgdu':
+    tg = obj('tg')
+    divu = obj('divup'+'ui')
+    return -2/3 * tg * divu
+
+  elif var in ['tg_rate', 'tgdtime']:
+    tgqcol = obj('tg_qcol')
+    tgdu = obj('tgdu')
+    return tgqcol + tgdu
 
   # converting to temperature (from energy density) terms
   elif var == 'e_to_tg':
@@ -971,6 +1159,9 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
     # << at this point, result = ui dot ef
     return qi * ni * result
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_heating_quant')
+
 
 # default
 _SPITZTERM_QUANT = ('SPITZTERM_QUANT', ['kappaq','dxTe','dyTe','dzTe','rhs'])
@@ -1000,19 +1191,19 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
     te  = obj.get_var('tg', mf_ispecies=-1) #obj.get_var('etg')
     result = kappaq0*(te)**(5.0/2.0)
 
-  if (var == 'dxTe'):     
+  elif (var == 'dxTe'):     
     gradx_Te = obj.get_var('dtgdxup', iS=-1)
     result = gradx_Te
 
-  if (var == 'dyTe'):
+  elif (var == 'dyTe'):
     grady_Te = obj.get_var('dtgdyup', iS=-1)
     result = grady_Te
   
-  if (var == 'dzTe'):
+  elif (var == 'dzTe'):
     gradz_Te = obj.get_var('dtgdzup', iS=-1)
     result = gradz_Te
 
-  if (var == 'rhs'):  
+  elif (var == 'rhs'):  
     bx =   obj.get_var('bx')
     by =   obj.get_var('by')
     bz =   obj.get_var('bz')
@@ -1034,13 +1225,16 @@ def get_spitzerterm(obj, var, SPITZERTERM_QUANT=None):
     rhs = bbx*gradx_Te + bby*grady_Te + bbz*gradz_Te
     result = rhs
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_spitzterm')
+
   return result
 
 
 # default
 _COLFRE_QUANT = ('COLFRE_QUANT',
                  ['nu_ij','nu_sj',                                 # basics: frequencies
-                  'nu_si','nu_sn','nu_ei','nu_en',                 # sum of frequencies
+                  'nu_si','nu_sn','nu_ei','nu_en','nu_ssum',       # sum of frequencies
                   'nu_ij_el', 'nu_ij_mx', 'nu_ij_cl',              # colfreq by type
                   'nu_ij_res', 'nu_se_spitzcoul', 'nu_ij_capcoul', # alternative colfreq formulae
                   'nu_ij_to_ji', 'nu_sj_to_js',                    # conversion factor nu_ij --> nu_ji
@@ -1071,6 +1265,7 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
     docvar('nu_sn', sstr.format('ifluid', 'neutral fluids (excluding ifluid)'), nfluid=1)
     docvar('nu_ei', sstr.format('electrons', 'ion fluids'), nfluid=0)
     docvar('nu_en', sstr.format('electrons', 'neutral fluids'), nfluid=0)
+    docvar('nu_ssum', sstr.format('ifluid', 'all other fluids'), nfluid=1)
     docvar('nu_ij_el', 'Elastic ' + mtra, nfluid=2)
     docvar('nu_ij_mx', 'Maxwell ' + mtra + 'NOTE: assumes maxwell molecules; result independent of temperatures. '+\
                         'presently, only properly implemented when ifluid=H or jfluid=H.', nfluid=2)
@@ -1163,13 +1358,13 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
         
       # elastic collisions:
       elif var.endswith('el'):
-        cross    = obj.get_var('cross', match_type=MATCH_PHYSICS)    # [cm^2]
+        cross    = obj.get_var('cross_physical')    # [cm^2]
         tg_speed = np.sqrt(8 * (obj.uni.kboltzmann/obj.uni.amu) * tgij / (np.pi * m_ij)) # [cm s^-1]
         result = 4./3. * n_j * m_jfrac * cross * tg_speed / obj.uni.u_hz  # [simu frequency units]
 
       # cache result, then return:
-      cache(var, result)
-      return result
+      cache(var, result)#/ 1.0233)
+      return result#/ 1.0233
 
 
   # collision frequency - maxwell
@@ -1212,6 +1407,12 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
 
   elif var == 'nu_en':
     return obj.get_var('nu_sn', mf_ispecies=-1)
+
+  # sum of collision frequencies: sum_{s != ifluid} (nu_{ifluid, s})
+  elif var == 'nu_ssum':
+    return sum(obj('nu_ij', jSL=SL)
+               for SL in obj.fluid_SLs(with_electrons=True)
+               if not obj.fluids_equal(obj.ifluid, SL))
 
   # collision frequency - resonant charge exchange for H, H+
   elif var == 'nu_ij_res':
@@ -1306,6 +1507,9 @@ def get_mf_colf(obj, var, COLFRE_QUANT=None):
       warnings.warn(DeprecationWarning('1dcolslope will be removed at some point in the future.'))
     return -1 * obj.get_var("nu_ij") * (1 + obj.get_var('nu_ij_to_ji'))
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_mf_colf')
+
 
 # default
 _LOGCUL_QUANT = ('LOGCUL_QUANT', ['logcul'])
@@ -1330,9 +1534,12 @@ def get_mf_logcul(obj, var, LOGCUL_QUANT=None):
     return 23. + 1.5 * np.log(etg / 1.e6) - \
           0.5 * np.log(nel / 1e6)
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_logcul')
+
 
 # default
-_CROSTAB_QUANT = ('CROSTAB_QUANT', ['cross'])
+_CROSTAB_QUANT = ('CROSTAB_QUANT', ['cross','cross_physical','tgij'])
 # get value
 @document_vars.quant_tracking_simple(_CROSTAB_QUANT[0])
 def get_mf_cross(obj, var, CROSTAB_QUANT=None):
@@ -1344,12 +1551,18 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
     docvar = document_vars.vars_documenter(obj, _CROSTAB_QUANT[0], CROSTAB_QUANT, get_mf_cross.__doc__, nfluid=2)
     docvar('cross', 'cross section between ifluid and jfluid [cm^2]. Use species < 0 for electrons.',
                     uni_name=UNI_length.name**2, ucgs_f=UNITS_FACTOR_1, usi_f=UCONST.cm_to_m**2)
+    docvar('cross_physical', "cross section between ifluid and jfluid [cm^2]. " + \
+                  "Always returns physical value, regardless of match_type. (As opposed to 'cross' " +\
+                  "which gives 0 for ifluid > jfluid, in order to match aux.)",
+                  uni_name=UNI_length.name**2, ucgs_f=UNITS_FACTOR_1, usi_f=UCONST.cm_to_m**2)
+    docvar('tgij', 'mass-weighted temperature: (Ti mj + Tj mi) / (mi + mj)',
+                    uni=U_TUPLE(UNITS_FACTOR_1, Usym('K')))
     return None
 
   if var not in CROSTAB_QUANT:
     return None
 
-  if obj.match_aux():
+  if (var == 'cross') and obj.match_aux():
     # return 0 if ifluid > jfluid. (comparing species, then level if species are equal)
     # we do this because mm_cross gives 0 if ifluid > jfluid (and jfluid is not electrons))
     if (obj.ifluid > obj.jfluid) and obj.mf_jspecies > 0:
@@ -1364,14 +1577,16 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
 
   # temperature, weighted by mass of species
   tg = (tgi*m_j + tgj*m_i)/(m_i + m_j)
+  if var == 'tgij' : 
+    return tg
+  else: 
+    # look up cross table and get cross section
+    #crossunits = 2.8e-17  
+    crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
+    crossunits = crossobj.cross_tab[0]['crossunits']
+    cross = crossunits * crossobj.tab_interp(tg)
 
-  # look up cross table and get cross section
-  #crossunits = 2.8e-17  
-  crossobj = obj.get_cross_sect(ifluid=obj.ifluid, jfluid=obj.jfluid)
-  crossunits = crossobj.cross_tab[0]['crossunits']
-  cross = crossunits * crossobj.tab_interp(tg)
-
-  return cross
+    return cross
 
 
 # default
@@ -1458,6 +1673,9 @@ def get_mean_quant(obj, var, MEAN_QUANT=None):
       denom += r / m
     return numer / denom
 
+  else:
+    raise NotImplementedError(f'{repr(var)} in get_mean_quant')
+
 
 # default
 _CFL_QUANTS = ['ohm']
@@ -1487,12 +1705,16 @@ def get_cfl_quant(obj, quant, CFL_QUANT=None):
     nu_es = obj.get_var('nu_ij', iS=-1, jfluid=fluid)                   # nu_es
     return mrat * (qrat + nrat) * nu_es
 
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_cfl_quant')
+
 
 # default
 _PLASMA_QUANT = ('PLASMA_QUANT',
-                 ['beta', 'beta_ions', 'va', 'va_ions', 'cs', 's', 'ke', 'mn', 'man', 'hp',
+                 ['beta', 'beta_ions', 'va', 'va_ions', 'vai', 'cs', 's', 'ke', 'mn', 'man', 'hp',
                   'vax', 'vay', 'vaz', 'hx', 'hy', 'hz', 'kx', 'ky', 'kz',
                   'sgyrof', 'gyrof', 'skappa', 'kappa', 'ldebye', 'ldebyei',
+                  'meanfreepath', 'gyroradius',
                  ]
                 )
 # get value
@@ -1508,7 +1730,10 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     docvar('beta_ions', "plasma beta using sum of ion pressures. P / (B^2 / (2 mu0)).", nfluid=0, uni=DIMENSIONLESS)
     docvar('va', "alfven speed [simu. units]", nfluid=0, uni=UNI_speed)
     docvar('va_ions', "alfven speed [simu. units], using density := density of ions.", nfluid=0, uni=UNI_speed)
+    docvar('vai', "alfven speed [simu. units] of ifluid. Vai = sqrt(B^2 / (mu0 * rho_i))", nfluid=1, uni=UNI_speed)
     docvar('cs', "sound speed [simu. units]", nfluid='???', uni=UNI_speed)
+    docvar('csi', "sound speed [simu. units] of ifluid. Csi = sqrt(gamma * pressure_i / rho_i)", nfluid=1, uni=UNI_speed)
+    docvar('cfast', "Cfast for ifluid. == (Csi**2 + Vai**2 + Cse**2)?? NEEDS UPDATING.", nfluid=1, uni=UNI_speed)
     docvar('s', "entropy [log of quantities in simu. units]", nfluid='???', uni=DIMENSIONLESS)
     docvar('mn', "mach number (using sound speed)", nfluid=1, uni=DIMENSIONLESS)
     docvar('man', "mach number (using alfven speed)", nfluid=1, uni=DIMENSIONLESS)
@@ -1527,6 +1752,8 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     docvar('ldebye', "debye length of plasma [simu. length units]. " +\
                      "sqrt(kB eps0 e^-2 / (ne/Te + sum_j(Zj^2 * nj / Tj)) ); Zj = qj/e"+\
                      "1/sum_j( (1/ldebye_j) for j in fluids and electrons)", nfluid=0, uni=UNI_length)
+    docvar('meanfreepath', "mean free path of particles of ifluid. = |ui| / sum_j(nu_ij).", nfluid=1, uni=UNI_length)
+    docvar('gyroradius', "gyroradius for ifluid. I.e. |ui| / abs(qi * |B| / mi)", nfluid=1, uni=UNI_length)
     return None
 
   if quant not in PLASMA_QUANT:
@@ -1545,24 +1772,40 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     elif quant == 's':
       return (np.log(var) - obj.params['gamma'][obj.snapInd] *
               np.log(obj.get_var('totr')))
-    elif quant == 'beta':
+    else: # quant == 'beta':
       return 2 * var / obj.get_var('b2')
 
-  if quant == 'beta_ions':
+  elif quant == 'csi':
+    p = obj('p')
+    r = obj('r')
+    return np.sqrt(obj.uni.gamma * p / r)
+
+  elif quant == 'cfast':
+    warnings.warn('cfast implementation may be using the wrong formula.')
+    speeds = [obj('csi')]   # sound speed
+    i_charged = obj.get_charge(obj.ifluid) != 0
+    if i_charged:
+      speeds.append(obj('vai'))   # alfven speed
+      if not obj.fluids_equal(obj.ifluid, (-1,0)):   # if ifluid is not electrons
+        speeds.append(obj('csi', ifluid=(-1,0)))  # sound speed of electrons
+    result = sum(speed**2 for speed in speeds)
+    return result
+
+  elif quant == 'beta_ions':
     p = obj.zero()
     for fluid in obj.fluids.ions():
       p += obj.get_var('p', ifluid=fluid)
     bp = obj.get_var('b2') / 2    # (dd.uni.usi_b**2 / dd.uni.mu0si) == 1 by def'n of b in ebysus.
     return p / bp
 
-  if quant in ['mn', 'man']:
+  elif quant in ['mn', 'man']:
     var = obj.get_var('modu')
     if quant == 'mn':
       return var / (obj.get_var('cs') + 1e-12)
     else:
       return var / (obj.get_var('va') + 1e-12)
 
-  if quant in ['va', 'vax', 'vay', 'vaz']:
+  elif quant in ['va', 'vax', 'vay', 'vaz']:
     var = obj.get_var('totr')
     if len(quant) == 2:
       return obj.get_var('modb') / np.sqrt(var)
@@ -1570,11 +1813,16 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
       axis = quant[-1]
       return np.sqrt(obj.get_var('b' + axis + 'c') ** 2 / var)
 
-  if quant in ['va_ions']:
+  elif quant in ['va_ions']:
     r = obj.get_var('rions')
     return obj.get_var('modb') / np.sqrt(r)
 
-  if quant in ['hx', 'hy', 'hz', 'kx', 'ky', 'kz']:
+  elif quant == 'vai':
+    r = obj('r')
+    b = obj('modb')
+    return b / np.sqrt(r)   # [simu speed units]. note: mu0 = 1 in simu units.
+
+  elif quant in ['hx', 'hy', 'hz', 'kx', 'ky', 'kz']:
     axis = quant[-1]
     var = obj.get_var('p' + axis + 'c')
     if quant[0] == 'h':
@@ -1589,21 +1837,21 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     else:
       return obj.get_var('u2') * var * 0.5
 
-  if quant == 'sgyrof':
+  elif quant == 'sgyrof':
     B = obj.get_var('modb')                       # magnitude of B [simu. B-field units]
     q = obj.get_charge(obj.ifluid, units='simu')     #[simu. charge units]
     m = obj.get_mass(obj.mf_ispecies, units='simu')  #[simu. mass units]
     return q * B / m
 
-  if quant == 'gyrof':
+  elif quant == 'gyrof':
     return np.abs(obj.get_var('sgyrof'))
 
-  if quant == 'skappa':
+  elif quant == 'skappa':
     gyrof = obj.get_var('sgyrof') #[simu. freq.]
     nu_sn = obj.get_var('nu_sn')  #[simu. freq.]
     return gyrof / nu_sn 
 
-  if quant == 'kappa':
+  elif quant == 'kappa':
     return np.abs(obj.get_var('skappa'))
 
   elif quant == 'ldebyei':
@@ -1622,6 +1870,133 @@ def get_mf_plasmaparam(obj, quant, PLASMA_QUANT=None):
     for fluid in obj.fluids.ions():
       ldeb_inv_sum += 1/obj.get_var('ldebyei', ifluid=fluid.SL)
     return 1/ldeb_inv_sum
+
+  elif quant == 'meanfreepath':
+    ui = obj('ui_mod')
+    nu = obj('nu_ssum')
+    return ui / nu
+
+  elif quant == 'gyroradius':
+    ui = obj('ui_mod')
+    omega = obj('gyrof')
+    return ui / omega
+
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_mf_plasmaparam')
+
+
+# default
+_FUNDAMENTALS = ('r', 'px', 'py', 'pz', 'e', 'bx', 'by', 'bz')
+_HD_Fs = ('part',   # part --> only get the internal part. e.g. nu1 * Cfast.
+          *_FUNDAMENTALS)
+_HD_QUANTS  = ['hd1_part', 'hd2_part']       # << without the factor of nu1, nu2
+_HD_QUANTS += ['hd1_partnu', 'hd2_partnu']   # << include the factor of nu1, nu2
+_HD_QUANTS += [f'hd3{x}_part' for x in AXES] + [f'hd3{x}_bpart' for x in AXES]       # << without the factor of nu3
+_HD_QUANTS += [f'hd3{x}_partnu' for x in AXES] + [f'hd3{x}_bpartnu' for x in AXES]   # << include the factor of nu3
+_HD_QUANTS += [f'hd{x}quench_{f}' for x in AXES for f in _FUNDAMENTALS]  # Q(∂f/∂x)
+_HD_QUANTS += [f'hd{x}coeff_{f}' for x in AXES for f in _FUNDAMENTALS]   # nu dx (∂f/∂x) * Q(∂f/∂x)
+_HD_QUANTS += [f'{d}hd{n}{x}_{f}' for d in ('', 'd')       # E.g. hd1x_r == hd1_part * nu dx (∂r/∂x) * Q(∂r/∂x)
+                                  for n in (1,2,3)         # and dhd1x_r == ∂[hd1_part * nu dx (∂r/∂x) * Q(∂r/∂x)]/∂x
+                                  for x in AXES
+                                  for f in _FUNDAMENTALS]
+_HYPERDIFFUSIVE_QUANT = ('HYPERDIFFUSIVE_QUANT', _HD_QUANTS)
+# get value
+@document_vars.quant_tracking_simple(_HYPERDIFFUSIVE_QUANT[0])
+def get_hyperdiffusive_quant(obj, quant, HYPERDIFFUSIVE_QUANT=None):
+  '''hyperdiffusive terms. All in simu units.'''
+  if HYPERDIFFUSIVE_QUANT is None:
+    HYPERDIFFUSIVE_QUANT = _HYPERDIFFUSIVE_QUANT[1]
+
+  if quant=='':
+    docvar = document_vars.vars_documenter(obj, _HYPERDIFFUSIVE_QUANT[0], HYPERDIFFUSIVE_QUANT,
+                                           get_hyperdiffusive_quant.__doc__, nfluid=1)
+    docvar('hd1_part'  ,       'Cfast_i', uni=UNI_speed)
+    docvar('hd1_partnu', 'nu1 * Cfast_i', uni=UNI_speed)
+    docvar('hd2_part'  ,       '|ui|'   , uni=UNI_speed)
+    docvar('hd2_partnu', 'nu2 * |ui|'   , uni=UNI_speed)
+    for x in AXES:
+      docvar(f'hd3{x}_part'   ,       f'd{x} * grad1{x}(ui{x})'         , uni=UNI_speed)
+      docvar(f'hd3{x}_partnu' , f'nu3 * d{x} * grad1{x}(ui{x})'         , uni=UNI_speed)
+      docvar(f'hd3{x}_bpart'  ,       f'd{x} * |grad1_perp_to_b(ui{x})|', uni=UNI_speed)
+      docvar(f'hd3{x}_bpartnu', f'nu3 * d{x} * |grad1_perp_to_b(ui{x})|', uni=UNI_speed)
+    for x in AXES:
+      for f in _FUNDAMENTALS:
+        docvar(f'hd{x}quench_{f}', f'Q(∂{f}/∂{x})', uni=DIMENSIONLESS)
+        docvar(f'hd{x}coeff_{f}',  f'nu d{x} (∂{f}/∂{x}) * Q(∂{f}/∂{x})', uni=UNI.qc(0))
+    for x in AXES:
+      for n in (1,2,3):
+        for f in _FUNDAMENTALS:
+          if n==3 and f.startswith('b'):
+            docvar(f'hd{n}{x}_{f}', f'nu{n} * hd{n}_bpart * hd{x}coeff_{f}', ) #uni=[TODO]
+          else:
+            docvar(f'hd{n}{x}_{f}', f'nu{n} * hd{n}_part * hd{x}coeff_{f}', ) #uni=[TODO]
+          docvar(f'dhd{n}{x}_{f}', f'∂[hd{n}{x}_{f}]/∂{x}', )
+    return None
+
+  if quant not in HYPERDIFFUSIVE_QUANT:
+    return None
+
+  # nu1 term
+  if quant == 'hd1_part':
+    return obj('cfast')
+  elif quant == 'hd1_partnu':
+    return obj('hd1_part') * obj.get_param('nu1')
+
+  # nu2 term
+  elif quant == 'hd2_part':
+    return obj('ui_mod')
+  elif quant == 'hd2_partnu':
+    return obj('hd2_part') * obj.get_param('nu2')
+
+  # nu3 term
+  elif quant.startswith('hd3') and quant in (f'hd3{x}_part' for x in AXES):
+    x = quant[len('hd3')+0]  # 'x', 'y', or 'z'
+    # dx * grad1x (uix)
+    raise NotImplementedError(f'hd3{x}_part')
+
+  elif quant.startswith('hd3') and quant in (f'hd3{x}_bpart' for x in AXES):
+    x = quant[len('hd3')+0]  # 'x', 'y', or 'z'
+    # dx * |grad1_perp_to_b(ui{x})|
+    raise NotImplementedError(f'hd3{x}_bpart')
+
+  elif quant.starstwith('hd3') and quant in (f'hd3{x}_{b}partnu' for x in AXES for b in ('', 'b')):
+    part_without_nu = quant[:-len('nu')]
+    return obj(part_without_nu) * obj.get_param('nu3')
+
+  # quench term
+  elif quant.startswith('hd') and quant.partition('_')[0] in (f'hd{x}quench' for x in AXES):
+    base, _, f = quant.partition('_')
+    x = base[len('hd')]  # 'x', 'y', or 'z'
+    fval = obj(f)    # value of f, e.g. value of 'r' or 'bx'
+    # Q(∂f/∂x)
+    raise NotImplementedError(f'hd{x}quench_{f}')
+
+  # coeff term
+  elif quant.startswith('hd') and quant.partition('_')[0] in (f'hd{x}coeff' for x in AXES):
+    base, _, f = quant.partition('_')
+    x = base[len('hd')]  # 'x', 'y', or 'z'
+    nu = NotImplemented  # << TODO
+    dx = obj.dx          # << TODO (allow to vary in space)
+    quench = obj(f'hd{x}quench_{f}')
+    dfdx   = obj(f'd{f}dxdn')
+    return nu * dx * dfdx * quench
+
+  # full hd term
+  elif quant.startswith('hd') and quant.partition('_')[0] in (f'hd{n}{x}' for x in AXES for n in (1,2,3)):
+    base, _, f = quant.partition('_')
+    n, x = base[2:4]
+    nu = obj.get_param(f'nu{n}')
+    if n==3 and f.startswith('b'):
+      hd_part = obj('hd3_bpart')
+    else:
+      hd_part = obj(f'hd{n}_part')
+    coeff = obj(f'hd{x}coeff_{f}')
+    return nu * hd_part * coeff
+
+  # full hd term, with derivative
+  elif quant.startswith('dhd') and quant.partition('_')[0] in (f'dhd{n}{x}' for x in AXES for n in (1,2,3)):
+    quant_str = quant[1:]
+    return obj('d'+quant_str+'dxdn')
 
 
 # default
@@ -1644,6 +2019,9 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     for x in AXES:
       docvar('kmax'+x, "maximum resolvable wavevector in "+x+" direction. Determined via 2*pi/obj.d"+x+"1d",
                        nfluid=0, uni=UNI_length)
+    return None
+
+  if quant not in _WAVE_QUANT[1]:
     return None
 
   if quant == 'ci':
@@ -1677,6 +2055,9 @@ def get_mf_wavequant(obj, quant, WAVE_QUANT=None):
     dx1d = getattr(obj, 'd'+x+'1d')  # 1D; needs dims to be added. add dims below.
     dx1d = np.expand_dims(dx1d, axis=tuple(set((0,1,2)) - set([xidx])))
     return (2 * np.pi / dx1d) + obj.zero()
+
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_mf_wavequant')
 
 
 # default
@@ -1776,6 +2157,9 @@ def get_fb_instab_quant(obj, quant, FB_INSTAB_QUANT=None):
   elif quant in ['fb_ssi_growth_time_min'+x for x in AXES]:
     x = quant[-1]
     return 1/obj.get_var('fb_ssi_growth_rate_max'+x)
+
+  else:
+    raise NotImplementedError(f'{repr(quant)} in get_fb_instab_quant')
 
 
 # default

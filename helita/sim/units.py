@@ -1,7 +1,9 @@
 """
 Created by Sam Evans on Apr 27 2021
 
-purpose: enabling "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
+purpose:
+    1) provides HelitaUnits class
+    2) enable "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
 
 TL;DR:
     >>>> Use obj.get_units() to see the units for the most-recent quantity that obj got with get_var(). <<<< 
@@ -147,6 +149,13 @@ USER FRIENDLY GUIDE
 import operator
 import functools
 import collections
+import weakref
+
+# import internal modules
+from . import tools
+
+# import external public modules
+import numpy as np
 
 ''' ----------------------------- Set Defaults ----------------------------- '''
 
@@ -162,6 +171,12 @@ HIDE_INTERNAL_TRACEBACKS = True
 #  for obj.units_output='si', get_units('si') tells (1, string for SI units name)
 #  for obj.units_output='si', get_units('cgs') raises NotImplementedError.
 UNIT_SYSTEMS = ('simu', 'si', 'cgs')
+
+def ASSERT_UNIT_SYSTEM(value):
+    assert value in UNIT_SYSTEMS, f"expected unit system from {UNIT_SYSTEMS}, but got {value}"
+def ASSERT_UNIT_SYSTEM_OR(value, *alternates):
+    VALID_VALUES = (*alternates, *UNIT_SYSTEMS)
+    assert value in VALID_VALUES, f"expected unit system from {UNIT_SYSTEMS} or value in {alternates}, but got {value}"
 
 # UNITS_OUTPUT property
 def UNITS_OUTPUT_PROPERTY(internal_name='_units_output', default='simu'):
@@ -179,7 +194,7 @@ def UNITS_OUTPUT_PROPERTY(internal_name='_units_output', default='simu'):
             value = value.lower()
         except AttributeError:
             pass   # the error below ("value isn't in UNIT_SYSTEMS") will be more elucidating than raising here.
-        assert value in UNIT_SYSTEMS, f"can only set units_output to one of {UNIT_SYSTEMS}, but got {value}"
+        ASSERT_UNIT_SYSTEM(value)
         setattr(self, internal_name, value)
 
     doc = \
@@ -229,6 +244,555 @@ UNITS_KEY_F = '{}_f'
 
 # UNITS_NAME_KEY
 UNITS_KEY_NAME = '{}_name'
+
+
+''' ============================= Helita Units ============================= '''
+
+class HelitaUnits(object):
+    '''stores units as attributes.
+
+    units starting with 'u_' are in cgs. starting with 'usi_' are in SI.
+    Convert to these units by multiplying data by this factor.
+    Example:
+        r    = obj.get_var('r')  # r    = mass density / (simulation units)
+        rcgs = r * obj.uni.u_r   # rcgs = mass density / (cgs units, i.e. (g * cm^-3))
+        rsi  = r * obj.uni.usi_r # rsi  = mass density / (si units, i.e. (kg * m^-3))
+
+    all units are uniquely determined by the following minimal set of units:
+        (length, time, mass density, gamma)
+
+    you can access documentation on the units themselves via:
+    self.help().    (for BifrostData object obj, do obj.uni.help())
+    this documentation is not very detailed, but at least tells you
+    which physical quantity the units are for.
+
+    PARAMETERS
+    ----------
+    u_l, u_t, u_r, gamma:
+        values for these units.
+    parent: None, or HelitaData object (e.g. BifrostData object)
+        the object to which these units are associated.
+    units_output: None, 'simu', 'cgs', or 'si'
+        unit system for output of self(ustr). E.g. self('r') -->
+            if 'si'  --> self.usi_r
+            if 'cgs' --> self.u_r
+            if 'simu' --> 1
+        if parent is provided and has 'units_output' attribute,
+        self.units_output will default to parent.units_output.
+    units_input: 'simu', 'cgs', or 'si'
+        unit system to convert from, for self(ustr).
+        E.g. self('r', units_output='simu', units_input='si') = 1/self.usi_r,
+        since r [si units] * 1/self.usi_r == r [simu units]
+    '''
+
+    BASE_UNITS = ['u_l', 'u_t', 'u_r', 'gamma']
+
+    def __init__(self, u_l=1.0, u_t=1.0, u_r=1.0, gamma=1.6666666667, verbose=False,
+                 units_output=None, units_input='simu', parent=None):
+        '''get units from file (by reading values of u_l, u_t, u_r, gamma).'''
+        self.verbose = verbose
+
+        # base units
+        self.docu('l', 'length')
+        self.u_l = u_l
+        self.docu('t', 'time')
+        self.u_t = u_t
+        self.docu('r', 'mass density')
+        self.u_r = u_r
+        self.docu('gamma', 'adiabatic constant')
+        self.gamma = gamma
+
+        # bookkeeping
+        self._parent_ref = (lambda: None) if parent is None else weakref.ref(parent)  # weakref to avoid circular reference.
+        self.units_output = units_output
+        self.units_input  = units_input
+
+        # set many unit constants (e.g. cm_to_m, amu, gsun).
+        tools.globalvars(self)
+        # initialize unit conversion factors, and values of some constants in [simu] units.
+        self._initialize_extras()
+        # initialize constant_lookup, the lookup table for constants in various unit systems.
+        self._initialize_constant_lookup()
+
+    ## PROPERTIES ##
+    parent = property(lambda self: self._parent_ref())
+
+    @property
+    def units_output(self):
+        '''self(ustr) * value [self.units_input units] == value [self.units_output units]
+        if None, use the value of self.parent.units_output instead.
+        '''
+        result = getattr(self, '_units_output', None)
+        if result is None:
+            if self.parent is None:
+                raise AttributeError('self.units_output=None and cannot guess value from parent.')
+            else:
+                result = self.parent.units_output
+        return result
+    @units_output.setter
+    def units_output(self, value):
+        ASSERT_UNIT_SYSTEM_OR(value, None)
+        self._units_output = value
+
+    @property
+    def units_input(self):
+        ''''self(ustr) * value [self.units_input units] == value [self.units_output units]'''
+        return getattr(self, '_units_input', 'simu')
+    @units_input.setter
+    def units_input(self, value):
+        ASSERT_UNIT_SYSTEM(value)
+        self._units_input = value
+
+    @property
+    def doc_units(self):
+        '''dictionary of documentation about the unit conversion attributes of self.'''
+        if not hasattr(self, '_doc_units'):
+            self._doc_units = dict()
+        return self._doc_units
+
+    @property
+    def doc_constants(self):
+        '''dictionary of documentation about the constants attributes of self.'''
+        if not hasattr(self, '_doc_constants'):
+            self._doc_constants = dict()
+        return self._doc_constants
+
+    @property
+    def doc_all(self):
+        '''dictionary of documentation about all attributes of self.'''
+        return {**self.doc_units, **self.doc_constants}
+
+    ## GETTING UNITS ##
+    def __call__(self, ustr, units_output=None, units_input=None):
+        '''returns factor based on ustr and unit systems.
+
+        There are two modes for this function:
+        1) "conversion mode"
+            self(ustr) * value [units_input units] == value [units_output units]
+        2) "constants mode"
+            self(ustr) == value of the relevant constant in [units_output] system.
+        The mode will be dermined by ustr.
+        E.g. 'r', 'u', 'nq' --> conversion mode.
+        E.g. 'kB', 'amu', 'q_e' --> constants mode.
+        raises ValueEror if ustr is unrecognized.
+
+        ustr: string
+            tells unit dimensions of value, or which constant to get.
+            e.g. ustr='r' <--> mass density.
+            See self.help() for a (non-extensive) list of more options.
+        units_output: None, 'simu', 'si', or 'cgs'
+            unit system for output of self(ustr) * value.
+            if None, use self.units_output.
+            (Note: self.units_output defaults to parent.units_output)
+        units_input: None, 'simu', 'si', or 'cgs'
+            unit system for input value; output will be self(ustr) * value.
+            if None, use self.units_input.
+            (Note: self.units_input always defaults to 'simu')
+        '''
+        try:
+            cname = self._constant_name(ustr)
+        except KeyError:
+            conversion_mode=True
+        else:
+            conversion_mode=False
+        if conversion_mode:
+            if not self._unit_exists(ustr):
+                raise ValueError(f'units do not exist: u_{ustr}, usi_{ustr}. ' +\
+                                 f'And, {ustr} is not a constant from constant_lookup.')
+            simu_to_out = self.get_conversion_from_simu(ustr, units_output)
+            if units_input is None: units_input = self.units_input
+            ASSERT_UNIT_SYSTEM(units_input)
+            simu_to_in  = self.get_conversion_from_simu(ustr, units_input)
+            out_from_in = simu_to_out / simu_to_in    # in_to_simu = 1 / simu_to_in.
+            return out_from_in
+        else: # "constants mode"
+            try:
+                result = self.get_constant(ustr, units_output)
+            except KeyError:
+                ustr_not_found_errmsg = f'failed to determine units for ustr={ustr}.'
+                raise ValueError(ustr_not_found_errmsg)
+            else:
+                return result
+
+    def get_conversion_from_simu(self, ustr, units_output=None):
+        '''get conversion factor from simulation units, to units_system.
+        ustr: string
+            tells unit dimensions of value.
+            e.g. ustr='r' <--> mass density.
+            See self.help() for a (non-extensive) list of more options.
+        units_output: None, 'simu', 'si', or 'cgs'
+            unit system for output. Result converts from 'simu' to units_output.
+            if None, use self.units_output.
+        '''
+        if units_output is None: units_output = self.units_output
+        ASSERT_UNIT_SYSTEM(units_output)
+        if units_output == 'simu':
+            return 1
+        elif units_output == 'si':
+            return getattr(self, f'usi_{ustr}')
+        elif units_output == 'cgs':
+            return getattr(self, f'u_{ustr}')
+        else:
+            raise NotImplementedError(f'units_output={units_output}')
+
+    def get_constant(self, constant_name, units_output=None):
+        '''gets value of constant_name in unit system [units_output].
+        constant_name: string
+            name of constant to get.
+            e.g. 'amu' <--> value of one atomic mass unit.
+        units_output: None, 'simu', 'si', or 'cgs'
+            unit system for output. Result converts from 'simu' to units_output.
+            if None, use self.units_output.
+        '''
+        if units_output is None: units_output = self.units_output
+        ASSERT_UNIT_SYSTEM(units_output)
+        cdict = self.constant_lookup[constant_name]
+        ckey  = cdict[units_output]
+        return getattr(self, ckey)
+
+    ## INITIALIZING UNITS AND CONSTANTS ##
+    def _initialize_extras(self):
+        '''initializes all the units other than the base units.'''
+        import scipy.constants as const          # import here to reduce overhead of the module.
+        from astropy import constants as aconst  # import here to reduce overhead of the module.
+
+        # set cgs units
+        self.u_u  = self.u_l / self.u_t
+        self.u_p  = self.u_r * (self.u_u)**2           # Pressure [dyne/cm2]
+        self.u_kr = 1 / (self.u_r * self.u_l)         # Rosseland opacity [cm2/g]
+        self.u_ee = self.u_u**2
+        self.u_e  = self.u_p      # energy density units are the same as pressure units.
+        self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
+        self.u_n  = 3.00e+10                      # Density number n_0 * 1/cm^3
+        self.pi   = const.pi
+        self.u_b  = self.u_u * np.sqrt(4. * self.pi * self.u_r)
+        self.u_tg = (self.m_h / self.k_b) * self.u_ee
+        self.u_tge = (self.m_e / self.k_b) * self.u_ee
+
+        # set si units
+        self.usi_t = self.u_t
+        self.usi_l = self.u_l * const.centi                   # 1e-2
+        self.usi_r = self.u_r * const.gram / const.centi**3   # 1e-4
+        self.usi_u = self.usi_l / self.u_t
+        self.usi_p = self.usi_r * (self.usi_u)**2             # Pressure [N/m2]
+        self.usi_kr = 1 / (self.usi_r * self.usi_l)           # Rosseland opacity [m2/kg]
+        self.usi_ee = self.usi_u**2
+        self.usi_e = self.usi_p    # energy density units are the same as pressure units.
+        self.usi_te = self.usi_e / self.u_t * self.usi_l      # Box therm. em. [J/(s ster m2)]
+        self.msi_h = const.m_n                                # 1.674927471e-27
+        self.msi_he = 6.65e-27
+        self.msi_p = self.mu * self.msi_h                     # Mass per particle
+        self.usi_tg = (self.msi_h / self.ksi_b) * self.usi_ee
+        self.msi_e = const.m_e  # 9.1093897e-31
+        self.usi_b = self.u_b * 1e-4
+
+        # documentation for units above:
+        self.docu('u', 'velocity')
+        self.docu('p', 'pressure')
+        self.docu('kr', 'Rosseland opacity')
+        self.docu('ee', 'energy (total; i.e. not energy density)')
+        self.docu('e', 'energy density')
+        self.docu('te', 'Box therm. em. [J/(s ster m2)]')
+        self.docu('b', 'magnetic field')
+
+        # setup self.uni. (tells how to convert from simu. units to cgs units, for simple vars.)
+        self.uni={}
+        self.uni['l'] = self.u_l
+        self.uni['t'] = self.u_t
+        self.uni['rho'] = self.u_r
+        self.uni['p'] = self.u_r * self.u_u # self.u_p
+        self.uni['u'] = self.u_u
+        self.uni['e'] = self.u_e
+        self.uni['ee'] = self.u_ee
+        self.uni['n'] = self.u_n
+        self.uni['tg'] = 1.0
+        self.uni['b'] = self.u_b
+
+        # setup self.unisi
+        tools.convertcsgsi(self)
+
+        # additional units (added for convenience) - started by SE, Apr 26 2021
+        self.docu('m', 'mass')
+        self.u_m    = self.u_r   * self.u_l**3   # rho = mass / length^3
+        self.usi_m  = self.usi_r * self.usi_l**3 # rho = mass / length^3
+        self.docu('ef', 'electric field')
+        self.u_ef   = self.u_b                   # in cgs: F = q(E + (u/c) x B)
+        self.usi_ef = self.usi_b * self.usi_u    # in SI:  F = q(E + u x B)
+        self.docu('f', 'force')
+        self.u_f    = self.u_p   * self.u_l**2   # pressure = force / area
+        self.usi_f  = self.usi_p * self.usi_l**2 # pressure = force / area
+        self.docu('q', 'charge')
+        self.u_q    = self.u_f   / self.u_ef     # F = q E
+        self.usi_q  = self.usi_f / self.usi_ef   # F = q E
+        self.docu('nr', 'number density')
+        self.u_nr   = self.u_r   / self.u_m      # nr = r / m
+        self.usi_nr = self.usi_r / self.usi_m    # nr = r / m
+        self.docu('nq', 'charge density')
+        self.u_nq   = self.u_q   * self.u_nr
+        self.usi_nq = self.usi_q * self.usi_nr
+        self.docu('pm', 'momentum density')
+        self.u_pm   = self.u_u   * self.u_r      # mom. dens. = mom * nr = u * r
+        self.usi_pm = self.usi_u * self.usi_r
+        self.docu('hz', 'frequency')
+        self.u_hz   = 1./self.u_t
+        self.usi_hz = 1./self.usi_t
+        self.docu('phz', 'momentum density frequency (see e.g. momentum density exchange terms)')
+        self.u_phz  = self.u_pm   * self.u_hz
+        self.usi_phz= self.usi_pm * self.usi_hz
+        self.docu('i', 'current per unit area')
+        self.u_i    = self.u_nq   * self.u_u     # ue = ... + J / (ne qe)
+        self.usi_i  = self.usi_nq * self.usi_u
+
+        # additional constants (added for convenience)
+        ## masses
+        self.simu_amu = self.amu / self.u_m         # 1 amu
+        self.simu_m_e = self.m_electron / self.u_m  # 1 electron mass
+        ## charge (1 elementary charge)
+        self.simu_q_e   = self.q_electron   / self.u_q   # [derived from cgs]
+        self.simu_qsi_e = self.qsi_electron / self.usi_q # [derived from si]
+        ### note simu_q_e != simu_qsi_e because charge is defined
+        ### by different equations, for cgs and si. 
+        ## permeability (magnetic constant) (mu0) (We expect mu0_simu == 1.)
+        self.simu_mu0 = self.mu0si * (1/self.usi_b) * (self.usi_l) * (self.usi_i)
+        ### J = curl(B) / mu0 --> mu0 = curl(B) / J --> [mu0] = [B] [length]^-1 [J]^-1
+        ### --> mu0[simu] / mu0[SI] = (B[simu] / B[SI]) * (L[SI] / L[simu]) * (J[SI]/J[simu])
+        ## boltzmann constant
+        self.simu_kB = self.ksi_b * (self.usi_nr / self.usi_e)   # kB [simu energy / K]
+
+        # update the dict doc_units with the values of units
+        self._update_doc_units_with_values()
+
+    def _initialize_constant_lookup(self):
+        '''initialize self.constant_lookup, the lookup table for constants in various unit systems.
+        self.constant_lookup doesn't actually contain values; just the names of attributes.
+        In particular:
+            attr = self.constant_lookup[constant_name][unit_system]
+            getattr(self, attr) == value of constant_name in unit_system.
+
+        Also creates constant_lookup_reverse, which tells constant_name given attr.
+        '''
+        self.constant_lookup = collections.defaultdict(dict)
+        def addc(c, doc=None, cgs=None, si=None, simu=None):
+            '''add constant c to lookup table with the units provided.
+            also adds documentation if provided.'''
+            if doc is not None:
+                self.docc(c, doc)
+            for key, value in (('cgs', cgs), ('si', si), ('simu', simu)):
+                if value is not None:
+                    self.constant_lookup[c][key] = value
+        addc('amu', 'atomic mass unit', cgs='amu',     si='amusi',        simu='simu_amu')
+        addc('m_e', 'electron mass', cgs='m_electron', si='msi_electron', simu='simu_m_e')
+        addc('q_e', 'elementary charge derived from cgs', cgs='q_electron', simu='simu_q_e')
+        addc('qsi_e', 'elementary charge derived from si', si='qsi_electron', simu='simu_qsi_e')
+        addc('mu0', 'magnetic constant',               si='mu0si',        simu='simu_mu0')
+        addc('kB', 'boltzmann constant', cgs='k_b',    si='ksi_b',        simu='simu_kB')
+        addc('eps0', 'permittivity in vacuum', si='permsi')
+        # << [TODO] put more relevant constants here.
+
+        # update the dict doc_constants with the values of constants
+        self._update_doc_constants_with_values()
+
+        # include reverse-lookup for convenience.
+        rlookup = {key: c for (c, d) in self.constant_lookup.items() for key in (c, *d.values())}
+        self.constant_lookup_reverse = rlookup
+
+    ## PRETTY REPR AND PRINTING ##
+    def __repr__(self):
+        '''show self in a pretty way (i.e. including info about base units)'''
+        return "<{} with base_units=dict({})>".format(type(self),
+                            self.prettyprint_base_units(printout=False))
+
+    def base_units(self):
+        '''returns dict of u_l, u_t, u_r, gamma, for self.'''
+        return {unit: getattr(self, unit) for unit in self.BASE_UNITS}
+
+    def prettyprint_base_units(self, printout=True):
+        '''print (or return, if not printout) prettystring for base_units for self.'''
+        fmt = '{:.2e}'  # formatting for keys (except gamma)
+        fmtgam = '{}'   # formatting for key gamma
+        s = []
+        for unit in self.BASE_UNITS:
+            val = getattr(self,unit)
+            if unit=='gamma':
+                valstr = fmtgam.format(val)
+            else:
+                valstr = fmt.format(val)
+            s += [unit+'='+valstr]
+        result = ', '.join(s)
+        if printout:
+            print(result)
+        else:
+            return(result)
+
+    ## DOCS ##
+    def docu(self, u, doc):
+        '''documents u by adding u=doc to dict self.doc_units'''
+        self.doc_units[u]=doc
+
+    def docc(self, c, doc):
+        '''documents c by adding c=doc to dict self.doc_constants'''
+        self.doc_constants[c]=doc
+
+    def _unit_name(self, u):
+        '''returns name of unit u. e.g. u_r -> 'r'; usi_hz -> 'hz', 'nq' -> 'nq'.'''
+        for prefix in ['u_', 'usi_']:
+            if u.startswith(prefix):
+                u = u[len(prefix):]
+                break
+        return u
+
+    def _unit_values(self, u):
+        '''return values of u, as a dict.
+        (checks u, 'u_'+u, and 'usi_'+u)
+        '''
+        u = self._unit_name(u)
+        result = {}
+        u_u   = 'u_'+u
+        usi_u = 'usi_'+u
+        result = {key: getattr(self, key) for key in [u, u_u, usi_u] if hasattr(self, key)}
+        return result
+
+    def _unit_exists(self, ustr):
+        '''returns whether u_ustr or usi_ustr is an attribute of self.'''
+        return hasattr(self, 'u_'+ustr) or hasattr(self, 'usi_'+ustr)
+
+    def prettyprint_unit_values(self, x, printout=True, fmtname='{:<3s}', fmtval='{:.2e}', sep=' ;  '):
+        '''pretty string for unit values. print if printout, else return string.'''
+        if isinstance(x, str):
+            x = self._unit_values(x)
+        result = []
+        for key, value in x.items():
+            u_, p, name = key.partition('_')
+            result += [u_ + p + fmtname.format(name) + ' = ' + fmtval.format(value)]
+        result = sep.join(result)
+        if printout:
+            print(result)
+        else:
+            return result
+
+    def _update_doc_units_with_values(self, sep=' |  ', fmtdoc='{:20s}'):
+        '''for u in self.doc_units, update self.doc_units[u] with values of u.'''
+        for u, doc in self.doc_units.items():
+            valstr = self.prettyprint_unit_values(u, printout=False)
+            if len(valstr)>0:
+                doc = sep.join([fmtdoc.format(doc), valstr])
+                self.doc_units[u] = doc
+
+    def _constant_name(self, c):
+        '''returns name corresponding to c in self.constants_lookup.'''
+        return self.constant_lookup_reverse[c]
+
+    def _constant_keys_and_values(self, c):
+        '''return keys and values for c, as a dict.'''
+        try:
+            clookup = self.constant_lookup[c]
+        except KeyError:
+            raise ValueError(f'constant not found in constant_lookup table: {repr(c)}') from None
+        else:
+            return {usys : (ckey, getattr(self, ckey)) for (usys,ckey) in clookup.items()}
+
+    def prettyprint_constant_values(self, x, printout=True, fmtname='{:<10s}', fmtval='{:.2e}', sep=' ;  '):
+        '''pretty string for constant values. print if printout, else return string.'''
+        if isinstance(x, str):
+            x = self._constant_keys_and_values(x)
+        result = []
+        for ckey, cval in x.values():
+            result += [fmtname.format(ckey) + ' = ' + fmtval.format(cval)]
+        result = sep.join(result)
+        if printout:
+            print(result)
+        else:
+            return result
+
+    def _update_doc_constants_with_values(self, sep=' |  ', fmtdoc='{:20s}'):
+        '''for c in self.doc_constants, update self.doc_constants[c] with values of c.'''
+        for c, doc in self.doc_constants.items():
+            valstr = self.prettyprint_constant_values(c, printout=False)
+            if len(valstr)>0:
+                doc = sep.join([fmtdoc.format(doc), valstr])
+                self.doc_constants[c] = doc
+
+    ## HELP AND HELPFUL METHODS ##
+    def help(self, u=None, printout=True, fmt='{:5s}: {}'):
+        '''prints documentation for u, or all units if u is None.
+        u: None, string, or list of strings
+            specify which attributes you want help with.
+            None        --> provide help with all attributes.
+            'units'     --> provide help with all unit conversions
+            'constants' --> provide help with all constants.
+            string      --> provide help with this (or directly related) attribute.
+            list of strings --> provide help with these (or directly related) attributes.
+
+        printout=False --> return dict, instead of printing.
+        '''
+        if u is None:
+            result = self.doc_all
+        elif u == 'units':
+            result = self.doc_units
+        elif u == 'constants':
+            result = self.doc_constants
+        else:
+            if isinstance(u, str):
+                u = [u]
+            result = dict()
+            for unit in u:
+                try:
+                    name = self._unit_name(unit)
+                    doc = self.doc_units[name]
+                except KeyError:
+                    try:
+                        name = self._constant_name(unit)
+                        doc = self.doc_constants[name]
+                    except KeyError:
+                        doc = f"u={repr(name)} is not yet documented (maybe it doesn't exist?)"
+                result[name] = doc
+        if not printout:
+            return result
+        else:
+            if len(result) > 1:  # (i.e. getting help on multiple things)
+                print('Retrieve values by calling self(key, unit system).',
+                      f'Recognized unit systems are: {UNIT_SYSTEMS}.',
+                      'See help(self.__call__) for more details.', sep='\n', end='\n\n')
+            for key, doc in result.items():
+                print(fmt.format(key, doc))
+
+    def closest(self, value, sign_sensitive=True, reltol=1e-8):
+        '''returns [(attr, value)] for attr(s) in self whose value is closest to value.
+        sign_sensitive: True (default) or False
+            whether to care about signs (plus or minus) when comparing values
+        reltol: number (default 1e-8)
+            if multiple attrs are closest, and all match (to within reltol)
+            return a list of (attr, value) pairs for all such attrs.
+        closeness is determined by doing ratios.
+        '''
+        result = []
+        best = np.inf
+        for key, val in self.__dict__.items():
+            if val == 0:
+                if value != 0:
+                    continue
+                else:
+                    result += [(key, val)]
+            try:
+                rat = value / val
+            except TypeError:
+                continue
+            if sign_sensitive: 
+                rat = abs(rat)
+            compare_val = abs(rat - 1)
+            if best == 0:  # we handle this separately to prevent division by 0 error.
+                if compare_val < reltol:
+                    result += [(key, val)]
+            elif abs(1 - compare_val / best) < reltol:
+                result += [(key, val)]
+            elif compare_val < best:
+                result = [(key, val)]
+                best = compare_val
+        return result
+
+
+''' ============================= UNITS OUTPUT SYSTEM ============================= '''
+
 
 
 ''' ----------------------------- Hesitant Execution ----------------------------- '''
@@ -411,6 +975,10 @@ class Funclike:
                     self._required_args, self._required_kwargs)
 
     def __repr__(self):
+        return f'(Funclike with operation {repr(self.__name__)})'
+
+    def _repr_adv_(self):
+        '''very detailed repr of self.'''
         return '<{} named {} with {}>'.format(
                 object.__repr__(self), repr(self.__name__), self._strinfo())
 
@@ -504,7 +1072,7 @@ def _join_strs(strs, sep=' '):
         return sep.join(ss)
 
 
-class UnitsExpression:
+class UnitsExpression():
     '''expression of units.
 
     Parameters
@@ -601,7 +1169,10 @@ class UnitsExpression:
         return result
 
     def __repr__(self):
-        '''repr of self.'''
+        return repr(str(self))
+
+    def _repr_adv_(self):
+        '''very detailed repr of self.'''
         return "<{} with content = '{}'>".format(object.__repr__(self), str(self))
 
     def __mul__(self, b):
@@ -713,7 +1284,7 @@ class UnitsExpressionDict(UnitsExpression):
                 self.contents[key] = UnitsExpression.__init__(val, **kw__units_expression_init)
         self._kw__units_expression_init = kw__units_expression_init
 
-    def __str__(self):
+    def __repr__(self):
         '''pretty string of self.'''
         return str({key: str(val) for (key, val) in self.contents.items()})
 
@@ -876,6 +1447,10 @@ class UnitsTuple(UnitsTupleBase):
             name = self.name                     # so, don't call it.
         factor = self.f(*args, **kwargs)
         return UnitsTuple(factor, name, evaluated=True)
+
+    # representation
+    def __repr__(self):
+        return f'{type(self).__name__}(f={self.f}, name={repr(self.name)}, evaluated={self.evaluated})'
 
 ''' ----------------------------- Dimensionless Tuple ----------------------------- '''
 # in this section is a units tuple which should be used for dimensionless quantities.

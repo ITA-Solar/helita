@@ -39,12 +39,6 @@ vardict = {
     ...
 }
 
-
-[TODO]:
-    - [FIX] Solve sad interaction between self.variables checking and quant_tracking.
-        - E.g. get_var('r') after initialization of EbysusData confuses quant_tracking,
-            because it returns the data in self.r immediately, instead of loading a quantity.
-
 """
 
 # import built-ins
@@ -55,6 +49,7 @@ import copy   # for deepcopy for QuantTree
 
 # import internal modules
 from . import units       # not used heavily; just here for setting defaults, and setting obj.get_units
+from . import tools
 
 VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
 NONEDOC = '(not yet documented)'        #default documentation if none is provided.
@@ -159,18 +154,32 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
         write = True
     if write:
         # define function (which will be returned)
-        def document_var(varname, vardoc, nfluid=nfluid, **kw__more_info_about_var):
-            '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].'''
+        def document_var(varname, vardoc, nfluid=nfluid, copy=False, **kw__more_info_about_var):
+            '''puts documentation about var named varname into obj.vardict[TYPE_QUANT].
+            copy: bool, default False
+                False --> ignore this kwarg.
+                True --> instead of usual behavior, look up vardoc in vardict and copy the info to varname.
+                        Example:
+                            document_var('myvar', 'the documentation for myvar', nfluid=N, **kw_original)
+                            # now, these two options are equivalent:
+                            1) document_var('myvar_alias', 'the documentation for myvar', nfluid=N, **kw_original)
+                            2) document_var('myvar_alias', 'myvar', copy=True)
+            '''
             if (QUANT_VARS is not None) and (varname not in QUANT_VARS):
                 return
+            
             tqd = vardict[TYPE_QUANT]
-            var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__defaults, **kw__more_info_about_var}
+            if not copy: # case "basic usage" (copy=False)
+                var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__defaults, **kw__more_info_about_var}
+            else:        # case "aliasing" (copy=True)
+                var_info_dict = tqd[vardoc]   # obj(varname) == obj(args[1]). (but for "basic" case, args[1]==vardoc.)
             try:
                 vd = tqd[varname]   # vd = vardict[TYPE_QUANT][varname] (if it already exists)
             except KeyError:        # else, initialize tqd[varname]:
                 tqd[varname] = var_info_dict
             else:                   # if vd assignment was successful, set info.
                 vd.update(var_info_dict)
+
 
         # initialize documentation to NONEDOC for var in QUANT_VARS
         if QUANT_VARS is not None:
@@ -389,7 +398,8 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
         elif search.type == 'typequant':
             result += _vardocs_typequant(search.result, tqd=tqd, q=q, ud=ud)
         elif search.type == 'var':
-            result += _vardocs_var(x, search.result, q=q)
+            vdv = _vardocs_var(x, search.result, q=q)
+            result += [WS*TW*2 + NONEDOC] if vdv is None else vdv
         return _vardocs_print(result, printout)
 
     obj.vardoc = vardoc
@@ -400,33 +410,6 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
         return search_vardict(vardict, x)
 
     obj.search_vardict = _search_vardict
-
-
-''' --------------------- restore attrs --------------------- '''
-
-# this helper function probably should go in another file, but this is the best place for it for now.
-
-def maintain_attrs(*attrs):
-    '''return decorator which restores attrs of obj after running function.
-    It is assumed that obj is the first arg of function.
-    '''
-    def attr_restorer(f):
-        @functools.wraps(f)
-        def f_but_maintain_attrs(obj, *args, **kwargs):
-            '''f but attrs are maintained.'''
-            __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-            memory = dict()  # dict of attrs to maintain
-            for attr in attrs:
-                if hasattr(obj, attr):
-                    memory[attr] = getattr(obj, attr)
-            try:
-                return f(obj, *args, **kwargs)
-            finally:
-                # restore attrs
-                for attr, val in memory.items(): 
-                    setattr(obj, attr, val)
-        return f_but_maintain_attrs
-    return attr_restorer
 
 
 ''' ----------------------------- quant tracking ----------------------------- '''
@@ -532,7 +515,8 @@ def quant_tracking_simple(typequant, metaquant=None):
         do NOT use this wrapper for get_..._quant functions whose results correspond to
         only a PART of the quant entered. For example, don't use this for get_square() in
         load_arithmetic_quantities, since that function pulls a '2' off the end of quant,
-        E.g. get_var('b2') --> bx**2 + by**2 + bz**2. For this case, see quant_tracker() instead.
+        E.g. get_var('b2') --> bx**2 + by**2 + bz**2.
+        For this case, use settattr_quant_selected. (See load_arithmetic_quantities.py for examples)
     '''
     def decorator(f):
         @functools.wraps(f)
@@ -727,7 +711,7 @@ def quant_tree_tracking(f):
 def quant_tracking_top_level(f):
     '''decorator which improves quant tracking. (decorate _load_quantities using this.)'''
     @quant_tree_tracking
-    @maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
+    @tools.maintain_attrs(LOADING_LEVEL, VARNAME_INPUT, QUANT_SELECTION, QUANT_SELECTED)
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
@@ -875,12 +859,24 @@ def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=T
 
 def quant_lookup(obj, quant_info):
     '''returns entry in obj.vardict related to quant_info (a QuantInfo object).
-    if quant_info does not have an entry in obj.vardict, return an empty dict().
+    returns vardict[quant_info.metaquant][quant_info.typequant][quant_info.quant]
+
+    if that cannot be found:
+        if metaquant in obj.VDSEARCH_IF_META return search_vardict(vardict, quant).result if it exists
+
+    default (if we haven't returned anything else): return an empty dict.
     '''
+    quant_dict = dict()  # default value
     vardict = getattr(obj, VARDICT, dict())
-    metaquant_dict = vardict.get(quant_info.metaquant, dict())
-    typequant_dict = metaquant_dict.get(quant_info.typequant, dict())
-    quant_dict     = typequant_dict.get(quant_info.quant, dict())
+    try:
+        metaquant_dict =        vardict[quant_info.metaquant]
+        typequant_dict = metaquant_dict[quant_info.typequant]
+        quant_dict     = typequant_dict[quant_info.quant]
+    except KeyError:
+        if quant_info.metaquant in getattr(obj, 'VDSEARCH_IF_META', []):
+            search = search_vardict(vardict, quant_info.quant)
+            if search:
+                quant_dict = search.result
     return quant_dict
 
 def get_quant_info(obj, lookup_in_vardict=False):
