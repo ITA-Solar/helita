@@ -679,6 +679,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         if var in AXES:
             return getattr(self, var)
+        
+        if var in self.varn.keys(): 
+            var=self.varn[var]
 
         if match_type is not None:
             self.match_type = match_type
@@ -712,6 +715,100 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # do post-processing (function is defined in bifrost.py)
         val = self._get_var_postprocess(val, var=var, original_slice=original_slice)
         return val
+    
+    
+    
+    def simple_trans2comm(self, varname, snap=None, mf_ispecies=None, mf_ilevel=None, *args, **kwargs):
+        ''' Simple form of trans2com, can select species and ionized level'''
+        
+        self.trans2commaxes() 
+        
+        self.sel_units = 'cgs'
+
+        # Trying cgs
+
+        sign = 1.0
+        if varname[-1] in ['x','y','z']: 
+            
+            varname = varname+'c'
+            if varname[-2] in ['y','z']: 
+                sign = -1.0 
+        
+        var = self.get_var(varname,snap=snap, mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, *args, **kwargs)
+        var = sign * var
+
+        var = var[...,::-1].copy()
+
+        return var
+    
+    def total_trans2comm(self, varname, snap=None, *args, **kwargs):
+        ''' Trans2comm that sums the selected variable over all species and levels.
+            For variables that do not change through species simple_trans2comm is used
+            with the default specie. '''
+
+        
+        if varname in self.varn.keys(): 
+            varname=self.varn[varname]
+        
+        # Electron variables
+        e_variables = { 'r': 're', 'ux':'uex', 'uy':'uey', 'uz':'uez', 'tg':'etg', 'px':'pex', 'py':'pey', 'pz':'pez' }
+        
+        # Instead of using ux or similar, uix with the specific fluid is used
+        i_variables = { 'ux':'uix', 'uy':'uiy','uz':'uiz', 'px':'pix', 'py':'piy', 'pz':'piz' }
+        
+        
+        # Different variables add in different ways
+        
+        # Since it is the same volume, density just adds
+        if varname == 'r':
+            var = self.simple_trans2comm( e_variables[ varname ], snap, *args, **kwargs)
+
+            for fluid in self.fluids.SL:
+                var += self.simple_trans2comm(varname, snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
+
+            return var
+        
+        # Momentum just adds.
+        if varname in ['px', 'py', 'pz', 'pix', 'piy', 'piz']:
+            var = self.simple_trans2comm(  e_variables[ varname ] , snap, *args, **kwargs)
+
+            for fluid in self.fluids.SL:
+                var += self.simple_trans2comm( i_variables[ varname ], snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
+
+            return var
+        
+        # Velocity depends on the density and the momentum of each fluid
+        # Ux = Px/rho 
+        # trying recursivity for rho
+        if varname in ['ux', 'uy', 'uz', 'uix', 'uiy', 'uiz']:
+            axis = varname[-1]
+            
+            # Pi = sum_j rhoj*uxj
+            var1 = self.simple_trans2comm( e_variables['r'], snap, *args, **kwargs) * self.simple_trans2comm( e_variables['p'+axis], snap, *args, **kwargs)
+
+            for fluid in self.fluids.SL:
+                specie_rho = self.simple_trans2comm('r', snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
+                specie_pi  = self.simple_trans2comm( i_variables['p'+axis], snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
+                var1 +=  specie_rho*specie_pi
+                
+            # rho, recursive
+            var2 = self.total_trans2comm( 'r', snap=None, *args, **kwargs)
+            
+            return var1/var2
+        
+        # Temperature depends on density, mass and temperature of each fluid
+        # T_total = [ sum_j (rho_j/m_j)*tg_j ]/[ sum_j (rho_j/m_j) ]
+        #if varname in ['tg', 'temperature']:
+            
+            
+            
+
+            
+        # For variables that do not deppend on the specie
+        return self.simple_trans2comm(varname, snap, *args, **kwargs)
+    
+    
+    
 
     @document_vars.quant_tracking_simple('SIMPLE_VARS')
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
