@@ -443,7 +443,7 @@ class AtomFile:
             # Continua (EXPLICIT):
             UNITS['radiative_bound_free'] = {'cross_section':['nm', 'm^2']}
             # Continua (HYDROGENIC):
-            UNITS['radiative_bound_free']['α_peak'] = 'm^2'
+            UNITS['radiative_bound_free']['σ_peak'] = 'm^2'
             UNITS['radiative_bound_free']['λ_min'] = 'nm'
             # Collisions:
             UNITS['coll_data']['group_1'] = 's^-1 * K^-1/2 * m^3'
@@ -452,7 +452,7 @@ class AtomFile:
             # Continua (EXPLICIT):
             UNITS['radiative_bound_free'] = {'cross_section':['Å', 'cm^2']}
             # Continua (HYDROGENIC):
-            UNITS['radiative_bound_free']['α_peak'] = 'cm^2'
+            UNITS['radiative_bound_free']['σ_peak'] = 'cm^2'
             UNITS['radiative_bound_free']['λ_min'] = 'Å' 
             # Collisions:
             UNITS['coll_data']['group_1'] = 's^-1 * K^-1/2 * cm^3'
@@ -732,15 +732,13 @@ class AtomFile:
             elif continuum['wavelength_dependence'] == 'HYDROGENIC':
                 output_file.write(tab4 + 'cross_section_hydrogenic: \n')
                 val = {'value':continuum['edge_cross_section'], 
-                        'unit':UNITS['radiative_bound_free']['α_peak']} 
+                        'unit':UNITS['radiative_bound_free']['σ_peak']} 
                 output_file.write(tab6 
-                    + 'α_peak: {value: %.5e, unit: %s'%(
+                    + 'σ_peak: {value: %.5e, unit: %s'%(
                         val['value'], val['unit']) + '}\n')
                 val = {'value': continuum['wave_min'], 
                         'unit':UNITS['radiative_bound_free']['λ_min']}
                 output_file.write(tab6 + 'λ_min: ' + str(val) + '\n')
-                val = {'value':continuum['edge_cross_section'], 
-                        'unit':UNITS['radiative_bound_free']['α_peak']} 
                 output_file.write(
                     tab6 + 'nλ: ' + str(continuum['nlambda']) + '\n')
 
