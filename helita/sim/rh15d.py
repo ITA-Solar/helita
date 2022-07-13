@@ -567,10 +567,10 @@ class AtomFile:
                         'type': 'Ridder_Rensbergen', 
                         'h':{'α': {'value': float(vdWval[0]), 
                                    'unit': UNITS['vdW_broadening']['RR_α']['h']},
-                             'β': vdWval[1]},
+                             'β': float(vdWval[1])},
                         'he': {'α': {'value': float(vdWval[2]), 
                                      'unit': UNITS['vdW_broadening']['RR_α']['he']},
-                               'β': vdWval[3]}
+                               'β': float(vdWval[3])}
                     }
                 elif vdWtype == 'BARKLEM':
                     line_dict['broadening_vanderwaals'] = [{
@@ -582,7 +582,7 @@ class AtomFile:
                     }]
                     line_dict['broadening_vanderwaals'] += [{
                         'type': 'Unsold',
-                        'he_coefficient': vdWval[2]
+                        'he_coefficient': float(vdWval[2])
                     }]
                 else:
                     raise NotImplementedError(
