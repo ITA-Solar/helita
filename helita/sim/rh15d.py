@@ -477,10 +477,11 @@ class AtomFile:
 
         # LEVELS:
         levels_dict = dict()
-        # Build human-readable level strings
         __level_str = []
         counter = np.ones(self.levels["stage"].max() + 1, dtype='i')
+
         for i in range(self.nlevel):
+            # Build human-readable level strings
             suffix = ''
             ion_stage = self.levels["stage"][i]
             if ion_stage != 0:
@@ -488,7 +489,6 @@ class AtomFile:
             __level_str.append(f"lev{counter[ion_stage]}{suffix}")
             counter[ion_stage] += 1
 
-        for i in range(self.nlevel):
             values = self.levels[i]
             if self.format=='RH':
                 num = values[4] + 1
