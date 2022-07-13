@@ -2,7 +2,6 @@
 Set of programs and tools to read the outputs from RH, 1.5D version
 """
 import os
-import re
 import warnings
 import datetime
 import numpy as np
@@ -478,11 +477,16 @@ class AtomFile:
 
         # LEVELS:
         levels_dict = dict()
-        def __level_str(level_i, type=self.format):
-            if (type == 'RH'):
-                level_i += 1
-            num = str(level_i)
-            return 'lev'+ num
+        # Build human-readable level strings
+        __level_str = []
+        counter = np.ones(self.levels["stage"].max() + 1, dtype='i')
+        for i in range(self.nlevel):
+            suffix = ''
+            ion_stage = self.levels["stage"][i]
+            if ion_stage != 0:
+                suffix = f'_ion{ion_stage}'
+            __level_str.append(f"lev{counter[ion_stage]}{suffix}")
+            counter[ion_stage] += 1
 
         for i in range(self.nlevel):
             values = self.levels[i]
@@ -490,7 +494,7 @@ class AtomFile:
                 num = values[4] + 1
             else:
                 num = i + 1
-            key = 'lev'+str(num)
+            key = __level_str[i]
             energy_dict = {'value': float(values[0]), 'unit': str(UNITS['energy'])}
             g = values[1]
             label = values[2]
@@ -524,8 +528,8 @@ class AtomFile:
         for i in range(self.nline):
             line_dict = dict()
             line_i = self.lines[i]
-            line_dict['transition'] = [__level_str(line_i[0]), 
-                                       __level_str(line_i[1])]
+            line_dict['transition'] = [__level_str[line_i[0]], 
+                                       __level_str[line_i[1]]]
             line_dict['f_value'] = float(line_i[2])
             if line_i[ityp] == 'PRD':
                 line_dict['type_profile'] = 'PRD'
@@ -680,8 +684,8 @@ class AtomFile:
                 raise NotImplementedError(
                     f"Collision data type not understood! type: {collision['type']}")
             # Place the data in correct transition:
-            tr = [__level_str(collision['level_start']), 
-                  __level_str(collision['level_end'])]
+            tr = [__level_str[collision['level_start']], 
+                  __level_str[collision['level_end']]]
             if tr in transitions_list:
                 # append data to that transition
                 idx = transitions_list.index(tr)
@@ -739,8 +743,8 @@ class AtomFile:
         if self.ncont == 0:
             output_file.write(tab2 + '[]\n')
         for continuum in self.continua:
-            up = __level_str(continuum['level_start'])
-            lo = __level_str(continuum['level_end'])
+            up = __level_str[continuum['level_start']]
+            lo = __level_str[continuum['level_end']]
             output_file.write(f"{tab2}- transition: [{up}, {lo}]\n")
 
             if continuum['wavelength_dependence'] == 'EXPLICIT':
