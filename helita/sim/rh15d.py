@@ -706,6 +706,8 @@ class AtomFile:
 
         # Radiative bound-bound:
         output_file.write('\n\nradiative_bound_bound:\n')
+        if self.nline == 0:
+            output_file.write(tab2 + '[]\n')
         for line in lines_list:
             output_file.write(
                 tab2 + '- transition: ' + str(line['transition']) +'\n')
@@ -723,6 +725,8 @@ class AtomFile:
 
         # Radiative bound-free:
         output_file.write('\n\nradiative_bound_free:\n')
+        if self.ncont == 0:
+            output_file.write(tab2 + '[]\n')
         for continuum in self.continua:
             tr = [level_str(continuum['level_start']), 
                   level_str(continuum['level_end'])]
@@ -752,6 +756,8 @@ class AtomFile:
 
         # Collisional:
         output_file.write('\n\ncollisional:\n')
+        if len(collisions_list) == 0:
+            output_file.write(tab2 + '[]\n')
         for collisions in collisions_list:
             output_file.write(
                 tab2 + '- transition: ' + str(collisions['transition']) +'\n')
