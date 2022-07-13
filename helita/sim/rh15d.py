@@ -482,21 +482,29 @@ class AtomFile:
                 stage = values[3]+1
             else:
                 stage = values[3]
-            levels_dict[key] = {'energy': energy_dict,  'g': g, 
-                                'stage': stage,         'label': label}
+            levels_dict[key] = {'energy': energy_dict, 'g': g, 
+                                'stage': stage, 'label': label}
 
         # LINES:
         lines_list = []
         if self.format == 'RH':
-            ityp =  3
-            igr  = 10 ; ibs  = 11
-            idWt =  8 ; ivdW =  9
-            inw  =  4 ; iqw  =  7 ; iqc = 6
+            ityp = 3
+            igr = 10
+            ibs = 11
+            idWt = 8
+            ivdW = 9
+            inw = 4
+            iqw = 7
+            iqc = 6
         elif self.format == 'MULTI':
             ityp = 10
-            igr  =  7    ; ibs  = 9
-            idWt =  None ; ivdW = 8
-            inw  =  3    ; iqw  = 4  ; iqc = 5
+            igr = 7 
+            ibs = 9
+            idWt = None
+            ivdW = 8
+            inw = 3
+            iqw = 4
+            iqc = 5
         for i in range(self.nline):
             line_dict = dict()
             line_i = self.lines[i]
@@ -548,14 +556,14 @@ class AtomFile:
                 coeff = line_i[ivdW][0]
                 if coeff >= 20:
                     # Recipe from MULTI
-                    sigma=int(coeff)*2.80028E-21
-                    alpha=coeff-int(coeff)
-                    line_dict['broadening_vanderwaals'] = [{
-                        'type': 'ABO', 
-                        'σ': {'value': sigma, 
-                              'unit': UNITS['vdW_broadening']['ABO_σ']}, 
-                        'α': {'value': alpha, 
-                              'unit': UNITS['vdW_broadening']['ABO_α']}}]
+                    sigma = int(coeff) * 2.80028E-21
+                    alpha = coeff - int(coeff)
+                    line_dict['broadening_vanderwaals'] = [
+                        {'type': 'ABO', 
+                         'σ': {'value': sigma, 
+                               'unit': UNITS['vdW_broadening']['ABO_σ']}, 
+                         'α': {'value': alpha, 
+                               'unit': UNITS['vdW_broadening']['ABO_α']}}]
                 else:
                     line_dict['broadening_vanderwaals'] = {
                             'type': 'Unsold', 
@@ -566,11 +574,11 @@ class AtomFile:
                                         'qwing': line_i[iqw], 
                                         'qcore': line_i[iqc], 
                                         'vmicro_char': {
-                                            'value': 8.0, # In RH is set to 2.5 #
+                                            'value': 8.0,
                                             'unit': UNITS['vmicro_char']}
             }
             if self.format=='RH': 
-                line_dict['wavelengths']['vmicro_char']['value'] = 2.5 # 
+                line_dict['wavelengths']['vmicro_char']['value'] = 2.5 
                 line_dict['wavelengths']['asymmetric'] = ((line_i[5])=='ASYMM')
             lines_list += [line_dict]
 
@@ -627,10 +635,10 @@ class AtomFile:
                                 't_col': collision['data'][1], 
                                 'a_rad': collision['data'][2], 
                                 'x_rad': collision['data'][3], 
-                                'a_di' : collision['data'][4], 
-                                'b_di' : collision['data'][5], 
-                                't0'   : collision['data'][6], 
-                                't1'   : collision['data'][7]
+                                'a_di': collision['data'][4], 
+                                'b_di': collision['data'][5], 
+                                't0': collision['data'][6], 
+                                't1': collision['data'][7]
                     }
                 elif collision['type'] in ['AR85-CEA', 'BURGESS']:
                     transition_data['data'] = {
@@ -641,8 +649,8 @@ class AtomFile:
                                 't2': collision['data'][1], 
                                 'a': collision['data'][2], 
                                 'b': collision['data'][3], 
-                                'c' : collision['data'][4], 
-                                'd' : collision['data'][5], 
+                                'c': collision['data'][4], 
+                                'd': collision['data'][5], 
                     }
                 else: 
                     transition_data['data'] = collision['data']
@@ -651,7 +659,7 @@ class AtomFile:
                 transition_data['data'] = collision['data']
             else:
                 raise NotImplementedError(
-                    'Collision data type not understood! type: %s' %collision['type'])
+                    f"Collision data type not understood! type: {collision['type']}")
             # Place the data in correct transition:
             tr = [level_str(collision['level_start']), 
                   level_str(collision['level_end'])]
@@ -694,7 +702,7 @@ class AtomFile:
         # Atomic levels:
         output_file.write('\n\natomic_levels:\n')
         for key, val in levels_dict.items():
-            output_file.write(tab2 + '%s: '%key + str(val) +'\n')
+            output_file.write(tab2 + f"{key}: {val}\n")
 
         # Radiative bound-bound:
         output_file.write('\n\nradiative_bound_bound:\n')
@@ -708,7 +716,7 @@ class AtomFile:
                 if key == 'γ_rad': 
                     output_file.write(
                         tab4 + '%s: '%key + '{'
-                        + 'value: %.5e, unit:%s}'%(
+                        + 'value: %.5e, unit: %s}'%(
                             val['value'],val['unit']) +'\n')
                 else:
                     output_file.write(tab4 + '%s: '%key + str(val) +'\n')
