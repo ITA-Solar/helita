@@ -249,8 +249,8 @@ class AtomFile:
                           'continua_photoionisation': units.Unit('cm2'),
                           'continua_wavelength': units.Unit('Angstrom'),
                           'collision_cross_sections': units.Unit('cm3')}
-            self.abund = data[counter].split()[0]
-            self.atomic_weight = data[counter].split()[1]
+            self.abund = float(data[counter].split()[0])
+            self.atomic_weight = float(data[counter].split()[1])
             counter += 1
         else:
             raise ValueError("Unsupported atom format " + format)
@@ -263,6 +263,8 @@ class AtomFile:
         # read levels
         self.levels = self.read_atom_levels(data[counter:counter + nlevel],
                                              self.format)
+        if self.format == 'RH':  # ensure stage=1 means neutral
+            self.levels["stage"] += 1
         counter += nlevel
         # read lines
         tmp = StringIO('\n'.join(data[counter:counter + nline]))
@@ -278,11 +280,14 @@ class AtomFile:
             ncol = 11
             data_type = [('level_start', 'i4'), ('level_end', 'i4'),
                          ('f_value', 'f8'), ('nlambda', 'i'),
-                         ('qwing', 'f8'), ('qcore', 'f8'), ('iw', 'i4'),
+                         ('qmax', 'f8'), ('q0', 'f8'), ('iw', 'i4'),
                          ('radiative_broadening', 'f8'),
                          ('vdWaals', 'f8', (1,)), ('stark_broadening', 'f8'),
                          ('type', 'U10')]
         self.lines = np.loadtxt(tmp, dtype=data_type, ndmin=1, usecols=range(ncol))
+        if self.format == 'MULTI':
+            self.lines['level_start'] -= 1
+            self.lines['level_end'] -= 1
         counter += nline
         # read continua
         self.continua = []
@@ -292,6 +297,9 @@ class AtomFile:
             result = {}
             result['level_start'] = int(line[0])
             result['level_end'] = int(line[1])
+            if self.format == 'MULTI':
+                result['level_start'] -= 1
+                result['level_end'] -= 1
             result['edge_cross_section'] = float(line[2])
             result['nlambda'] = int(line[3])
             if self.format == "RH":
@@ -315,6 +323,9 @@ class AtomFile:
             result = {}
             result['level_start'] = int(line[0])
             result['level_end'] = int(line[1])
+            if self.format == 'MULTI':
+                result['level_start'] -= 1
+                result['level_end'] -= 1
             result['strength'] = float(line[2])
             result['trad'] = float(line[3])
             result['trad_option'] = line[4]
@@ -410,6 +421,10 @@ class AtomFile:
                 unread_lines = True
 
             if result:
+                if self.format == 'MULTI':
+                    if "level_start" in result.keys():
+                        result["level_start"] -= 1
+                        result["level_end"] -= 1
                 self.collision_tables.append(result)
             counter += 1
 
@@ -434,7 +449,7 @@ class AtomFile:
         # Levels:
         UNITS['energy'] = 'cm^-1'
         # Lines:
-        UNITS['vmicro_char'] = 'km / s'
+        UNITS['qnorm'] = 'km / s'
         UNITS['natural_broadening'] = 's^-1'
         UNITS['vdW_broadening'] = {'ABO_σ':'a_0^2'}
         UNITS['vdW_broadening']['ABO_α'] = 'm/m'
@@ -479,29 +494,23 @@ class AtomFile:
         levels_dict = dict()
         __level_str = []
         counter = np.ones(self.levels["stage"].max() + 1, dtype='i')
+        stage_min = self.levels["stage"].min()
 
         for i in range(self.nlevel):
             # Build human-readable level strings
             suffix = ''
             ion_stage = self.levels["stage"][i]
-            if ion_stage != 0:
-                suffix = f'_ion{ion_stage}'
+            if ion_stage != stage_min:
+                suffix = f'_ion{ion_stage - stage_min}'
             __level_str.append(f"lev{counter[ion_stage]}{suffix}")
             counter[ion_stage] += 1
 
             values = self.levels[i]
-            if self.format=='RH':
-                num = values[4] + 1
-            else:
-                num = i + 1
             key = __level_str[i]
             energy_dict = {'value': float(values[0]), 'unit': str(UNITS['energy'])}
             g = values[1]
             label = values[2]
-            if self.format =='RH':
-                stage = values[3] + 1
-            else:
-                stage = values[3]
+            stage = values[3]
             levels_dict[key] = {'energy': energy_dict, 'g': int(g), 
                                 'stage': int(stage), 'label': str(label)}
 
@@ -516,6 +525,9 @@ class AtomFile:
             inw = 4
             iqw = 7
             iqc = 6
+            qwing = 'qwing'
+            qcore = 'qcore'
+            qnorm = 'vmicro_char'
         elif self.format == 'MULTI':
             ityp = 10
             igr = 7 
@@ -525,6 +537,9 @@ class AtomFile:
             inw = 3
             iqw = 4
             iqc = 5
+            qwing = 'qmax'
+            qcore = 'q0'
+            qnorm = 'qnorm'
         for i in range(self.nline):
             line_dict = dict()
             line_i = self.lines[i]
@@ -573,16 +588,16 @@ class AtomFile:
                     raise NotImplementedError(
                             'vdWtype not recognized: %s'%vdWtype)
             else:
-                coeff = line_i[ivdW][0]
+                coeff = float(line_i[ivdW][0])
                 if coeff >= 20:
                     # Recipe from MULTI
                     sigma = int(coeff) * 2.80028E-21
                     alpha = coeff - int(coeff)
                     line_dict['broadening_vanderwaals'] = [
                         {'type': 'ABO', 
-                         'σ': {'value': float(sigma), 
+                         'σ': {'value': sigma, 
                                'unit': str(UNITS['vdW_broadening']['ABO_σ'])}, 
-                         'α': {'value': float(alpha), 
+                         'α': {'value': alpha, 
                                'unit': str(UNITS['vdW_broadening']['ABO_α'])}}]
                 else:
                     line_dict['broadening_vanderwaals'] = {
@@ -591,14 +606,14 @@ class AtomFile:
                             'he_coefficient': 0.0}
             line_dict['wavelengths'] = {'type': self.format, 
                                         'nλ': int(line_i[inw]), 
-                                        'qwing': float(line_i[iqw]), 
-                                        'qcore': float(line_i[iqc]), 
-                                        'vmicro_char': {
+                                        qwing: float(line_i[iqw]), 
+                                        qcore: float(line_i[iqc]), 
+                                        qnorm: {
                                             'value': 8.0,
-                                            'unit': UNITS['vmicro_char']}
+                                            'unit': UNITS['qnorm']}
             }
             if self.format=='RH': 
-                line_dict['wavelengths']['vmicro_char']['value'] = 2.5 
+                line_dict['wavelengths'][qnorm]['value'] = 2.5 
                 line_dict['wavelengths']['asymmetric'] = ((line_i[5])=='ASYMM')
             lines_list += [line_dict]
 
@@ -722,6 +737,10 @@ class AtomFile:
 
         output_file.write('element:\n')
         output_file.write(tab2 + 'symbol: %s'%(element) +'\n')
+        if self.format == "MULTI":
+            output_file.write(f"{tab2}abundance: {self.abund}\n")
+            amass = {"value": self.atomic_weight, "unit": "u"}
+            output_file.write(f"{tab2}atomic_mass: {__dict_to_yaml(amass)}")
 
         # Atomic levels:
         output_file.write('\natomic_levels:\n')
