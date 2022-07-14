@@ -486,7 +486,7 @@ class AtomFile:
             if type(dict) in [float, int, str]:
                 return f"{dict}\n"
             else:
-                return yaml.dump(dict,
+                return yaml.safe_dump(dict,
                                  default_flow_style=True, sort_keys=False,
                                  allow_unicode=True, width=200)
 
