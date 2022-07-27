@@ -451,31 +451,31 @@ class AtomFile:
         # Lines:
         UNITS['qnorm'] = 'km / s'
         UNITS['natural_broadening'] = 's^-1'
-        UNITS['vdW_broadening'] = {'ABO_σ':'a_0^2'}
+        UNITS['vdW_broadening'] = {'ABO_σ': 'a_0^2'}
         UNITS['vdW_broadening']['ABO_α'] = 'm/m'
-        UNITS['vdW_broadening']['RR_α'] = {'h':'1.0e-8*cm^3/s', 'he':'1.0e-9*cm^3/s'}
+        UNITS['vdW_broadening']['DR_α'] = {'h': '1e-8*cm^3/s', 'he': '1e-9*cm^3/s'}
         # Collisions:
         UNITS['coll_temp'] = 'K'
-        UNITS['coll_data'] = {'Omega':'m/m'}
+        UNITS['coll_data'] = {'Omega': 'm/m'}
         COLL_GROUP_1 = ['CE', 'CI']
         COLL_GROUP_2 = ['CP', 'CH', 'CH0', 'CH+', 'CR']
         if self.format == 'RH':
             # Continua (EXPLICIT):
-            UNITS['radiative_bound_free'] = {'cross_section':['nm', 'm^2']}
+            UNITS['radiative_bound_free'] = {'cross_section': ['nm', 'm^2']}
             # Continua (HYDROGENIC):
             UNITS['radiative_bound_free']['σ_peak'] = 'm^2'
             UNITS['radiative_bound_free']['λ_min'] = 'nm'
             # Collisions:
-            UNITS['coll_data']['group_1'] = 's^-1 * K^-1/2 * m^3'
+            UNITS['coll_data']['group_1'] = 's^-1 * K^-(1/2) * m^3'
             UNITS['coll_data']['group_2'] = 's^-1 * m^3'
         elif self.format == 'MULTI':
             # Continua (EXPLICIT):
-            UNITS['radiative_bound_free'] = {'cross_section':['Å', 'cm^2']}
+            UNITS['radiative_bound_free'] = {'cross_section': ['Å', 'cm^2']}
             # Continua (HYDROGENIC):
             UNITS['radiative_bound_free']['σ_peak'] = 'cm^2'
             UNITS['radiative_bound_free']['λ_min'] = 'Å' 
             # Collisions:
-            UNITS['coll_data']['group_1'] = 's^-1 * K^-1/2 * cm^3'
+            UNITS['coll_data']['group_1'] = 's^-1 * K^-(1/2) * cm^3'
             UNITS['coll_data']['group_2'] = 's^-1 * cm^3'
 
         ###
@@ -564,12 +564,12 @@ class AtomFile:
                         'he_coefficient': float(vdWval[2])}
                 elif vdWtype == 'PARAMTR':
                     line_dict['broadening_vanderwaals'] = {
-                        'type': 'Ridder_Rensbergen', 
-                        'h':{'α': {'value': float(vdWval[0]), 
-                                   'unit': UNITS['vdW_broadening']['RR_α']['h']},
-                             'β': float(vdWval[1])},
+                        'type': 'Deridder_Rensbergen', 
+                        'h': {'α': {'value': float(vdWval[0]), 
+                                    'unit': UNITS['vdW_broadening']['DR_α']['h']},
+                              'β': float(vdWval[1])},
                         'he': {'α': {'value': float(vdWval[2]), 
-                                     'unit': UNITS['vdW_broadening']['RR_α']['he']},
+                                     'unit': UNITS['vdW_broadening']['DR_α']['he']},
                                'β': float(vdWval[3])}
                     }
                 elif vdWtype == 'BARKLEM':
