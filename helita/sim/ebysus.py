@@ -622,7 +622,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                     CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
                     IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
                     DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                    COULOMB_COL_QUANT='', AMB_QUANT='')
+                    COULOMB_COL_QUANT='', AMB_QUANT='', EM_QUANT='')
         if val is None:
             val = load_mf_quantities(self,var)
         if val is None:
@@ -800,6 +800,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if varname in self.varn.keys(): 
             varname=self.varn[varname]
         
+        # # # # # Helping dictionaries # # # # # 
+        
         # Electron variables
         e_variables = { 'r': 're', 'ux':'uex', 'uy':'uey', 'uz':'uez', 'tg':'etg', 'px':'pex', 'py':'pey', 'pz':'pez' }
         
@@ -809,6 +811,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         
         # Different variables add in different ways
         
+        # # # # # Density # # # # # 
         # Since it is the same volume, density just adds
         if varname == 'r':
             var = self.simple_trans2comm( e_variables[ varname ], snap, *args, **kwargs)
@@ -818,8 +821,10 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
             return var
         
+        # # # # # Momentum # # # # # 
         # Momentum just adds.
         if varname in ['px', 'py', 'pz', 'pix', 'piy', 'piz']:
+            # e variables are giving problems for some reason, the next line could be removed if necesary
             var = self.simple_trans2comm(  e_variables[ varname ] , snap, *args, **kwargs)
 
             for fluid in self.fluids.SL:
@@ -827,13 +832,16 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
             return var
         
+        # # # # # Velocity # # # # #
         # Velocity depends on the density and the momentum of each fluid
         # Ux = Px/rho 
         # trying recursivity for rho
         if varname in ['ux', 'uy', 'uz', 'uix', 'uiy', 'uiz']:
             axis = varname[-1]
             
-            # Pi = sum_j rhoj*uxj
+            # px = sum_j rho_j*ux_j
+            
+            # e contribution to velocity, could be removed
             var1 = self.simple_trans2comm( e_variables['r'], snap, *args, **kwargs) * self.simple_trans2comm( e_variables['p'+axis], snap, *args, **kwargs)
 
             for fluid in self.fluids.SL:
@@ -846,14 +854,30 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             
             return var1/var2
         
+        # # # # # Temperature # # # # #
         # Temperature depends on density, mass and temperature of each fluid
         # T_total = [ sum_j (rho_j/m_j)*tg_j ]/[ sum_j (rho_j/m_j) ]
-        #if varname in ['tg', 'temperature']:
+        #         = alpha/beta
+        
+        if varname in ['tg', 'temperature']:
             
+            n_e = self.simple_trans2comm('er', snap, *args, **kwargs)*self.uni.u_r/self.get_mass( -1, units='cgs' )
+            tgi_e = self.simple_trans2comm('etg', snap, *args, **kwargs)
             
+            alpha = n_e * tgi_e
+            beta  = n_e
             
+            for fluid in self.fluids.SL:
+                n = self.simple_trans2comm('r', snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)*self.uni.u_r/self.get_mass( (fluid[0], fluid[1]), units='cgs' )
+                tgi = self.simple_trans2comm('tg', snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
+                
+                alpha += n*tgi
+                beta  += n
+            
+            return alpha/beta
 
             
+        # # # # # All other variables # # # # #
         # For variables that do not deppend on the specie
         return self.simple_trans2comm(varname, snap, *args, **kwargs)
     
