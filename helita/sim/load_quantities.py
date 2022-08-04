@@ -273,7 +273,7 @@ def load_quantities(obj, quant, *args__None, PLASMA_QUANT=None, CYCL_RES=None,
   # loop through the function and QUANT pairs, running the functions as appropriate.
   for getter, QUANT_STR in _getter_QUANT_pairs:
     QUANT = locals()[QUANT_STR]   # QUANT = value of input parameter named QUANT_STR.
-    # if QUANT == '', that means
+    # if QUANT == '', we are skipping this getter function (see docstring of load_quantities for more detail).
     if QUANT != '':
       val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
       if val is not None:
