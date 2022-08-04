@@ -233,10 +233,9 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
   # loop through the function and QUANT pairs, running the functions as appropriate.
   for getter, QUANT_STR in _getter_QUANT_pairs:
     QUANT = locals()[QUANT_STR]   # QUANT = value of input parameter named QUANT_STR.
-    if QUANT != '':
-      val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
-      if val is not None:
-        break
+    val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
+    if val is not None:
+      break
   return val
 
 
@@ -256,12 +255,8 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
       Array with the dimensions of the 3D spatial from the simulation
       of the emission measure c.g.s units.
   """
-  if EM_QUANT == '': 
-        return None
-
-  if EM_QUANT is None:
+  if (EM_QUANT == None or EM_QUANT == ''):
     EM_QUANT = _EM_QUANT[1]
-    
   unitsnorm = 1e27
   for key, value in kwargs.items():
         if key == 'unitsnorm':
@@ -270,16 +265,14 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
   if quant=='':
     docvar = document_vars.vars_documenter(obj, _EM_QUANT[0], EM_QUANT, get_em.__doc__)
     docvar('emiss',  'emission messure [cgs]')
-
+    
   if (quant == '') or not quant in EM_QUANT:
     return None
 
-  
   sel_units = obj.sel_units
   obj.sel_units = 'cgs'
-
-  rho = obj.get_var('rho')
-  en = obj.get_var('ne')  
+  rho = obj.get_var('totr') # Does not read rho
+  en = obj.get_var('nel')    # Does not read ne
   nh = rho / obj.uni.grph
 
   obj.sel_units = sel_units
