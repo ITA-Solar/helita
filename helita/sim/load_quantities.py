@@ -182,7 +182,7 @@ def set_crossdict_as_needed(obj, **kwargs):
 
 ''' ----------------------------- get values of quantities ----------------------------- '''
 
-def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
+def load_quantities(obj, quant, *args__None, PLASMA_QUANT=None, CYCL_RES=None,
                 COLFRE_QUANT=None, COLFRI_QUANT=None, IONP_QUANT=None,
                 EOSTAB_QUANT=None, TAU_QUANT=None, DEBYE_LN_QUANT=None,
                 CROSTAB_QUANT=None, COULOMB_COL_QUANT=None, AMB_QUANT=None, 
@@ -191,6 +191,46 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
                 FLUX_QUANT=None, CURRENT_QUANT=None, COLCOU_QUANT=None,  
                 COLCOUMS_QUANT=None, COLFREMX_QUANT=None, EM_QUANT=None, 
                 POND_QUANT=None, **kwargs):
+  '''loads or calculates the value of single-fluid quantity quant.
+
+  obj: HelitaData object. (e.g. BifrostData, EbysusData)
+    use this object for loading / calculating.
+    if quant depends on another quantity, call obj (or obj's get_var method).
+      e.g. getting 'beta' --> will call obj('b2') and obj('p').
+  quant: string
+    the name of the quantity to get.
+    For help on available quantity names, use obj.vardocs(), or obj.get_var('').
+  *args__None:
+    additional non-named arguments are passed to NOWHERE.
+  kwargs in function call signature (such as PLASMA_QUANT, CYCL_RES): None, list of strings, or ''.
+    Controls which quants are gettable by the corresponding getter function.
+    These are mostly intended for internal use, to allow certain HelitaData classes to 
+      utilize load_quantities, but possibly provide different behavior for some variables.
+    OPTIONS:
+      None --> "all available quants"
+        can get any quant the getter function knows about.
+      list of strings --> "these quants"
+        can get any quant in this list, if the getter function knows about it.
+      '' --> "no quants"
+        the associated getter function will not get any quantities.
+    EXAMPLES:
+      - load_quantities(obj, var)
+          This is the default behavior of load_quantities;
+          all getter functions will get a chance to do their default behavior.
+      - load_quantities(obj, var, PLASMA_QUANT='')
+          In this case, obj will use all the getter funcs in load_quantities except for get_plasmaparam.
+          This is useful, e.g., if you want to implement a different routine for getting 'beta',
+          rather than letting get_plasmaparam handle getting 'beta'.
+      - load_quantities(obj, var, PLASMA_QUANT=['va', 'cs', 'nr'])
+          In this case, obj will use all the getter funcs in load_quantities,
+          using default behavior for all getter funcs except get_plasmaparam.
+          For get_plasmaparam, ONLY 'va', 'cs', and 'nr' will be handled.
+          This is useful, e.g., if you want to implement a different routine for getting 'beta',
+          but still want to utilitze get_plasmaparam's routines in case of 'va', 'cs', and 'nr'.
+  **kwargs:
+    additional kwargs (not in function call signature) are passed to the getter funcs.
+  '''
+
   #             HALL_QUANT=None, SPITZER_QUANT=None, **kwargs):
   __tracebackhide__ = True  # hide this func from error traceback stack.
 
@@ -233,6 +273,8 @@ def load_quantities(obj, quant, *args, PLASMA_QUANT=None, CYCL_RES=None,
   # loop through the function and QUANT pairs, running the functions as appropriate.
   for getter, QUANT_STR in _getter_QUANT_pairs:
     QUANT = locals()[QUANT_STR]   # QUANT = value of input parameter named QUANT_STR.
+    # if QUANT == '', that means
+    if QUANT != '':
     val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
     if val is not None:
       break
@@ -255,8 +297,13 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
       Array with the dimensions of the 3D spatial from the simulation
       of the emission measure c.g.s units.
   """
-  if (EM_QUANT == None or EM_QUANT == ''):
+  if EM_QUANT == '':   # by entering EM_QUANT='', we are saying "skip get_em; get nothing."
+    return None
+
+  if EM_QUANT == None:
     EM_QUANT = _EM_QUANT[1]
+
+
   unitsnorm = 1e27
   for key, value in kwargs.items():
         if key == 'unitsnorm':

@@ -622,7 +622,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                     CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
                     IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
                     DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                    COULOMB_COL_QUANT='', AMB_QUANT='', EM_QUANT='')
+                    COULOMB_COL_QUANT='', AMB_QUANT='')
         if val is None:
             val = load_mf_quantities(self,var)
         if val is None:
