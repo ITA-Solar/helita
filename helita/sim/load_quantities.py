@@ -275,9 +275,9 @@ def load_quantities(obj, quant, *args__None, PLASMA_QUANT=None, CYCL_RES=None,
     QUANT = locals()[QUANT_STR]   # QUANT = value of input parameter named QUANT_STR.
     # if QUANT == '', that means
     if QUANT != '':
-    val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
-    if val is not None:
-      break
+      val = getter(obj, quant, **{QUANT_STR : QUANT}, **kwargs)
+      if val is not None:
+        break
   return val
 
 
