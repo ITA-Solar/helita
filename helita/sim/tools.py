@@ -256,6 +256,34 @@ def globalvars(obj):
            'ca': 2.2, 'cr': 7.2, 'fe': 42.7, 'ni': 10.5}
 
 
+''' --------------------------- API --------------------------- '''
+
+def apply(x, fstr, *args, **kwargs):
+    '''return x.fstr(*args, **kwargs), or x if x doesn't have an 'fstr' attribute.
+    default can be returned instead for x without 'fstr' attribute, if default is entered in kwargs.
+
+    Examples:
+        apply(x, 'test1', 3, 7, mykwarg=8)
+        >>> x.test1(3, 7, mykwarg=8) if hasattr(x, 'test1') else x
+        apply(x, 'test2', mykwarg=8, default=None)
+        >>> x.test2(mykwarg=8) if hasattr(x, 'test2') else None
+    '''
+    __tracebackhide__ = True
+    # pop default if it was provided.
+    doing_default = 'default' in kwargs
+    if doing_default:
+        default = kwargs.pop('default')
+    # call x.fstr(*args, **kwargs)   # (kwargs with 'default' popped.)
+    if hasattr(x, fstr):
+        return getattr(x, fstr)(*args, **kwargs)
+    elif doing_default:
+        return default
+    else:
+        return x
+
+def is_integer(x):
+    return isinstance(x, (int, np.integer)) or apply(x, 'is_integer', default=False)
+
 ''' --------------------------- coordinate transformations --------------------------- '''
 
 def polar2cartesian(r, t, grid, x, y, order=3):

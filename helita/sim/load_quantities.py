@@ -271,6 +271,7 @@ def get_em(obj, quant, EM_QUANT = None,  *args, **kwargs):
 
   sel_units = obj.sel_units
   obj.sel_units = 'cgs'
+
   rho = obj.get_var('totr') # Does not read rho
   en = obj.get_var('nel')    # Does not read ne
   nh = rho / obj.uni.grph
