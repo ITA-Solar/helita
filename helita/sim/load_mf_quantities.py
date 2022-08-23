@@ -935,7 +935,7 @@ _HEATING_QUANT = ['qcol_uj', 'qcol_tgj', 'qcol_coeffj', 'qcolj', 'qcol_j',
                  'tg_qcol',  # TODO: add tg_qcol_... for as many of the qcol terms as applicable.
                  'tg_qcol_uj', 'tg_qcol_u', 'tg_qcol_tgj', 'tg_qcol_tg', 'tg_qcol_j', 'tg_qcolj',
                  'qjoulei',
-                 'tgdu',
+                 'tgdu', 'tgdspaceu',
                  'tg_rate', 'tgdtime',   # use tgdtime instead of tg_rate to avoid ambiguity with "rat" quant.
                  'qcol_u_noe', 'qcol_tg_noe',
                  ]
@@ -996,8 +996,12 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
                           nfluid=2, **units_qcol)
     docvar('e_to_tg',  'conversion factor from energy density to temperature for ifluid. '+\
                        'e_ifluid * e_to_tg = tg_ifluid', nfluid=1, **units_e_to_tg)
-    # the other heating in the heating equation
-    docvar('tgdu', 'rate of change of Ti due to -2/3 * T * div(u).', **units_dtgdt)
+    # the other heating in the heating equation.
+    # partial T / partial t = - div(u T) + (1/3) T div(u) + tgqcol
+    # we've written it this way because the divergence theorem tells us
+    #   that the mean (or the "integral over the box") of div(u T) must be 0 for a periodic box.
+    docvar('tgdu', 'rate of change of Ti due to +1/3 * T * div(u).', **units_dtgdt)
+    docvar('tgdspaceu', 'rate of change of Ti due to - div(u T)', **units_dtgdt)
     for tg_rate in ('tg_rate', 'tgdtime'):
       docvar(tg_rate, 'predicted total rate of change of Ti, including all contributions. ' +\
                         'use "tgdtime" to avoid ambiguity with "rat" quant.', **units_dtgdt)
@@ -1086,12 +1090,16 @@ def get_heating_quant(obj, var, HEATING_QUANT=None):
   elif var == 'tgdu':
     tg = obj('tg')
     divu = obj('divup'+'ui')
-    return -2/3 * tg * divu
+    return +1/3 * tg * divu
+
+  elif var == 'tgdspaceu':
+    return sum(obj.stagger.do(obj(f'tg{x}dn') * obj(f'ui{x}'), f'dd{x}up') for x in AXES)
 
   elif var in ['tg_rate', 'tgdtime']:
     tgqcol = obj('tg_qcol')
-    tgdu = obj('tgdu')
-    return tgqcol + tgdu
+    tgdu   = obj('tgdu')
+    tgd_udivtg = obj('tgdspaceu')
+    return tgqcol + tgdu + tgd_udivtg
 
   # converting to temperature (from energy density) terms
   elif var == 'e_to_tg':
