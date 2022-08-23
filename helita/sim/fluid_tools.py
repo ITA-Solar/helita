@@ -13,6 +13,10 @@ import itertools
 # import internal modules
 from . import tools
 
+from .load_mf_quantities import (
+    MATCH_AUX, MATCH_PHYSICS,
+)
+
 # import external private modules
 try:
   from at_tools import fluids as fl
@@ -487,7 +491,7 @@ def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
     result is 'EL' for elastic collisions, 'MX' for maxwell, 'CL' for coulomb, or None
     In the following cases, return None:
         - ifluid and jfluid are not both charged and 'EL' and 'MX' are not in their coll_keys.
-        - ifluid and jfluid   are   both charged and 'CL' is not in their coll_keys.
+        - ifluid and jfluid   are   both charged and 'CL' is not in their coll_keys AND obj.match_type is not MATCH_PHYSICS.
     if ifluid or jfluid is electrons:
         if both are charged: return ('EE', 'CL')
         if one is neutral:   return ('EE', 'EL')
@@ -505,7 +509,7 @@ def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
                                  'Common cause: mistakes / missing keys in COLL KEYS in mf_param_file.'
         raise KeyError(errmsg_collkey_missing)
     if icharge != 0 and jcharge != 0:    # two charged fluids --> return CL or None
-        if 'CL' in coll_keys:
+        if 'CL' in coll_keys or (MATCH_PHYSICS == getattr(obj, 'match_type', MATCH_AUX)):
             return 'CL'
         else:
             return None
