@@ -248,19 +248,27 @@ def fluid_pairs(fluids, ordered=False, allow_same=False):
     elif not ordered and     allow_same: return itertools.product(fluids, repeat=2)
     assert False #we should never reach this line...
 
-def iter_fluid_SLs(dd, with_electrons=True):
+def iter_fluid_SLs(dd, with_electrons=True, iset=False):
     '''returns an iterator over the fluids of dd, and electrons.
     yields SL pairs; NOT at_tools.fluids.Fluid objects!
     example: list(iter_fluids(dd)) = [(-1,0), (1,1), (1,2)].
+
+    if iset (default False, for now),
+        also sets dd.ifluid to the SL as we iterate.
 
     with_electrons: bool
         True --> electrons are included, first: (-1,0)
         False --> electrons are not included.
     '''
-    if with_electrons:
-        yield (-1,0)
-    for fluid in dd.fluids:
-        yield fluid.SL
+    if iset:
+        for SL in iter_fluid_SLs(dd, with_electrons, iset=False):
+            dd.ifluid = SL
+            yield SL
+    else:
+        if with_electrons:
+            yield (-1,0)
+        for fluid in dd.fluids:
+            yield fluid.SL
 
 def fluid_SLs(dd, with_electrons=True):
     '''returns list of (species, level) pairs for fluids in dd.
@@ -272,15 +280,18 @@ def fluid_SLs(dd, with_electrons=True):
     '''
     return list(iter_fluid_SLs(dd, with_electrons=with_electrons))
 
-def iter_fluid_SLs_and_names(dd, with_electrons=True):
+def iter_fluid_SLs_and_names(dd, with_electrons=True, iset=False):
     '''returns and iterator over the fluids of dd, and electrons.
     yields ((species, level), name)
+
+    if iset (default False, for now),
+        also sets dd.ifluid to the SL as we iterate.
 
     with_electrons: bool
         True --> electrons are included, first: ((-1,0),'e-').
         False --> electrons are not included.
     '''
-    for SL in dd.iter_fluid_SLs(with_electrons=with_electrons):
+    for SL in dd.iter_fluid_SLs(with_electrons=with_electrons, iset=iset):
         yield (SL, dd.get_fluid_name(SL))
 
 def fluid_SLs_and_names(dd, with_electrons=True):
