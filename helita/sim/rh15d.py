@@ -590,9 +590,9 @@ class AtomFile:
             else:
                 coeff = float(line_i[ivdW][0])
                 if coeff >= 20:
-                    # Recipe from MULTI
-                    sigma = int(coeff) * 2.80028E-21
-                    alpha = coeff - int(coeff)
+                    # Recipe from MULTI, not multiplying by a_0^2 here
+                    sigma = int(coeff)
+                    alpha = coeff - sigma
                     line_dict['broadening_vanderwaals'] = [
                         {'type': 'ABO', 
                          'σ': {'value': sigma, 
