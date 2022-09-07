@@ -1,7 +1,6 @@
 """
 Set of programs and tools to read the outputs from RH, 1.5D version
 """
-from ast import AnnAssign
 import os
 import warnings
 import datetime
@@ -607,7 +606,7 @@ class AtomFile:
                     line_dict['broadening_stark'] = {'coefficient': stark_tmp}
                     warnings.warn(
                         ("Stark coefficients given for Gray recipe (MULTI), which "
-                        "is not yet supported. Reverting to Traving recipe from RH."),
+                        "is not yet supported. Double check Stark coefficients."),
                         RuntimeWarning
                     )
                 coeff = float(line_i[ivdW][0])
