@@ -1,6 +1,7 @@
 """
 Set of programs and tools to read the outputs from RH, 1.5D version
 """
+from ast import AnnAssign
 import os
 import warnings
 import datetime
@@ -460,6 +461,8 @@ class AtomFile:
         COLL_GROUP_1 = ['CE', 'CI']
         COLL_GROUP_2 = ['CP', 'CH', 'CH0', 'CH+', 'CR']
         if self.format == 'RH':
+            # Lines:
+            UNITS['stark_c4'] = "m^3 / s"
             # Continua (EXPLICIT):
             UNITS['radiative_bound_free'] = {'cross_section': ['nm', 'm^2']}
             # Continua (HYDROGENIC):
@@ -469,6 +472,8 @@ class AtomFile:
             UNITS['coll_data']['group_1'] = 's^-1 * K^-(1/2) * m^3'
             UNITS['coll_data']['group_2'] = 's^-1 * m^3'
         elif self.format == 'MULTI':
+            # Lines:
+            UNITS['stark_c4'] = "cm^3 / s"
             # Continua (EXPLICIT):
             UNITS['radiative_bound_free'] = {'cross_section': ['Å', 'cm^2']}
             # Continua (HYDROGENIC):
@@ -553,8 +558,14 @@ class AtomFile:
                                                 + line_i[ityp][1:].lower())
             line_dict['γ_rad'] = {'value': float(line_i[igr]), 
                                   'unit': UNITS['natural_broadening']}
-            line_dict['broadening_stark'] = {'coefficient': float(line_i[ibs])}
-            if self.format=='RH':
+            stark_tmp = float(line_i[ibs])
+            if self.format == 'RH':
+                if stark_tmp < 0:
+                    line_dict['broadening_stark'] = {
+                        "C_4": {"value": abs(stark_tmp), "unit": UNITS['stark_c4']}
+                    }
+                else:  # Empty, use Traving recipe
+                    line_dict['broadening_stark'] = {'coefficient': stark_tmp}
                 vdWtype = line_i[idWt]
                 vdWval = line_i[ivdW]
                 if vdWtype == 'UNSOLD':
@@ -587,7 +598,18 @@ class AtomFile:
                 else:
                     raise NotImplementedError(
                             'vdWtype not recognized: %s'%vdWtype)
-            else:
+            elif self.format == "MULTI":
+                if stark_tmp >= 0:
+                    line_dict['broadening_stark'] = {
+                        "C_4": {"value": stark_tmp, "unit": UNITS['stark_c4']}
+                    }
+                else:
+                    line_dict['broadening_stark'] = {'coefficient': stark_tmp}
+                    warnings.warn(
+                        ("Stark coefficients given for Gray recipe (MULTI), which "
+                        "is not yet supported. Reverting to Traving recipe from RH."),
+                        RuntimeWarning
+                    )
                 coeff = float(line_i[ivdW][0])
                 if coeff >= 20:
                     # Recipe from MULTI, not multiplying by a_0^2 here
