@@ -128,11 +128,12 @@ def load_arithmetic_quantities(obj,quant, *args__None, **kwargs__None):
     get_center, get_deriv, get_interp,
     get_module, get_horizontal_average,
     get_gradients_vect, get_gradients_scalar,
-    get_vector_product, get_dot_product,
+    get_dot_product,
     get_square, get_lg, get_numop, get_ratios, get_parens,
     get_projections, get_angle,
     get_stat_quant, get_fft_quant,
     get_multi_quant,
+    get_vector_product,   # this is intentionally later in the order, so that e.g. "(eftimesb)2" will work.
   )
 
   val = None
