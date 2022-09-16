@@ -1456,7 +1456,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     ## CONVENIENCE METHODS ##
     def print_values(self, fmtval='{: .1e}', fmtname='{:5s}',
                      GLOBAL_VARS=['bx', 'by', 'bz'], FLUID_VARS=['nr', 'uix', 'uiy', 'uiz', 'tg'],
-                     as_string=False):
+                     SKIP_FLUIDS=[], as_string=False):
         '''prints fundamental values for self.
             bx, by, bz, AND for each fluid: nr, uix, uiy, uiz, tg
         Default behavior is to just print the mean of each value.
@@ -1470,6 +1470,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             global vars to show. "global" --> "no fluids".
         FLUID_VARS: list of strings
             fluid vars to show. possibly a different value for each fluid.
+        SKIP_FLUIDS: list of (species,level) tuples.
+            skip any SL found in SKIP_FLUIDS.
         as_string: bool, default False
             if True, return result as a string instead of printing it.
         '''
@@ -1485,7 +1487,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # table with fluids
         if len(FLUID_VARS) > 0:
             #   get all the values   #
-            SLs  = self.fluid_SLs()
+            SLs  = [SL for SL in self.fluid_SLs() if not SL in SKIP_FLUIDS]
             values = {SL: {} for SL in SLs}
             for var in FLUID_VARS:
                 for SL in SLs:
