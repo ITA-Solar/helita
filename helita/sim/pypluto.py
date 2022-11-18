@@ -939,6 +939,7 @@ class PlutoData(object):
     '''
     self.varn={}
     self.varn['rho']= 'rho'
+    self.varn['totr']= 'rho'
     self.varn['pg'] = 'prs'
     self.varn['ux'] = 'vx1'
     self.varn['uy'] = 'vx2'

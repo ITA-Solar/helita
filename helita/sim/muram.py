@@ -511,6 +511,7 @@ class MuramAtmos:
     '''
     self.varn={}
     self.varn['rho']= 'result_prim_0'
+    self.varn['totr']= 'result_prim_0'
     self.varn['tg'] = 'eosT'
     self.varn['pg'] = 'eosP'
     if os.path.isfile(self.fdir+'/eosne'+ self.siter):

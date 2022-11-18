@@ -757,6 +757,7 @@ class BifrostData():
         '''
         self.varn={}
         self.varn['rho']= 'r'
+        self.varn['totr']= 'r'
         self.varn['tg'] = 'tg'
         self.varn['pg'] = 'p'
         self.varn['ux'] = 'ux'
