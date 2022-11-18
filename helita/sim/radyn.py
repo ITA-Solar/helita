@@ -154,6 +154,7 @@ class radyn(object):
     '''
     self.varn={}
     self.varn['rho']= 'd1'
+    self.varn['totr']= 'd1'
     self.varn['tg'] = 'tg1'
     self.varn['ux'] = 'ux'
     self.varn['uy'] = 'uy'
