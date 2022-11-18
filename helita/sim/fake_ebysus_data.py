@@ -129,7 +129,7 @@ class FakeEbysusData(ebysus.EbysusData):
 
     ## SET_VAR ##
     def set_var(self, var, value, *args, nfluid=None, units=None, fundamental=None,
-                _skip_preprocess=False, **kwargs):
+                _skip_preprocess=False, fundamental_only=False, **kwargs):
         '''set var in memory of self.
         Use this to set the value for some fake data.
         Any time we get var, we will check memory first;
@@ -158,12 +158,31 @@ class FakeEbysusData(ebysus.EbysusData):
                      if it is, use set_fundamental_var instead.
             True --> immediately call set_fundamental_var instead.
             False --> do not even consider using set_fundamental_var.
+        fundamental_only: True (default), or False
+            if calling set_fundamental_var...
+            True  --> only set value of fundamental quantity corresponding to var.
+            False --> also set value of var.
+            Example of why it matters...:
+                If running the following lines:
+                    (1)  obj.set_var('tg', 4321)
+                    (2)  obj.set_var('e', obj('e') * 100)
+                    (3)  obj.get_var('tg')
+                with fundamental_only==True:
+                    (1)  sets 'e' to the appropriate value such that 'tg' will be 4321
+                    (2)  adjusts the value of 'e' (only)
+                    (3)  gives the answer 432100
+                with fundamental_only==False:
+                    (1)  sets 'tg' to 4321. (AND 'e' appropriately, if fundamental is True or None.)
+                    (2)  adjusts the value of 'e' (only)
+                    (3)  gives the answer 4321, because it reads the value of 'tg' directly, instead of checking 'e'.
+
         '''
         if fundamental is None:
             if var in self.FUNDAMENTAL_SETTABLES:
                 fundamental = True
         if fundamental:
-            return self.set_fundamental_var(var, value, *args, units=units, **kwargs)
+            return self.set_fundamental_var(var, value, *args, units=units,
+                                            fundamental_only=fundamental_only, **kwargs)
 
         self._warning_during_setvar_if_slicing_and_stagger()
 
@@ -219,7 +238,7 @@ class FakeEbysusData(ebysus.EbysusData):
 
     FUNDAMENTAL_SETTABLES = ('r', 'nr', 'e', 'tg', *(f'{v}{x}' for x in AXES for v in ('p', 'u', 'ui', 'b')))
 
-    def set_fundamental_var(self, var, value, *args, fundamental_only=False, units=None, **kwargs):
+    def set_fundamental_var(self, var, value, *args, fundamental_only=True, units=None, **kwargs):
         '''sets fundamental quantity corresponding to var; also sets var (unless fundamental_only).
         fundamental quantities, and alternate options for vars will allow to set them, are:
             r - nr
@@ -227,7 +246,7 @@ class FakeEbysusData(ebysus.EbysusData):
             p{x} - u{x}, ui{x}   (for {x} in 'x', 'y', 'z')
             b{x} – (no alternates.)
         
-        fundamental_only: False (default) or True
+        fundamental_only: True (default) or False
             True  --> only set value of fundamental quantity corresponding to var.
             False --> also set value of var.
         units: None, 'simu', 'si', or 'cgs'
@@ -278,9 +297,8 @@ class FakeEbysusData(ebysus.EbysusData):
                 result = value / (self.uni.gamma - 1)
             elif var == 'tg':   # T = p / (nr * kB) = (e * (gamma - 1)) / (nr * kB)
                 u_var  = 1   # temperature units always K.
-                nr     = self('nr') * ulookup('nr')
-                kB     = ulookup('kB')
-                result = value * nr * kB / (self.uni.gamma - 1)
+                e_to_tg = self('e_to_tg')
+                result  = value / e_to_tg
         ## 'p{x}' - momentum density ({x}-component)
         elif var in tuple(f'{v}{x}' for x in AXES for v in ('p', 'u', 'ui')):
             base, x = var[:-1], var[-1]

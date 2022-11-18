@@ -532,10 +532,11 @@ def get_electron_var(obj, var, ELECTRON_QUANT=None):
 
   elif var == 'nre': # number density of electrons [simu. units]
     with Caching(obj, nfluid=0) as cache:
-      output = obj.zero_at_mesh_center()
-      for fluid in obj.fluids.ions():
-        output += obj.get_var('nr', ifluid=fluid.SL) * fluid.ionization   #[simu. number density units]
-      cache(var, output)
+      ions = obj.fluids.ions()
+      if len(ions) == 0:
+        return obj.zero_at_mesh_center()
+      else:
+        return sum(obj('nr', ifluid=ion.SL) * ion.ionization for ion in ions)  #[simu. number density units]
       return output
 
   elif var == 're': # mass density of electrons [simu. mass density units]

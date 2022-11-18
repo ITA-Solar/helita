@@ -1454,6 +1454,70 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         raise NotImplementedError('EbysusData.plot')
 
     ## CONVENIENCE METHODS ##
+    def print_values(self, fmtval='{: .1e}', fmtname='{:5s}',
+                     GLOBAL_VARS=['bx', 'by', 'bz'], FLUID_VARS=['nr', 'uix', 'uiy', 'uiz', 'tg'],
+                     SKIP_FLUIDS=[], as_string=False):
+        '''prints fundamental values for self.
+            bx, by, bz, AND for each fluid: nr, uix, uiy, uiz, tg
+        Default behavior is to just print the mean of each value.
+        TODO: implement "advanced stats" mode where min and max are shown as well.
+
+        fmtval: str
+            format string for values.
+        fmtname: str
+            format string for fluid names.
+        GLOBAL_VARS: list of strings
+            global vars to show. "global" --> "no fluids".
+        FLUID_VARS: list of strings
+            fluid vars to show. possibly a different value for each fluid.
+        SKIP_FLUIDS: list of (species,level) tuples.
+            skip any SL found in SKIP_FLUIDS.
+        as_string: bool, default False
+            if True, return result as a string instead of printing it.
+        '''
+        def fmtv(val): return fmtval.format(val)
+        def fmtn(name): return fmtname.format(name)
+        # units
+        lines = [f"units = '{self.units_output}'"]
+        # globals
+        if len(GLOBAL_VARS) > 0:
+            lines.append(' | '.join([f"{var} = {fmtv(np.mean(self(var)))}" for var in GLOBAL_VARS]))
+            if len(FLUID_VARS) > 0:
+                lines.append('')
+        # table with fluids
+        if len(FLUID_VARS) > 0:
+            #   get all the values   #
+            SLs  = [SL for SL in self.fluid_SLs() if not SL in SKIP_FLUIDS]
+            values = {SL: {} for SL in SLs}
+            for var in FLUID_VARS:
+                for SL in SLs:
+                    values[SL][var] = np.mean(self(var, iSL=SL))
+            #   convert values to strings   #
+            vstrs = {SL: {var: fmtv(values[SL][var]) for var in FLUID_VARS} for SL in SLs}
+            for SL in SLs:
+                vstrs[SL]['name'] = fmtn(self.get_fluid_name(SL))
+            #   calculate string lengths   #
+            vlens = {var: max(*(len(vstrs[SL][var]) for SL in SLs), len(var)) for var in FLUID_VARS}
+            vlens['name'] = max(len(vstrs[SL]['name']) for SL in SLs)
+            #   convert strings to appropriate lengths for consistency   #
+            vstrs_pretty = {SL: {var: vstrs[SL][var].rjust(vlens[var]) for var in FLUID_VARS} for SL in SLs}
+            for SL in SLs:
+                vstrs_pretty[SL]['name'] = vstrs[SL]['name'].ljust(vlens['name'])
+            #   add header   #
+            header = ' | '.join([' '*vlens['name'], *[var.center(vlens[var]) for var in FLUID_VARS]])
+            lines.append(header)
+            lines.append('-'*len(header))
+            #   add rows   #
+            for SL in SLs:
+                lines.append(' | '.join([vstrs_pretty[SL]['name'], *[vstrs_pretty[SL][var] for var in FLUID_VARS]]))
+
+        # print or return
+        result = '\n'.join(lines)
+        if as_string:
+            return result
+        else:
+            print(result)
+
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
 
