@@ -825,8 +825,8 @@ def get_projections(obj,quant):
     '''do projecting; can be used in threadQuantity() or as is'''
     v2Mag = np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2)
     v2x, v2y, v2z = x2 / v2Mag, y2 / v2Mag, z2 / v2Mag
-    parScal = x1 * v2x + y1 * v2y + z1 * v2z
-    parX, parY, parZ = parScal * v2x, parScal * v2y, parScal * v2z
+    parScal = np.sqrt((x1 * v2x)**2 + (y1 * v2y)**2 + (z1 * v2z)**2)
+    parX, parY, parZ = x1 * v2x, y1 * v2y, z1 * v2z
     if par == 'par':
       return np.abs(parScal)
     elif par == 'per':
