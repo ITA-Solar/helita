@@ -2,21 +2,23 @@
 Set of programs and tools visualise the output from RH, 1.5D version
 """
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-import matplotlib.pyplot as plt
-from pkg_resources import resource_filename
-from ipywidgets import interact, fixed, Dropdown, IntSlider, FloatSlider
+from astropy import units as u
+from ipywidgets import fixed, interact
 from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
-from astropy import units as u
-from ..utils.utilsmath import planck, voigt
+
+from ..utils.utilsmath import planck
 
 
 class Populations:
     """
     Class to visualise the populations from an RH 1.5D object.
     """
+
     def __init__(self, rh_object):
         self.rhobj = rh_object
         self.atoms = [a for a in dir(self.rhobj) if a[:5] == 'atom_']
@@ -87,6 +89,7 @@ class SourceFunction:
     """
     Class to visualise the source function and opacity from an RH 1.5D object.
     """
+
     def __init__(self, rh_object):
         self.rhobj = rh_object
         self.display()

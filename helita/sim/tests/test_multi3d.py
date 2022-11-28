@@ -2,11 +2,13 @@
 Test suite for multi3d.py
 """
 import os
-import pytest
 import tarfile
-import numpy as np
 from shutil import rmtree
+
+import numpy as np
+import pytest
 from pkg_resources import resource_filename
+
 from helita.sim import multi3d
 
 TEST_FILES = ['ie_+0.00_+0.00_+1.00_allnu', 'multi3d.input', 'out_atm',
@@ -18,6 +20,7 @@ TEST_DIR = resource_filename('helita', 'data/multi3d_test')
 # A sample of keyword values from multi3d.input
 INPUT_VALUES = {'atmosid': 'falc.5x5x82', 'atom': '../input/atoms/atom.h3',
                 'convlim': 0.001, 'n_scratch': 10}
+
 
 def unpack_data(source_tarball, files, output_directory):
     """Unpack test data to temporary directory."""
@@ -70,7 +73,7 @@ def test_Multi3dOut():
     data.set_transition(3, 2)
     ie = data.readvar('ie')
     assert np.array_equal(ie[0, 0], ie[-1, -1])
-    assert np.isclose(ie[0,0,5::20],
+    assert np.isclose(ie[0, 0, 5::20],
                       np.array([2.9016188e-05, 1.1707955e-05, 3.8370090e-06,
                                 4.9833211e-06, 1.8675400e-05])).all()
 

@@ -30,43 +30,46 @@ TODO:
 # import built-in modules
 import os
 import time
+import shutil
 import warnings
 import collections
-import shutil
 
+from . import document_vars, file_memory, fluid_tools, stagger, tools
 # import local modules
-from .bifrost import (
-    BifrostData, Rhoeetab, Bifrost_units, Cross_sect,
-    read_idl_ascii, subs2grph,
-    # for historical reasons / convenience, also import directly:
-    get_snapstuff, snapstuff, get_snapname, snapname,
-    available_snaps, snaps, get_snaps, list_snaps, snaps_info,
+from .bifrost import (  # for historical reasons / convenience, also import directly:
+    Bifrost_units,
+    BifrostData,
+    Cross_sect,
+    EnterDir,
+    EnterDirectory,
+    Rhoeetab,
     _N_to_snapstr,
-    EnterDir, EnterDirectory,
+    available_snaps,
+    get_snapname,
+    get_snaps,
+    get_snapstuff,
+    list_snaps,
+    read_idl_ascii,
+    snapname,
+    snaps,
+    snaps_info,
+    snapstuff,
+    subs2grph,
 )
-from .load_mf_quantities         import load_mf_quantities
-from .load_quantities            import load_quantities
 from .load_arithmetic_quantities import load_arithmetic_quantities
-from .load_fromfile_quantities   import load_fromfile_quantities
-from . import document_vars
-from . import file_memory
-from . import fluid_tools
-from . import stagger
-from . import tools
-from .units import (
-    UNI, USI, UCGS, UCONST,
-    Usym, Usyms, UsymD,
-    U_TUPLE,
-    UNI_length, UNI_time, UNI_mass,
-    UNI_speed, UNI_rho, UNI_nr, UNI_hz
-)
+from .load_fromfile_quantities import load_fromfile_quantities
+from .load_mf_quantities import load_mf_quantities
+from .load_quantities import load_quantities
+from .units import U_TUPLE, UNI, UNI_rho, UNI_speed, Usym, UsymD
+
 try:
-  from . import cstagger
+    from . import cstagger
 except ImportError:
-  cstagger = tools.ImportFailed('cstagger', "This module is required to use stagger_kind='cstagger'.")
+    cstagger = tools.ImportFailed('cstagger', "This module is required to use stagger_kind='cstagger'.")
 
 # import external public modules
 import numpy as np
+
 try:
     import matplotlib.pyplot as plt
 except ImportError:
@@ -87,12 +90,11 @@ except ImportError:
     fl = tools.ImportFailed('at_tools.fluids')
 
 # set defaults:
-from .load_mf_quantities import (
-    MATCH_PHYSICS, MATCH_AUX
-)
+from .load_mf_quantities import MATCH_AUX, MATCH_PHYSICS
+
 MATCH_TYPE_DEFAULT = MATCH_PHYSICS  # can change this one. Tells whether to match physics or aux.
-                               # match physics -> try to return physical value.
-                               # match aux     -> try to return value matching aux.
+# match physics -> try to return physical value.
+# match aux     -> try to return value matching aux.
 
 AXES = ('x', 'y', 'z')
 
@@ -107,12 +109,12 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     def __init__(self, *args, fast=True, match_type=MATCH_TYPE_DEFAULT,
                  mesh_location_tracking=stagger.DEFAULT_MESH_LOCATION_TRACKING,
                  read_mode='io',
-                 N_memmap=200, mm_persnap=True, 
+                 N_memmap=200, mm_persnap=True,
                  do_caching=True, cache_max_MB=10, cache_max_Narr=20,
                  _force_disable_memory=False,
                  **kwargs):
         ''' initialize EbysusData object.
-        
+
         mesh_location_tracking: False (default) or True
             False --> disable conversion to ArrayOnMesh. (You can safely ignore this feature.)
             True  --> arrays from get_var will be returned as stagger.ArrayOnMesh objects,
@@ -126,7 +128,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             'zc': 'zarr-compressed', the output from the EbysusData.compress() function.
                 'zc' mode is generally faster to read and requires less storage space.
                 But it requires the compress function to have been run separately.
-    
+
         N_memmap: int (default 0)
             keep the N_memmap most-recently-created memmaps stored in self._memory_numpy_memmap.
             -1  --> try to never forget any memmaps.
@@ -176,7 +178,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # set values of some attrs (e.g. from args & kwargs passed to __init__)
         self.mesh_location_tracking = mesh_location_tracking
         self.match_type = match_type
-        self.read_mode  = read_mode
+        self.read_mode = read_mode
 
         setattr(self, file_memory.NMLIM_ATTR, N_memmap)
         setattr(self, file_memory.MM_PERSNAP, mm_persnap)
@@ -184,11 +186,11 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         self.do_caching = do_caching and not _force_disable_memory
         self._force_disable_memory = _force_disable_memory
         if not _force_disable_memory:
-            self.cache  = file_memory.Cache(obj=self, max_MB=cache_max_MB, max_Narr=cache_max_Narr)
-        self.caching    = lambda: self.do_caching and not self.cache.is_NoneCache()  # (used by load_mf_quantities)
-        setattr(self, document_vars.LOADING_LEVEL, -1) # tells how deep we are into loading a quantity now.
+            self.cache = file_memory.Cache(obj=self, max_MB=cache_max_MB, max_Narr=cache_max_Narr)
+        self.caching = lambda: self.do_caching and not self.cache.is_NoneCache()  # (used by load_mf_quantities)
+        setattr(self, document_vars.LOADING_LEVEL, -1)  # tells how deep we are into loading a quantity now.
 
-        self.panic=False
+        self.panic = False
 
         # figure out snapname. If it doesn't agree with snapname (optionally) entered in args, make warning.
         with EnterDirectory(kwargs.get('fdir', os.curdir)):
@@ -196,22 +198,22 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if len(args) >= 1:
             if args[0] != snapname:
                 snapname_errmsg = "snapname from args ('{}') disagrees with snapname from mhd.in ('{}')!"
-                # it will read from arg and won't raise error if mhd.in does not match args. 
+                # it will read from arg and won't raise error if mhd.in does not match args.
                 warnings.warn(snapname_errmsg.format(args[0], snapname))
                 snapname = args[0]
 
         # call BifrostData.__init__
-        BifrostData.__init__(self, snapname,*args[1:], fast=fast, **kwargs)
+        BifrostData.__init__(self, snapname, *args[1:], fast=fast, **kwargs)
 
         # call Multifluid.__init__
-        fluid_tools.Multifluid.__init__(self, ifluid=kwargs.pop('ifluid', (1,1)),   # default (1,1)
-                                              jfluid=kwargs.pop('jfluid', (1,1)))   # default (1,1)
+        fluid_tools.Multifluid.__init__(self, ifluid=kwargs.pop('ifluid', (1, 1)),   # default (1,1)
+                                        jfluid=kwargs.pop('jfluid', (1, 1)))   # default (1,1)
 
         # set up self.att
         self.att = {}
         tab_species = self.mf_tabparam['SPECIES']
         self.mf_nspecies = len(tab_species)
-        self.mf_total_nlevel=0
+        self.mf_total_nlevel = 0
         for row in tab_species:
             # example row looks like: ['01', 'H', 'H_2.atom']
             mf_ispecies = int(row[0])
@@ -245,6 +247,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 But it requires the compress function to have been run separately.
         '''
         return getattr(self, '_read_mode', 'io')
+
     @read_mode.setter
     def read_mode(self, value):
         value = value.lower()
@@ -276,7 +279,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # begin processing:
         result = dict()
-        if 'COLL_KEYS' in self.mf_tabparam: 
+        if 'COLL_KEYS' in self.mf_tabparam:
             x = self.mf_tabparam['COLL_KEYS']
             for tokenline in x:      # example tokenline: ['01', '02', 'EL']
                 ispec, jspec, collkey = tokenline
@@ -287,14 +290,14 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 except KeyError:
                     result[key] = [collkey]
         if _enforce_symmetry_in_collisions:
-            for key in list(result.keys()): #list() because changing size of result
+            for key in list(result.keys()):  # list() because changing size of result
                 rkey = (key[1], key[0])  # reversed
                 if rkey not in result.keys():
                     result[rkey] = result[key]
 
         self.coll_keys = result
 
-    def _set_snapvars(self,firstime=False):
+    def _set_snapvars(self, firstime=False):
 
         if os.path.exists(self.file_root_with_io_ext):
             self.snaprvars = ['r']
@@ -319,7 +322,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         if (self.mf_epf):
             # add internal energy to basic snaps
-            #self.snapvars.append('e')
+            # self.snapvars.append('e')
             # make distiction between different aux variable
             self.mf_e_file = self.root_name + '_mf_e'
         else:  # one energy for all fluid
@@ -330,7 +333,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             if self.with_electrons:
                 self.mf_e_file = self.root_name + '_mf_e'
                 # JMS This must be implemented
-                self.snapelvars=['r', 'px', 'py', 'pz', 'e']
+                self.snapelvars = ['r', 'px', 'py', 'pz', 'e']
 
         for var in (
                 self.varsmfr +
@@ -341,7 +344,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 self.varsmm):
             self.auxvars.remove(var)
 
-        #if hasattr(self, 'mf_total_nlevel'):
+        # if hasattr(self, 'mf_total_nlevel'):
         #    if self.mf_total_nlevel == 1:
         #        self.snapvars.append('e')
 
@@ -372,16 +375,16 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if (self.do_mhd):
             self.compvars = self.compvars + ['bxc', 'byc', 'bzc', 'modb']'''
 
-    def set_snap(self,snap,*args__set_snap,**kwargs__set_snap):
+    def set_snap(self, snap, *args__set_snap, **kwargs__set_snap):
         '''call set_snap from BifrostData,
         but also if mm_persnap, then delete all the memmaps in memory..
         '''
-        if getattr(self, file_memory.MM_PERSNAP, False) and np.shape(self.snap)==():
+        if getattr(self, file_memory.MM_PERSNAP, False) and np.shape(self.snap) == ():
             if hasattr(self, file_memory.MEMORY_MEMMAP):
                 delattr(self, file_memory.MEMORY_MEMMAP)
         super(EbysusData, self).set_snap(snap, *args__set_snap, **kwargs__set_snap)
 
-    def _read_params(self,firstime=False):
+    def _read_params(self, firstime=False):
         ''' Reads parameter file specific for Multi Fluid Bifrost '''
         super(EbysusData, self)._read_params(firstime=firstime)
 
@@ -390,18 +393,18 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # get misc. params (these have no default values. Make error if we can't get them).
         errmsg = 'read_params: could not find {} in idl file!'
-        self.mf_epf          = self.get_param('mf_epf',          error_prop=KeyError(errmsg.format('mf_epf'))          )
-        self.mf_nspecies     = self.get_param('mf_nspecies',     error_prop=KeyError(errmsg.format('mf_nspecies'))     )
-        self.with_electrons  = self.get_param('mf_electrons',    error_prop=KeyError(errmsg.format('mf_electrons'))    )
-        self.mf_total_nlevel = self.get_param('mf_total_nlevel', error_prop=KeyError(errmsg.format('mf_total_nlevel')) )
+        self.mf_epf = self.get_param('mf_epf',          error_prop=KeyError(errmsg.format('mf_epf')))
+        self.mf_nspecies = self.get_param('mf_nspecies',     error_prop=KeyError(errmsg.format('mf_nspecies')))
+        self.with_electrons = self.get_param('mf_electrons',    error_prop=KeyError(errmsg.format('mf_electrons')))
+        self.mf_total_nlevel = self.get_param('mf_total_nlevel', error_prop=KeyError(errmsg.format('mf_total_nlevel')))
 
         # get param_file params (these have default values).
-        ## mf_param_file
+        # mf_param_file
         param_file = self.get_param('mf_param_file', default='mf_params.in',
-                        warning='mf_param_file not found in this idl file; trying to use mf_params.in')
+                                    warning='mf_param_file not found in this idl file; trying to use mf_params.in')
         file = os.path.join(self.fdir, param_file.strip())
         self.mf_tabparam = read_mftab_ascii(file, obj=self)
-        ## mf_eparam_file
+        # mf_eparam_file
         do_ohm_ecol = self.get_param('do_ohm_ecol', 0)
         warning = 'mf_eparam_file parameter not found; trying to use mf_eparams.in' if do_ohm_ecol else None
         eparam_file = self.get_param('mf_eparam_file', default='mf_eparams.in', warning=warning)
@@ -416,7 +419,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
     def _init_vars(self, firstime=False, fast=None, *args__get_simple_var, **kw__get_simple_var):
         """
         Initialises variables (common for all fluid)
-        
+
         fast: None, True, or False.
             whether to only read density (and not all the other variables).
             if None, use self.fast instead.
@@ -427,9 +430,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if self._fast_skip_flag is True:
             return
         elif self._fast_skip_flag is False:
-            self._fast_skip_flag = True #swaps flag to True, then runs the rest of the code (this time around).
-        #else, fast_skip_flag is None, so the code should never be skipped.
-        #as long as fast is False, fast_skip_flag should be None.
+            self._fast_skip_flag = True  # swaps flag to True, then runs the rest of the code (this time around).
+        # else, fast_skip_flag is None, so the code should never be skipped.
+        # as long as fast is False, fast_skip_flag should be None.
 
         self.mf_common_file = (self.root_name + '_mf_common')
         if os.path.exists(self.file_root_with_io_ext):
@@ -450,7 +453,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         if not firstime:
             self._init_vars_get(firstime=False, *args__get_simple_var, **kw__get_simple_var)
-            
+
     def _init_vars_get(self, firstime=False, *args__get_simple_var, **kw__get_simple_var):
         '''get vars for _init_vars.'''
         varlist = ['r'] if self.fast else self.simple_vars
@@ -458,18 +461,18 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             try:
                 # try to get var via _get_simple_var.
                 self.variables[var] = self._get_simple_var(var,
-                    *args__get_simple_var, **kw__get_simple_var)
+                                                           *args__get_simple_var, **kw__get_simple_var)
             except Exception as error:
                 # if an error occurs, then...
-                if var=='r' and firstime:
+                if var == 'r' and firstime:
                     # RAISE THE ERROR
-                    ## Many methods depend on self.r being set. So if we can't get it, the code needs to crash.
+                    # Many methods depend on self.r being set. So if we can't get it, the code needs to crash.
                     raise
                 elif isinstance(error, ValueError) and (self.mf_ispecies < 0 or self.mf_ilevel < 0):
                     # SILENTLY HIDE THE ERROR.
-                    ## We assume it came from doing something like get_var('r', mf_ispecies=-1),
-                    ##  which is is _supposed_ to fail. We hope it came from that, at least....
-                    ## To be cautious / help debugging, we will store any such errors in self._hidden_errors.
+                    # We assume it came from doing something like get_var('r', mf_ispecies=-1),
+                    # which is is _supposed_ to fail. We hope it came from that, at least....
+                    # To be cautious / help debugging, we will store any such errors in self._hidden_errors.
                     if not hasattr(self, '_hidden_errors'):
                         self._hidden_errors = []
                     if not hasattr(self, '_hidden_errors_max_len'):
@@ -481,30 +484,30 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                         del self._hidden_errors[0]
                 else:
                     # MAKE A WARNING but don't crash the code.
-                    ## Note: warnings with the same exact contents will only appear once per session, by default.
-                    ## You can change this behavior via, e.g.: import warnings; warnings.simplefilter('always')
+                    # Note: warnings with the same exact contents will only appear once per session, by default.
+                    # You can change this behavior via, e.g.: import warnings; warnings.simplefilter('always')
                     errmsg = error if (self.verbose or firstime) else type(error).__name__
                     warnings.warn("init_vars failed to read variable '{}' due to: {}".format(var, errmsg))
             else:
                 # if there was no error, then set self.var to the result.
-                ## also set self.variables['metadata'] to self._metadata.
-                ## this ensures we only pull data from self.variables when
-                ## it is the correct snapshot, ifluid, and jfluid.
+                # also set self.variables['metadata'] to self._metadata.
+                # this ensures we only pull data from self.variables when
+                # it is the correct snapshot, ifluid, and jfluid.
                 setattr(self, var, self.variables[var])
                 self.variables['metadata'] = self._metadata()
 
         rdt = self.r.dtype
         if self.stagger_kind == 'cstagger':
-            if (self.nz>1):
+            if (self.nz > 1):
                 cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
-                                  self.zdn.astype(rdt), self.dzidzup.astype(rdt),
-                                  self.dzidzdn.astype(rdt))
+                                      self.zdn.astype(rdt), self.dzidzup.astype(rdt),
+                                      self.dzidzdn.astype(rdt))
                 self.cstagger_exists = True   # we can use cstagger methods!
             else:
                 self.cstagger_exists = False
                 #cstagger.init_stagger_mz1(self.nz, self.dx, self.dy, self.z.astype(rdt))
-                #self.cstagger_exists = True  # we must avoid using cstagger methods.
-        else: 
+                # self.cstagger_exists = True  # we must avoid using cstagger methods.
+        else:
             self.cstagger_exists = True
 
     ## INTROSPECTION ##
@@ -521,7 +524,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # METADATA_ATTRS is the list of all the attrs of self which may affect the output of get_var.
         #   we only read from cache if ALL these attrs agree with those associated to the cached value.
         METADATA_ATTRS = ['ifluid', 'jfluid', 'snap', 'iix', 'iiy', 'iiz', 'match_type', 'panic',
-                         'do_stagger', 'stagger_kind', '_mesh_location_tracking', 'read_mode']
+                          'do_stagger', 'stagger_kind', '_mesh_location_tracking', 'read_mode']
         if with_nfluid < 2:
             del METADATA_ATTRS[1]  # jfluid
         if with_nfluid < 1:
@@ -532,7 +535,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if result['snap'] is not none:
             if len(np.shape(result['snap'])) > 0:
                 result['snaps'] = result['snap']              # snaps is the array of snaps
-                result['snap'] = result['snap'][self.snapInd] # snap is the single snap
+                result['snap'] = result['snap'][self.snapInd]  # snap is the single snap
         return result
 
     def quick_look(self):
@@ -542,7 +545,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         snaps = x.get('snaps', None)
         if snaps is not None:
             result += ', snaps={}'.format('<list of {} items from min={} to max={}>'.format(
-                                        np.size(snaps), np.min(snaps), np.max(snaps)))
+                np.size(snaps), np.min(snaps), np.max(snaps)))
         return result
 
     def __repr__(self):
@@ -581,12 +584,12 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             if None not in (SL1, SL2):
                 if not self.fluids_equal(SL1, SL2):
                     return False
-            #else: fluid is missing from m1 and/or m2; at least one of the metadata doesn't care about fluid.
+            # else: fluid is missing from m1 and/or m2; at least one of the metadata doesn't care about fluid.
         # << if we reached this line, then we know ifluid and jfluid "match" between alt and self.
         return file_memory._dict_equals(m1, m2, ignore_keys=['ifluid', 'jfluid'])
 
-    ## MATCH TYPE ##  # (MATCH_AUX --> match simulation values; MATCH_PHYSICS --> match physical values)
-    @property 
+    # MATCH TYPE ##  # (MATCH_AUX --> match simulation values; MATCH_PHYSICS --> match physical values)
+    @property
     def match_type(self):
         '''whether to match aux or physics. see self.match_aux and self.match_physics.'''
         return getattr(self, '_match_type', MATCH_TYPE_DEFAULT)
@@ -619,14 +622,14 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         val = load_fromfile_quantities(self, var, panic=panic, save_if_composite=False)
         if val is None:
             val = load_quantities(self, var, PLASMA_QUANT='',
-                    CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
-                    IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
-                    DEBYE_LN_QUANT='', CROSTAB_QUANT='',
-                    COULOMB_COL_QUANT='', AMB_QUANT='')
+                                  CYCL_RES='', COLFRE_QUANT='', COLFRI_QUANT='',
+                                  IONP_QUANT='', EOSTAB_QUANT='', TAU_QUANT='',
+                                  DEBYE_LN_QUANT='', CROSTAB_QUANT='',
+                                  COULOMB_COL_QUANT='', AMB_QUANT='')
         if val is None:
-            val = load_mf_quantities(self,var)
+            val = load_mf_quantities(self, var)
         if val is None:
-            val = load_arithmetic_quantities(self,var)
+            val = load_arithmetic_quantities(self, var)
         return val
 
     @tools.maintain_attrs('match_type', 'ifluid', 'jfluid')
@@ -642,7 +645,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     def get_var(self, var, snap=None, iix=None, iiy=None, iiz=None,
                 mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                ifluid=None, jfluid=None, panic=False, 
+                ifluid=None, jfluid=None, panic=False,
                 match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
                 read_mode=None, printing_stats=None,
                 *args, **kwargs):
@@ -695,7 +698,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             jS, jL - alias for jfluid[0], jfluid[1]
         extra **kwargs are passed to NOWHERE.
         extra *args are passed to NOWHERE.
-        """     
+        """
         kw__preprocess = dict(snap=snap, iix=iix, iiy=iiy, iiz=iiz,
                               mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel,
                               mf_jspecies=mf_jspecies, mf_jlevel=mf_jlevel,
@@ -718,10 +721,10 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         return val
 
     def _get_var_preprocess(self, var, snap=None, iix=None, iiy=None, iiz=None,
-                mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
-                ifluid=None, jfluid=None, panic=False, internal=False,
-                match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
-                read_mode=None, **kw__fluids):
+                            mf_ispecies=None, mf_ilevel=None, mf_jspecies=None, mf_jlevel=None,
+                            ifluid=None, jfluid=None, panic=False, internal=False,
+                            match_type=None, check_cache=True, cache=False, cache_with_nfluid=None,
+                            read_mode=None, **kw__fluids):
         '''preprocessing for get_var.
         returns ((dict of kwargs to pass to _load_quantity),
                  (dict of kwargs to pass to _get_var_postprocess))
@@ -731,9 +734,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         if var in AXES:
             return getattr(self, var)
-        
-        if var in self.varn.keys(): 
-            var=self.varn[var]
+
+        if var in self.varn.keys():
+            var = self.varn[var]
 
         if match_type is not None:
             self.match_type = match_type
@@ -750,12 +753,12 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if snap is not None:
             if not np.array_equal(snap, self.snap):
                 self.set_snap(snap)
-        self.panic=panic
+        self.panic = panic
 
         # set iix, iiy, iiz appropriately
         slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
         original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
-                           for slicename, iix in slices_names_and_vals]
+                          for slicename, iix in slices_names_and_vals]
         self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=internal)
 
         # set caching kwargs appropriately (see file_memory.with_caching() for details.)
@@ -763,126 +766,118 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # setup and return result.
         kw__load_quantity = dict(panic=panic, **kw__caching)
-        kw__postprocess = dict(original_slice = original_slice)
+        kw__postprocess = dict(original_slice=original_slice)
         return (kw__load_quantity, kw__postprocess)
-    
-    
-    
+
     def simple_trans2comm(self, varname, snap=None, mf_ispecies=None, mf_ilevel=None, *args, **kwargs):
         ''' Simple form of trans2com, can select species and ionized level'''
-        
-        self.trans2commaxes() 
-        
+
+        self.trans2commaxes()
+
         self.sel_units = 'cgs'
 
         # Trying cgs
 
         sign = 1.0
-        if varname[-1] in ['x','y','z']: 
-            
+        if varname[-1] in ['x', 'y', 'z']:
+
             varname = varname+'c'
-            if varname[-2] in ['y','z']: 
-                sign = -1.0 
-        
-        var = self.get_var(varname,snap=snap, mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, *args, **kwargs)
+            if varname[-2] in ['y', 'z']:
+                sign = -1.0
+
+        var = self.get_var(varname, snap=snap, mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, *args, **kwargs)
         var = sign * var
 
-        var = var[...,::-1].copy()
+        var = var[..., ::-1].copy()
 
         return var
-    
+
     def total_trans2comm(self, varname, snap=None, *args, **kwargs):
         ''' Trans2comm that sums the selected variable over all species and levels.
             For variables that do not change through species simple_trans2comm is used
             with the default specie. '''
 
-        
-        if varname in self.varn.keys(): 
-            varname=self.varn[varname]
-        
-        # # # # # Helping dictionaries # # # # # 
-        
+        if varname in self.varn.keys():
+            varname = self.varn[varname]
+
+        # # # # # Helping dictionaries # # # # #
+
         # Electron variables
-        e_variables = { 'r': 're', 'ux':'uex', 'uy':'uey', 'uz':'uez', 'tg':'etg', 'px':'pex', 'py':'pey', 'pz':'pez' }
-        
+        e_variables = {'r': 're', 'ux': 'uex', 'uy': 'uey', 'uz': 'uez', 'tg': 'etg', 'px': 'pex', 'py': 'pey', 'pz': 'pez'}
+
         # Instead of using ux or similar, uix with the specific fluid is used
-        i_variables = { 'ux':'uix', 'uy':'uiy','uz':'uiz', 'px':'pix', 'py':'piy', 'pz':'piz' }
-        
-        
+        i_variables = {'ux': 'uix', 'uy': 'uiy', 'uz': 'uiz', 'px': 'pix', 'py': 'piy', 'pz': 'piz'}
+
         # Different variables add in different ways
-        
-        # # # # # Density # # # # # 
+
+        # # # # # Density # # # # #
         # Since it is the same volume, density just adds
         if varname == 'r':
-            var = self.simple_trans2comm( e_variables[ varname ], snap, *args, **kwargs)
+            var = self.simple_trans2comm(e_variables[varname], snap, *args, **kwargs)
 
             for fluid in self.fluids.SL:
                 var += self.simple_trans2comm(varname, snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
 
             return var
-        
-        # # # # # Momentum # # # # # 
+
+        # # # # # Momentum # # # # #
         # Momentum just adds.
         if varname in ['px', 'py', 'pz', 'pix', 'piy', 'piz']:
             # e variables are giving problems for some reason, the next line could be removed if necesary
-            var = self.simple_trans2comm(  e_variables[ varname ] , snap, *args, **kwargs)
+            var = self.simple_trans2comm(e_variables[varname], snap, *args, **kwargs)
 
             for fluid in self.fluids.SL:
-                var += self.simple_trans2comm( i_variables[ varname ], snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
+                var += self.simple_trans2comm(i_variables[varname], snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
 
             return var
-        
+
         # # # # # Velocity # # # # #
         # Velocity depends on the density and the momentum of each fluid
-        # Ux = Px/rho 
+        # Ux = Px/rho
         # trying recursivity for rho
         if varname in ['ux', 'uy', 'uz', 'uix', 'uiy', 'uiz']:
             axis = varname[-1]
-            
+
             # px = sum_j rho_j*ux_j
-            
+
             # e contribution to velocity, could be removed
-            var1 = self.simple_trans2comm( e_variables['r'], snap, *args, **kwargs) * self.simple_trans2comm( e_variables['p'+axis], snap, *args, **kwargs)
+            var1 = self.simple_trans2comm(e_variables['r'], snap, *args, **kwargs) * self.simple_trans2comm(e_variables['p'+axis], snap, *args, **kwargs)
 
             for fluid in self.fluids.SL:
                 specie_rho = self.simple_trans2comm('r', snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
-                specie_pi  = self.simple_trans2comm( i_variables['p'+axis], snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
-                var1 +=  specie_rho*specie_pi
-                
+                specie_pi = self.simple_trans2comm(i_variables['p'+axis], snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
+                var1 += specie_rho*specie_pi
+
             # rho, recursive
-            var2 = self.total_trans2comm( 'r', snap=None, *args, **kwargs)
-            
+            var2 = self.total_trans2comm('r', snap=None, *args, **kwargs)
+
             return var1/var2
-        
+
         # # # # # Temperature # # # # #
         # Temperature depends on density, mass and temperature of each fluid
         # T_total = [ sum_j (rho_j/m_j)*tg_j ]/[ sum_j (rho_j/m_j) ]
         #         = alpha/beta
-        
+
         if varname in ['tg', 'temperature']:
-            
-            n_e = self.simple_trans2comm('er', snap, *args, **kwargs)*self.uni.u_r/self.get_mass( -1, units='cgs' )
+
+            n_e = self.simple_trans2comm('er', snap, *args, **kwargs)*self.uni.u_r/self.get_mass(-1, units='cgs')
             tgi_e = self.simple_trans2comm('etg', snap, *args, **kwargs)
-            
+
             alpha = n_e * tgi_e
-            beta  = n_e
-            
+            beta = n_e
+
             for fluid in self.fluids.SL:
-                n = self.simple_trans2comm('r', snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)*self.uni.u_r/self.get_mass( (fluid[0], fluid[1]), units='cgs' )
+                n = self.simple_trans2comm('r', snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)*self.uni.u_r/self.get_mass((fluid[0], fluid[1]), units='cgs')
                 tgi = self.simple_trans2comm('tg', snap, mf_ispecies=fluid[0], mf_ilevel=fluid[1], *args, **kwargs)
-                
+
                 alpha += n*tgi
-                beta  += n
-            
+                beta += n
+
             return alpha/beta
 
-            
         # # # # # All other variables # # # # #
         # For variables that do not deppend on the specie
         return self.simple_trans2comm(varname, snap, *args, **kwargs)
-    
-    
-
 
     @document_vars.quant_tracking_simple('SIMPLE_VARS')
     def _get_simple_var(self, var, order='F', mode='r', panic=False, *args, **kwargs):
@@ -916,7 +911,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             Requested variable.
         """
         # handle documentation for simple_vars
-        ## set documentation for vardict, if var == ''.
+        # set documentation for vardict, if var == ''.
         if var == '':
             _simple_vars_msg = ('Quantities which are stored by the simulation. These are '
                                 'loaded as numpy memmaps by reading data files directly.')
@@ -925,12 +920,12 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             #    However, that might not be viable, depending on when self.simple_vars is assigned
             for x in AXES:
                 docvar('b'+x, x+'-component of magnetic field [simu. units]',
-                              nfluid=0, uni=U_TUPLE(UNI.b, UsymD(usi='T', ucgs='G')))
+                       nfluid=0, uni=U_TUPLE(UNI.b, UsymD(usi='T', ucgs='G')))
             docvar('r', 'mass density of ifluid [simu. units]', nfluid=1, uni=UNI_rho)
             for x in AXES:
                 docvar('p'+x, x+'-component of momentum density of ifluid [simu. units]',
-                              nfluid=1, uni=UNI_speed * UNI_rho)
-            units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  #ucgs_name= ???
+                       nfluid=1, uni=UNI_speed * UNI_rho)
+            units_e = dict(uni_f=UNI.e, usi_name=Usym('J') / Usym('m')**3)  # ucgs_name= ???
             docvar('e', 'energy density of ifluid [simu. units]. Use -1 for electrons.',
                         nfluid=1, **units_e)
             return None
@@ -1020,7 +1015,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         elif currSnap == 0:   # reading snap0
             _reading_scr = False
             currStr = ''
-        else: #currSnap < 0   # reading .scr
+        else:  # currSnap < 0   # reading .scr
             _reading_scr = True
             currStr = ''
 
@@ -1029,61 +1024,61 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         iL = str(self.mf_ilevel).zfill(2)     # ilevel as str.   min 2 digits. (E.g. 14 --> '14')
         iSL = dict(iS=iS, iL=iL)
 
-        jdx=0 # counts number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
+        jdx = 0  # counts number of fluids with iSL < jSL.  ( (iS < jS) OR ((iS == jS) AND (iL < jL)) )
 
         # -------- figure out file name and idx (used to find offset in file). --------- #
         if os.path.exists(self.file_root_with_io_ext):
             # in this case, we are reading an ebysus-like snapshot.
             _reading_ebysuslike_snap = True
-            
+
             # check if var is a simple var from snaps.
             _reading_snap_not_aux = True       # whether we are reading '.snap' (not '.aux')
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
                     var in ['bx', 'by', 'bz']):  # magnetic field, or a fluid-specific mhd simple variable)
-                idx      = self.mhdvars.index(var)
+                idx = self.mhdvars.index(var)
                 filename = os.path.join('mf_common', self.mf_common_file)
             elif var in self.snaprvars and self.mf_ispecies > 0:  # mass density (for non-electron fluid)
-                idx      = self.snaprvars.index(var)
+                idx = self.snaprvars.index(var)
                 filename = os.path.join('mf_{iS:}_{iL:}', 'mfr', self.mfr_file).format(**iSL)
             elif var in self.snappvars and self.mf_ispecies > 0:  # momentum density (for non-electron fluid)
-                idx      = self.snappvars.index(var)
+                idx = self.snappvars.index(var)
                 filename = os.path.join('mf_{iS:}_{iL:}', 'mfp', self.mfp_file).format(**iSL)
             elif var in self.snapevars and self.mf_ispecies > 0:  # energy density (for non-electron fluid)
-                idx      = self.snapevars.index(var)
+                idx = self.snapevars.index(var)
                 filename = os.path.join('mf_{iS:}_{iL:}', 'mfe', self.mfe_file).format(**iSL)
             elif var in self.snapevars and self.mf_ispecies < 0:  # energy density (for electrons)
-                idx      = self.snapevars.index(var)
+                idx = self.snapevars.index(var)
                 filename = os.path.join('mf_e', self.mf_e_file)
-            else: # var is not a simple var from snaps.
+            else:  # var is not a simple var from snaps.
                 # check if var is from aux.
                 _reading_snap_not_aux = False  # we are reading '.aux' (not '.snap')
                 if var in self.auxvars:    # global auxvars
-                    idx      = self.auxvars.index(var)
+                    idx = self.auxvars.index(var)
                     filename = os.path.join('mf_common', self.aux_file)
                 elif var in self.varsmf:   # ??
-                    idx      = self.varsmf.index(var)
+                    idx = self.varsmf.index(var)
                     filename = os.path.join('mf_{iS:}_{iL:}', 'mfa', self.mf_file).format(**iSL)
                 elif var in self.varsmfr:  # ??
-                    idx      = self.varsmfr.index(var)
+                    idx = self.varsmfr.index(var)
                     filename = os.path.join('mf_{iS:}_{iL:}', 'mfr',  self.mfr_file).format(**iSL)
                 elif var in self.varsmfp:  # ??
-                    idx      = self.varsmfp.index(var)
+                    idx = self.varsmfp.index(var)
                     filename = os.path.join('mf_{iS:}_{iL:}', 'mfp',  self.mfp_file).format(**iSL)
                 elif var in self.varsmfe:  # ??
-                    idx      = self.varsmfe.index(var)
+                    idx = self.varsmfe.index(var)
                     filename = os.path.join('mf_{iS:}_{iL:}', 'mfe',  self.mfe_file).format(**iSL)
                 elif var in self.varsmfc:  # ??
-                    idx      = self.varsmfc.index(var)
+                    idx = self.varsmfc.index(var)
                     filename = os.path.join('mf_{iS:}_{iL:}', 'mfc',  self.mfc_file).format(**iSL)
                 elif var in self.varsmm:   # two-fluid auxvars, e.g. mm_cross.
-                    idx      = self.varsmm.index(var)
+                    idx = self.varsmm.index(var)
                     filename = os.path.join('mf_{iS:}_{iL:}', 'mm',  self.mm_file).format(**iSL)
                     # calculate important details for data's offset in file.
                     mf_arr_size = self.mf_total_nlevel
-                    for ispecies in range(1,self.mf_nspecies+1):
-                        nlevels=self.att[ispecies].params.nlevel
-                        for ilevel in range(1,nlevels+1):
-                            if (ispecies < self.mf_jspecies): 
+                    for ispecies in range(1, self.mf_nspecies+1):
+                        nlevels = self.att[ispecies].params.nlevel
+                        for ilevel in range(1, nlevels+1):
+                            if (ispecies < self.mf_jspecies):
                                 jdx += 1
                             elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
                                 jdx += 1
@@ -1098,46 +1093,46 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             _reading_snap_not_aux = True       # whether we are reading '.snap' (not '.aux')
             if (var in self.mhdvars and self.mf_ispecies > 0) or (
                     var in ['bx', 'by', 'bz']):   # magnetic field, or a fluid-specific mhd simple variable)
-                idx      = self.mhdvars.index(var)
+                idx = self.mhdvars.index(var)
                 filename = self.mf_common_file
             elif var in self.snapvars and self.mf_ispecies > 0:  # snapvars
-                idx      = self.snapvars.index(var)
+                idx = self.snapvars.index(var)
                 filename = self.mf_file.format(**iSL)
-            elif var in self.snapevars and self.mf_ispecies > 0: # snapevars (non-electrons) (??)
-                idx      = self.snapevars.index(var)
+            elif var in self.snapevars and self.mf_ispecies > 0:  # snapevars (non-electrons) (??)
+                idx = self.snapevars.index(var)
                 filename = self.mfe_file.format(**iSL)
-            elif var in self.snapevars and self.mf_ispecies < 0: # snapevars (electrons) (??)
-                idx      = self.snapevars.index(var)
+            elif var in self.snapevars and self.mf_ispecies < 0:  # snapevars (electrons) (??)
+                idx = self.snapevars.index(var)
                 filename = self.mf_e_file
-            else: # var is not a simple var from snaps.
+            else:  # var is not a simple var from snaps.
                 # check if var is from aux.
                 _reading_snap_not_aux = False  # we are reading '.aux' (not '.snap')
                 if var in self.auxvars:    # global auxvars
-                    idx      = self.auxvars.index(var)
+                    idx = self.auxvars.index(var)
                     filename = self.aux_file
                 elif var in self.varsmf:   # ??
-                    idx      = self.varsmf.index(var)
+                    idx = self.varsmf.index(var)
                     filename = self.mf_file.format(**iSL)
                 elif var in self.varsmfr:  # ??
-                    idx      = self.varsmfr.index(var)
+                    idx = self.varsmfr.index(var)
                     filename = self.mfr_file.format(**iSL)
                 elif var in self.varsmfp:  # ??
-                    idx      = self.varsmfp.index(var)
+                    idx = self.varsmfp.index(var)
                     filename = self.mfp_file.format(**iSL)
                 elif var in self.varsmfe:  # ??
-                    idx      = self.varsmfe.index(var)
+                    idx = self.varsmfe.index(var)
                     filename = self.mfe_file.format(**iSL)
                 elif var in self.varsmfc:  # ??
-                    idx      = self.varsmfc.index(var)
+                    idx = self.varsmfc.index(var)
                     filename = self.mfc_file.format(**iSL)
                 elif var in self.varsmm:   # two-fluid auxvars, e.g. mm_cross. (??)
-                    idx      = self.varsmm.index(var)
+                    idx = self.varsmm.index(var)
                     filename = self.mm_file.format(**iSL)
                     # calculate important details for data's offset in file.
                     mf_arr_size = self.mf_total_nlevel
-                    for ispecies in range(1,self.mf_nspecies+1):
-                        nlevels=self.att[ispecies].params.nlevel
-                        for ilevel in range(1,nlevels+1):
+                    for ispecies in range(1, self.mf_nspecies+1):
+                        nlevels = self.att[ispecies].params.nlevel
+                        for ilevel in range(1, nlevels+1):
                             if (ispecies < self.mf_jspecies):
                                 jdx += 1
                             elif ((ispecies == self.mf_jspecies) and (ilevel < self.mf_jlevel)):
@@ -1153,9 +1148,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if panic:
             _suffix_panic = '.panic' if _reading_snap_not_aux else '.aux.panic'
             filename = filename + _suffix_panic
-        else: 
+        else:
             _suffix_dotsnap = '.snap' if _reading_snap_not_aux else '.aux'
-            _suffix_dotscr  = '.scr'  if _reading_scr else ''
+            _suffix_dotscr = '.scr' if _reading_scr else ''
             filename = filename + currStr + _suffix_dotsnap + _suffix_dotscr
 
         if _meta_as_index:
@@ -1179,9 +1174,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # -------- use filename and offset details to pick appropriate kwargs for numpy memmap --------- #
 
         # calculate info which numpy needs to read file as memmap.
-        dsize  = np.dtype(self.dtype).itemsize
+        dsize = np.dtype(self.dtype).itemsize
         offset = self.nxb * self.nyb * self.nzb * dsize * (idx * mf_arr_size + jdx)
-        shape  = (self.nxb, self.nyb, self.nzb)
+        shape = (self.nxb, self.nyb, self.nzb)
         obj = self if (self.N_memmap != 0) else None    # for memmap memory management; popped before np.memmap(**kw).
 
         # kwargs which will be passed to get_numpy_memmap.
@@ -1190,14 +1185,14 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     def get_var_if_in_aux(self, var, *args__get_var, **kw__get_var):
         """ get_var but only if it appears in aux (i.e. self.params['aux'][self.snapInd])
-        
+
         if var not in aux, return None.
         *args and **kwargs go to get_var.
         """
         if var in self.params['aux'][self.snapInd].split():
             return self.get_var(var, *args__get_var, **kw__get_var)
         else:
-            return None  
+            return None
 
     ## COMPRESSION ALGORITHMS ##
     def compress(self, mode='zc', smash_mode=None, warn=True, kw_smash=dict(), skip_existing=False, **kwargs):
@@ -1229,11 +1224,11 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         returns name of created folder.
         '''
-        assert (smash_mode is None) or (not skip_existing), "smash_mode and skip_existing are incompatible."  # for safety reasons. 
+        assert (smash_mode is None) or (not skip_existing), "smash_mode and skip_existing are incompatible."  # for safety reasons.
         mode = mode.lower()
         try:    # put the compression algorithms in a try..except block to make a warning if error is encountered.
             if mode == 'zc':
-                result   = self._zc_compress(skip_existing=skip_existing, **kwargs)
+                result = self._zc_compress(skip_existing=skip_existing, **kwargs)
             else:
                 raise NotImplementedError(f"EbysusData.compress(mode={repr(mode)})")
         except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
@@ -1274,7 +1269,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         try:
             if mode == 'zc':
                 ORIGINAL = f"{self.get_param('snapname')}.zc"
-                result   = self._zc_decompress(**kwargs)
+                result = self._zc_decompress(**kwargs)
             else:
                 raise NotImplementedError(f"EbysusData.decompress(mode={repr(mode)})")
         except:   # we specifically want to catch ALL errors here, even BaseException like KeyboardInterrupt.
@@ -1300,10 +1295,10 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         '''
         # bookkeeping - parameters
         SNAPNAME = self.get_param('snapname')
-        SHAPE    = self.shape        # (nx, ny, nz). reshape the whole file to shape (nx, ny, nz, -1).
-        CHUNKS   = (*(None for dim in self.shape), 1)   # (None, None, None, 1).     "1 chunk per array for each var".
-        ORDER    = 'F'        # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
-        DTYPE    = '<f4'
+        SHAPE = self.shape        # (nx, ny, nz). reshape the whole file to shape (nx, ny, nz, -1).
+        CHUNKS = (*(None for dim in self.shape), 1)   # (None, None, None, 1).     "1 chunk per array for each var".
+        ORDER = 'F'        # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
+        DTYPE = '<f4'
 
         # iterator through existing files
         def snapfiles_iter(makedirs=False):
@@ -1344,19 +1339,20 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # the actual compression happens in this loop.
         file_str_len = 0
-        original_bytes_total   = 0
+        original_bytes_total = 0
         compressed_bytes_total = 0
         for file_n, (src, dst) in enumerate(snapfiles_iter(makedirs=True)):
             z = save_filebinary_to_filezarr(src, dst, shape=SHAPE, dtype=DTYPE, order=ORDER, chunks=CHUNKS, **kw__zarr)
-            original_bytes_total   += z.nbytes
+            original_bytes_total += z.nbytes
             compressed_bytes_total += z.nbytes_stored
             # printing updates
-            if verbose: file_str_len = max(file_str_len, len(dst))
+            if verbose:
+                file_str_len = max(file_str_len, len(dst))
             print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
 
-        print_if_verbose('_zc_compress complete!'  + \
-                         f' Compressed {tools.pretty_nbytes(original_bytes_total)}' + \
-                         f' into {tools.pretty_nbytes(compressed_bytes_total)}' + \
+        print_if_verbose('_zc_compress complete!' +
+                         f' Compressed {tools.pretty_nbytes(original_bytes_total)}' +
+                         f' into {tools.pretty_nbytes(compressed_bytes_total)}' +
                          f' (net compression ratio = {original_bytes_total/(compressed_bytes_total+1e-10):.2f}).',
                          print_time=True, vreq=1, clearline=40+file_str_len)
         return (f'{SNAPNAME}.zc', original_bytes_total, compressed_bytes_total)
@@ -1373,14 +1369,14 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
         # bookkeeping - parameters
         SNAPNAME = self.get_param('snapname')
-        ORDER    = 'F'    # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
+        ORDER = 'F'    # data order. 'F' for 'fortran'. Results are nonsense if the wrong order is used.
 
         # bookeeping - printing updates
         if verbose >= 1:   # calculate total number of files and print progress as fraction.
             nfiles = sum(1 for _, _, files in os.walk(f'{SNAPNAME}.zc') if '.zarray' in files)
             nfstr = len(str(nfiles))
             start_time = time.time()
-        
+
         def print_if_verbose(*args, vreq=1, print_time=True, file_n=None, clearline=0, **kw):
             if verbose < vreq:
                 return   # without printing anything.
@@ -1402,7 +1398,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                 os.makedirs(os.path.dirname(dst), exist_ok=True)   # make dst dir if necessary.
                 save_filezarr_to_filebinary(src, dst, order=ORDER)
                 # printing updates
-                if verbose: file_str_len = max(file_str_len, len(dst))
+                if verbose:
+                    file_str_len = max(file_str_len, len(dst))
                 print_if_verbose(f'{dst}', end='\r', vreq=1, file_n=file_n, clearline=40+file_str_len)
 
         print_if_verbose('_zc_decompress complete!', print_time=True, vreq=1, clearline=40+file_str_len)
@@ -1487,7 +1484,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # table with fluids
         if len(FLUID_VARS) > 0:
             #   get all the values   #
-            SLs  = [SL for SL in self.fluid_SLs() if not SL in SKIP_FLUIDS]
+            SLs = [SL for SL in self.fluid_SLs() if not SL in SKIP_FLUIDS]
             values = {SL: {} for SL in SLs}
             for var in FLUID_VARS:
                 for SL in SLs:
@@ -1536,7 +1533,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         except AttributeError:  # var not found. (search is False)
             raise ValueError(f"var not documented: '{var}'") from None
 
-    def zero_at_meshloc(self, meshloc=[0,0,0], **kw__np_zeros):
+    def zero_at_meshloc(self, meshloc=[0, 0, 0], **kw__np_zeros):
         '''return array of zeros, associated with the provided mesh location.
         if not self.mesh_location_tracking, return self.zero() instead.
         '''
@@ -1591,14 +1588,14 @@ def write_mf_data(rootname, inputs, mfstr, **kw_ifluid):
             warnings.warn(nonfinite_errmsg.format((mf_ispecies, mf_ilevel)))
     # calculate names of directory and saveloc.
     directory = os.path.join(
-                    '{}.io'.format(rootname),
-                    'mf_%02i_%02i' % (mf_ispecies,mf_ilevel),
-                    mfstr
-                )
-    saveloc   = os.path.join(
-                    directory,
-                    '%s_%s_%02i_%02i.snap' % (rootname, mfstr, mf_ispecies, mf_ilevel)
-                )
+        '{}.io'.format(rootname),
+        'mf_%02i_%02i' % (mf_ispecies, mf_ilevel),
+        mfstr
+    )
+    saveloc = os.path.join(
+        directory,
+        '%s_%s_%02i_%02i.snap' % (rootname, mfstr, mf_ispecies, mf_ilevel)
+    )
     # calculate shape for memmap
     shape = (*(inputs[0].shape), len(inputs))   # (nx, ny, nz, (1 or 3))
     # save memmap
@@ -1606,10 +1603,11 @@ def write_mf_data(rootname, inputs, mfstr, **kw_ifluid):
         os.makedirs(directory)
     data = np.memmap(saveloc, dtype='float32', mode='w+', order='f', shape=shape)
     for i, arr in enumerate(inputs):
-        data[...,i] = arr
+        data[..., i] = arr
     data.flush()
 
-def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
+
+def write_mfr(rootname, inputdata, mf_ispecies=None, mf_ilevel=None, **kw_ifluid):
     '''write density. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdata = array of shape (nx, ny, nz)
@@ -1621,7 +1619,8 @@ def write_mfr(rootname,inputdata,mf_ispecies=None,mf_ilevel=None,**kw_ifluid):
     return write_mf_data(rootname, [inputdata], 'mfr',
                          mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, **kw_ifluid)
 
-def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
+
+def write_mfp(rootname, inputdatax, inputdatay, inputdataz, mf_ispecies=None, mf_ilevel=None, **kw_ifluid):
     '''write momentum. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdata = arrays of shape (nx, ny, nz)
@@ -1634,7 +1633,8 @@ def write_mfp(rootname,inputdatax,inputdatay,inputdataz,mf_ispecies=None,mf_ilev
     return write_mf_data(rootname, [inputdatax, inputdatay, inputdataz], 'mfp',
                          mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, **kw_ifluid)
 
-def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,xyz):
+
+def write_mfpxyz(rootname, inputdataxyz, mf_ispecies, mf_ilevel, xyz):
     '''write component of momentum. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdataxyz = array of shape (nx, ny, nz)
@@ -1649,15 +1649,16 @@ def write_mfpxyz(rootname,inputdataxyz,mf_ispecies,mf_ilevel,xyz):
         print('(WWW) species should start with 1')
     if mf_ilevel < 1:
         print('(WWW) levels should start with 1')
-    directory = '%s.io/mf_%02i_%02i/mfp' % (rootname,mf_ispecies,mf_ilevel)
+    directory = '%s.io/mf_%02i_%02i/mfp' % (rootname, mf_ispecies, mf_ilevel)
     nx, ny, nz = inputdataxyz.shape
     if not os.path.exists(directory):
         os.makedirs(directory)
-    data = np.memmap(directory+'/%s_mfp_%02i_%02i.snap' % (rootname,mf_ispecies,mf_ilevel), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
-    data[...,xyz] = inputdataxyz
+    data = np.memmap(directory+'/%s_mfp_%02i_%02i.snap' % (rootname, mf_ispecies, mf_ilevel), dtype='float32', mode='w+', order='f', shape=(nx, ny, nz, 3))
+    data[..., xyz] = inputdataxyz
     data.flush()
 
-def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
+
+def write_mfe(rootname, inputdata, mf_ispecies=None, mf_ilevel=None, **kw_ifluid):
     '''write energy. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdata = array of shape (nx, ny, nz)
@@ -1669,7 +1670,8 @@ def write_mfe(rootname,inputdata,mf_ispecies=None,mf_ilevel=None, **kw_ifluid):
     return write_mf_data(rootname, [inputdata], 'mfe',
                          mf_ispecies=mf_ispecies, mf_ilevel=mf_ilevel, **kw_ifluid)
 
-def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
+
+def write_mf_common(rootname, inputdatax, inputdatay, inputdataz, inputdatae=None):
     '''write common (?? what is this ??). (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdata = arrays of shape (nx, ny, nz)
@@ -1683,19 +1685,20 @@ def write_mf_common(rootname,inputdatax,inputdatay,inputdataz,inputdatae=None):
     if not os.path.exists(directory):
         os.makedirs(directory)
     if np.any(inputdatae) == None:
-        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,3))
-        data[...,0] = inputdatax
-        data[...,1] = inputdatay
-        data[...,2] = inputdataz
+        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f', shape=(nx, ny, nz, 3))
+        data[..., 0] = inputdatax
+        data[..., 1] = inputdatay
+        data[..., 2] = inputdataz
     else:
-        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,4))
-        data[...,0] = inputdatae
-        data[...,1] = inputdatax
-        data[...,2] = inputdatay
-        data[...,3] = inputdataz
+        data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f', shape=(nx, ny, nz, 4))
+        data[..., 0] = inputdatae
+        data[..., 1] = inputdatax
+        data[..., 2] = inputdatay
+        data[..., 3] = inputdataz
     data.flush()
 
-def write_mf_commonxyz(rootname,inputdataxyz,xyz):
+
+def write_mf_commonxyz(rootname, inputdataxyz, xyz):
     '''write common (?? what is this ??). (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdataxyz = array of shape (nx, ny, nz)
@@ -1708,11 +1711,12 @@ def write_mf_commonxyz(rootname,inputdataxyz,xyz):
     nx, ny, nz = inputdataxyz.shape
     if not os.path.exists(directory):
         os.makedirs(directory)
-    data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,4))
-    data[...,xyz] = inputdataxyz
+    data = np.memmap(directory+'/%s_mf_common.snap' % (rootname), dtype='float32', mode='w+', order='f', shape=(nx, ny, nz, 4))
+    data[..., xyz] = inputdataxyz
     data.flush()
 
-def write_mf_e(rootname,inputdata):
+
+def write_mf_e(rootname, inputdata):
     ''' write electron energy. (Useful when using python to make initial snapshot; e.g. in make_mf_snap.py)
     rootname = snapname (should be set equal to the value of parameter 'snapname' in mhd.in)
     inputdata = array of shape (nx, ny, nz)
@@ -1722,9 +1726,10 @@ def write_mf_e(rootname,inputdata):
     nx, ny, nz = inputdata.shape
     if not os.path.exists(directory):
         os.makedirs(directory)
-    data = np.memmap(directory+'/%s_mf_e.snap' % (rootname), dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,1))
-    data[...,0] = inputdata
+    data = np.memmap(directory+'/%s_mf_e.snap' % (rootname), dtype='float32', mode='w+', order='f', shape=(nx, ny, nz, 1))
+    data[..., 0] = inputdata
     data.flush()
+
 
 def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
     '''calculates the fundamental variables, in ebysus units, ready to be written to snapshot.
@@ -1779,35 +1784,37 @@ def calculate_fundamental_writeables(fluids, B, nr, v, tg, tge, uni):
         Units for Outputs and Side Effects are [ebysus units] unless otherwise specified.
     '''
     orig_stack, orig_stack_axis = getattr(fluids, 'stack', None), getattr(fluids, 'stack_axis', None)
-    fluids.stack      = True
+    fluids.stack = True
     fluids.stack_axis = -1
     # global quantities
-    B                = np.asarray(B)/uni.u_b                 # [ebysus units] magnetic field
+    B = np.asarray(B)/uni.u_b                 # [ebysus units] magnetic field
     # fluid (and global) quantities
-    fluids.assign_scalars('nr', (np.asarray(nr) / 1e6) )     # [cm^-3] number density of fluids
-    nre              = np.sum(fluids.nr * fluids.ionization, axis=-1) # [cm^-3] number density of electrons
+    fluids.assign_scalars('nr', (np.asarray(nr) / 1e6))     # [cm^-3] number density of fluids
+    nre = np.sum(fluids.nr * fluids.ionization, axis=-1)  # [cm^-3] number density of electrons
     fluids.assign_scalars('tg', tg)                          # [K] temperature of fluids
-    tge              = tge                                   # [K] temperature of electrons
-    def _energy(ndens, tg): #returns energy density [ebysus units]
-        return (ndens * tg * uni.k_b / (uni.gamma-1)) / uni.u_e   
-    fluids.energy    = _energy(fluids.nr, fluids.tg)         # [ebysus units] energy density of fluids
+    tge = tge                                   # [K] temperature of electrons
+
+    def _energy(ndens, tg):  # returns energy density [ebysus units]
+        return (ndens * tg * uni.k_b / (uni.gamma-1)) / uni.u_e
+    fluids.energy = _energy(fluids.nr, fluids.tg)         # [ebysus units] energy density of fluids
     energy_electrons = _energy(nre, tge)                     # [ebysus units] energy density of electrons
     # fluid quantities
-    fluids.rho       = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
+    fluids.rho = (fluids.nr * fluids.atomic_weight * uni.amu) / uni.u_r  # [ebysus units] mass density of fluids
     fluids.assign_vectors('v', (np.asarray(v) / uni.usi_u))                    # [ebysus units] velocity
     for fluid in fluids:
         fluid_v = fluid.v    # want to get to shape (3, Nx, Ny, Nz), or (3, 1, 1, 1) for broadcasting with rho.
         fluid_v = np.expand_dims(fluid_v, axis=tuple(range(1, 1+4-np.ndim(fluid_v))))   # (if already 4D, does nothing.)
         fluid.p = fluid_v * fluid.rho
-    #fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
+    # fluids.p         = fluids.v * fluids.rho                                   # [ebysus units] momentum density
     for x in AXES:
         setattr(fluids, 'p'+x, fluids.p[dict(x=0, y=1, z=2)[x]])  # sets px, py, pz
     # restore original stack, stack_axis of fluids object.
     if orig_stack is not None:
-        fluids.stack      = orig_stack
+        fluids.stack = orig_stack
     if orig_stack_axis is not None:
         fluids.stack_axis = orig_stack_axis
     return dict(B=B, ee=energy_electrons)
+
 
 def write_fundamentals(rootname, fluids, B, ee, zero=0):
     '''writes fundamental quantities using write funcs (write_mfr, write_mfp, etc).
@@ -1855,7 +1862,7 @@ def write_fundamentals(rootname, fluids, B, ee, zero=0):
     for fluid in fluids:
         write_mfp(rootname, zero+fluid.p[0], zero+fluid.p[1], zero+fluid.p[2], ifluid=fluid.SL)
     ## Fluid Energies ##
-    if len(fluids) > 1: 
+    if len(fluids) > 1:
         for fluid in fluids:
             write_mfe(rootname, zero+fluid.energy, ifluid=fluid.SL)
         ## Electron Energy ##
@@ -1863,53 +1870,55 @@ def write_fundamentals(rootname, fluids, B, ee, zero=0):
 
         ## Magnetic Field ##
         write_mf_common(rootname, zero+B[0], zero+B[1], zero+B[2])
-    else: 
+    else:
         write_mf_common(rootname, zero+B[0], zero+B[1], zero+B[2], fluid.energy)
 
 
-def printi(fdir='./',rootname='',it=1):
+def printi(fdir='./', rootname='', it=1):
     '''?? print data about snapshot i ?? (seems to not work though; SE checked on Mar 2, 2021).'''
-    dd=EbysusData(rootname,fdir=fdir,verbose=False)
-    nspecies=len(dd.mf_tabparam['SPECIES'])
-    for ispecies in range(0,nspecies):
-        aa=at.Atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2],fdir=fdir)
-        nlevels=aa.params.nlevel
-        print('reading %s'%dd.mf_tabparam['SPECIES'][ispecies][2])
-        for ilevel in range(1,nlevels+1):
-            print('ilv = %i'%ilevel)
-            r=dd.get_var('r',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_r']
-            print('dens=%6.2E,%6.2E g/cm3'%(np.min(r),np.max(r)))
-            r=dd.get_var('nr',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) 
-            print('ndens=%6.2E,%6.2E 1/cm3'%(np.min(r),np.max(r)))
-            ux=dd.get_var('ux',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
-            print('ux=%6.2E,%6.2E km/s'%(np.min(ux),np.max(ux)))
-            uy=dd.get_var('uy',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
-            print('uy=%6.2E,%6.2E km/s'%(np.min(uy),np.max(uy)))
-            uz=dd.get_var('uz',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
-            print('uz=%6.2E,%6.2E km/s'%(np.min(uz),np.max(uz)))
-            tg=dd.get_var('mfe_tg',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1)
-            print('tg=%6.2E,%6.2E K'%(np.min(tg),np.max(tg)))
-            ener=dd.get_var('e',it,mf_ilevel=ilevel,mf_ispecies=ispecies+1) * dd.params['u_e']
-            print('e=%6.2E,%6.2E erg'%(np.min(ener),np.max(ener)))
+    dd = EbysusData(rootname, fdir=fdir, verbose=False)
+    nspecies = len(dd.mf_tabparam['SPECIES'])
+    for ispecies in range(0, nspecies):
+        aa = at.Atom_tools(atom_file=dd.mf_tabparam['SPECIES'][ispecies][2], fdir=fdir)
+        nlevels = aa.params.nlevel
+        print('reading %s' % dd.mf_tabparam['SPECIES'][ispecies][2])
+        for ilevel in range(1, nlevels+1):
+            print('ilv = %i' % ilevel)
+            r = dd.get_var('r', it, mf_ilevel=ilevel, mf_ispecies=ispecies+1) * dd.params['u_r']
+            print('dens=%6.2E,%6.2E g/cm3' % (np.min(r), np.max(r)))
+            r = dd.get_var('nr', it, mf_ilevel=ilevel, mf_ispecies=ispecies+1)
+            print('ndens=%6.2E,%6.2E 1/cm3' % (np.min(r), np.max(r)))
+            ux = dd.get_var('ux', it, mf_ilevel=ilevel, mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('ux=%6.2E,%6.2E km/s' % (np.min(ux), np.max(ux)))
+            uy = dd.get_var('uy', it, mf_ilevel=ilevel, mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('uy=%6.2E,%6.2E km/s' % (np.min(uy), np.max(uy)))
+            uz = dd.get_var('uz', it, mf_ilevel=ilevel, mf_ispecies=ispecies+1) * dd.params['u_u'] / 1e5
+            print('uz=%6.2E,%6.2E km/s' % (np.min(uz), np.max(uz)))
+            tg = dd.get_var('mfe_tg', it, mf_ilevel=ilevel, mf_ispecies=ispecies+1)
+            print('tg=%6.2E,%6.2E K' % (np.min(tg), np.max(tg)))
+            ener = dd.get_var('e', it, mf_ilevel=ilevel, mf_ispecies=ispecies+1) * dd.params['u_e']
+            print('e=%6.2E,%6.2E erg' % (np.min(ener), np.max(ener)))
 
-    bx=dd.get_var('bx',it) * dd.params['u_b']
-    print('bx=%6.2E,%6.2E G'%(np.min(bx),np.max(bx)))
-    by=dd.get_var('by',it) * dd.params['u_b']
-    print('by=%6.2E,%6.2E G'%(np.min(by),np.max(by)))
-    bz=dd.get_var('bz',it) * dd.params['u_b']
-    print('bz=%6.2E,%6.2E G'%(np.min(bz),np.max(bz)))
-    va=dd.get_var('va',it) * dd.params['u_u'] / 1e5
-    print('va=%6.2E,%6.2E km/s'%(np.min(va),np.max(va)))
+    bx = dd.get_var('bx', it) * dd.params['u_b']
+    print('bx=%6.2E,%6.2E G' % (np.min(bx), np.max(bx)))
+    by = dd.get_var('by', it) * dd.params['u_b']
+    print('by=%6.2E,%6.2E G' % (np.min(by), np.max(by)))
+    bz = dd.get_var('bz', it) * dd.params['u_b']
+    print('bz=%6.2E,%6.2E G' % (np.min(bz), np.max(bz)))
+    va = dd.get_var('va', it) * dd.params['u_u'] / 1e5
+    print('va=%6.2E,%6.2E km/s' % (np.min(va), np.max(va)))
 
 ###################
 #  READING FILES  #
 ###################
+
 
 @file_memory.manage_memmaps(file_memory.MEMORY_MEMMAP)
 @file_memory.remember_and_recall(file_memory.MEMORY_MEMMAP, ORDERED=True)
 def get_numpy_memmap(filename, **kw__np_memmap):
     '''makes numpy memmap; also remember and recall (i.e. don't re-make memmap for the same file multiple times.)'''
     return np.memmap(filename, **kw__np_memmap)
+
 
 def load_zarr(filename, array_n=None):
     '''reads zarr from file. if array_n is provided, index by [..., array_n].'''
@@ -1923,6 +1932,7 @@ def load_zarr(filename, array_n=None):
     else:
         result = z[..., array_n]
     return result
+
 
 def save_filebinary_to_filezarr(src, dst, shape, dtype='<f4', order='F',
                                 chunks=(None, None, None, 1), **kw__zarr):
@@ -1942,16 +1952,18 @@ def save_filebinary_to_filezarr(src, dst, shape, dtype='<f4', order='F',
     zarr.save(dst, z)
     return z
 
+
 def save_filezarr_to_filebinary(src, dst, order='F'):
     '''converts saved zarr file to file of binary data.
     (creates a new file; does not delete the source file.)
     returns a numpy array of the data from src.
     '''
     arr = load_zarr(src)
-    if order=='F':   # we want to write in fortran order.
+    if order == 'F':   # we want to write in fortran order.
         arr = arr.T    # transposing converts from 'C' to 'F' order.
     arr.tofile(dst)
     return arr
+
 
 @file_memory.remember_and_recall('_memory_mftab')
 def read_mftab_ascii(filename):
@@ -1960,7 +1972,7 @@ def read_mftab_ascii(filename):
     This is most commonly used for reading mf_param_file such as mf_params.in.
     '''
     convert_to_ints = False   # True starting when we hit key=='COLLISIONS_MAP'
-    colstartkeys = ['COLLISIONS_MAP', 'COLISIONS_MAP'] # or another key in colstartkeys.
+    colstartkeys = ['COLLISIONS_MAP', 'COLISIONS_MAP']  # or another key in colstartkeys.
     params = dict()
     # go through the file, add stuff to dictionary
     with open(filename) as fp:
@@ -1986,22 +1998,24 @@ def read_mftab_ascii(filename):
 
     return params
 
+
 read_mf_param_file = read_mftab_ascii   # alias
 
 ####################
 #  LOCATING SNAPS  #
 ####################
 
+
 class SnapfileNotFoundError(FileNotFoundError):
     '''custom error class for reporting snap not found; subclass of FileNotFoundError.'''
-    pass
+
 
 def get_snap_files(snap, snapname=None, read_mode=None, dd=None, include_aux=True):
     '''returns the minimal list of filenames for all files specific to this snap (a number).
     if no data for snap is found, raises SnapfileNotFoundError (subclass of FileNotFoundError).
     Directories containing solely files for this snap will be reported as the directory, not all contents.
     (e.g. for zarray "files", which are directories, the zarray directory will be reported, not all its contents.)
-    
+
     read_mode  : string (e.g. 'io' or 'zc') or None; see EbysusData.read_mode. Defaults to 'io'.
     snapname   : snapshot name, or None.
     dd         : EbysusData object or None. If provided, used to guess snapname & read_mode as necessary.
@@ -2021,13 +2035,14 @@ def get_snap_files(snap, snapname=None, read_mode=None, dd=None, include_aux=Tru
     if not os.path.isdir(snapdir):
         raise SnapfileNotFoundError(repr(snapdir))
     # snapidl (e.g. 'snapname_072.idl')
-    Nstr    = _N_to_snapstr(snap)   
+    Nstr = _N_to_snapstr(snap)
     snapidl = f'{snapname}{Nstr}.idl'
     if not os.path.isfile(snapidl):
         raise SnapfileNotFoundError(repr(snapidl))
     else:
         result.append(snapidl)
     # snapshot data - checking
+
     def _is_snapN_data(name):
         return _is_Nstr_snapfile(Nstr, name, '.snap') or (include_aux and _is_Nstr_snapfile(Nstr, name, '.aux'))
     # looping through files & directories
@@ -2039,7 +2054,7 @@ def get_snap_files(snap, snapname=None, read_mode=None, dd=None, include_aux=Tru
         # check if directories are snapshot data files (e.g. this will be the case for "zarray" storage system, read_mode='zc').
         i = 0
         while i < len(dirnames):
-            dname = dirnames[i]   
+            dname = dirnames[i]
             if dname.endswith(f'.snap') or dname.endswith(f'.aux'):
                 del dirnames[i]  # we don't need to os.walk any further down from a directory ending with '.snap' or '.aux'
                 if _is_snapN_data(dname):
@@ -2048,6 +2063,7 @@ def get_snap_files(snap, snapname=None, read_mode=None, dd=None, include_aux=Tru
                 i += 1
     return result
 
+
 def _is_Nstr_snapfile(Nstr, filename, ext='.snap'):
     '''returns whether filename is a '.snap' file associated with snap indicated by Nstr.
     This is only difficult when Nstr==''; else we just check if filename looks like '{stuff}{Nstr}.snap'.
@@ -2055,25 +2071,25 @@ def _is_Nstr_snapfile(Nstr, filename, ext='.snap'):
     '''
     # pop extension
     if filename.endswith(ext):
-        basename = filename[ : -len(ext)]
+        basename = filename[: -len(ext)]
     else:
         return False   # << proper extension is required, otherwise not a snap file.
     # handle "easy" case (Nstr != '')
     if Nstr != '':
         return basename.endswith(f'{Nstr}')
     # else: Nstr == '', so we need to do a lot more work.
-    ## in particular, we recognize snap 0 only in these cases:
-    ##   case A) 'stuff{C}.ext' with C non-numeric
-    ##   case B) 'stuff{C}_{SS}_{LL}.ext' with C non-numeric, SS numeric, LL numeric
-    ## all other cases are considered to be a snap other than 0, so we ignore them.
+    # in particular, we recognize snap 0 only in these cases:
+    # case A) 'stuff{C}.ext' with C non-numeric
+    # case B) 'stuff{C}_{SS}_{LL}.ext' with C non-numeric, SS numeric, LL numeric
+    # all other cases are considered to be a snap other than 0, so we ignore them.
     if not basename[-1].isdigit():
         return True   # << we are in case A. "no-fluid" case.
     # consider case B:
     stuffC_SS, underscore, LL = basename.rpartition('_')
-    if not (underscore=='_' and LL.isdigit()):
+    if not (underscore == '_' and LL.isdigit()):
         return False
     stuffC, underscore, SS = stuffC_SS.rpartition('_')
-    if not (underscore=='_' and SS.isdigit()):
+    if not (underscore == '_' and SS.isdigit()):
         return False
     if stuffC[-1].isdigit():
         return False
@@ -2099,15 +2115,17 @@ def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
     Otherwise, return an 2D array with result[i] = [AAi, BBi, TTi].
     '''
     x = read_mftab_ascii(mf_param_file)
+
     def levels_ions_neutrals(atomfile):
         '''returns (levels of ions in atomfile, levels of neutrals in atomfile)'''
         fluids = fl.Fluids([atomfile])
         return (fluids.ions().level_no, fluids.neutrals().level_no)
 
     species = {iS: levels_ions_neutrals(file) for (iS, elem, file) in x['SPECIES']}
-    tables  = collections.defaultdict(list)
+    tables = collections.defaultdict(list)
     for (neuS, ionS, ionL, file) in x['CROSS_SECTIONS_TABLES']:
         tables[(neuS, ionS)].append(ionL)   # tables keys (neuS, ionS); vals lists of ionL.
+
     def table_exists(neuS, ionS, ion_levels):
         '''tells whether a table exists between neutralSpecie and ionSpecie,
         at at least one of the levels in ion_levels.
@@ -2118,7 +2136,7 @@ def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
         return False
     coll_keys = []
     for (iS, (ilevels_ion, ilevels_neu)) in species.items():
-        if len(ilevels_ion) == 0: # if there are no i ions,
+        if len(ilevels_ion) == 0:  # if there are no i ions,
             continue   # continue, because no coll_keys start with iS in this case.
         for (jS, (jlevels_ion, jlevels_neu)) in species.items():
             # ion-neutral collisions:
@@ -2145,262 +2163,265 @@ def coll_keys_generate(mf_param_file='mf_params.in', as_str=True):
         result += '\n'.join([fmtstr.format(*collkey_row) for collkey_row in coll_keys])
         return result
 
-def write_idlparamsfile(snapname,mx=1,my=1,mz=1):
+
+def write_idlparamsfile(snapname, mx=1, my=1, mz=1):
     '''Write default .idl file'''
-    default_idl=[
-     '; ************************* From   params ************************* \n',
-     '             mx =         {}                                        \n'.format(mx),
-     '             my =         {}                                        \n'.format(my),
-     '             mz =         {}                                        \n'.format(mz),
-     '             mb =         5                                         \n',
-     '          nstep =        10                                         \n',
-     '     nstepstart =         0                                         \n',
-     '          debug =         0                                         \n',
-     '       time_lim = -1.000E+00                                        \n',
-     '          tstop = -1.00000000E+00                                   \n',
-     'mf_total_nlevel =         5                                         \n',
-     '   mf_electrons =    0                                              \n',
-     '        mf_epf =    1                                               \n',
-     '   mf_nspecies =         2                                          \n',
-     ' mf_param_file = "mf_params.in"                                     \n',
-     '; ************************* From parallel ************************* \n',
-     '    periodic_x =    1                                               \n',
-     '    periodic_y =    1                                               \n',
-     '    periodic_z =    0                                               \n',
-     '          ndim =    3                                               \n',
-     '       reorder =    1                                               \n',
-     '; ************************* From    units ************************* \n',
-     '           u_l =  1.000E+08                                         \n',
-     '           u_t =  1.000E+02                                         \n',
-     '           u_r =  1.000E-07                                         \n',
-     '           u_p =  1.000E+05                                         \n',
-     '           u_u =  1.000E+06                                         \n',
-     '          u_kr =  1.000E-01                                         \n',
-     '          u_ee =  1.000E+12                                         \n',
-     '           u_e =  1.000E+05                                         \n',
-     '          u_te =  1.000E+11                                         \n',
-     '          u_tg =  1.212E+04                                         \n',
-     '           u_B =  1.121E+03                                         \n',
-     '; ************************* From  stagger ************************* \n,'
-     '      meshfile =             "{}.mesh"                     \n'.format(snapname),
-     '            dx =  1.000E+00                                         \n',
-     '            dy =  1.000E+00                                         \n',
-     '            dz =  2.993E-02                                         \n',
-     '; ************************* From timestep ************************* \n',
-     '           Cdt =  0.030                                             \n',
-     '            dt =  1.e-11                                            \n',
-     '             t =  0.0                                               \n',
-     ' timestepdebug =    0                                               \n',
-     '; ************************* From      mhd ************************* \n',
-     '           nu1 =  0.100                                             \n',
-     '           nu2 =  0.300                                             \n',
-     '           nu3 =  0.800                                             \n',
-     '          nu_r =  0.100                                             \n',
-     '        nu_r_z =  9.990E+02                                         \n',
-     '       nu_r_mz =  0.100                                             \n',
-     '         nu_ee =  0.100                                             \n',
-     '       nu_ee_z =  9.990E+02                                         \n',
-     '      nu_ee_mz =  0.100                                             \n',
-     '       nu_e_ee =  0.000                                             \n',
-     '     nu_e_ee_z =  9.990E+02                                         \n',
-     '    nu_e_ee_mz =  0.000                                             \n',
-     '   symmetric_e =    0                                               \n',
-     '   symmetric_b =    0                                               \n',
-     '          grav = -2.740                                             \n',
-     '          eta3 =  3.000E-01                                         \n',
-     '        ca_max =  0.000E+00                                         \n',
-     '      mhddebug =    0                                               \n',
-     '        do_mhd =    1                                               \n',
-     '      mhdclean =        -1                                          \n',
-     '   mhdclean_ub =    0                                               \n',
-     '   mhdclean_lb =    0                                               \n',
-     '  mhdclean_ubx =    0                                               \n',
-     '  mhdclean_lbx =    0                                               \n',
-     '  mhdclean_uby =    0                                               \n',
-     '  mhdclean_lby =    0                                               \n',
-     '    do_e_joule =    1                                               \n',
-     '  do_ion_joule =    1                                               \n',
-     '          nue1 =  0.050                                             \n',
-     '          nue2 =  0.100                                             \n',
-     '          nue3 =  0.050                                             \n',
-     '          nue4 =  0.000                                             \n',
-     '; ************************* From       io ************************* \n',
-     '      one_file =    0                                               \n',
-     '      snapname =                  "{}"                     \n'.format(snapname),
-     '         isnap =         0                                          \n',
-     '  large_memory =    1                                               \n',
-     '         nsnap = 100000000                                          \n',
-     '          nscr =       250                                          \n',
-     '           aux = " nel mfe_tg etg "                                 \n',
-     '        dtsnap =  5.000E-09                                         \n',
-     '        newaux =    0                                               \n',
-     '    rereadpars =   1000000                                          \n',
-     '         dtscr =  1.000E+04                                         \n',
-     '         tsnap =  0.0                                               \n',
-     '          tscr =  0.00000000E+00                                    \n',
-     '   boundarychk =    0                                               \n',
-     '  boundarychky =    0                                               \n',
-     '  boundarychkx =    0                                               \n',          
-     '   print_stats =    0                                               \n',
-     '; ************************* From     math ************************* \n',
-     '         max_r =    5                                               \n',
-     '      smooth_r =    3                                               \n',
-     '   divhc_niter = 1000                                               \n',
-     '     divhc_cfl =  0.400                                             \n',
-     '       divhc_r =  0.180                                             \n',
-     '     divhc_vxr =  0.000                                             \n',
-     '     divhc_vyr =  0.000                                             \n',
-     '     divhc_vzr =  0.950                                             \n',
-     '     divhc_tol =  1.000E-05                                         \n',
-     '; ************************* From   quench ************************* \n',
-     '          qmax =  8.000                                             \n',
-     '; ************************* From      eos ************************* \n',
-     '         gamma =  1.667                                             \n',
-     '      eosdebug =    0                                               \n',
-     '; ************************* From     collisions utils ************* \n',
-     '        do_col =    0                                               \n',
-     '     col_debug =    0                                               \n',
-     '       do_qcol =    1                                               \n',
-     '       do_ecol =    0                                               \n',
-     'col_calc_nu_in =    1                                               \n',
-     'col_const_nu_in = -1.000E+03                                        \n',
-     '   col_cnu_max =  1.000E+03                                         \n',
-     '     col_utiny = -1.000E-05                                         \n',
-     'col_trans_tim0 =  0.000E+00                                         \n',
-     '  col_trans_dt =  1.000E+00                                         \n',
-     'col_trans_ampl =  1.000E-10                                         \n',
-     '     col_tabin = "mf_coltab.in"                                     \n',
-     '; ************************* From          collisions  ************* \n',
-     '    qcol_method = "expl"                                            \n',
-     'col_matrix_norm =    0                                              \n',
-     '; ************************* From              ionrec  ************* \n',
-      '   qri_method = "impl"                                             \n',
-     '; ************************* From   mf_recion (utils)  ************* \n',
-     '     do_recion =    0                                               \n',
-     '  recion_debug =    0                                               \n',
-     '     calc_freq =    1                                               \n',
-     '     three_bdy =    1                                               \n',
-     '    const_fion = -1.000E+00                                         \n',
-     '    const_frec = -1.000E+00                                         \n',
-     '  recion_tabin = "mf_reciontab.in"                                  \n',
-     'recion_modname = "atomic"                                           \n',
-     '; ************************* From     hall ************************* \n',
-     '       do_hall = "false"                                            \n',
-     '    tstep_hall = "ntsv"                                             \n',
-     '     eta_hallo =  1.000E+00                                         \n',
-     '     eta4_hall = [ 0.100,  0.100,  0.100 ]                          \n',
-     'mts_max_n_hall =   10                                               \n',
-     '; ************************* From Bierman  ************************* \n',
-     '    do_battery =    0                                               \n',
-     '       bb_bato =  1.000E+00                                         \n',
-     'bb_extdyn_time = -1.000E+00                                         \n',
-     '     bb_ext_bb =  0.000E+00                                         \n',
-     'bb_debug_battery =    0                                             \n',
-     '       do_qbat =    0                                               \n',
-     '; ************************* From            ohm_ecol  ************* \n',
-     '   do_ohm_ecol =    0                                               \n',
-     '       do_qohm =    1                                               \n',
-     'ec_ohm_ecoll_debug =    0                                           \n',
-     ' ec_calc_nu_en =    1                                               \n',
-     ' ec_calc_nu_ei =    1                                               \n',
-     'ec_const_nu_en = -1.000E+00                                         \n',
-     'ec_const_nu_ei = -1.000E+00                                         \n',
-     '      ec_tabin = "mf_ecoltab.in"                                    \n',
-     'mf_eparam_file = "mf_eparams.in"                                    \n',
-     '; ************************* From  spitzer ************************* \n',
-     '       spitzer = "impl"                                             \n',
-     ' debug_spitzer =    0                                               \n',
-     '  info_spitzer =    0                                               \n',
-     '   spitzer_amp =  0.000                                             \n',
-     '      theta_mg =  0.900                                             \n',
-     '        dtgerr =  1.000E-05                                         \n',
-     '      ntest_mg =         1                                          \n',
-     '          tgb0 =  0.000E+00                                         \n',
-     '          tgb1 =  0.000E+00                                         \n',
-     '        tau_tg =  1.000E+00                                         \n',
-     '   fix_grad_tg =    1                                               \n',
-     '   niter_mg = [   2,    5,    5,    5,   30 ]                       \n',
-     '          bmin =  1.000E-04                                         \n',
-     '       kappaq0 =  0.000E+00                                         \n',
-     '; ************************* From   genrad ************************* \n',
-     '     do_genrad =    1                                               \n',
-     '    genradfile =                  "qthresh.dat"                     \n',
-     '  debug_genrad =    0                                               \n',
-     ' incrad_detail =    0                                               \n',
-     '   incrad_quad =    3                                               \n',
-     '      dtincrad =  1.000E-03                                         \n',
-     '  dtincrad_lya =  1.000E-04                                         \n',
-     '  debug_incrad =    0                                               \n',
-     '; ************************* From         ue_electric  ************* \n',
-     'do_ue_electric =    1                                               \n',
-     'ue_electric_debug =    0                                            \n',
-     'ue_fudge_mass =  1.000E+00                                          \n',
-     '       ue_incr =  0.000                                             \n',
-     '     ue_dt_inc = -1.000E+00                                         \n',
-     '         ue_nu = [ 0.000,  0.000,  0.000,  0.000,  0.000 ]          \n',
-     '      eionsfrz =    1                                               \n',
-     '; ************************* From   bc_lowerx_magnetic ************* \n',
-     '  bctypelowerx = "mcccc"                                            \n',
-     '     bcldebugx =    0                                               \n',
-     '  nextrap_bclx =         1                                          \n',
-     '  nsmooth_bclx =         0                                          \n',
-     'nsmoothbyz_bcl =         0                                          \n',
-     '; ************************* From   bc_upperx_magnetic ************* \n',
-     ' bctypeupperx = "mcccc"                                             \n',
-     '     bcudebugx =    0                                               \n',
-     '  nextrap_bcux =         1                                          \n',
-     '  nsmooth_bcux =         0                                          \n',
-     'nsmoothbyz_bcu =         0                                          \n',
-     '; ************************* From   bc_lowery_magnetic ************* \n',
-     ' bctypelowery = "mcccc"                                             \n',
-     '     bcldebugy =    0                                               \n',
-     '  nextrap_bcly =         1                                          \n',
-     '  nsmooth_bcly =         0                                          \n',
-     'nsmoothbxz_bcl =         0                                          \n',
-     '; ************************* From   bc_uppery_magnetic ************* \n',
-     ' bctypeuppery = "mcccc"                                             \n',
-     '     bcudebugy =    0                                               \n',
-     '  nextrap_bcuy =         1                                          \n',
-     '  nsmooth_bcuy =         0                                          \n',
-     'nsmoothbxz_bcu =         0                                          \n',
-     '; ************************* From   bc_lowerz_magnetic ************* \n',
-     '  bctypelowerz = "mesec"                                            \n',
-     '     bcldebugz =    0                                               \n',
-     '  nextrap_bclz =         1                                          \n',
-     '  nsmooth_bclz =         0                                          \n',
-     'nsmoothbxy_bcl =         0                                          \n',
-     '; ************************* From   bc_upperz_magnetic ************* \n',
-     '  bctypeupperz = "mesec"                                            \n',
-     '     bcudebugz =    0                                               \n',
-     '  nextrap_bcuz =         1                                          \n',
-     '  nsmooth_bcuz =         0                                          \n',
-     'nsmoothbxy_bcu =         0                                          \n'
-          ]
-    out=open('{}.idl'.format(snapname),'w')
+    default_idl = [
+        '; ************************* From   params ************************* \n',
+        '             mx =         {}                                        \n'.format(mx),
+        '             my =         {}                                        \n'.format(my),
+        '             mz =         {}                                        \n'.format(mz),
+        '             mb =         5                                         \n',
+        '          nstep =        10                                         \n',
+        '     nstepstart =         0                                         \n',
+        '          debug =         0                                         \n',
+        '       time_lim = -1.000E+00                                        \n',
+        '          tstop = -1.00000000E+00                                   \n',
+        'mf_total_nlevel =         5                                         \n',
+        '   mf_electrons =    0                                              \n',
+        '        mf_epf =    1                                               \n',
+        '   mf_nspecies =         2                                          \n',
+        ' mf_param_file = "mf_params.in"                                     \n',
+        '; ************************* From parallel ************************* \n',
+        '    periodic_x =    1                                               \n',
+        '    periodic_y =    1                                               \n',
+        '    periodic_z =    0                                               \n',
+        '          ndim =    3                                               \n',
+        '       reorder =    1                                               \n',
+        '; ************************* From    units ************************* \n',
+        '           u_l =  1.000E+08                                         \n',
+        '           u_t =  1.000E+02                                         \n',
+        '           u_r =  1.000E-07                                         \n',
+        '           u_p =  1.000E+05                                         \n',
+        '           u_u =  1.000E+06                                         \n',
+        '          u_kr =  1.000E-01                                         \n',
+        '          u_ee =  1.000E+12                                         \n',
+        '           u_e =  1.000E+05                                         \n',
+        '          u_te =  1.000E+11                                         \n',
+        '          u_tg =  1.212E+04                                         \n',
+        '           u_B =  1.121E+03                                         \n',
+        '; ************************* From  stagger ************************* \n,'
+        '      meshfile =             "{}.mesh"                     \n'.format(snapname),
+        '            dx =  1.000E+00                                         \n',
+        '            dy =  1.000E+00                                         \n',
+        '            dz =  2.993E-02                                         \n',
+        '; ************************* From timestep ************************* \n',
+        '           Cdt =  0.030                                             \n',
+        '            dt =  1.e-11                                            \n',
+        '             t =  0.0                                               \n',
+        ' timestepdebug =    0                                               \n',
+        '; ************************* From      mhd ************************* \n',
+        '           nu1 =  0.100                                             \n',
+        '           nu2 =  0.300                                             \n',
+        '           nu3 =  0.800                                             \n',
+        '          nu_r =  0.100                                             \n',
+        '        nu_r_z =  9.990E+02                                         \n',
+        '       nu_r_mz =  0.100                                             \n',
+        '         nu_ee =  0.100                                             \n',
+        '       nu_ee_z =  9.990E+02                                         \n',
+        '      nu_ee_mz =  0.100                                             \n',
+        '       nu_e_ee =  0.000                                             \n',
+        '     nu_e_ee_z =  9.990E+02                                         \n',
+        '    nu_e_ee_mz =  0.000                                             \n',
+        '   symmetric_e =    0                                               \n',
+        '   symmetric_b =    0                                               \n',
+        '          grav = -2.740                                             \n',
+        '          eta3 =  3.000E-01                                         \n',
+        '        ca_max =  0.000E+00                                         \n',
+        '      mhddebug =    0                                               \n',
+        '        do_mhd =    1                                               \n',
+        '      mhdclean =        -1                                          \n',
+        '   mhdclean_ub =    0                                               \n',
+        '   mhdclean_lb =    0                                               \n',
+        '  mhdclean_ubx =    0                                               \n',
+        '  mhdclean_lbx =    0                                               \n',
+        '  mhdclean_uby =    0                                               \n',
+        '  mhdclean_lby =    0                                               \n',
+        '    do_e_joule =    1                                               \n',
+        '  do_ion_joule =    1                                               \n',
+        '          nue1 =  0.050                                             \n',
+        '          nue2 =  0.100                                             \n',
+        '          nue3 =  0.050                                             \n',
+        '          nue4 =  0.000                                             \n',
+        '; ************************* From       io ************************* \n',
+        '      one_file =    0                                               \n',
+        '      snapname =                  "{}"                     \n'.format(snapname),
+        '         isnap =         0                                          \n',
+        '  large_memory =    1                                               \n',
+        '         nsnap = 100000000                                          \n',
+        '          nscr =       250                                          \n',
+        '           aux = " nel mfe_tg etg "                                 \n',
+        '        dtsnap =  5.000E-09                                         \n',
+        '        newaux =    0                                               \n',
+        '    rereadpars =   1000000                                          \n',
+        '         dtscr =  1.000E+04                                         \n',
+        '         tsnap =  0.0                                               \n',
+        '          tscr =  0.00000000E+00                                    \n',
+        '   boundarychk =    0                                               \n',
+        '  boundarychky =    0                                               \n',
+        '  boundarychkx =    0                                               \n',
+        '   print_stats =    0                                               \n',
+        '; ************************* From     math ************************* \n',
+        '         max_r =    5                                               \n',
+        '      smooth_r =    3                                               \n',
+        '   divhc_niter = 1000                                               \n',
+        '     divhc_cfl =  0.400                                             \n',
+        '       divhc_r =  0.180                                             \n',
+        '     divhc_vxr =  0.000                                             \n',
+        '     divhc_vyr =  0.000                                             \n',
+        '     divhc_vzr =  0.950                                             \n',
+        '     divhc_tol =  1.000E-05                                         \n',
+        '; ************************* From   quench ************************* \n',
+        '          qmax =  8.000                                             \n',
+        '; ************************* From      eos ************************* \n',
+        '         gamma =  1.667                                             \n',
+        '      eosdebug =    0                                               \n',
+        '; ************************* From     collisions utils ************* \n',
+        '        do_col =    0                                               \n',
+        '     col_debug =    0                                               \n',
+        '       do_qcol =    1                                               \n',
+        '       do_ecol =    0                                               \n',
+        'col_calc_nu_in =    1                                               \n',
+        'col_const_nu_in = -1.000E+03                                        \n',
+        '   col_cnu_max =  1.000E+03                                         \n',
+        '     col_utiny = -1.000E-05                                         \n',
+        'col_trans_tim0 =  0.000E+00                                         \n',
+        '  col_trans_dt =  1.000E+00                                         \n',
+        'col_trans_ampl =  1.000E-10                                         \n',
+        '     col_tabin = "mf_coltab.in"                                     \n',
+        '; ************************* From          collisions  ************* \n',
+        '    qcol_method = "expl"                                            \n',
+        'col_matrix_norm =    0                                              \n',
+        '; ************************* From              ionrec  ************* \n',
+        '   qri_method = "impl"                                             \n',
+        '; ************************* From   mf_recion (utils)  ************* \n',
+        '     do_recion =    0                                               \n',
+        '  recion_debug =    0                                               \n',
+        '     calc_freq =    1                                               \n',
+        '     three_bdy =    1                                               \n',
+        '    const_fion = -1.000E+00                                         \n',
+        '    const_frec = -1.000E+00                                         \n',
+        '  recion_tabin = "mf_reciontab.in"                                  \n',
+        'recion_modname = "atomic"                                           \n',
+        '; ************************* From     hall ************************* \n',
+        '       do_hall = "false"                                            \n',
+        '    tstep_hall = "ntsv"                                             \n',
+        '     eta_hallo =  1.000E+00                                         \n',
+        '     eta4_hall = [ 0.100,  0.100,  0.100 ]                          \n',
+        'mts_max_n_hall =   10                                               \n',
+        '; ************************* From Bierman  ************************* \n',
+        '    do_battery =    0                                               \n',
+        '       bb_bato =  1.000E+00                                         \n',
+        'bb_extdyn_time = -1.000E+00                                         \n',
+        '     bb_ext_bb =  0.000E+00                                         \n',
+        'bb_debug_battery =    0                                             \n',
+        '       do_qbat =    0                                               \n',
+        '; ************************* From            ohm_ecol  ************* \n',
+        '   do_ohm_ecol =    0                                               \n',
+        '       do_qohm =    1                                               \n',
+        'ec_ohm_ecoll_debug =    0                                           \n',
+        ' ec_calc_nu_en =    1                                               \n',
+        ' ec_calc_nu_ei =    1                                               \n',
+        'ec_const_nu_en = -1.000E+00                                         \n',
+        'ec_const_nu_ei = -1.000E+00                                         \n',
+        '      ec_tabin = "mf_ecoltab.in"                                    \n',
+        'mf_eparam_file = "mf_eparams.in"                                    \n',
+        '; ************************* From  spitzer ************************* \n',
+        '       spitzer = "impl"                                             \n',
+        ' debug_spitzer =    0                                               \n',
+        '  info_spitzer =    0                                               \n',
+        '   spitzer_amp =  0.000                                             \n',
+        '      theta_mg =  0.900                                             \n',
+        '        dtgerr =  1.000E-05                                         \n',
+        '      ntest_mg =         1                                          \n',
+        '          tgb0 =  0.000E+00                                         \n',
+        '          tgb1 =  0.000E+00                                         \n',
+        '        tau_tg =  1.000E+00                                         \n',
+        '   fix_grad_tg =    1                                               \n',
+        '   niter_mg = [   2,    5,    5,    5,   30 ]                       \n',
+        '          bmin =  1.000E-04                                         \n',
+        '       kappaq0 =  0.000E+00                                         \n',
+        '; ************************* From   genrad ************************* \n',
+        '     do_genrad =    1                                               \n',
+        '    genradfile =                  "qthresh.dat"                     \n',
+        '  debug_genrad =    0                                               \n',
+        ' incrad_detail =    0                                               \n',
+        '   incrad_quad =    3                                               \n',
+        '      dtincrad =  1.000E-03                                         \n',
+        '  dtincrad_lya =  1.000E-04                                         \n',
+        '  debug_incrad =    0                                               \n',
+        '; ************************* From         ue_electric  ************* \n',
+        'do_ue_electric =    1                                               \n',
+        'ue_electric_debug =    0                                            \n',
+        'ue_fudge_mass =  1.000E+00                                          \n',
+        '       ue_incr =  0.000                                             \n',
+        '     ue_dt_inc = -1.000E+00                                         \n',
+        '         ue_nu = [ 0.000,  0.000,  0.000,  0.000,  0.000 ]          \n',
+        '      eionsfrz =    1                                               \n',
+        '; ************************* From   bc_lowerx_magnetic ************* \n',
+        '  bctypelowerx = "mcccc"                                            \n',
+        '     bcldebugx =    0                                               \n',
+        '  nextrap_bclx =         1                                          \n',
+        '  nsmooth_bclx =         0                                          \n',
+        'nsmoothbyz_bcl =         0                                          \n',
+        '; ************************* From   bc_upperx_magnetic ************* \n',
+        ' bctypeupperx = "mcccc"                                             \n',
+        '     bcudebugx =    0                                               \n',
+        '  nextrap_bcux =         1                                          \n',
+        '  nsmooth_bcux =         0                                          \n',
+        'nsmoothbyz_bcu =         0                                          \n',
+        '; ************************* From   bc_lowery_magnetic ************* \n',
+        ' bctypelowery = "mcccc"                                             \n',
+        '     bcldebugy =    0                                               \n',
+        '  nextrap_bcly =         1                                          \n',
+        '  nsmooth_bcly =         0                                          \n',
+        'nsmoothbxz_bcl =         0                                          \n',
+        '; ************************* From   bc_uppery_magnetic ************* \n',
+        ' bctypeuppery = "mcccc"                                             \n',
+        '     bcudebugy =    0                                               \n',
+        '  nextrap_bcuy =         1                                          \n',
+        '  nsmooth_bcuy =         0                                          \n',
+        'nsmoothbxz_bcu =         0                                          \n',
+        '; ************************* From   bc_lowerz_magnetic ************* \n',
+        '  bctypelowerz = "mesec"                                            \n',
+        '     bcldebugz =    0                                               \n',
+        '  nextrap_bclz =         1                                          \n',
+        '  nsmooth_bclz =         0                                          \n',
+        'nsmoothbxy_bcl =         0                                          \n',
+        '; ************************* From   bc_upperz_magnetic ************* \n',
+        '  bctypeupperz = "mesec"                                            \n',
+        '     bcudebugz =    0                                               \n',
+        '  nextrap_bcuz =         1                                          \n',
+        '  nsmooth_bcuz =         0                                          \n',
+        'nsmoothbxy_bcu =         0                                          \n'
+    ]
+    out = open('{}.idl'.format(snapname), 'w')
     out.writelines(default_idl)
     return
-      
-def keyword_update(inoutfile,new_values):
-   ''' Updates a given number of fields with values on a snapname.idl file.
-       These are given in a dictionary: fvalues = {field: value}.
-       Reads from snapname.idl and writes back into the same file.'''
-   lines = list()
-   with open(inoutfile) as f:
-     for line in f.readlines():
-       if line[0] == '#' or line[0] == ';':
-         continue
-       elif line.find('=') < 0:
-         continue
-       else:
-         ss = line.split('=')[0]
-         ssv = ss.strip().lower()
-         if ssv in list(new_values.keys()):
-           line = '{} = {} \n'.format(ss,str(new_values[ssv]))
-       lines.append(line)
-       
-   with open(inoutfile,"w") as f:
-     f.writelines(lines)
-      
+
+
+def keyword_update(inoutfile, new_values):
+    ''' Updates a given number of fields with values on a snapname.idl file.
+        These are given in a dictionary: fvalues = {field: value}.
+        Reads from snapname.idl and writes back into the same file.'''
+    lines = list()
+    with open(inoutfile) as f:
+        for line in f.readlines():
+            if line[0] == '#' or line[0] == ';':
+                continue
+            elif line.find('=') < 0:
+                continue
+            else:
+                ss = line.split('=')[0]
+                ssv = ss.strip().lower()
+                if ssv in list(new_values.keys()):
+                    line = '{} = {} \n'.format(ss, str(new_values[ssv]))
+            lines.append(line)
+
+    with open(inoutfile, "w") as f:
+        f.writelines(lines)
+
+
 def write_mftab_ascii(filename, NSPECIES_MAX=28,
                       SPECIES=None, EOS_TABLES=None, REC_TABLES=None,
                       ION_TABLES=None, CROSS_SECTIONS_TABLES=None,
@@ -2436,21 +2457,21 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28,
     '''
 
     if SPECIES is None:
-        SPECIES=['H_2.atom', 'He_2.atom']
+        SPECIES = ['H_2.atom', 'He_2.atom']
     if EOS_TABLES is None:
-        EOS_TABLES=['H_EOS.dat', 'He_EOS.dat']
+        EOS_TABLES = ['H_EOS.dat', 'He_EOS.dat']
     if REC_TABLES is None:
-        REC_TABLES=['h_rec.dat', 'he_rec.dat']
+        REC_TABLES = ['h_rec.dat', 'he_rec.dat']
     if ION_TABLES is None:
-        ION_TABLES=['h_ion.dat', 'he_ion.dat']
+        ION_TABLES = ['h_ion.dat', 'he_ion.dat']
     if CROSS_SECTIONS_TABLES is None:
-        CROSS_SECTIONS_TABLES=[[1, 1, 'p-H-elast.txt'],
-                               [1, 2, 'p-He.txt'],
-                               [2, 2, 'He-He.txt']]
+        CROSS_SECTIONS_TABLES = [[1, 1, 'p-H-elast.txt'],
+                                 [1, 2, 'p-He.txt'],
+                                 [2, 2, 'He-He.txt']]
     if CROSS_SECTIONS_TABLES_I is None:
-        CROSS_SECTIONS_TABLES_I=[]
+        CROSS_SECTIONS_TABLES_I = []
     if CROSS_SECTIONS_TABLES_N is None:
-        CROSS_SECTIONS_TABLES_N=[]
+        CROSS_SECTIONS_TABLES_N = []
 
     params = [
         'NSPECIES_MAX',
@@ -2581,7 +2602,7 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28,
 
     for symb in SPECIES:
         symb = symb.split('_')[0]
-        if not(symb.lower() in coll_vars_list):
+        if not (symb.lower() in coll_vars_list):
             print('write_mftab_ascii: WARNING there may be a mismatch between'
                   'the atom files and selected species.\n'
                   'Check for species', symb.lower())
@@ -2686,7 +2707,7 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28,
                 f.write("\t" + "\t".join(
                         [str(int(
                             COLISIONS_MAP[crs][v])).zfill(2) for v in range(
-                                    0, NSPECIES_MAX)]) + "\n")
+                            0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP_I':
             f.write("#\t" + "\t".join(
@@ -2695,7 +2716,7 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28,
             for crs in range(0, NSPECIES_MAX):
                 f.write("\t" + "\t".join([str(int(
                         COLISIONS_MAP_I[crs][v])).zfill(2) for v in range(
-                                0, NSPECIES_MAX)]) + "\n")
+                    0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'COLISIONS_MAP_N':
             f.write("#\t" + "\t".join(
@@ -2704,7 +2725,7 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28,
             for crs in range(0, NSPECIES_MAX):
                 f.write("\t" + "\t".join([str(int(
                         COLISIONS_MAP_N[crs][v])).zfill(2) for v in range(
-                                0, NSPECIES_MAX)]) + "\n")
+                    0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
         if head == 'EMASK':
             f.write("#\t" + "\t".join(
@@ -2712,13 +2733,14 @@ def write_mftab_ascii(filename, NSPECIES_MAX=28,
                             0, NSPECIES_MAX)]) + "\n")
             f.write("\t" + "\t".join([str(
                     int(EMASK_MAP[v])).zfill(2) for v in range(
-                            0, NSPECIES_MAX)]) + "\n")
+                0, NSPECIES_MAX)]) + "\n")
             f.write("\n")
     f.close()
 
 ######################
 #  DESTROYING FILES  #
 ######################
+
 
 def smash_folder(folder, mode='trash', warn=True, _force_no_warn=False):
     '''smashes (destroys or moves to trash) folder.
@@ -2753,6 +2775,7 @@ def smash_folder(folder, mode='trash', warn=True, _force_no_warn=False):
         raise NotImplementedError(f"mode={repr(mode)}")   # << we should never reach this line.
     return result
 
+
 def _trash_folder(folder, warn=True, _force_no_warn=False):
     '''moves the indicated folder to Trash (which the User can empty at a later time).
     Uses os.environ['TRASH'] to determine the location of trash.
@@ -2776,7 +2799,7 @@ def _trash_folder(folder, warn=True, _force_no_warn=False):
         trash_ = os.environ['TRASH']
     except KeyError:
         errmsg = ("_trash_folder() requires os.environ['TRASH'] to be set.\n"
-                 "Set it via os.environ['TRASH']='~/.Trash'  (or some other value, as appropriate)")
+                  "Set it via os.environ['TRASH']='~/.Trash'  (or some other value, as appropriate)")
         raise AttributeError(errmsg) from None
     trash = os.path.abspath(os.path.expanduser(trash_))   # expanduser handles '~'.
     # preprocessing - are we warning the user?
@@ -2789,7 +2812,7 @@ def _trash_folder(folder, warn=True, _force_no_warn=False):
     # possible warning
     if warn:
         confirm_msg = f'About to move to trash (at {repr(trash)}) the folder:\n    {repr(folder)}\n' + \
-                       "Proceed? ('y' or empty string for yes; 'n' or anything else for no.)\n"
+            "Proceed? ('y' or empty string for yes; 'n' or anything else for no.)\n"
         input_ = input(confirm_msg)
         input_ = input_.lower()
         if input_ not in ('y', ''):
@@ -2801,11 +2824,12 @@ def _trash_folder(folder, warn=True, _force_no_warn=False):
     if os.path.exists(dst):   # append time if necessary to make name unique in trash
         dst = dst + ' ' + time.strftime('%I.%M.%S %p')  # e.g. '12.07.59 PM'
     if os.path.exists(dst):   # append date if necessary to make name unique in trash
-        dst = dst + ' ' + time.strftime('%m_%d_%Y') # e.g. '03_01_2022'
+        dst = dst + ' ' + time.strftime('%m_%d_%Y')  # e.g. '03_01_2022'
     # actually trash the folder
     result = shutil.move(folder, dst)
     # return the old path of the now-deleted folder.
     return result
+
 
 def _destroy_folder(folder, warn=True, _force_no_warn=False):
     '''destroys the indicated folder.
@@ -2830,7 +2854,7 @@ def _destroy_folder(folder, warn=True, _force_no_warn=False):
     # possible warning
     if warn:
         confirm_msg = f'About to destroy the folder:\n    {repr(folder)}\nProceed? ' + \
-                       "('y' or empty string for yes; 'n' or anything else for no.)\n"
+            "('y' or empty string for yes; 'n' or anything else for no.)\n"
         input_ = input(confirm_msg)
         input_ = input_.lower()
         if input_ not in ('y', ''):
@@ -2840,6 +2864,7 @@ def _destroy_folder(folder, warn=True, _force_no_warn=False):
     shutil.rmtree(folder)
     # return the old path of the now-deleted folder.
     return folder
+
 
 def _count_components(path):
     '''counts components in the provided path.
