@@ -1,14 +1,16 @@
 """
 Set of routines to interface with MULTI (1D or _3D)
 """
-import numpy as np
 import os
+
+import numpy as np
 
 
 class Multi_3dOut:
     """
     Class that reads and deals with output from multi_3d
     """
+
     def __init__(self, outfile=None, basedir='.', atmosid='', length=4,
                  verbose=False, readall=False):
         self.verbose = verbose
@@ -90,20 +92,20 @@ class Multi_3dOut:
                                    length=length)
                     setattr(self, cname,
                             np.transpose(aa.reshape(self.ndep, self.ny,
-                                                   self.nx)))
+                                                    self.nx)))
                 elif cname == 'Iv':
                     self.check_basic()
                     aa = fort_read(file, isize, 'f', big_endian=be,
                                    length=length)
                     self.Iv = np.transpose(aa.reshape(self.ny, self.nx,
-                                                     self.nqtot))
+                                                      self.nqtot))
                 elif cname == 'n3d':  # might be brokenp...
                     self.check_basic()
                     self.nk = isize // (self.nx * self.ny * self.ndep)
                     aa = fort_read(file, isize, 'f', big_endian=be,
                                    length=length)
                     self.n3d = np.transpose(aa.reshape(self.nk, self.ndep,
-                                                      self.ny, self.nx))
+                                                       self.ny, self.nx))
                 elif cname == 'nk':
                     self.nk = fort_read(file, 1, 'i', big_endian=be,
                                         length=length)[0]
@@ -193,7 +195,6 @@ class Atmos3d:
             self.rho = np.transpose(aa.reshape((nz, ny, nx)))
         file.close()
         return
-
 
     def write_rh15d(self, outfile, sx=None, sy=None, sz=None, desc=None):
         ''' Writes atmos into rh15d NetCDF format. '''
@@ -384,6 +385,7 @@ def write_atmos3d(outfile, x, y, z, ne, temp, vz, vx=None, vy=None, rho=None,
     None. Writes file to disk.
     """
     import os
+
     from ..io.fio import fort_write
 
     if os.path.isfile(outfile):

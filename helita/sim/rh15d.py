@@ -2,13 +2,14 @@
 Set of programs and tools to read the outputs from RH, 1.5D version
 """
 import os
-import warnings
 import datetime
-import numpy as np
-import xarray as xr
+import warnings
+from io import StringIO
+
 import h5py
 import netCDF4
-from io import StringIO
+import numpy as np
+import xarray as xr
 from astropy import units
 
 
@@ -16,6 +17,7 @@ class Rh15dout:
     """
     Class to load and manipulate output from RH 1.5D.
     """
+
     def __init__(self, fdir='.', verbose=True, autoread=True):
         self.files = []
         self.params = {}
@@ -67,6 +69,7 @@ class HDF5Atmos:
     """
     Class to load and manipulate RH 1.5D input atmosphere files in HDF5.
     """
+
     def __init__(self, infile):
         self.file = read_hdf5(self, infile)
         self.closed = False
@@ -103,9 +106,9 @@ class HDF5Atmos:
                                  " installed in this system.")
             nh = rhpy.nh_lte(self.temperature[nti, xi, yi, zcut:].astype('Float64'),
                              self.electron_density[
-                                   nti, xi, yi, zcut:].astype('Float64'),
-                             self.hydrogen_populations[
-                                   nti, 0, xi, yi, zcut:].astype('Float64'))
+                nti, xi, yi, zcut:].astype('Float64'),
+                self.hydrogen_populations[
+                nti, 0, xi, yi, zcut:].astype('Float64'))
         elif self.params['nhydr'] == 6:
             nh = self.hydrogen_populations[nti, :, xi, yi, zcut:]
         else:
@@ -194,6 +197,7 @@ class AtomFile:
     format: str
         Can be 'RH' (default) or 'MULTI'.
     """
+
     def __init__(self, filename, format='RH'):
         self.read_atom(filename, format)
 
@@ -203,8 +207,8 @@ class AtomFile:
         Reads levels part of atom file
         """
         tmp = []
-        dtype=[('energy', 'f8'), ('g_factor', 'f8'),('label', '|U30'),
-               ('stage', 'i4'), ('level_no','i4')]
+        dtype = [('energy', 'f8'), ('g_factor', 'f8'), ('label', '|U30'),
+                 ('stage', 'i4'), ('level_no', 'i4')]
         if format.upper() == "RH":
             extra_cols = 2
         elif format.upper() == "MULTI":
@@ -216,7 +220,7 @@ class AtomFile:
             buf = line.split("'")
             assert len(buf) == 3
             tmp.append(tuple(buf[0].split() +
-                        [buf[1].strip()] + buf[2].split()[:extra_cols]))
+                             [buf[1].strip()] + buf[2].split()[:extra_cols]))
         return np.array(tmp, dtype=dtype)
 
     def read_atom(self, filename, format='RH'):
@@ -261,7 +265,7 @@ class AtomFile:
         counter += 1
         # read levels
         self.levels = self.read_atom_levels(data[counter:counter + nlevel],
-                                             self.format)
+                                            self.format)
         counter += nlevel
         # read lines
         tmp = StringIO('\n'.join(data[counter:counter + nline]))
@@ -317,9 +321,9 @@ class AtomFile:
             result['trad_option'] = line[4]
             self.fixed_transitions.append(result)
         # read collisions
-        ### IN MULTI FORMAT COLLISIONS START WITH GENCOL
-        ### Also in MULTI, must merge together lines that are written in
-        ### free format (ie, not prefixed by OMEGA, CE, etc...)
+        # IN MULTI FORMAT COLLISIONS START WITH GENCOL
+        # Also in MULTI, must merge together lines that are written in
+        # free format (ie, not prefixed by OMEGA, CE, etc...)
         self.collision_temperatures = []
         self.collision_tables = []
         # Keys for rates given as function of temperature
@@ -330,7 +334,7 @@ class AtomFile:
                                'BURGESS', 'SUMMERS']
         COLLISION_KEYS_OTHER = ['AR85-CDI', 'BADNELL']
         ALL_KEYS = (COLLISION_KEYS_TEMP + COLLISION_KEYS_LINE +
-                        COLLISION_KEYS_OTHER)
+                    COLLISION_KEYS_OTHER)
         SINGLE_KEYS = ['GENCOL', 'END']
 
         if self.format == 'MULTI':   # merge lines in free FORMAT
@@ -347,7 +351,7 @@ class AtomFile:
                             collision_data.append(tmp)
                             break
                         else:
-                            tmp += '  '  + data[counter]
+                            tmp += '  ' + data[counter]
                 elif key in SINGLE_KEYS:
                     collision_data.append(line)
                     counter += 1
@@ -368,14 +372,14 @@ class AtomFile:
             # Collision rates given as function of temperature
             elif key in COLLISION_KEYS_TEMP:
                 assert self.collision_temperatures, ('No temperature block'
-                         ' found before %s table' % (key))
+                                                     ' found before %s table' % (key))
                 ntemp = len(self.collision_temperatures[-1])
                 result = {'type': key, 'level_start': int(line[1]),
                           'level_end': int(line[2]),
                           'temp_index': len(self.collision_temperatures) - 1,
                           'data': np.array(line[3:3 + ntemp]).astype('d')}  # this will not work in MULTI
                 assert len(result['data']) == len(temp_tmp), ('Inconsistent '
-                    'number of points between temperature and collision table')
+                                                              'number of points between temperature and collision table')
             elif key in COLLISION_KEYS_LINE:
                 if key == "SUMMERS":
                     result = {'type': key, 'data': float(line[1])}
@@ -386,7 +390,7 @@ class AtomFile:
             elif key in ["AR85-CDI", "BADNELL"]:
                 assert len(line) >= 4, '%s must have >3 elements' % key
                 result = {'type': key, 'level_start': int(line[1]),
-                              'level_end': int(line[2])}
+                          'level_end': int(line[2])}
                 if key == "BADNELL":
                     rows = 2
                 else:
@@ -394,7 +398,7 @@ class AtomFile:
                 if self.format == 'MULTI':  # All values in one line
                     tmp = np.array(line[4:]).astype('d')
                     assert tmp.shape[0] % rows == 0, ('Inconsistent number of'
-                                                 ' data points for %s' % key)
+                                                      ' data points for %s' % key)
                     result['data'] = tmp.reshape((rows, tmp.shape[0] // rows))
                     counter += 1
                 else:  # For RH, values written in matrix form
@@ -427,7 +431,7 @@ def read_hdf5(inclass, infile):
     if 'params' not in dir(inclass):
         inclass.params = {}
     # add attributes
-    attrs = [a for a in f.attrs]
+    [a for a in f.attrs]
     for att in f.attrs:
         try:
             inclass.params[att] = f.attrs[att]
@@ -581,7 +585,7 @@ def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=No
     else:  # use h5py to append existing file
         rootgrp = h5py.File(outfile, mode='a')
         nti = int(rootgrp.attrs['nt'])
-        #rootgrp.attrs['nt'] = nti + nt  # add appended number of snapshots
+        # rootgrp.attrs['nt'] = nti + nt  # add appended number of snapshots
         for var in data:
             if var in VARS4D + ['hydrogen_populations', 'z', 'snapshot_number']:
                 rootgrp[var].resize(nti + nt, axis=0)
@@ -605,9 +609,8 @@ def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
             tmax     [K] maximum temperature of the first point
 
     """
-    from scipy.integrate import cumtrapz
     import scipy.interpolate as interp
-    import astropy.constants as const
+    from scipy.integrate import cumtrapz
     ndep = len(height)
     # calculate optical depth from H-bf only
     taumax = 100
@@ -687,6 +690,7 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
         wavelengths.
     """
     import xdrlib
+
     from specutils.utils.wcs_utils import air_to_vac
     if new_wave is None:
         new_wave = np.arange(start, end, step)
@@ -731,8 +735,9 @@ def read_wave_file(infile):
     wave : array
         Wavelength from file.
     """
-    import xdrlib
     import io
+    import xdrlib
+
     from .rh import read_xdr_var
     f = io.open(infile, 'rb')
     buf = xdrlib.Unpacker(f.read())

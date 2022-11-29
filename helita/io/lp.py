@@ -1,8 +1,9 @@
 """
 Set of tools to read and write 'La Palma' cubes
 """
-import numpy as np
 import os
+
+import numpy as np
 
 
 def make_header(image):

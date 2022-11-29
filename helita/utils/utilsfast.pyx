@@ -5,8 +5,9 @@
 # https://github.com/gasagna/openpiv-python/blob/master/openpiv/src/lib.pyx
 
 import numpy as np
-cimport numpy as np
+
 cimport cython
+cimport numpy as np
 
 DTYPEf = np.float64
 ctypedef np.float64_t DTYPEf_t
@@ -719,11 +720,11 @@ cpdef fwhm_gen(np.ndarray[DTYPEf_t, ndim=1] x,
                np.ndarray[DTYPEf_t, ndim=3] spec):
     """
     fwhm_gen(x, spec)
-    
+
     Calculates the FWHM of a generic line profile. This is done by first
     calculating the line maximum, and then linearly interpolating the widest
     wings for half of that value. (Local maxima/minima are therefore ignored).
-    
+
     Parameters
     ----------
     x    : 1-D ndarray (double type)
@@ -735,13 +736,13 @@ cpdef fwhm_gen(np.ndarray[DTYPEf_t, ndim=1] x,
     Returns
     -------
     blue_wing, red_wing : 3-D ndarrays
-        Arrays with blue and red wing. Same units as x. 
+        Arrays with blue and red wing. Same units as x.
     """
     cdef int nx = spec.shape[0]
     cdef int ny = spec.shape[1]
     cdef int nw = spec.shape[2]
     cdef int i, j, k, midw = nw // 2
-    cdef float local_max 
+    cdef float local_max
     cdef float local_min
     cdef float hm
     cdef np.ndarray[DTYPEf_t, ndim=2] blue_wing = np.zeros((nx,ny), dtype=DTYPEf)

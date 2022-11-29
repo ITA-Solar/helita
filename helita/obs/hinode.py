@@ -1,7 +1,6 @@
 """
 set of tools to deal with Hinode observations
 """
-import os
 import numpy as np
 from pkg_resources import resource_filename
 
@@ -32,7 +31,7 @@ def bfi_filter(wave, band='CAH', norm=True):
                   'BLUE': '4504', 'GREEN': '5550', 'RED': '6684'}
     if band not in list(filt_names.keys()):
         msg = "Band name must be one of %s" % ', '.join(filt_names.keys())
-        raise(ValueError, "Invalid band. " + msg + ".")
+        raise (ValueError, "Invalid band. " + msg + ".")
     cfile = resource_filename('helita',
                               'data/BFI_filter_%s.txt' % filt_names[band])
     wave_filt, filt = np.loadtxt(cfile, unpack=True)

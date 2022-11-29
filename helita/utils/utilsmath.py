@@ -1,6 +1,7 @@
-import numpy as np
-from numba import vectorize, float32, float64
 from math import exp
+
+import numpy as np
+from numba import float32, float64, vectorize
 
 
 def hist2d(x, y, nbins=30, norm=False, rx=0.08):
@@ -97,8 +98,8 @@ def planck(wavelength, temp, dist='wavelength'):
     For solid angle integrated one must multiply it by pi.
 
     """
-    from astropy.constants import c, h, k_B
     import astropy.units as u
+    from astropy.constants import c, h, k_B
 
     wave = wavelength.to('nm')
     if temp.shape and wave.shape:
@@ -130,8 +131,8 @@ def int_to_bt(inu, wave):
     brightness_temp : `Quantity` object (number or sequence)
         Brightness temperature in SI units of temperature.
     """
-    from astropy.constants import c, h, k_B
     import astropy.units as u
+    from astropy.constants import c, h, k_B
 
     bt = h * c / (wave * k_B * np.log(2 * h * c / (wave**3 * inu * u.rad**2) + 1))
     return bt.si
@@ -187,7 +188,7 @@ def translate(data, z, mu, phi, dx=1, dy=1):
     -------
     None, data are modified in-place.
     """
-    from math import acos, sin, cos
+    from math import cos, sin, acos
     try:
         from .trnslt import trnslt
     except ModuleNotFoundError:
@@ -247,7 +248,7 @@ def voigt(a, v):
         return exp(-v ** 2)
     z = v * 1j + a
     h = (((((((a6 * z + a5) * z + a4) * z + a3) * z + a2) * z + a1) * z + a0) /
-     (((((((z + b6) * z + b5) * z + b4) * z + b3) * z + b2) * z + b1) * z + b0))
+         (((((((z + b6) * z + b5) * z + b4) * z + b3) * z + b2) * z + b1) * z + b0))
     return h.real
 
 

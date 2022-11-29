@@ -84,7 +84,7 @@ int anadecrunch32(unsigned char *x,int32_t *array,int r9,int nx,int ny,int littl
  if ((xq&16) != 0) r0+=5; else {
  if ((xq&32) != 0) r0+=6; else {
  if ((xq&64) != 0) r0+=7; else {
- if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8; 
+ if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8;
 				 /* add 8 bits for each all zero byte */
  if (r0 > 32) { fprintf(stderr,"DECRUNCH -- bad bit sequence, cannot continue\n");
 	 fprintf(stderr,"i = %d, r1 = %d, ix= %d, iy = %d\n",i,r1,ix,iy);
@@ -92,13 +92,13 @@ int anadecrunch32(unsigned char *x,int32_t *array,int r9,int nx,int ny,int littl
  r1=r1+r0;       /* update pointer */
 			 /* r0 even or odd determines sign of difference */
  /*printf("r0 = %d\n", r0);*/
- if ((r0&1) != 0) { 
+ if ((r0&1) != 0) {
 							 /* positive case */
  /*printf("plus case, r0, r2, iq = %d %d %d\n", r0, r2, iq);*/
  r0=(r0/2)<<r9;  iq=iq+r2;       iq=iq+r0;       array[in]=iq;
  /*printf("r0 now = %d\n", r0);*/
   } else
- { if (r0 == 32) { 
+ { if (r0 == 32) {
 	 /* a long one, yank out the next 33 bits and use as difference */
  i=r1/8;         j=r1%8;
  if(little_endian){
@@ -196,18 +196,18 @@ int anadecrunch(unsigned char *x,int16_t *array,int r9,int nx,int ny,int little_
  if ((xq&16) != 0) r0+=5; else {
  if ((xq&32) != 0) r0+=6; else {
  if ((xq&64) != 0) r0+=7; else {
- if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8; 
+ if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8;
 				 /* add 8 bits for each all zero byte */
  if (r0 > 32) { fprintf(stderr,"DECRUNCH -- bad bit sequence, cannot continue\n");
 	 fprintf(stderr,"i = %d, r1 = %d, ix= %d, iy = %d\n",i,r1,ix,iy);
 	 return -1; }       }       }       }
  r1=r1+r0;       /* update pointer */
 			 /* r0 even or odd determines sign of difference */
- if ((r0&1) != 0) { 
+ if ((r0&1) != 0) {
 							 /* positive case */
  r0=(r0/2)<<r9;  iq=iq+r2;       iq=iq+r0;       array[in]=iq;
   } else
- { if (r0 == 32) { 
+ { if (r0 == 32) {
 	 /* a long one, yank out the next 17 bits and use as difference */
  i=r1/8;         j=r1%8;
  if(little_endian){
@@ -291,17 +291,17 @@ int anadecrunch8(unsigned char *x,int8_t *array,int r9,int nx,int ny,int little_
  if ((xq&16) != 0) r0+=5; else {
  if ((xq&32) != 0) r0+=6; else {
  if ((xq&64) != 0) r0+=7; else {
- if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8; 
+ if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8;
  /* add 8 bits for each all zero byte */
  if (r0 > 32) { fprintf(stderr,"DECRUNCH -- bad bit sequence, cannot continue");
 	  return -1; }       }       }       }
  r1=r1+r0;       /* update pointer */
  /* r0 even or odd determines sign of difference */
- if ((r0&1) != 0) { 
+ if ((r0&1) != 0) {
 						 /* positive case */
  r0=(r0/2)<<r9;  iq=iq+r2;       iq=iq+r0;       array[in]=iq;
   } else
- { if (r0 == 32) { 
+ { if (r0 == 32) {
  /* a long one, yank out the next 9 bits and use as difference */
  i=r1/8;         j=r1%8;
  if(little_endian){
@@ -421,19 +421,19 @@ int anadecrunchrun(unsigned char *x,int16_t *array,int r9,int nx,int ny,int litt
  if ((xq&16) != 0) r0+=5; else {
  if ((xq&32) != 0) r0+=6; else {
  if ((xq&64) != 0) r0+=7; else {
- if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8; 
+ if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8;
 				 /* add 8 bits for each all zero byte */
  if (r0 > 32) { fprintf(stderr,"DECRUNCH -- bad bit sequence, cannot continue\n");
 	 fprintf(stderr,"i = %d, r1 = %d, iy = %d\n",i,r1,iy);
 	 return -1; }       }       }       }
  r1=r1+r0;       /* update pointer */
 			 /* r0 even or odd determines sign of difference */
- if ((r0&1) != 0) { 
+ if ((r0&1) != 0) {
 							 /* positive case */
  r0=(r0/2)<<r9;  iq=iq+r2;       iq=iq+r0;       array[in]=iq;
  /* printf("r0,r2,iq = %d %d %d\n", r0,r2,iq);*/
   } else
- { if (r0 == 32) { 
+ { if (r0 == 32) {
 	 /* a long one, yank out the next 17 bits and use as difference */
  i=r1/8;         j=r1%8;
  if(little_endian){
@@ -465,7 +465,7 @@ int anadecrunchrun(unsigned char *x,int16_t *array,int r9,int nx,int ny,int litt
  }   	    /* end of ix loop */
  if (nc < 0) {
   fprintf(stderr,"bad loop in decrunchrun, nc=%d, iy=%d, in= %d\n",nc,iy,in);  return -1; }
- 
+
  i=(r1+7)/8;     r1=8*i;                 }   	    /* end of iy loop */
  return 1;
  }  						     /* end of routine */
@@ -557,19 +557,19 @@ int anadecrunchrun8(unsigned char *x,int8_t *array,int r9,int nx,int ny,int litt
  if ((xq&16) != 0) r0+=5; else {
  if ((xq&32) != 0) r0+=6; else {
  if ((xq&64) != 0) r0+=7; else {
- if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8; 
+ if ((xq&128) != 0) r0+=8; }}}}}}} break; } else { r0=r0+8;
 				 /* add 8 bits for each all zero byte */
  if (r0 > 32) { fprintf(stderr,"DECRUNCH -- bad bit sequence, cannot continue\n");
 	 fprintf(stderr,"i = %d, r1 = %d, iy = %d\n",i,r1,iy);
 	 return -1; }       }       }       }
  r1=r1+r0;       /* update pointer */
 			 /* r0 even or odd determines sign of difference */
- if ((r0&1) != 0) { 
+ if ((r0&1) != 0) {
 							 /* positive case */
  r0=(r0/2)<<r9;  iq=iq+r2;       iq=iq+r0;       array[in]=iq;
  /* printf("r0,r2,iq = %d %d %d\n", r0,r2,iq);*/
   } else
- { if (r0 == 32) { 
+ { if (r0 == 32) {
 	 /* a long one, yank out the next 9 bits and use as difference */
  i=r1/8;         j=r1%8;
  if(little_endian){
@@ -602,7 +602,7 @@ int anadecrunchrun8(unsigned char *x,int8_t *array,int r9,int nx,int ny,int litt
  if (nc < 0) {
   fprintf(stderr,"bad loop in decrunchrun8, nc=%d, iy=%d, in= %d\n",nc,iy,in);
   return -1; }
- 
+
  i=(r1+7)/8;     r1=8*i;                 }   	    /* end of iy loop */
  return 1;
   }  						     /* end of routine */

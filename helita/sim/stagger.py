@@ -55,41 +55,42 @@ TODO:
 # import built-in modules
 import time
 import weakref
-import collections
 import warnings
-
-# import internal modules
-from . import tools
+import collections
 
 # import public external modules
 import numpy as np
+
+# import internal modules
+from . import tools
 
 try:
     from numba import jit, njit, prange
 except ImportError:
     numba = prange = tools.ImportFailed('numba', "This module is required to use stagger_kind='numba'.")
-    jit   = njit   = tools.boring_decorator
+    jit = njit = tools.boring_decorator
 
 
 """ ------------------------ defaults ------------------------ """
 
-PAD_PERIODIC    = 'wrap'     # how to pad periodic dimensions, by default
+PAD_PERIODIC = 'wrap'     # how to pad periodic dimensions, by default
 PAD_NONPERIODIC = 'reflect'  # how to pad nonperiodic dimensions, by default
 PAD_DEFAULTS = {'x': PAD_PERIODIC, 'y': PAD_PERIODIC, 'z': PAD_NONPERIODIC}   # default padding for each dimension.
 DEFAULT_STAGGER_KIND = 'numba'  # which stagger kind to use by default.
-VALID_STAGGER_KINDS  = tuple(('numba', 'numba_nopython',
-                              'numpy', 'numpy_improved', 'o1_numpy',
-                              'cstagger'))  # list of valid stagger kinds.
+VALID_STAGGER_KINDS = tuple(('numba', 'numba_nopython',
+                             'numpy', 'numpy_improved', 'o1_numpy',
+                             'cstagger'))  # list of valid stagger kinds.
 PYTHON_STAGGER_KINDS = tuple(('numba', 'numba_nopython',
                               'numpy', 'numpy_improved', 'o1_numpy',
                               ))  # list of valid stagger kinds from stagger.py.
-ALIAS_STAGGER_KIND   = {'stagger': 'numba', 'numba': 'numba',   # dict of aliases for stagger kinds.
-                       'numba_nopython': 'numba_nopython', 
-                       'numpy': 'numpy',
-                       'numpy_improved': 'numpy_improved', 'numpy_i': 'numpy_improved',
-                       'o1_numpy': 'o1_numpy',
-                       'cstagger': 'cstagger'}
+ALIAS_STAGGER_KIND = {'stagger': 'numba', 'numba': 'numba',   # dict of aliases for stagger kinds.
+                      'numba_nopython': 'numba_nopython',
+                      'numpy': 'numpy',
+                      'numpy_improved': 'numpy_improved', 'numpy_i': 'numpy_improved',
+                      'o1_numpy': 'o1_numpy',
+                      'cstagger': 'cstagger'}
 DEFAULT_MESH_LOCATION_TRACKING = False   # whether mesh location tracking should be enabled, by default.
+
 
 def STAGGER_KIND_PROPERTY(internal_name='_stagger_kind', default=DEFAULT_STAGGER_KIND):
     '''creates a property which manages stagger_kind.
@@ -97,6 +98,7 @@ def STAGGER_KIND_PROPERTY(internal_name='_stagger_kind', default=DEFAULT_STAGGER
 
     only allows setting of stagger_kind to valid names (as determined by VALID_STAGGER_KINDS).
     '''
+
     def get_stagger_kind(self):
         return getattr(self, internal_name, default)
 
@@ -107,8 +109,8 @@ def STAGGER_KIND_PROPERTY(internal_name='_stagger_kind', default=DEFAULT_STAGGER
         except KeyError:
             class KeyErrorMessage(str):  # KeyError(msg) uses repr(msg), so newlines don't show up.
                 def __repr__(self): return str(self)    # this is a workaround. Makes the message prettier.
-            errmsg = (f"stagger_kind = {repr(value)} was invalid!" + "\n" + 
-                      f"Expected value from: {VALID_STAGGER_KINDS}." + "\n" + 
+            errmsg = (f"stagger_kind = {repr(value)} was invalid!" + "\n" +
+                      f"Expected value from: {VALID_STAGGER_KINDS}." + "\n" +
                       f"Advanced: to add a valid value, edit helita.sim.stagger.ALIAS_STAGGER_KINDS")
             raise KeyError(KeyErrorMessage(errmsg)) from None
         setattr(self, internal_name, kind)
@@ -116,6 +118,7 @@ def STAGGER_KIND_PROPERTY(internal_name='_stagger_kind', default=DEFAULT_STAGGER
     doc = f"Tells which method to use for stagger operations. Options are: {VALID_STAGGER_KINDS}"
 
     return property(fset=set_stagger_kind, fget=get_stagger_kind, doc=doc)
+
 
 """ ------------------------ stagger constants ------------------------ """
 
@@ -143,10 +146,15 @@ CONSTANTS_SHIFT_o1 = StaggerConstants(0.5, 0, 0)
 ## GENERIC ##
 CONSTANTS_DERIV_ODICT = {5: CONSTANTS_DERIV, 1: CONSTANTS_DERIV_o1}
 CONSTANTS_SHIFT_ODICT = {5: CONSTANTS_SHIFT, 1: CONSTANTS_SHIFT_o1}
+
+
 def GET_CONSTANTS_DERIV(order):
     return CONSTANTS_DERIV_ODICT[order]
+
+
 def GET_CONSTANTS_SHIFT(order):
     return CONSTANTS_SHIFT_ODICT[order]
+
 
 # remove temporary variables from the module namespace
 del c, b, a
@@ -154,12 +162,13 @@ del c, b, a
 
 """ ------------------------ 'do' - stagger interface ------------------------ """
 
+
 def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAGGER_KIND):
     """
-    Do a stagger operation on `var` by doing a 6th order polynomial interpolation of 
+    Do a stagger operation on `var` by doing a 6th order polynomial interpolation of
     the variable from cell centres to cell faces (down operations), or cell faces
     to cell centres (up operations).
-    
+
     Parameters
     ----------
     var : 3D array
@@ -174,7 +183,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     diff: None or 1D array
         If operation is one of the derivatives, you must supply `diff`,
         an array with the distances between each cell in the direction of the
-        operation must be same length as array along that direction. 
+        operation must be same length as array along that direction.
         For non-derivative operations, `diff` must be None.
     pad_mode : None or str
         Mode for padding array `var` to have enough points for a 6th order
@@ -190,7 +199,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     Returns
     -------
     3D array
-        Array of same type and dimensions to var, after performing the 
+        Array of same type and dimensions to var, after performing the
         stagger operation.
     """
     # initial bookkeeping
@@ -228,7 +237,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
         up = True
     elif up_str == 'dn':
         up = False
-    else: 
+    else:
         raise ValueError(f"Invalid operation; must end in 'up' or 'dn': {operation}")
     # x, dim_index (0 for x, 1 for y, 2 for z)
     x = operation[:-2]
@@ -252,14 +261,14 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     else:
         out = np.pad(var, padding, mode=pad_mode)
         out_diff = np.pad(diff, extra_dims, mode=pad_mode)
-        if stagger_kind=='numba':
-            func = {'x':_xshift, 'y':_yshift, 'z':_zshift}[x]
+        if stagger_kind == 'numba':
+            func = {'x': _xshift, 'y': _yshift, 'z': _zshift}[x]
             result = func(out, out_diff, up=up, derivative=derivative)
-        elif stagger_kind=='numba_nopython':
+        elif stagger_kind == 'numba_nopython':
             result = _numba_stagger(out, out_diff, up, derivative, dim_index)
-        elif stagger_kind=='numpy':   # 'numpy' or 'o1_numpy', originally.
+        elif stagger_kind == 'numpy':   # 'numpy' or 'o1_numpy', originally.
             result = _np_stagger(out, out_diff, up, derivative, dim_index, order=order)
-        elif stagger_kind=='numpy_improved':
+        elif stagger_kind == 'numpy_improved':
             result = _np_stagger_improved(out, out_diff, up, derivative, dim_index)
         else:
             raise ValueError(f"invalid stagger_kind: '{stagger_kind}'. Options are: {PYTHON_STAGGER_KINDS}")
@@ -275,65 +284,71 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
 """ ------------------------ numba stagger ------------------------ """
 
 ## STAGGER_KIND = NUMBA ##
+
+
 @njit(parallel=True)
 def _xshift(var, diff, up=True, derivative=False):
     grdshf = 1 if up else 0
-    start  =   int(3. - grdshf)  
-    end    = - int(2. + grdshf)
+    start = int(3. - grdshf)
+    end = - int(2. + grdshf)
     if derivative:
         pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm, (a, b, c) =  1, CONSTANTS_SHIFT
+        pm, (a, b, c) = 1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
-    out=np.zeros((nx,ny,nz))
-    for k in prange(nz): 
+    out = np.zeros((nx, ny, nz))
+    for k in prange(nz):
         for j in prange(ny):
             for i in prange(start, nx + end):
-                out[i, j, k] = diff[i] * (a * (var[i+ grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
-                                b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
-                                c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
+                out[i, j, k] = diff[i] * (a * (var[i + grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
+                                          b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
+                                          c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
 
     return out[start:end, :, :]
+
 
 @njit(parallel=True)
 def _yshift(var, diff, up=True, derivative=False):
     grdshf = 1 if up else 0
-    start  =   int(3. - grdshf)  
-    end    = - int(2. + grdshf)
+    start = int(3. - grdshf)
+    end = - int(2. + grdshf)
     if derivative:
         pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm, (a, b, c) =  1, CONSTANTS_SHIFT
+        pm, (a, b, c) = 1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
-    out=np.zeros((nx,ny,nz))
-    for k in prange(nz): 
+    out = np.zeros((nx, ny, nz))
+    for k in prange(nz):
         for j in prange(start, ny + end):
             for i in prange(nx):
                 out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] + pm * var[i, j - 1 + grdshf, k]) +
-                                b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
-                                c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
+                                          b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
+                                          c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
     return out[:, start:end, :]
+
 
 @njit(parallel=True)
 def _zshift(var, diff, up=True, derivative=False):
     grdshf = 1 if up else 0
-    start  =   int(3. - grdshf)  
-    end    = - int(2. + grdshf)
+    start = int(3. - grdshf)
+    end = - int(2. + grdshf)
     if derivative:
         pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm, (a, b, c) =  1, CONSTANTS_SHIFT
+        pm, (a, b, c) = 1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
-    out=np.zeros((nx,ny,nz))
-    for k in prange(start, nz + end): 
+    out = np.zeros((nx, ny, nz))
+    for k in prange(start, nz + end):
         for j in prange(ny):
             for i in prange(nx):
                 out[i, j, k] = diff[k] * (a * (var[i, j, k + grdshf] + pm * var[i, j, k - 1 + grdshf]) +
-                                b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
-                                c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
+                                          b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
+                                          c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
     return out[:, :, start:end]
 
 ## STAGGER_KIND = NUMBA_NOPYTHON ##
+
+
 def _numba_stagger(var, diff, up, derivative, x):
     '''stagger along x axis. x should be 0, 1, or 2. Corresponds to stagger_kind='numba_compiled'.
 
@@ -343,73 +358,80 @@ def _numba_stagger(var, diff, up, derivative, x):
     brief testing (by SE on 2/18/22) showed no speed improvement compared to stagger_kind='numba' method.
     '''
     grdshf = 1 if up else 0
-    start  =   int(3. - grdshf)  
-    end    = - int(2. + grdshf)
+    start = int(3. - grdshf)
+    end = - int(2. + grdshf)
     if derivative:
         pm, (a, b, c) = -1, CONSTANTS_DERIV
     else:
-        pm, (a, b, c) =  1, CONSTANTS_SHIFT
+        pm, (a, b, c) = 1, CONSTANTS_SHIFT
     nx, ny, nz = var.shape
-    out=np.zeros((nx,ny,nz))
-    _nopython_shift = {0:_nopython_xshift, 1:_nopython_yshift, 2:_nopython_zshift}[x]
+    out = np.zeros((nx, ny, nz))
+    _nopython_shift = {0: _nopython_xshift, 1: _nopython_yshift, 2: _nopython_zshift}[x]
     return _nopython_shift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm)
+
 
 @jit(parallel=True, nopython=True)
 def _nopython_xshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm):
-    for k in prange(nz): 
+    for k in prange(nz):
         for j in prange(ny):
             for i in prange(start, nx + end):
-                out[i, j, k] = diff[i] * (a * (var[i+ grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
-                                b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
-                                c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
+                out[i, j, k] = diff[i] * (a * (var[i + grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
+                                          b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
+                                          c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
     return out[start:end, :, :]
+
 
 @jit(parallel=True, nopython=True)
 def _nopython_yshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm):
-    for k in prange(nz): 
+    for k in prange(nz):
         for j in prange(start, ny + end):
             for i in prange(nx):
                 out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] + pm * var[i, j - 1 + grdshf, k]) +
-                                b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
-                                c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
+                                          b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
+                                          c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
     return out[:, start:end, :]
+
 
 @jit(parallel=True, nopython=True)
 def _nopython_zshift(var, diff, out, nx, ny, nz, start, end, grdshf, a, b, c, pm):
-    for k in prange(start, nz + end): 
+    for k in prange(start, nz + end):
         for j in prange(ny):
             for i in prange(nx):
                 out[i, j, k] = diff[k] * (a * (var[i, j, k + grdshf] + pm * var[i, j, k - 1 + grdshf]) +
-                                b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
-                                c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
+                                          b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
+                                          c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
     return out[:, :, start:end]
 
 
 """ ------------------------ numpy stagger ------------------------ """
 
 ## STAGGER_KIND = NUMPY ##
+
+
 def _np_stagger(var, diff, up, derivative, x, order=5):
     """stagger along x axis. x should be 0, 1, or 2."""
     # -- same constants and setup as numba method -- #
     grdshf = 1 if up else 0
-    start  =   int(3. - grdshf)  
-    end    = - int(2. + grdshf)
+    start = int(3. - grdshf)
+    end = - int(2. + grdshf)
     if derivative:
         pm, (a, b, c) = -1, GET_CONSTANTS_DERIV(order)
     else:
-        pm, (a, b, c) =  1, GET_CONSTANTS_SHIFT(order)
+        pm, (a, b, c) = 1, GET_CONSTANTS_SHIFT(order)
     # -- begin numpy syntax -- #
     nx = var.shape[x]
+
     def slx(shift):
         '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
         return tools.slicer_at_ax((start+shift, nx+end+shift), x)
+
     def sgx(shift):
         '''return slicer at x axis from (start + shift + grdshf) to (nx + end + shift + grdshf)'''
         return slx(shift + grdshf)
-    diff = np.expand_dims(diff,  axis=tuple( set((0,1,2)) - set((x,)) )  )   # make diff 3D (with size 1 for axes other than x)
+    diff = np.expand_dims(diff,  axis=tuple(set((0, 1, 2)) - set((x,))))   # make diff 3D (with size 1 for axes other than x)
 
     if order == 5:
-        out = diff[slx(0)] * (a * (var[sgx(0)] + pm * var[sgx(-1)]) + 
+        out = diff[slx(0)] * (a * (var[sgx(0)] + pm * var[sgx(-1)]) +
                               b * (var[sgx(1)] + pm * var[sgx(-2)]) +
                               c * (var[sgx(2)] + pm * var[sgx(-3)]))
     elif order == 1:
@@ -418,6 +440,8 @@ def _np_stagger(var, diff, up, derivative, x, order=5):
     return out
 
 ## STAGGER_KIND = NUMPY_IMPROVED ##
+
+
 def _np_stagger_improved(var, diff, up, derivative, x):
     """stagger along x axis. x should be 0, 1, or 2.
     uses the "improved" stagger method, as implemented in stagger_mesh_improved_mpi.f90.
@@ -426,29 +450,31 @@ def _np_stagger_improved(var, diff, up, derivative, x):
             a X + b Y + c Z == a (X - 2 f_0) + b (Y - 2 f_0) + c (Z - 2 f_0) + f_0
     """
     grdshf = 1 if up else 0
-    start  =   int(3. - grdshf)  
-    end    = - int(2. + grdshf)
+    start = int(3. - grdshf)
+    end = - int(2. + grdshf)
     # -- begin numpy syntax -- #
     nx = var.shape[x]
+
     def slx(shift):
         '''return slicer at x axis from (start + shift) to (nx + end + shift).'''
         return tools.slicer_at_ax((start+shift, nx+end+shift), x)
+
     def sgx(shift):
         '''return slicer at x axis from (start + shift + grdshf) to (nx + end + shift + grdshf)'''
         return slx(shift + grdshf)
-    diff = np.expand_dims(diff,  axis=tuple( set((0,1,2)) - set((x,)) )  )   # make diff 3D (with size 1 for axes other than x)
+    diff = np.expand_dims(diff,  axis=tuple(set((0, 1, 2)) - set((x,))))   # make diff 3D (with size 1 for axes other than x)
 
     if derivative:
         # formula is exactly the same as regular numpy method. (though we use '-' instead of 'pm' with pm=-1)
         a, b, c = CONSTANTS_DERIV
-        out = diff[slx(0)] * (a * (var[sgx(0)] - var[sgx(-1)]) + 
+        out = diff[slx(0)] * (a * (var[sgx(0)] - var[sgx(-1)]) +
                               b * (var[sgx(1)] - var[sgx(-2)]) +
                               c * (var[sgx(2)] - var[sgx(-3)]))
     else:
         # here is where we see the 'improved' stagger method.
         a, b, c = CONSTANTS_SHIFT
         f0 = var[sgx(0)]
-        out = diff[slx(0)] * (a * (                   var[sgx(-1)] - f0) +    # note: the f0 - f0 term went away.
+        out = diff[slx(0)] * (a * (var[sgx(-1)] - f0) +    # note: the f0 - f0 term went away.
                               b * (var[sgx(1)] - f0 + var[sgx(-2)] - f0) +
                               c * (var[sgx(2)] - f0 + var[sgx(-3)] - f0)
                               + f0)
@@ -461,6 +487,7 @@ def _np_stagger_improved(var, diff, up, derivative, x):
 #   update that mesh location info whenever a stagger operation is performed,
 #   and enforce arrays have the same location when doing arithmetic.
 
+
 class MeshLocation():
     '''class defining a location on a mesh.
     Also provides shifting operations.
@@ -472,7 +499,8 @@ class MeshLocation():
         m.xup.ydn.zdn
         >>> MeshLocation([0.5, 0, -0.5])
     '''
-    def __init__(self, loc=[0,0,0]):
+
+    def __init__(self, loc=[0, 0, 0]):
         self.loc = list(loc)
 
     def __repr__(self):
@@ -523,8 +551,8 @@ class MeshLocation():
     ## MESH LOCATION AS OPERATION LIST ##
     def as_operations(self):
         '''returns self, viewed as a list of operations. (returns a list of strings.)
-        equivalently, returns "steps needed to get from (0,0,0) to self". 
-        
+        equivalently, returns "steps needed to get from (0,0,0) to self".
+
         Examples:
             MeshLocation([0.5, 0, 0]).as_operations()
             >>> ['xup']
@@ -541,7 +569,7 @@ class MeshLocation():
             n = val / 0.5   # here we expect n to be an integer-valued float. (e.g. 1.0)
             assert getattr(n, 'is_integer', lambda: True)(), f"Expected n/0.5 to be an integer. n={n}, self={self}"
             up = 'up' if val > 0 else 'dn'
-            n = abs(int(n)) # convert n to positive integer (required for list multiplication)
+            n = abs(int(n))  # convert n to positive integer (required for list multiplication)
             result += ([f'{x}{up}'] * n)  # list addition; list multiplication.
         return result
 
@@ -596,12 +624,17 @@ class MeshLocation():
         if any(p is None for p in pos) or all(p is True for p in pos):
             return ('unknown', None)
         if xdn:
-            if   ydn: return ('edge', 'z')
-            elif zdn: return ('edge', 'y')
-            else:     return ('face', 'x')
+            if ydn:
+                return ('edge', 'z')
+            elif zdn:
+                return ('edge', 'y')
+            else:
+                return ('face', 'x')
         elif ydn:
-            if   zdn: return ('edge', 'x')
-            else:     return ('face', 'y')
+            if zdn:
+                return ('edge', 'x')
+            else:
+                return ('face', 'y')
         elif zdn:
             return ('face', 'z')
         # could just return ('unknown', None) if we reach this line.
@@ -620,26 +653,31 @@ class MeshLocation():
     #   are added to the class after its initial definition.
 
 ## MESH LOCATION SHIFTING ##
+
+
 def _mesh_shifter(x, up):
     '''returns a function which returns a copy of MeshLocation but shifted by x and up.
     x should be 'x', 'y', or 'z'.
     up should be 'up' or 'dn'.
     '''
-    ix = {'x':0, 'y':1, 'z':2}[x]
-    up_value = {'up':0.5, 'dn':-0.5}[up]
+    ix = {'x': 0, 'y': 1, 'z': 2}[x]
+    up_value = {'up': 0.5, 'dn': -0.5}[up]
+
     def mesh_shifted(self):
         '''returns a copy of self shifted by {x}{up}'''
         copy = self.copy()
         copy[ix] += up_value
         return copy
-    mesh_shifted.__doc__  = mesh_shifted.__doc__.format(x=x, up=up)
+    mesh_shifted.__doc__ = mesh_shifted.__doc__.format(x=x, up=up)
     mesh_shifted.__name__ = f'{x}{up}'
     return mesh_shifted
+
 
 def _mesh_shifter_property(x, up):
     '''returns a property which calls a function that returns a copy of MeshLocation shifted by x and up.'''
     shifter = _mesh_shifter(x, up)
     return property(fget=shifter, doc=shifter.__doc__)
+
 
 # actually set the functions xup, ..., zdn, as methods of MeshLocation.
 for x in ('x', 'y', 'z'):
@@ -649,12 +687,12 @@ for x in ('x', 'y', 'z'):
 
 class ArrayOnMesh(np.ndarray):
     '''numpy array associated with a location on a mesh grid.
-    
+
     Examples:
         ArrayOnMesh(x, meshloc=[0,0,0])
         ArrayOnMesh(y, meshloc=[0,0,0.5])
         with x, y numpy arrays (or subclasses).
-    
+
     The idea is to enforce that arrays are at the same mesh location before doing any math.
     When arrays are at different locations, raise an AssertionError instead.
 
@@ -663,7 +701,7 @@ class ArrayOnMesh(np.ndarray):
         ArrayOnMesh does not know how to actually do any of the stagger operations.
         Rather, the stagger operations are responsible for properly tracking mesh location;
             they can use the provided _relocate or _shift_location methods to do so.
-    
+
     meshloc: list, tuple, MeshLocation object, or None
         None --> default. If input has meshloc, use meshloc of input; else use [0,0,0]
         else --> use this value as the mesh location.
@@ -671,15 +709,16 @@ class ArrayOnMesh(np.ndarray):
     def __new__(cls, input_array, meshloc=None):
         obj = np.asanyarray(input_array).view(cls)   # view input_array as an ArrayOnMesh.
         if meshloc is None:
-            obj.meshloc = getattr(obj, 'meshloc', [0,0,0])
+            obj.meshloc = getattr(obj, 'meshloc', [0, 0, 0])
         else:
             obj.meshloc = meshloc
         return obj
 
     def __array_finalize__(self, obj):
         '''handle other ways of creating this array, e.g. copying an existing ArrayOnMesh.'''
-        if obj is None: return
-        self.meshloc = getattr(obj, 'meshloc', [0,0,0])
+        if obj is None:
+            return
+        self.meshloc = getattr(obj, 'meshloc', [0, 0, 0])
 
     def describe_mesh_location(self):
         '''returns a description of the mesh location of self.
@@ -702,6 +741,7 @@ class ArrayOnMesh(np.ndarray):
     @property
     def meshloc(self):
         return self._meshloc
+
     @meshloc.setter
     def meshloc(self, newloc):
         if not isinstance(newloc, MeshLocation):
@@ -724,7 +764,7 @@ class ArrayOnMesh(np.ndarray):
 
     def __array_ufunc__(self, ufunc, method, *inputs, out=None, **kwargs):
         '''does the ufunc but first ensures all arrays are at the same meshloc.
-        
+
         The code here follows the format of the example from the numpy subclassing docs.
         '''
         args = []
@@ -738,7 +778,7 @@ class ArrayOnMesh(np.ndarray):
                 args.append(input_.view(np.ndarray))
             else:
                 args.append(input_)
-                
+
         assert meshloc is not None  # meshloc should have been set to some value by this point.
 
         outputs = out
@@ -772,7 +812,7 @@ class ArrayOnMesh(np.ndarray):
             results[0].meshloc = meshloc
 
         return results[0] if len(results) == 1 else results
-        
+
     def __repr__(self):
         result = super().__repr__()
         return f'{result} at {self.meshloc}'
@@ -781,7 +821,8 @@ class ArrayOnMesh(np.ndarray):
 # predefined mesh locations
 def mesh_location_center():
     '''returns MeshLocation at center of box. (0,0,0)'''
-    return MeshLocation([0,0,0])
+    return MeshLocation([0, 0, 0])
+
 
 def mesh_location_face(x):
     '''returns MeshLocation centered at face x.
@@ -790,10 +831,11 @@ def mesh_location_face(x):
         'y' --> [ 0  , -0.5,  0  ]
         'z' --> [ 0  ,  0  , -0.5]
     '''
-    loc = {'x' : [-0.5,  0  ,  0  ],
-           'y' : [ 0  , -0.5,  0  ],
-           'z' : [ 0  ,  0  , -0.5]}
+    loc = {'x': [-0.5,  0,  0],
+           'y': [0, -0.5,  0],
+           'z': [0,  0, -0.5]}
     return MeshLocation(loc[x])
+
 
 def mesh_location_edge(x):
     '''returns MeshLocation centered at edge x.
@@ -802,20 +844,24 @@ def mesh_location_edge(x):
         'y' --> [-0.5,  0  , -0.5]
         'z' --> [-0.5, -0.5,  0  ]
     '''
-    loc = {'x' : [ 0  , -0.5, -0.5],
-           'y' : [-0.5,  0  , -0.5],
-           'z' : [-0.5, -0.5,  0  ]}
+    loc = {'x': [0, -0.5, -0.5],
+           'y': [-0.5,  0, -0.5],
+           'z': [-0.5, -0.5,  0]}
     return MeshLocation(loc[x])
 
 # describing mesh locations (for a "generic object")
+
+
 def get_mesh_location(obj, *default):
     if len(default) > 0:
         return getattr(obj, 'meshloc', default[0])
     else:
         return getattr(obj, 'meshloc')
 
+
 def has_mesh_location(obj):
     return hasattr(obj, 'meshloc')
+
 
 def describe_mesh_location(obj):
     '''returns a description of the mesh location of obj
@@ -843,6 +889,8 @@ def describe_mesh_location(obj):
         return ('unknown', None)
 
 # mesh location tracking property
+
+
 def MESH_LOCATION_TRACKING_PROPERTY(internal_name='_mesh_location_tracking', default=DEFAULT_MESH_LOCATION_TRACKING):
     '''creates a property which manages mesh_location_tracking.
     uses the internal name provided, and returns the default if property value has not been set.
@@ -859,11 +907,12 @@ def MESH_LOCATION_TRACKING_PROPERTY(internal_name='_mesh_location_tracking', def
             when self.do_stagger or self.stagger_kind are INCOMPATIBLE with mesh_location_tracking,
                 mesh_location_tracking will be disabled, until compatibility requirements are met.
                 trying to set mesh_location_tracking = True will make a ValueError.
-            INCOMPATIBLE when one or more of the following are True: 
+            INCOMPATIBLE when one or more of the following are True:
                 1) bool(self.do_stagger) != True
                 2) self.stagger_kind not in stagger.PYTHON_STAGGER_KINDS
                     (compatible stagger_kinds are {PYTHON_STAGGER_KINDS})
         '''
+
     def _mesh_location_tracking_incompatible(obj):
         '''returns attributes of obj with present values incompatible with mesh_location_tracking.
         e.g. ['do_stagger', 'stagger_kind'], or ['stagger_kind'], or ['do_stagger'] or [].
@@ -930,9 +979,9 @@ class _stagger_factory():
                  padx=None, pady=None, padz=None,
                  **kw__do):
         if pad_mode is None:
-            pad_mode = {'x':padx, 'y': pady, 'z':padz}[self.x]
+            pad_mode = {'x': padx, 'y': pady, 'z': padz}[self.x]
         if verbose:
-            end = '\n' if verbose>1 else '\r\r'
+            end = '\n' if verbose > 1 else '\r\r'
             msg = f'interpolating: {self.opstr:>5s}.'
             print(msg, end=' ', flush=True)
             now = time.time()
@@ -963,6 +1012,7 @@ class _stagger_spatial(_stagger_factory):
 
     TODO: fix ugly printout during verbose==1.
     '''
+
     def __init__(self, x, up):
         super().__init__(x, up, opstr_fmt='{x}{up}')
 
@@ -997,6 +1047,7 @@ class _stagger_derivate(_stagger_factory):
 
     TODO: fix ugly printout during verbose==1.
     '''
+
     def __init__(self, x, up):
         super().__init__(x, up, opstr_fmt='dd{x}{up}')
 
@@ -1005,16 +1056,17 @@ class _stagger_derivate(_stagger_factory):
                  diffx=None, diffy=None, diffz=None,
                  stagger_kind=DEFAULT_STAGGER_KIND, **kw__None):
         if diff is None:
-            diff = {'x':diffx, 'y':diffy, 'z':diffz}[self.x]
+            diff = {'x': diffx, 'y': diffy, 'z': diffz}[self.x]
         return super().__call__(arr, diff=diff, pad_mode=pad_mode, verbose=verbose,
                                 padx=padx, pady=pady, padz=padz, stagger_kind=stagger_kind)
+
 
 _STAGGER_ALIASES = {}
 for x in ('x', 'y', 'z'):
     _pad_default = PAD_DEFAULTS[x]
     for up in ('up', 'dn'):
         # define _xup (or _xdn, _yup, _ydn, _zup, _zdn).
-        _STAGGER_ALIASES[f'_{x}{up}']   = _stagger_spatial(x, up)
+        _STAGGER_ALIASES[f'_{x}{up}'] = _stagger_spatial(x, up)
         # define _ddxup (or _ddxdn, _ddyup, _ddydn, _ddzup, _ddzdn).
         _STAGGER_ALIASES[f'_dd{x}{up}'] = _stagger_derivate(x, up)
 
@@ -1035,8 +1087,10 @@ del x, _pad_default, up, _opstr, _op   # << remove "temporary variables" from mo
 # They can be called as you would expect, e.g. xdn(arr),
 # or chained together, e.g. xdn.ydn.zdn.ddzup(arr)  would do xdn(ydn(xdn(ddzup(arr)))).
 
+
 def _trim_leading_underscore(name):
-    return name[1:] if name[0]=='_' else name
+    return name[1:] if name[0] == '_' else name
+
 
 class BaseChain():  # base class. Inherit from this class before creating the chain. See e.g. _make_chain().
     """
@@ -1051,12 +1105,13 @@ class BaseChain():  # base class. Inherit from this class before creating the ch
             default order is A.B.C(val) --> A(B(C(val))).
     """
     ## ESSENTIAL BEHAVIORS ##
+
     def __init__(self, f_self, *funcs):
         self.funcs = [f_self, *funcs]
         # bookkeeping (non-essential, but makes help() more helpful and repr() prettier)
         self.__name__ = _trim_leading_underscore(f_self.__name__)
-        self.__doc__  = self.__doc__.format(undetermined=self.__name__)
-    
+        self.__doc__ = self.__doc__.format(undetermined=self.__name__)
+
     def __call__(self, x, reverse=False, **kw):
         '''apply the operations. If reverse, go in reverse order.'''
         itfuncs = self.funcs[::-1] if reverse else self.funcs
@@ -1084,8 +1139,10 @@ class BaseChain():  # base class. Inherit from this class before creating the ch
         funcnames = ' '.join([_trim_leading_underscore(f.__name__) for f in self])
         return f'{self.__class__.__name__} at <{hex(id(self))}> with operations: {funcnames}'
 
+
 class ChainCreator():
     """for creating and manipulating a chain."""
+
     def __init__(self, name='Chain', base=BaseChain):
         self.Chain = type(name, (base,), {'__doc__': BaseChain.__doc__})
         self.links = []
@@ -1096,26 +1153,28 @@ class ChainCreator():
 
     def _makelink(self, func):
         return self.Chain(func)
-        
+
     def link(self, prop, func):
         '''adds the (prop, func) link to chain.'''
         link = self._makelink(func)
         setattr(self.Chain, prop, self._makeprop(link))
         self.links.append(link)
 
+
 def _make_chain(*prop_func_pairs, name='Chain', base=BaseChain,
                 creator=ChainCreator, **kw__creator):
     """create new chain with (propertyname, func) pairs as indicated, named Chain.
     (propertyname, func): str, function
         name of attribute to associate with performing func when called.
-        
+
     returns Chain, (list of instances of Chain associated with each func)
     """
     Chain = creator(name, base=base, **kw__creator)
     for prop, func in prop_func_pairs:
         Chain.link(prop, func)
-    
+
     return tuple((Chain.Chain, Chain.links))
+
 
 props, funcs = [], []
 for dd in ('', 'dd'):
@@ -1139,6 +1198,7 @@ del props, funcs, dd, x, up, opstr, links, prop, link   # << remove "temporary v
 
 """ ------------------------ StaggerData (wrap methods in a class) ------------------------ """
 
+
 class StaggerInterface():
     """
     Interface to stagger methods, with defaults implied by an object.
@@ -1153,7 +1213,7 @@ class StaggerInterface():
             # stagger_kind = self.stagger_kind
 
         # interpolate arr via xup( ydn(ddzdn(arr)) ), using defaults as appropriate:
-        self.stagger.xup.ydn.ddzdn(arr)  
+        self.stagger.xup.ydn.ddzdn(arr)
 
     Available operations:
           xdn,   xup,   ydn,   yup,   zdn,   zup,
@@ -1211,7 +1271,7 @@ class StaggerInterface():
     def _make_bound_chain(self, *prop_func_pairs, name='BoundChain'):
         """create new bound chain, linking all props to same-named attributes of self."""
         Chain, links = _make_chain(*prop_func_pairs, name=name,
-                           base=BoundBaseChain, creator=BoundChainCreator, obj=self)
+                                   base=BoundBaseChain, creator=BoundChainCreator, obj=self)
         props, funcs = zip(*prop_func_pairs)
         for prop, link in zip(props, links):
             setattr(self, prop, link)
@@ -1248,11 +1308,13 @@ class StaggerInterface():
             arr = self.obj(arr, *args__get_var, **kw)
         return func(arr, **kw_to_use)
 
+
 StaggerInterface.__doc__ = StaggerInterface.__doc__.format(PAD_PERIODIC=PAD_PERIODIC, PAD_NONPERIODIC=PAD_NONPERIODIC)
 
 
 class BoundBaseChain(BaseChain):
     """BaseChain structure but bound to a class."""
+
     def __init__(self, obj, f_self, *funcs):
         self.obj = obj
         super().__init__(f_self, *funcs)
@@ -1268,10 +1330,13 @@ class BoundBaseChain(BaseChain):
         funcnames = ' '.join([_trim_leading_underscore(f.__name__) for f in self])
         return f'<{self.__class__.__name__} at <{hex(id(self))}> with operations: {funcnames}> bound to {self.obj}'
 
+
 class BoundChainCreator(ChainCreator):
     """for creating and manipulating a bound chain"""
+
     def __init__(self, *args, obj=None, **kw):
-        if obj is None: raise TypeError('obj must be provided')
+        if obj is None:
+            raise TypeError('obj must be provided')
         self.obj = obj
         super().__init__(*args, **kw)
 

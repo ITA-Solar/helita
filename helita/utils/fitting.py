@@ -1,6 +1,6 @@
-from scipy.odr import odrpack as odr
-from scipy.odr import models
 import numpy as np
+from scipy.odr import models
+from scipy.odr import odrpack as odr
 
 
 def gaussian(B, x):
@@ -15,8 +15,8 @@ def double_gaussian(B, x):
      B = mean1, stdev1, max1, mean2, stdev2, max2, offset
     """
     return B[2] / (B[1] * np.sqrt(2 * np.pi)) * np.exp(-((x - B[0])**2 / (2 * B[1]**2))) + \
-           B[5] / (B[4] * np.sqrt(2 * np.pi)) * \
-           np.exp(-((x - B[3])**2 / (2 * B[4]**2))) + B[6]
+        B[5] / (B[4] * np.sqrt(2 * np.pi)) * \
+        np.exp(-((x - B[3])**2 / (2 * B[4]**2))) + B[6]
 
 
 def sine(B, x):

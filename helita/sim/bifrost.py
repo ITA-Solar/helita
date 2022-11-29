@@ -4,35 +4,32 @@ Set of programs to read and interact with output from Bifrost
 
 # import builtin modules
 import os
-import functools
-import weakref
-from glob import glob
-import warnings
-import time
 import ast
+import time
+import weakref
+import warnings
+import functools
 import collections
+from glob import glob
 
 # import external public modules
 import numpy as np
 from scipy import interpolate
 from scipy.ndimage import map_coordinates
 
+from . import document_vars, file_memory, load_fromfile_quantities, stagger, tools, units
+from .load_arithmetic_quantities import *
 # import internal modules
 from .load_quantities import *
-from .load_arithmetic_quantities import *
-from . import load_fromfile_quantities 
 from .tools import *
-from . import tools
-from . import document_vars
-from . import file_memory
-from . import stagger
-from . import units
 
 # defaults
 whsp = '  '
 AXES = ('x', 'y', 'z')
 
 # BifrostData class
+
+
 class BifrostData():
     """
     Reads data from Bifrost simulations in native format.
@@ -72,11 +69,11 @@ class BifrostData():
     numThreads - integer, optional
         number of threads for certain operations that use parallelism.
     fast - whether to read data "fast", by only reading the requested data.
-        implemented as a flag, with False as default, for backwards 
-        compatibility; some previous codes may have assumed non-requested 
-        data was read. To avoid issues, just ensure you use get_var() 
-        every time you want to have data, and don't assume things exist 
-        (e.g. self.bx) unless you do get_var for that thing 
+        implemented as a flag, with False as default, for backwards
+        compatibility; some previous codes may have assumed non-requested
+        data was read. To avoid issues, just ensure you use get_var()
+        every time you want to have data, and don't assume things exist
+        (e.g. self.bx) unless you do get_var for that thing
         (e.g. get_var('bx')).
     units_output - string, optional
         unit system for output. default 'simu' for simulation output.
@@ -115,10 +112,10 @@ class BifrostData():
     """
 
     ## CREATION ##
-    def __init__(self, file_root, snap=None, meshfile=None, fdir='.', 
-                 fast=False, verbose=True, dtype='f4', big_endian=False, 
-                 cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False, 
-                 numThreads=1, params_only=False, sel_units=None, 
+    def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
+                 fast=False, verbose=True, dtype='f4', big_endian=False,
+                 cstagop=None, do_stagger=True, ghost_analyse=False, lowbus=False,
+                 numThreads=1, params_only=False, sel_units=None,
                  use_relpath=False, stagger_kind=stagger.DEFAULT_STAGGER_KIND,
                  units_output='simu', squeeze_output=False,
                  print_freq=2, printing_stats=False,
@@ -148,7 +145,7 @@ class BifrostData():
         self.units_output = units_output    # < units.py system of managing units.
         self.sel_units = sel_units          # < other system of managing units.
 
-        setattr(self, document_vars.LOADING_LEVEL, -1) # tells how deep we are into loading a quantity now.
+        setattr(self, document_vars.LOADING_LEVEL, -1)  # tells how deep we are into loading a quantity now.
 
         # endianness and data type
         if big_endian:
@@ -178,7 +175,7 @@ class BifrostData():
         self.genvar()
         self.transunits = False
         self.cross_sect = cross_sect_for_obj(self)
-        if 'tabinputfile' in self.params.keys(): 
+        if 'tabinputfile' in self.params.keys():
             tabfile = os.path.join(self.fdir, self.get_param('tabinputfile').strip())
             if os.access(tabfile, os.R_OK):
                 self.rhoee = Rhoeetab(tabfile=tabfile, fdir=fdir, radtab=True, verbose=self.verbose)
@@ -189,11 +186,11 @@ class BifrostData():
         document_vars.set_vardocs(self)
 
     ## PROPERTIES ##
-    help  = property(lambda self: self.vardoc)
+    help = property(lambda self: self.vardoc)
 
     shape = property(lambda self: (self.xLength, self.yLength, self.zLength))
-    size  = property(lambda self: (self.xLength * self.yLength * self.zLength))
-    ndim  = property(lambda self: 3)
+    size = property(lambda self: (self.xLength * self.yLength * self.zLength))
+    ndim = property(lambda self: 3)
 
     units_output = units.UNITS_OUTPUT_PROPERTY(internal_name='_units_output')
 
@@ -207,6 +204,7 @@ class BifrostData():
         Original intent: analyzing simulations with just a small perturbation around the mean.
         '''
         return getattr(self, '_internal_means', False)
+
     @internal_means.setter
     def internal_means(self, value):
         self._internal_means = value
@@ -218,12 +216,13 @@ class BifrostData():
         Options:
         False (default) --> don't print stats.
         True --> do print stats.
-        dict --> call print stats with these kwargs 
+        dict --> call print stats with these kwargs
                 e.g. printing_stats=dict(fmt='{:.3e}') --> self.print_stats(fmt='{:.3e}')
-        
-        This is useful especially while investigating just the approximate values for each quantity. 
+
+        This is useful especially while investigating just the approximate values for each quantity.
         '''
         return getattr(self, '_printing_stats', False)
+
     @printing_stats.setter
     def printing_stats(self, value):
         self._printing_stats = value
@@ -231,8 +230,9 @@ class BifrostData():
     stagger_kind = stagger.STAGGER_KIND_PROPERTY(internal_name='_stagger_kind')
 
     @property
-    def cstagop(self): # cstagop is an alias to do_stagger. Maintained for backwards compatibility.
+    def cstagop(self):  # cstagop is an alias to do_stagger. Maintained for backwards compatibility.
         return self.do_stagger
+
     @cstagop.setter
     def cstagop(self, value):
         self.do_stagger = value
@@ -241,6 +241,7 @@ class BifrostData():
     def snap(self):
         '''snapshot number, or list of snapshot numbers.'''
         return getattr(self, '_snap', None)
+
     @snap.setter
     def snap(self, value):
         self.set_snap(value)
@@ -259,7 +260,6 @@ class BifrostData():
     def snapname(self):
         '''alias for self.root_name. Set by 'snapname' in mhd.in / .idl files.'''
         return self.root_name
-
 
     kx = property(lambda self: 2*np.pi*np.fft.fftshift(np.fft.fftfreq(self.xLength, self.dx)),
                   doc='kx coordinates [simulation units] (fftshifted such that 0 is in the middle).')
@@ -291,7 +291,7 @@ class BifrostData():
         else:
             self.set_snap(self.get_snaps()[i])
         return self
-    
+
     def _set_snapvars(self, firstime=False):
         """
             Sets list of avaible variables
@@ -353,7 +353,7 @@ class BifrostData():
                         snap = 0
                     except IndexError:
                         raise ValueError(("(EEE) set_snap: snapshot not defined "
-                                      "and no .idl files found"))
+                                          "and no .idl files found"))
 
         self._snap = snap
         if np.shape(self.snap) != ():
@@ -370,7 +370,7 @@ class BifrostData():
         # variables: lists and initialisation
         self._set_snapvars(firstime=firstime)
         # Do not call if params_only requested
-        if(not params_only):
+        if (not params_only):
             self._init_vars(firstime=firstime)
 
     def _read_params(self, firstime=False):
@@ -396,7 +396,7 @@ class BifrostData():
                 filename.append(self.file_root + snap_str[i] + '.idl')
 
         for file in filename:
-            self.paramList.append(read_idl_ascii(file,firstime=firstime, obj=self))
+            self.paramList.append(read_idl_ascii(file, firstime=firstime, obj=self))
 
         # assign some parameters as attributes
         for params in self.paramList:
@@ -413,15 +413,15 @@ class BifrostData():
                     raise KeyError(('read_params: could not find '
                                     '%s in idl file!' % p))
             try:
-                if ((params['boundarychk'] == 1) and (params['isnap'] !=0)):
+                if ((params['boundarychk'] == 1) and (params['isnap'] != 0)):
                     self.nzb = self.nz + 2 * self.nb
                 else:
                     self.nzb = self.nz
-                if ((params['boundarychky'] == 1) and (params['isnap'] !=0)):
+                if ((params['boundarychky'] == 1) and (params['isnap'] != 0)):
                     self.nyb = self.ny + 2 * self.nb
                 else:
                     self.nyb = self.ny
-                if ((params['boundarychkx'] == 1) and (params['isnap'] !=0)):
+                if ((params['boundarychkx'] == 1) and (params['isnap'] != 0)):
                     self.nxb = self.nx + 2 * self.nb
                 else:
                     self.nxb = self.nx
@@ -446,12 +446,12 @@ class BifrostData():
         self.params = {}
         for key in self.paramList[0]:
             self.params[key] = np.array(
-                [self.paramList[i][key] for i in range(0, len(self.paramList))    \
+                [self.paramList[i][key] for i in range(0, len(self.paramList))
                     if key in self.paramList[i].keys()])
-                    # the if statement is required in case extra params in 
-                    # self.ParmList[0]
+            # the if statement is required in case extra params in
+            # self.ParmList[0]
         self.time = self.params['t']
-        if self.sel_units=='cgs': 
+        if self.sel_units == 'cgs':
             self.time *= self.uni.uni['t']
 
     def get_param(self, param, default=None, warning=None, error_prop=None):
@@ -487,7 +487,7 @@ class BifrostData():
         Equivalent to {p: self.get_param(p, **kw) for p in params}.
         '''
         return {p: self.get_param(p, **kw) for p in params}
-        
+
     def __read_mesh(self, meshfile, firstime=False):
         """
         Reads mesh file
@@ -544,7 +544,7 @@ class BifrostData():
             if self.verbose and firstime:
                 warnings.warn(('Mesh file {mf} does not exist. Creating uniform grid '
                                'with (dx,dy,dz)=({dx:.2e},{dy:.2e},{dz:.2e})').format(
-                               mf=repr(meshfile), dx=self.dx, dy=self.dy, dz=self.dz))
+                    mf=repr(meshfile), dx=self.dx, dy=self.dy, dz=self.dz))
             # x
             self.x = np.arange(self.nx) * self.dx
             self.xdn = self.x - 0.5 * self.dx
@@ -575,8 +575,8 @@ class BifrostData():
             else:
                 dx1d = np.zeros(len(xcoords))
             setattr(self, 'd'+x+'1d', dx1d)
-        
-        if self.sel_units=='cgs': 
+
+        if self.sel_units == 'cgs':
             self.x *= self.uni.uni['l']
             self.y *= self.uni.uni['l']
             self.z *= self.uni.uni['l']
@@ -587,21 +587,21 @@ class BifrostData():
             self.dx1d *= self.uni.uni['l']
             self.dy1d *= self.uni.uni['l']
             self.dz1d *= self.uni.uni['l']
-            
+
             self.dxidxup /= self.uni.uni['l']
             self.dxidxdn /= self.uni.uni['l']
             self.dyidyup /= self.uni.uni['l']
             self.dyidydn /= self.uni.uni['l']
             self.dzidzup /= self.uni.uni['l']
-            self.dzidzdn /= self.uni.uni['l']  
-        
+            self.dzidzdn /= self.uni.uni['l']
+
         self.transunits = False
-        
+
     def _init_vars(self, firstime=False,  fast=None, *args, **kwargs):
         """
         Memmaps "simple" variables, and maps them to methods.
         Also, sets file name[s] from which to read a data
-        
+
         fast: None, True, or False.
             whether to only read density (and not all the other variables).
             if None, use self.fast instead.
@@ -610,7 +610,7 @@ class BifrostData():
         if self._fast_skip_flag is True:
             return
         elif self._fast_skip_flag is False:
-            self._fast_skip_flag = True # swaps flag to True, then runs the rest of the code (this time around).
+            self._fast_skip_flag = True  # swaps flag to True, then runs the rest of the code (this time around).
         # else, fast_skip_flag is None, so the code should never be skipped.
         # as long as fast is False, fast_skip_flag should be None.
 
@@ -624,7 +624,7 @@ class BifrostData():
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable {} due to {}'.format(var, err))
+                              'variable {} due to {}'.format(var, err))
         for var in self.auxxyvars:
             try:
                 self.variables[var] = self._get_simple_var_xy(var, *args,
@@ -634,18 +634,18 @@ class BifrostData():
                 if self.verbose:
                     if firstime:
                         print('(WWW) init_vars: could not read '
-                            'variable {} due to {}'.format(var, err))
+                              'variable {} due to {}'.format(var, err))
         rdt = self.r.dtype
-        if self.stagger_kind == 'cstagger': 
-            if (self.nz > 1): 
+        if self.stagger_kind == 'cstagger':
+            if (self.nz > 1):
                 cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
-                                  self.zdn.astype(rdt), self.dzidzup.astype(rdt),
-                                  self.dzidzdn.astype(rdt))
+                                      self.zdn.astype(rdt), self.dzidzup.astype(rdt),
+                                      self.dzidzdn.astype(rdt))
                 self.cstagger_exists = True   # we can use cstagger methods!
             else:
                 cstagger.init_stagger_mz1d(self.nz, self.dx, self.dy, self.z.astype(rdt))
                 self.cstagger_exists = True  # we must avoid using cstagger methods.
-        else: 
+        else:
             self.cstagger_exists = True
 
     ## GET VARIABLE ##
@@ -688,9 +688,9 @@ class BifrostData():
 
         if not np.array_equal(iinum, slice(None)):
             # smash self.variables. Necessary, since we will change the domain size.
-            self.variables={}
+            self.variables = {}
 
-        if isinstance(iinum, (int, np.integer)): # we convert to slice, to maintain dimensions of output.
+        if isinstance(iinum, (int, np.integer)):  # we convert to slice, to maintain dimensions of output.
             iinum = slice(iinum, iinum+1)  # E.g. [0,1,2][slice(1,2)] --> [1]; [0,1,2][1] --> 1
 
         # set self.iix
@@ -698,7 +698,7 @@ class BifrostData():
         if self.verbose:
             # convert iinum to string that wont be super long (in case iinum is a long list)
             try:
-                assert len(iinum)>20
+                assert len(iinum) > 20
             except (TypeError, AssertionError):
                 iinumprint = iinum
             else:
@@ -706,9 +706,9 @@ class BifrostData():
                 iinumprint = iinumprint.format(len(iinum), min(iinum), max(iinum), iinum[1])
             # print info.
             print('(set_domain) {}: {}'.format(iix, iinumprint),
-                  whsp*4, end="\r",flush=True)
+                  whsp*4, end="\r", flush=True)
 
-        #set self.xLength
+        # set self.xLength
         if isinstance(iinum, slice):
             nx = getattr(self, 'n'+iiaxis+'b')
             indSize = len(range(*iinum.indices(nx)))
@@ -744,48 +744,48 @@ class BifrostData():
 
         any_domain_changes = False
         for x, iix in zip(AXES, slices):
-            domain_changed     = self.set_domain_iiaxis(iix, x)
+            domain_changed = self.set_domain_iiaxis(iix, x)
             any_domain_changes = any_domain_changes or domain_changed
 
         # update x, y, z, dx1d, dy1d, dz1d appropriately.
         if any_domain_changes:
             self.__read_mesh(self.meshfile, firstime=False)
 
-    def genvar(self): 
+    def genvar(self):
         '''
-        Dictionary of original variables which will allow to convert to cgs. 
+        Dictionary of original variables which will allow to convert to cgs.
         '''
-        self.varn={}
-        self.varn['rho']= 'r'
-        self.varn['totr']= 'r'
+        self.varn = {}
+        self.varn['rho'] = 'r'
+        self.varn['totr'] = 'r'
         self.varn['tg'] = 'tg'
         self.varn['pg'] = 'p'
         self.varn['ux'] = 'ux'
         self.varn['uy'] = 'uy'
         self.varn['uz'] = 'uz'
-        self.varn['e']  = 'e'
+        self.varn['e'] = 'e'
         self.varn['bx'] = 'bx'
         self.varn['by'] = 'by'
         self.varn['bz'] = 'bz'
-    
+
     @document_vars.quant_tracking_top_level
     def _load_quantity(self, var, cgsunits=1.0, **kwargs):
         '''helper function for get_var; actually calls load_quantities for var.'''
         __tracebackhide__ = True  # hide this func from error traceback stack
         # look for var in self.variables
-        if cgsunits==1.0:
+        if cgsunits == 1.0:
             if var in self.variables:                 # if var is still in memory,
                 return self.variables[var]  # load from memory instead of re-reading.
         # Try to load simple quantities.
         val = load_fromfile_quantities.load_fromfile_quantities(self, var,
-                                                save_if_composite=True, cgsunits=cgsunits, **kwargs)
+                                                                save_if_composite=True, cgsunits=cgsunits, **kwargs)
 
         # Try to load "regular" quantities
         if val is None:
             val = load_quantities(self, var, **kwargs)
         # Try to load "arithmetic" quantities.
         if val is None:
-            val = load_arithmetic_quantities(self, var, **kwargs) 
+            val = load_arithmetic_quantities(self, var, **kwargs)
 
         return val
 
@@ -813,33 +813,33 @@ class BifrostData():
         if (snap is not None) and np.any(snap != self.snap):
             if self.verbose:
                 print('(get_var): setsnap ', snap, self.snap, whsp*6,
-                    end="\r",flush=True)
+                      end="\r", flush=True)
             self.set_snap(snap)
-            self.variables={}
+            self.variables = {}
 
         # set iix, iiy, iiz appropriately
         slices_names_and_vals = (('iix', iix), ('iiy', iiy), ('iiz', iiz))
         original_slice = [iix if iix is not None else getattr(self, slicename, slice(None))
-                           for slicename, iix in slices_names_and_vals]
+                          for slicename, iix in slices_names_and_vals]
         self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=True)
-        
-        if var in self.varn.keys(): 
-            var=self.varn[var]
 
-        if (self.sel_units=='cgs'): 
-            varu=var.replace('x','')
-            varu=varu.replace('y','')
-            varu=varu.replace('z','')
-            if varu == 'r': 
+        if var in self.varn.keys():
+            var = self.varn[var]
+
+        if (self.sel_units == 'cgs'):
+            varu = var.replace('x', '')
+            varu = varu.replace('y', '')
+            varu = varu.replace('z', '')
+            if varu == 'r':
                 varu = 'rho'
-            if (varu in self.uni.uni.keys()): 
+            if (varu in self.uni.uni.keys()):
                 cgsunits = self.uni.uni[varu]
-            else: 
+            else:
                 cgsunits = 1.0
 
-        else: 
+        else:
             cgsunits = 1.0
-                
+
         # get value of variable.
         val = self._load_quantity(var, cgsunits=cgsunits, **kwargs)
 
@@ -870,31 +870,31 @@ class BifrostData():
             print(self.simple_vars)
             print('Variables from xy aux files:')
             print(self.auxxyvars)
-            if hasattr(self,'vardict'):
+            if hasattr(self, 'vardict'):
                 self.vardocs()
             return None
 
         # handle "don't know how to get this var" case
         if val is None:
             errmsg = ('get_var: do not know (yet) how to calculate quantity {}. '
-                '(Got None while trying to calculate it.) '
-                'Note that simple_var available variables are: {}. '
-                '\nIn addition, get_quantity can read others computed variables; '
-                "see e.g. help(self.get_var) or get_var('')) for guidance.")
+                      '(Got None while trying to calculate it.) '
+                      'Note that simple_var available variables are: {}. '
+                      '\nIn addition, get_quantity can read others computed variables; '
+                      "see e.g. help(self.get_var) or get_var('')) for guidance.")
             raise ValueError(errmsg.format(repr(var), repr(self.simple_vars)))
 
         # set original_slice if do_stagger and we are at the outermost layer.
         if self.do_stagger and not self._getting_internal_var():
             self.set_domain_iiaxes(*original_slice, internal=False)
-        
+
         # reshape if necessary... E.g. if var is a simple var, and iix tells to slice array.
         if (np.ndim(val) >= self.ndim) and (np.shape(val) != self.shape):
             if all(isinstance(s, slice) for s in (self.iix, self.iiy, self.iiz)):
                 val = val[self.iix, self.iiy, self.iiz]  # we can index all together
             else:  # we need to index separately due to numpy multidimensional index array rules.
-                val = val[self.iix,:,:]
-                val = val[:,self.iiy,:]
-                val = val[:,:,self.iiz]
+                val = val[self.iix, :, :]
+                val = val[:, self.iiy, :]
+                val = val[:, :, self.iiz]
 
         # take mean if self.internal_means (disabled by default)
         if self.internal_means:
@@ -902,7 +902,7 @@ class BifrostData():
 
         # handle post-processing steps which we only do for top-level calls to get_var:
         if not self._getting_internal_var():
-            
+
             # squeeze if self.squeeze_output (disabled by default)
             if self.squeeze_output and (np.ndim(val) > 0):
                 val = val.squeeze()
@@ -944,77 +944,76 @@ class BifrostData():
         '''
         return getattr(self, document_vars.LOADING_LEVEL) >= 0
 
-    def trans2comm(self, varname, snap=None, *args, **kwargs): 
+    def trans2comm(self, varname, snap=None, *args, **kwargs):
         '''
-        Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis 
-        is: 
+        Transform the domain into a "common" format. All arrays will be 3D. The 3rd axis
+        is:
 
           - for 3D atmospheres:  the vertical axis
-          - for loop type atmospheres: along the loop 
-          - for 1D atmosphere: the unique dimension is the 3rd axis. 
-          At least one extra dimension needs to be created artifically. 
+          - for loop type atmospheres: along the loop
+          - for 1D atmosphere: the unique dimension is the 3rd axis.
+          At least one extra dimension needs to be created artifically.
 
-        All of them should obey the right hand rule 
+        All of them should obey the right hand rule
 
-        In all of them, the vectors (velocity, magnetic field etc) away from the Sun. 
+        In all of them, the vectors (velocity, magnetic field etc) away from the Sun.
 
-        If applies, z=0 near the photosphere. 
+        If applies, z=0 near the photosphere.
 
-        Units: everything is in cgs. 
+        Units: everything is in cgs.
 
-        If an array is reverse, do ndarray.copy(), otherwise pytorch will complain. 
+        If an array is reverse, do ndarray.copy(), otherwise pytorch will complain.
 
         '''
 
-        
-        self.trans2commaxes() 
+        self.trans2commaxes()
 
         self.sel_units = 'cgs'
 
         sign = 1.0
-        if varname[-1] in ['x','y','z']: 
+        if varname[-1] in ['x', 'y', 'z']:
             varname = varname+'c'
-            if varname[-2] in ['y','z']: 
-                sign = -1.0 
-        
-        var = self.get_var(varname,snap=snap, *args, **kwargs)
+            if varname[-2] in ['y', 'z']:
+                sign = -1.0
+
+        var = self.get_var(varname, snap=snap, *args, **kwargs)
         var = sign * var
 
-        var = var[...,::-1].copy()
+        var = var[..., ::-1].copy()
 
         return var
 
-    def trans2commaxes(self): 
+    def trans2commaxes(self):
         if self.transunits == False:
-          self.transunits = True
-          if self.sel_units == 'cgs':
-            cte=1.0
-          else: 
-            cte=self.uni.u_l #not sure if this works, u_l seems to be 1.e8
-          self.x = self.x*cte
-          self.dx = self.dx*cte
-          self.y = self.y*cte
-          self.dy = self.dy*cte
-          self.z = - self.z[::-1].copy()*cte
-          self.dz = - self.dz1d[::-1].copy()*cte 
+            self.transunits = True
+            if self.sel_units == 'cgs':
+                cte = 1.0
+            else:
+                cte = self.uni.u_l  # not sure if this works, u_l seems to be 1.e8
+            self.x = self.x*cte
+            self.dx = self.dx*cte
+            self.y = self.y*cte
+            self.dy = self.dy*cte
+            self.z = - self.z[::-1].copy()*cte
+            self.dz = - self.dz1d[::-1].copy()*cte
 
-    def trans2noncommaxes(self): 
+    def trans2noncommaxes(self):
 
         if self.transunits == True:
-          self.transunits = False
-          if self.sel_units == 'cgs':
-            cte=1.0
-          else: 
-            cte=self.uni.u_l
-          self.x =  self.x/cte
-          self.dx =  self.dx/cte
-          self.y =  self.y/cte
-          self.dy =  self.dy/cte
-          self.z = - self.z[::-1].copy()/cte
-          self.dz = - self.dz1d[::-1].copy()/cte
+            self.transunits = False
+            if self.sel_units == 'cgs':
+                cte = 1.0
+            else:
+                cte = self.uni.u_l
+            self.x = self.x/cte
+            self.dx = self.dx/cte
+            self.y = self.y/cte
+            self.dy = self.dy/cte
+            self.z = - self.z[::-1].copy()/cte
+            self.dz = - self.dz1d[::-1].copy()/cte
 
     @document_vars.quant_tracking_simple('SIMPLE_VARS')
-    def _get_simple_var(self, var, order='F', mode='r', 
+    def _get_simple_var(self, var, order='F', mode='r',
                         panic=False, *args, **kwargs):
         """
         Gets "simple" variable (ie, only memmap, not load into memory).
@@ -1035,7 +1034,7 @@ class BifrostData():
         if var == '':
             _simple_vars_msg = ('Quantities which are stored by the simulation. These are '
                                 'loaded as numpy memmaps by reading data files directly.')
-            docvar = document_vars.vars_documenter(self, 'SIMPLE_VARS', None, _simple_vars_msg)
+            document_vars.vars_documenter(self, 'SIMPLE_VARS', None, _simple_vars_msg)
             # TODO: << add documentation for bifrost simple vars, here.
             return None
 
@@ -1044,7 +1043,7 @@ class BifrostData():
 
         if self.verbose:
             print('(get_var): reading simple ', var, whsp*5,  # TODO: show np.shape(val) info somehow?
-                end="\r",flush=True)
+                  end="\r", flush=True)
 
         if np.shape(self.snap) != ():
             currSnap = self.snap[self.snapInd]
@@ -1054,9 +1053,9 @@ class BifrostData():
             currStr = self.snap_str
         if currSnap < 0:
             filename = self.file_root
-            if panic: 
+            if panic:
                 fsuffix_b = ''
-            else: 
+            else:
                 fsuffix_b = '.scr'
         elif currSnap == 0:
             filename = self.file_root
@@ -1066,9 +1065,9 @@ class BifrostData():
             fsuffix_b = ''
 
         if var in self.snapvars:
-            if panic: 
+            if panic:
                 fsuffix_a = '.panic'
-            else: 
+            else:
                 fsuffix_a = '.snap'
             idx = (self.snapvars).index(var)
             filename += fsuffix_a + fsuffix_b
@@ -1079,9 +1078,9 @@ class BifrostData():
         elif var in self.hionvars:
             idx = self.hionvars.index(var)
             isnap = self.get_param('isnap', error_prop=True)
-            if panic: 
+            if panic:
                 filename = filename + '.hion.panic'
-            else: 
+            else:
                 if isnap <= -1:
                     filename = filename + '.hion.snap.scr'
                 elif isnap == 0:
@@ -1093,7 +1092,7 @@ class BifrostData():
         elif var in self.heliumvars:
             idx = self.heliumvars.index(var)
             isnap = self.get_param('isnap', error_prop=True)
-            if panic: 
+            if panic:
                 filename = filename + '.helium.panic'
             else:
                 if isnap <= -1:
@@ -1111,7 +1110,7 @@ class BifrostData():
             offset = self.nxb * self.nyb * self.nzb * idx * dsize
             ss = (self.nxb, self.nyb, self.nzb)
         else:
-            offset = ((self.nxb + (self.nxb - self.nx)) * 
+            offset = ((self.nxb + (self.nxb - self.nx)) *
                       (self.nyb + (self.nyb - self.ny)) *
                       (self.nzb + (self.nzb - self.nz) // 2) * idx * dsize)
             ss = (self.nx, self.ny, self.nz)
@@ -1246,7 +1245,7 @@ class BifrostData():
         # strongly recoment to use Bifrost_units.
         ul = self.params['u_l'][self.snapInd] / 1.e2  # to metres
         # to g/cm^3  (for ne_rt_table)
-        ur = self.params['u_r'][self.snapInd]
+        self.params['u_r'][self.snapInd]
         ut = self.params['u_t'][self.snapInd]         # to seconds
         uv = ul / ut
         ub = self.params['u_b'][self.snapInd] * 1e-4  # to Tesla
@@ -1329,6 +1328,7 @@ class BifrostData():
         None.
         """
         from .multi3d import Multi3dAtmos
+
         # unit conversion to cgs and km/s
         ul = self.params['u_l'][self.snapInd]   # to cm
         ur = self.params['u_r'][self.snapInd]   # to g/cm^3  (for ne_rt_table)
@@ -1338,7 +1338,7 @@ class BifrostData():
         nh = None
         if self.verbose:
             print('Slicing and unit conversion...', whsp*4, end="\r",
-                flush=True)
+                  flush=True)
         temp = self.tg[sx, sy, sz]
         rho = self.r[sx, sy, sz]
         # Change sign of vz (because of height scale) and vy (to make
@@ -1382,7 +1382,7 @@ class BifrostData():
 
     ## VALUES OVER TIME, and TIME DERIVATIVES ##
 
-    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None, 
+    def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     print_freq=None, printing_stats=None,
                     *args__get_var, **kw__get_var):
         """
@@ -1416,21 +1416,21 @@ class BifrostData():
         """
         # set print_freq
         if print_freq is None:
-            print_freq = getattr(self, 'print_freq', 2) # default 2
+            print_freq = getattr(self, 'print_freq', 2)  # default 2
         else:
             setattr(self, 'print_freq', print_freq)
 
         # set snap
         if snap is None:
-            snap = kw__get_var.pop('snaps', None) # look for 'snaps' kwarg
+            snap = kw__get_var.pop('snaps', None)  # look for 'snaps' kwarg
             if snap is None:
                 snap = self.snap
         snap = np.array(snap, copy=False)
-        if len(snap.shape)==0:
+        if len(snap.shape) == 0:
             raise ValueError('Expected snap to be list (in get_varTime) but got snap={}'.format(snap))
         if not np.array_equal(snap, self.snap):
             self.set_snap(snap)
-            self.variables={}
+            self.variables = {}
 
         # set iix,iiy,iiz.
         self.set_domain_iiaxes(iix=iix, iiy=iiy, iiz=iiz, internal=False)
@@ -1442,9 +1442,10 @@ class BifrostData():
             delattr(self, 'recoverData')            # smash any existing saved data
         kw__get_var.update(printing_stats=False)   # never print_stats in the middle of get_varTime.
         timestart = now = time.time()           # track timing, so we can make updates.
-        printed_update  = False
+        printed_update = False
+
         def _print_clearline(N=100):        # clear N chars, and move cursor to start of line.
-            print('\r'+ ' '*N +'\r',end='') # troubleshooting: ensure end='' in other prints.
+            print('\r' + ' '*N + '\r', end='')  # troubleshooting: ensure end='' in other prints.
 
         try:
             firstit = True
@@ -1454,11 +1455,11 @@ class BifrostData():
                 if (print_freq >= 0) and (time.time() - now > print_freq):
                     _print_clearline()
                     print('Getting {:^10s}; at snap={:2d} (snap_it={:2d} out of {:2d}).'.format(
-                                    var,     snap[it],         it,    snapLen        ), end='')
+                        var,     snap[it],         it,    snapLen), end='')
                     now = time.time()
                     print(' Total time elapsed = {:.1f} s'.format(now - timestart), end='')
-                    printed_update=True
-                    
+                    printed_update = True
+
                 # actually get the values here:
                 if firstit:
                     # get value at first snap
@@ -1469,10 +1470,10 @@ class BifrostData():
                     firstit = False
                 else:
                     value[..., it] = self.get_var(var, snap=snap[it],
-                                                 *args__get_var, **kw__get_var)
+                                                  *args__get_var, **kw__get_var)
         except:   # here it is ok to except all errors, because we always raise.
             if it > 0:
-                self.recoverData = value[..., :it]   # save data 
+                self.recoverData = value[..., :it]   # save data
                 if self.verbose:
                     print(('Crashed during get_varTime, but managed to get data from {} '
                            'snaps before crashing. Data was saved and can be recovered '
@@ -1483,7 +1484,7 @@ class BifrostData():
             if printed_update:
                 _print_clearline()
                 print('Completed in {:.1f} s'.format(time.time() - timestart), end='\r')
-        
+
         self.print_stats(value, printing_stats=printing_stats)
         return value
 
@@ -1500,23 +1501,24 @@ class BifrostData():
             backward --> (var[snap] - var[snap-1]) / (t[snap] - t[snap-1])
             centered --> (var[snap+1] - var[snap-1]) / (t[snap+1] - t[snap-1])
         '''
-        if snap is not None: self.set_snap(snap)
+        if snap is not None:
+            self.set_snap(snap)
         method = method.lower()
-        if method=='forward':
+        if method == 'forward':
             snaps = [self.get_snap_here(), self.get_snap_next()]
-        elif method=='backward':
+        elif method == 'backward':
             snaps = [self.get_snap_prev(), self.get_snap_here()]
-        elif method=='centered':
+        elif method == 'centered':
             snaps = [self.get_snap_prev(), self.get_snap_next()]
         else:
             raise ValueError(f'Unrecognized method in ddt: {repr(method)}')
         kw__get_var.update(printing_stats=False)   # never print_stats in the middle of ddt.
         self.set_snap(snaps[0])
         value0 = self(var, *args__get_var, **kw__get_var)
-        time0  = self.get_coord('t')[0]
+        time0 = self.get_coord('t')[0]
         self.set_snap(snaps[1])
         value1 = self(var, *args__get_var, **kw__get_var)
-        time1  = self.get_coord('t')[0]
+        time1 = self.get_coord('t')[0]
         result = (value1 - value0) / (time1 - time0)
         self.print_stats(result, printing_stats=printing_stats)   # print stats iff self.printing_stats.
         return result
@@ -1549,7 +1551,7 @@ class BifrostData():
         KNOWN_METHODS = ('numpy', 'simple', 'centered')
         method = method.lower()
         assert method in KNOWN_METHODS, f"Unrecognized method for get_dvarTime: {repr(method)}"
-        v  = self.get_varTime(var, printing_stats=False, **kw__get_varTime)
+        v = self.get_varTime(var, printing_stats=False, **kw__get_varTime)
         tt = self.get_coord('t')
         tt = np.expand_dims(tt, axis=tuple(range(0, v.ndim - tt.ndim)))  # e.g. shape (1,1,1,len(self.snaps))
         method = method.lower()
@@ -1557,7 +1559,7 @@ class BifrostData():
             result = np.gradient(v, **kw__gradient, axis=-1) / np.gradient(tt, axis=-1)
         elif method == 'simple':
             result = (v[..., 1:] - v[..., :-1]) / (tt[..., 1:] - tt[..., :-1])
-        else: # method == 'centered'
+        else:  # method == 'centered'
             result = (v[..., 2:] - v[..., :-2]) / (tt[..., 2:] - tt[..., :-2])
         self.print_stats(result, printing_stats=printing_stats)
         return result
@@ -1627,7 +1629,7 @@ class BifrostData():
                 return (mod, angle)
         elif vmode == 'xyz':
             varxyz = [self.get_varm(var + x, *args__get_var, **kwargs__get_var) for x in ('x', 'y', 'z')]
-            units  = self.get_units(mode=mode)
+            units = self.get_units(mode=mode)
             return (np.array(varxyz) * units.factor, units.name)
         assert False  # if we made it to this line it means something is wrong with the code here.
 
@@ -1638,20 +1640,20 @@ class BifrostData():
         assert vmode in VALIDMODES, 'vmode {} invalid! Expected vmode in {}.'.format(repr(vmode), VALIDMODES)
         if vmode == 'modhat':
             def fmt(x):
-                mag   = fmt_values.format(x[0][0])
+                mag = fmt_values.format(x[0][0])
                 units = fmt_units.format(x[0][1])
-                hat   = ('[ '+fmt_values+', '+fmt_values+', '+fmt_values+' ]').format(*x[1])
+                hat = ('[ '+fmt_values+', '+fmt_values+', '+fmt_values+' ]').format(*x[1])
                 return 'magnitude = {} [{}];  unit vector = {}'.format(mag, units, hat)
         elif vmode == 'modangle':
             def fmt(x):
-                mag   = fmt_values.format(x[0][0])
+                mag = fmt_values.format(x[0][0])
                 units = fmt_units.format(x[0][1])
                 angle = fmt_values.format(x[1][0])
                 angle_units = fmt_units.format(x[1][1])
                 return 'magnitude = {} [{}];  angle (from +x) = {} [{}]'.format(mag, units, angle, angle_units)
         elif vmode == 'xyz':
             def fmt(x):
-                vec   = ('[ '+fmt_values+', '+fmt_values+', '+fmt_values+' ]').format(*x[0])
+                vec = ('[ '+fmt_values+', '+fmt_values+', '+fmt_values+' ]').format(*x[0])
                 units = fmt_units.format(x[1])
                 return '{}  [{}]'.format(vec, units)
         fmt.__doc__ = 'formats result of get_varV. I was made by helita.sim.bifrost._varV_formatter.'
@@ -1674,7 +1676,7 @@ class BifrostData():
 
     def get_snap_at_time(self, t, units='simu'):
         '''get snap number which is closest to time t.
-        
+
         units: 's', 'si', 'cgs', or 'simu' (default).
             's', 'si', 'cgs' --> enter t in seconds; return time at snap in seconds.
             'simu' (default) --> enter t in simulation units; return time at snap in simulation units.
@@ -1687,7 +1689,7 @@ class BifrostData():
         except TypeError:
             raise TypeError('expected self.snap (={}) to be a list. You can set it via self.set_snap()'.format(snaps))
         units = units.lower()
-        VALIDUNITS = ('s', 'si', 'cgs', 'simu') 
+        VALIDUNITS = ('s', 'si', 'cgs', 'simu')
         assert units in VALIDUNITS, 'expected units (={}) to be one of {}'.format(repr(units), VALIDUNITS)
         if units in ('s', 'si', 'cgs'):
             u_t = self.uni.u_t   # == self.uni.usi_t.   time [simu units] * u_t = time [seconds].
@@ -1699,7 +1701,7 @@ class BifrostData():
 
     def set_snap_time(self, t, units='simu', snaps=None, snap=None):
         '''set self.snap to the snap which is closest to time t.
-        
+
         units: 's', 'si', 'cgs', or 'simu' (default).
             's', 'si', 'cgs' --> enter t in seconds; return time at snap in seconds.
             'simu' (default) --> enter t in simulation units; return time at snap in simulation units.
@@ -1731,7 +1733,7 @@ class BifrostData():
         '''
         def _dxmin(x):
             dx1d = getattr(self, 'd'+x+'1d')
-            if len(dx1d)==1:
+            if len(dx1d) == 1:
                 return 1
             else:
                 return dx1d.min()
@@ -1772,9 +1774,9 @@ class BifrostData():
             scaling = 1.0
         else:
             scaling = self.uni.u_l / u_l
-        kw_x    = {  x   : getattr(self,    x      ) * scaling for x in AXES}
-        kw_dx   = {'d'+x : getattr(self, 'd'+x+'1d') / scaling for x in AXES}
-        kw_nx   = {'n'+x : getattr(self, x+'Length')           for x in AXES}
+        kw_x = {x: getattr(self,    x) * scaling for x in AXES}
+        kw_dx = {'d'+x: getattr(self, 'd'+x+'1d') / scaling for x in AXES}
+        kw_nx = {'n'+x: getattr(self, x+'Length') for x in AXES}
         kw_mesh = {**kw_x, **kw_nx, **kw_dx}
         Create_new_br_files().write_mesh(**kw_mesh, meshfile=meshfile)
         return os.path.abspath(meshfile)
@@ -1799,24 +1801,25 @@ class BifrostData():
         mode: alias for units. (for backwards compatibility)
             if entered, ignore units kwarg; use mode instead.
         '''
-        if mode is None: mode = units
+        if mode is None:
+            mode = units
         mode = mode.lower()
         VALIDMODES = ('si', 'cgs', 'simu')
         assert mode in VALIDMODES, "Invalid mode ({})! Expected one of {}".format(repr(mode), VALIDMODES)
-        if mode=='si':
+        if mode == 'si':
             u_l = self.uni.usi_l
             u_t = self.uni.usi_t
         elif mode == 'cgs':
             u_l = self.uni.u_l
             u_t = self.uni.u_t
-        else: # mode == 'simu'
+        else:  # mode == 'simu'
             u_l = 1
             u_t = 1
         x, y, z = (self_x * u_l for self_x in (self.x, self.y, self.z))
-        t       = self.time * u_t
+        t = self.time * u_t
         result = dict(x=x, y=y, z=z, t=t)
         if axes is not None:
-            AXES_LOOKUP = {'x':'x', 0:'x', 'y':'y', 1:'y', 'z':'z', 2:'z', 't':'t', 3:'t'}
+            AXES_LOOKUP = {'x': 'x', 0: 'x', 'y': 'y', 1: 'y', 'z': 'z', 2: 'z', 't': 't', 3: 't'}
             result = tuple(result[AXES_LOOKUP[axis]] for axis in axes)
         return result
 
@@ -1877,7 +1880,7 @@ class BifrostData():
             axes = AXES
             return_dict = True
         else:
-            AXES_LOOKUP = {'x':'x', 0:'x', 'y':'y', 1:'y', 'z':'z', 2:'z'}
+            AXES_LOOKUP = {'x': 'x', 0: 'x', 'y': 'y', 1: 'y', 'z': 'z', 2: 'z'}
             axes = [AXES_LOOKUP[x] for x in axes]
             return_dict = False
         result = {f'k{x}': getattr(self, f'k{x}') for x in axes}   # get k
@@ -1934,6 +1937,7 @@ class BifrostData():
 
 SnapStuff = collections.namedtuple('SnapStuff', ('snapname', 'snaps'))
 
+
 def get_snapstuff(dd=None):
     '''return (get_snapname(), available_snaps()).
     dd: None or BifrostData object.
@@ -1941,10 +1945,12 @@ def get_snapstuff(dd=None):
         else -> cd to dd.fdir, first.
     '''
     snapname = get_snapname(dd=dd)
-    snaps    = get_snaps(snapname=snapname, dd=dd)
+    snaps = get_snaps(snapname=snapname, dd=dd)
     return SnapStuff(snapname=snapname, snaps=snaps)
 
+
 snapstuff = get_snapstuff   # alias
+
 
 def get_snapname(dd=None):
     '''gets snapname by reading it from local mhd.in, or dd.snapname if dd is provided.'''
@@ -1954,7 +1960,9 @@ def get_snapname(dd=None):
     else:
         return dd.snapname
 
+
 snapname = get_snapname   # alias
+
 
 def get_snaps(dd=None, snapname=None):
     '''list available snap numbers.
@@ -1971,16 +1979,20 @@ def get_snaps(dd=None, snapname=None):
         snaps = sorted(snaps)
         return snaps
 
-snaps            = get_snaps   # alias
-available_snaps  = get_snaps   # alias
-list_snaps       = get_snaps   # alias
+
+snaps = get_snaps   # alias
+available_snaps = get_snaps   # alias
+list_snaps = get_snaps   # alias
+
 
 def snaps_info(dd=None, snapname=None, snaps=None):
     '''returns string with length of snaps, as well as min and max.
     if snaps is None, lookup all available snaps.
     '''
-    if snaps is None: snaps = get_snaps(dd=dd, snapname=snapname)
+    if snaps is None:
+        snaps = get_snaps(dd=dd, snapname=snapname)
     return 'There are {} snaps, from {} (min) to {} (max)'.format(len(snaps), min(snaps), max(snaps))
+
 
 def get_snap_shifted(dd=None, shift=0, snapname=None, snap=None):
     '''returns snap's number for snap at index (current_snap_index + shift).
@@ -2003,17 +2015,20 @@ def get_snap_shifted(dd=None, shift=0, snapname=None, snap=None):
     else:
         return snaps[i_result]
 
+
 def get_snap_prev(dd=None, snapname=None, snap=None):
     '''returns previous available snap's number. TODO: implement more efficiently.
     Must provide dd or snap, so we can figure out the snap here, first.
     '''
     return get_snap_shifted(dd=dd, shift=-1, snapname=snapname, snap=snap)
 
+
 def get_snap_next(dd=None, snapname=None, snap=None):
     '''returns next available snap's number. TODO: implement more efficiently.
     Must provide dd or snap, so we can figure out the snap here, first.
     '''
     return get_snap_shifted(dd=dd, shift=+1, snapname=snapname, snap=snap)
+
 
 def _get_dd_fdir(dd=None):
     '''return dd.fdir if dd is not None, else os.curdir.'''
@@ -2022,6 +2037,7 @@ def _get_dd_fdir(dd=None):
     else:
         fdir = os.curdir
     return fdir
+
 
 def _snap_to_N(name, base, sep='_', ext='.idl'):
     '''returns N as number given snapname (and basename) if possible, else None.
@@ -2033,7 +2049,7 @@ def _snap_to_N(name, base, sep='_', ext='.idl'):
     if not name.startswith(base):
         return None
     namext = os.path.splitext(name)
-    if   namext[1] != ext :
+    if namext[1] != ext:
         return None
     elif namext[0] == base:
         return 0
@@ -2045,6 +2061,7 @@ def _snap_to_N(name, base, sep='_', ext='.idl'):
         else:
             return snapN
 
+
 def _N_to_snapstr(N):
     '''return string representing snap number N.'''
     if N == 0:
@@ -2053,31 +2070,32 @@ def _N_to_snapstr(N):
         assert tools.is_integer(N), f"snap values must be integers! (snap={N})"
         return '_%03i' % N
 
+
 # include methods (and some aliases) for getting snaps in BifrostData object
-BifrostData.get_snapstuff   = get_snapstuff
-BifrostData.get_snapname    = get_snapname
+BifrostData.get_snapstuff = get_snapstuff
+BifrostData.get_snapname = get_snapname
 BifrostData.available_snaps = available_snaps
-BifrostData.get_snaps       = get_snaps
-BifrostData.get_snap_prev   = get_snap_prev
-BifrostData.get_snap_next   = get_snap_next
-BifrostData.snaps_info      = snaps_info
+BifrostData.get_snaps = get_snaps
+BifrostData.get_snap_prev = get_snap_prev
+BifrostData.get_snap_next = get_snap_next
+BifrostData.snaps_info = snaps_info
 
 
 ####################
 #  WRITING SNAPS   #
 ####################
 
-def write_br_snap(rootname,r,px,py,pz,e,bx,by,bz):
+def write_br_snap(rootname, r, px, py, pz, e, bx, by, bz):
     nx, ny, nz = r.shape
-    data = np.memmap(rootname, dtype='float32', mode='w+', order='f',shape=(nx,ny,nz,8))
-    data[...,0] = r
-    data[...,1] = px
-    data[...,2] = py
-    data[...,3] = pz
-    data[...,4] = e
-    data[...,5] = bx
-    data[...,6] = by
-    data[...,7] = bz
+    data = np.memmap(rootname, dtype='float32', mode='w+', order='f', shape=(nx, ny, nz, 8))
+    data[..., 0] = r
+    data[..., 1] = px
+    data[..., 2] = py
+    data[..., 3] = pz
+    data[..., 4] = e
+    data[..., 5] = bx
+    data[..., 6] = by
+    data[..., 7] = bz
     data.flush()
 
 
@@ -2128,7 +2146,7 @@ class Create_new_br_files:
             for i in range(1, 4):
                 x[nx - i] = x[nx - 4] + i * (x[nx - 4] - x[nx - 5])
 
-            x[nx-3:] = x[nx-3:][::-1] # fixes order in the tail of x
+            x[nx-3:] = x[nx-3:][::-1]  # fixes order in the tail of x
             return x
 
         def __ddxxup(f, dx=None):
@@ -2225,7 +2243,7 @@ class BifrostUnits(units.HelitaUnits):
         which physical quantity the units are for.
     '''
 
-    def __init__(self,filename='mhd.in',fdir='./',verbose=True,base_units=None, **kw__super_init):
+    def __init__(self, filename='mhd.in', fdir='./', verbose=True, base_units=None, **kw__super_init):
         '''get units from file (by reading values of u_l, u_t, u_r, gamma).
 
         filename: str; name of file. Default 'mhd.in'
@@ -2247,8 +2265,8 @@ class BifrostUnits(units.HelitaUnits):
         # setup units from base_units, if applicable
         if base_units is not None:
             try:
-                items = base_units.items()
-            except AttributeError: # base_units is a list
+                base_units.items()
+            except AttributeError:  # base_units is a list
                 for i, val in enumerate(base_units):
                     base_to_use[self.BASE_UNITS[i]] = val
                     _n_base_set += 1
@@ -2270,12 +2288,12 @@ class BifrostUnits(units.HelitaUnits):
                 file_exists = os.path.isfile(file)
             if file_exists:
                 # file exists -> set units using file.
-                self.params = read_idl_ascii(file,firstime=True)
-                
+                self.params = read_idl_ascii(file, firstime=True)
+
                 def setup_unit(key):
                     if base_to_use.get(key, None) is not None:
                         return
-                    #else:
+                    # else:
                     try:
                         value = self.params[key]
                     except Exception:
@@ -2291,7 +2309,7 @@ class BifrostUnits(units.HelitaUnits):
             else:
                 # file does not exist -> setup default units.
                 units_to_set = {unit: DEFAULT_UNITS[unit] for unit in DEFAULT_UNITS.keys()
-                                        if getattr(self, unit, None) is None}
+                                if getattr(self, unit, None) is None}
                 if verbose:
                     print("(WWW) selected file '{file}' is not available.".format(file=filename),
                           "Setting the following Default Solar Bifrost units: ", units_to_set)
@@ -2301,11 +2319,13 @@ class BifrostUnits(units.HelitaUnits):
         # initialize using instructions from HelitaUnits (see helita.sim.units.py)
         super().__init__(**base_to_use, verbose=verbose, **kw__super_init)
 
+
 Bifrost_units = BifrostUnits  # alias (required for historical compatibility)
 
 #####################
 #  CROSS SECTIONS   #
 #####################
+
 
 class Rhoeetab:
     def __init__(self, tabfile=None, fdir='.', big_endian=False, dtype='f4',
@@ -2333,7 +2353,7 @@ class Rhoeetab:
                     tmp = None
                     print("(WWW) init: no .idl or mhd.in files found." +
                           "Units set to 'standard' Bifrost units.")
-        self.uni = Bifrost_units(filename=tmp,fdir=fdir)
+        self.uni = Bifrost_units(filename=tmp, fdir=fdir)
         # load table(s)
         self.load_eos_table()
         if radtab:
@@ -2344,7 +2364,7 @@ class Rhoeetab:
         self.params = read_idl_ascii(tabfile, obj=self)
         if self.verbose:
             print(('*** Read parameters from ' + tabfile), whsp*4, end="\r",
-                    flush=True)
+                  flush=True)
         p = self.params
         # construct lnrho array
         self.lnrho = np.linspace(
@@ -2371,7 +2391,7 @@ class Rhoeetab:
         self.eosload = True
         if self.verbose:
             print('*** Read EOS table from ' + eostabfile, whsp*4, end="\r",
-                flush=True)
+                  flush=True)
 
     def load_ent_table(self, eostabfile=None):
         '''
@@ -2413,9 +2433,9 @@ class Rhoeetab:
         self.radload = True
         if self.verbose:
             print('*** Read rad table from ' + radtabfile, whsp*4, end="\r",
-                flush=True)
+                  flush=True)
 
-    def get_table(self, out='ne', bine=None, order=1):
+    def get_table(self, out='ne', bin=None, order=1):
 
         qdict = {'ne': 'lnne', 'tg': 'tgt', 'pg': 'lnpg', 'kr': 'lnkr',
                  'eps': 'epstab', 'opa': 'opatab', 'temp': 'temtab',
@@ -2434,7 +2454,7 @@ class Rhoeetab:
         if out in ['opa eps temp'.split()]:
             if bin is None:
                 print("(WWW) tab_interp: radiation bin not set,"
-                       " using first bin.")
+                      " using first bin.")
                 bin = 0
             quant = quant[..., bin]
         return quant
@@ -2528,7 +2548,7 @@ class Opatab:
     gaunt factors are set to 0.99 for h and 0.85 for heii,
     which should be good enough for the purposes of this code
     """
-    
+
     def __init__(self, tabname=None, fdir='.',  dtype='f4',
                  verbose=True, lambd=100.0, big_endian=False):
         self.fdir = fdir
@@ -2540,7 +2560,7 @@ class Opatab:
         self.teinit = 3.0
         self.dte = 0.05
         self.nte = 100
-        self.ch_tabname = "chianti" # alternatives are e.g. 'mazzotta' and others found in Chianti
+        self.ch_tabname = "chianti"  # alternatives are e.g. 'mazzotta' and others found in Chianti
         # read table file and calculate parameters
         if tabname is None:
             tabname = os.path.join(fdir, 'ionization.dat')
@@ -2589,7 +2609,7 @@ class Opatab:
         self.opaload = True
         if self.verbose:
             print('*** Read EOS table from ' + tabname, whsp*4, end="\r",
-                flush=True)
+                  flush=True)
 
     def tg_tab_interp(self, order=1):
         '''
@@ -2598,7 +2618,7 @@ class Opatab:
         self.load_opa1d_table()
         #rhoeetab = Rhoeetab(fdir=self.fdir)
         #tgTable = rhoeetab.get_table('tg')
-        tgTable = np.linspace(self.teinit,self.teinit + self.dte*self.nte,self.nte)
+        tgTable = np.linspace(self.teinit, self.teinit + self.dte*self.nte, self.nte)
         # translate to table coordinates
         x = ((tgTable) - self.teinit) / self.dte
         # interpolate quantity
@@ -2615,53 +2635,53 @@ class Opatab:
         if lambd is not None:
             self.lambd = lambd
         self.tg_tab_interp()
-        arr = (self.ionh) * self.hopac() + rhe * ((1 - self.ionhei - (1-self.ionhei-self.ionhe)) * 
-                           self.heiopac() + (self.ionhei) * self.heiiopac())
+        arr = (self.ionh) * self.hopac() + rhe * ((1 - self.ionhei - (1-self.ionhei-self.ionhe)) *
+                                                  self.heiopac() + (self.ionhei) * self.heiiopac())
         #ion_h = self.ionh
         #ion_he = self.ionhe
         #ion_hei = self.ionhei
         #ohi = self.hopac()
         #ohei = self.heiopac()
         #oheii = self.heiiopac()
-        #arr = (1 - ion_h) * ohi + rhe * ((1 - ion_he - ion_hei) *
+        # arr = (1 - ion_h) * ohi + rhe * ((1 - ion_he - ion_hei) *
         #                                 ohei + ion_he * oheii)
         arr[arr < 0] = 0
         return arr
 
     def load_opa1d_table(self, tabname='chianti', tgmin=3.0, tgmax=9.0, ntg=121):
         ''' Loads ionizationstate table. '''
-        import ChiantiPy.core as ch        
+        import ChiantiPy.core as ch
         if tabname is None:
             tabname = '%s/%s' % (self.fdir, 'ionization1d.dat')
         if tabname == '%s/%s' % (self.fdir, 'ionization1d.dat'):
             dtype = ('>' if self.big_endian else '<') + self.dtype
             table = np.memmap(tabname, mode='r', shape=(41, 3), dtype=dtype,
-                          order='F')
+                              order='F')
             self.ionh1d = table[:, 0]
             self.ionhe1d = table[:, 1]
             self.ionhei1d = table[:, 2]
             self.opaload = True
-        else: # Chianti table
+        else:  # Chianti table
             import ChiantiPy.core as ch
             if self.verbose:
                 print('*** Reading Chianti table', whsp*4, end="\r",
-                          flush=True)
+                      flush=True)
             h = ch.Ioneq.ioneq(1)
             h.load(tabname)
-            temp=np.linspace(tgmin,tgmax,ntg)
+            temp = np.linspace(tgmin, tgmax, ntg)
             h.calculate(10**temp)
             logte = np.log10(h.Temperature)
             self.dte = logte[1]-logte[0]
             self.teinit = logte[0]
             self.nte = np.size(logte)
-            self.ionh1d = h.Ioneq[0,:]
+            self.ionh1d = h.Ioneq[0, :]
             he = ch.Ioneq.ioneq(2)
             he.load(tabname)
-            self.ionhe1d = he.Ioneq[0,:]
-            self.ionhei1d = he.Ioneq[1,:]
+            self.ionhe1d = he.Ioneq[0, :]
+            self.ionhei1d = he.Ioneq[1, :]
         if self.verbose:
             print('*** Read OPA table from ' + tabname, whsp*4, end="\r",
-                flush=True)
+                  flush=True)
 
 
 class Cross_sect:
@@ -2686,6 +2706,7 @@ class Cross_sect:
     >>> a = cross_sect(['h-h-data2.txt','h-h2-data.txt'], fdir="/data/cb24bih")
 
     """
+
     def __init__(self, cross_tab=None, fdir=os.curdir, dtype='f4', verbose=None, kelvin=True, obj=None):
         '''
         Loads cross section tables and calculates collision frequencies and
@@ -2711,7 +2732,7 @@ class Cross_sect:
         '''
         self.fdir = fdir
         self.dtype = dtype
-        if verbose is None: 
+        if verbose is None:
             verbose = False if obj is None else getattr(obj, 'verbose', False)
         self.verbose = verbose
         self.kelvin = kelvin
@@ -2721,9 +2742,9 @@ class Cross_sect:
         # read table file and calculate parameters
         if cross_tab is None:
             cross_tab = ['h-h-data2.txt', 'h-h2-data.txt', 'he-he.txt',
-                          'e-h.txt', 'e-he.txt', 'h2_molecule_bc.txt',
-                          'h2_molecule_pj.txt', 'p-h-elast.txt', 'p-he.txt',
-                          'proton-h2-data.txt']
+                         'e-h.txt', 'e-he.txt', 'h2_molecule_bc.txt',
+                         'h2_molecule_pj.txt', 'p-h-elast.txt', 'p-he.txt',
+                         'proton-h2-data.txt']
         self._cross_tab_strs = cross_tab
         self.cross_tab_list = {}
         for i, cross_txt in enumerate(cross_tab):
@@ -2732,15 +2753,14 @@ class Cross_sect:
         # load table(s)
         self.load_cross_tables(firstime=True)
 
-    def load_cross_tables(self,firstime=False):
+    def load_cross_tables(self, firstime=False):
         '''
         Collects the information in the cross table files.
         '''
         self.cross_tab = dict()
         for itab in range(len(self.cross_tab_list)):
-            self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab],firstime=firstime,
+            self.cross_tab[itab] = read_cross_txt(self.cross_tab_list[itab], firstime=firstime,
                                                   obj=self.obj(), kelvin=self.kelvin)
-            
 
     def tab_interp(self, tg, itab=0, out='el', order=1):
         ''' Interpolates the cross section tables in the simulated domain.
@@ -2758,7 +2778,7 @@ class Cross_sect:
             raise ValueError("(EEE) tab_interp: EOS table not loaded!")
 
         finterp = interpolate.interp1d(np.log(self.cross_tab[itab]['tg']),
-                                          self.cross_tab[itab][out]) 
+                                       self.cross_tab[itab][out])
         tgreg = np.array(tg, copy=True)
         max_temp = np.max(self.cross_tab[itab]['tg'])
         tgreg[tg > max_temp] = max_temp
@@ -2788,12 +2808,15 @@ def cross_sect_for_obj(obj=None):
     '''
     @functools.wraps(Cross_sect)
     def _init_cross_sect(cross_tab=None, fdir=None, *args__Cross_sect, **kw__Cross_sect):
-        if fdir is None: fdir = getattr(obj, 'fdir', '.')
+        if fdir is None:
+            fdir = getattr(obj, 'fdir', '.')
         return Cross_sect(cross_tab, fdir, *args__Cross_sect, **kw__Cross_sect, obj=obj)
     return _init_cross_sect
 
 ## Tools for making cross section table such that colfreq is independent of temperature ##
-def constant_colfreq_cross(tg0, Q0, tg=range(1000, 400000, 100), T_to_eV = lambda T: T / 11604):
+
+
+def constant_colfreq_cross(tg0, Q0, tg=range(1000, 400000, 100), T_to_eV=lambda T: T / 11604):
     '''makes values for constant collision frequency vs temperature cross section table.
     tg0, Q0:
         enforce Q(tg0) = Q0.
@@ -2801,17 +2824,18 @@ def constant_colfreq_cross(tg0, Q0, tg=range(1000, 400000, 100), T_to_eV = lambd
         (recommend: 1000 to 400000, with intervals of 100.)
     T_to_eV: function
         T_to_eV(T) --> value in eV.
-    
+
     colfreq = consts * Q(tg) * sqrt(tg).
         For constant colfreq:
         Q(tg1) sqrt(tg1) = Q(tg0) sqrt(tg0)
-        
+
     returns dict of arrays. keys: 'E' (for energy in eV), 'T' (for temperature), 'Q' (for cross)
     '''
     tg = np.asarray(tg)
-    E  = T_to_eV(tg)
-    Q  = Q0 * np.sqrt(tg0) / np.sqrt(tg)
+    E = T_to_eV(tg)
+    Q = Q0 * np.sqrt(tg0) / np.sqrt(tg)
     return dict(E=E, T=tg, Q=Q)
+
 
 def cross_table_str(E, T, Q, comment=''):
     '''make a string for the table for cross sections.
@@ -2833,11 +2857,12 @@ def cross_table_str(E, T, Q, comment=''):
                          ";  (eV)         (K)        (a.u.)",
                          "",
                          "",
-                        ])
+                         ])
     lines = []
     for e, t, q in zip(E, T, Q):
         lines.append('{:.6f}       {:d}       {:.3f}'.format(e, t, q))
     return header + '\n'.join(lines)
+
 
 def constant_colfreq_cross_table_str(tg0, Q0, **kw):
     '''make a string for a cross section table which will give constant collision frequency (vs tg).'''
@@ -2847,7 +2872,7 @@ def constant_colfreq_cross_table_str(tg0, Q0, **kw):
         comment = '\n'.join(['; This table provides cross sections such that',
                              '; the collision frequency will be independent of temperature,',
                              '; assuming the functional form colfreq proportional to sqrt(T).',
-                            ])
+                             ])
     ccc = constant_colfreq_cross(tg0, Q0, **kw)
     result = cross_table_str(**ccc, comment=comment)
     return result
@@ -2905,23 +2930,23 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
         nH = np.empty((1, ) + tgas.shape, dtype='f')
 
     # unit conversion to SI
-    ul = data.params['u_l'] / 1.e2 # to metres
+    ul = data.params['u_l'] / 1.e2  # to metres
     ur = data.params['u_r']        # to g/cm^3  (for ne_rt_table)
     ut = data.params['u_t']        # to seconds
     uv = ul / ut
-    ub = data.params['u_b'] * 1e-4 # to tgasesl
+    ub = data.params['u_b'] * 1e-4  # to tgasesl
     ue = data.params['u_ee']       # to erg/g
 
     if not desc:
         desc = 'BIFROST snapshot from 2D sequence %s, sx=%s sy=1 sz=%s.' % \
-                    (file_root, repr(sx), repr(sz))
+            (file_root, repr(sx), repr(sz))
         if data.hion:
             desc = 'hion ' + desc
     x = data.x[sx] * ul
     y = snaps
     z = data.z[sz] * (-ul)
 
-    rdt = data.r.dtype
+    data.r.dtype
     # cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
     #                      data.zdn.astype(rdt), data.dzidzup.astype(rdt),
     #                      data.dzidzdn.astype(rdt))
@@ -2930,7 +2955,7 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
         data.set_snap(s)
         tgas[:, i] = np.squeeze(data.tg)[sx, sz]
         rho = np.squeeze(data.r)[sx, sz]
-        vz[:, i] = np.squeeze(do_stagger(data.pz,'zup',obj=data))[sx, sz] / rho * (-uv)
+        vz[:, i] = np.squeeze(do_stagger(data.pz, 'zup', obj=data))[sx, sz] / rho * (-uv)
         if writeB:
             Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
             By[:, i] = np.squeeze(-data.by)[sx, sz] * ub
@@ -2942,8 +2967,9 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
                             append=False, Bx=Bx, By=By, Bz=Bz, desc=desc,
                             snap=snaps[0])
 
+
 @file_memory.remember_and_recall('_memory_read_idl_ascii')
-def read_idl_ascii(filename,firstime=False):
+def read_idl_ascii(filename, firstime=False):
     ''' Reads IDL-formatted (command style) ascii file into dictionary.
     if obj is not None, remember the result and restore it if ever reading the same exact file again.
     '''
@@ -2956,8 +2982,8 @@ def read_idl_ascii(filename,firstime=False):
             li += 1
             # ignore empty lines and comments
             line, _, comment = line.partition(';')
-            key, _, value    = line.partition('=')
-            key   = key.strip().lower()
+            key, _, value = line.partition('=')
+            key = key.strip().lower()
             value = value.strip()
             if len(key) == 0:
                 continue    # this was a blank line.
@@ -2966,33 +2992,33 @@ def read_idl_ascii(filename,firstime=False):
                     print('(WWW) read_params: line %i is invalid, skipping' % li)
                 continue
             # --- evaluate value --- #
-            ## allow '.false.' or '.true.' for bools
+            # allow '.false.' or '.true.' for bools
             if (value.lower() in ['.false.', '.true.']):
                 value = False if value.lower() == '.false.' else True
             else:
-                ## safely evaluate any other type of value
+                # safely evaluate any other type of value
                 try:
                     value = ast.literal_eval(value)
                 except Exception:
-                    ## failed to evaluate. Might be string, or might be int with leading 0's.
+                    # failed to evaluate. Might be string, or might be int with leading 0's.
                     try:
                         value = int(value)
                     except ValueError:
-                        ## failed to convert to int; interpret value as string.
+                        # failed to convert to int; interpret value as string.
                         pass  # leave value as string without evaluating it.
 
             params[key] = value
 
     return params
 
+
 @file_memory.remember_and_recall('_memory_read_cross_txt', kw_mem=['kelvin'])
-def read_cross_txt(filename,firstime=False, kelvin=True):
+def read_cross_txt(filename, firstime=False, kelvin=True):
     ''' Reads IDL-formatted (command style) ascii file into dictionary.
     tg will be converted to Kelvin, unless kelvin==False.
     '''
     li = 0
     params = {}
-    count = 0
     # go through the file, add stuff to dictionary
     with open(filename) as fp:
         for line in fp:
@@ -3009,12 +3035,12 @@ def read_cross_txt(filename,firstime=False, kelvin=True):
                 params['crossunits'] = float(line[0].strip())
                 li += 1
                 continue
-            elif not('crossunits' in params.keys()):
-                print('(WWW) read_cross: line %i is invalid, missing crossunits, file %s' % (li,filename))
+            elif not ('crossunits' in params.keys()):
+                print('(WWW) read_cross: line %i is invalid, missing crossunits, file %s' % (li, filename))
 
             if (len(line) < 2):
                 if (firstime):
-                    print('(WWW) read_cross: line %i is invalid, skipping, file %s' % (li,filename))
+                    print('(WWW) read_cross: line %i is invalid, skipping, file %s' % (li, filename))
                 li += 1
                 continue
             # force lowercase because IDL is case-insensitive
@@ -3032,10 +3058,10 @@ def read_cross_txt(filename,firstime=False, kelvin=True):
                 except Exception:
                     if (firstime):
                         print('(WWW) read_cross: could not find datatype in '
-                            'line %i, skipping' % li)
+                              'line %i, skipping' % li)
                     li += 1
                     continue
-            if not('tg' in params.keys()):
+            if not ('tg' in params.keys()):
                 params['tg'] = temp
             else:
                 params['tg'] = np.append(params['tg'], temp)
@@ -3050,10 +3076,10 @@ def read_cross_txt(filename,firstime=False, kelvin=True):
                 except Exception:
                     if (firstime):
                         print('(WWW) read_cross: could not find datatype in '
-                            'line %i, skipping' % li)
+                              'line %i, skipping' % li)
                     li += 1
                     continue
-            if not('el' in params.keys()):
+            if not ('el' in params.keys()):
                 params['el'] = cross
             else:
                 params['el'] = np.append(params['el'], cross)
@@ -3071,10 +3097,10 @@ def read_cross_txt(filename,firstime=False, kelvin=True):
                     except Exception:
                         if (firstime):
                             print('(WWW) read_cross: could not find datatype'
-                                'in line %i, skipping' % li)
+                                  'in line %i, skipping' % li)
                         li += 1
                         continue
-                if not('mt' in params.keys()):
+                if not ('mt' in params.keys()):
                     params['mt'] = cross
                 else:
                     params['mt'] = np.append(params['mt'], cross)
@@ -3092,7 +3118,7 @@ def read_cross_txt(filename,firstime=False, kelvin=True):
                     except Exception:
                         if (firstime):
                             print('(WWW) read_cross: could not find datatype'
-                                'in line %i, skipping' % li)
+                                  'in line %i, skipping' % li)
                         li += 1
                         continue
                 if not hasattr(params, 'vi'):
@@ -3113,7 +3139,7 @@ def read_cross_txt(filename,firstime=False, kelvin=True):
                     except Exception:
                         if (firstime):
                             print('(WWW) read_cross: could not find datatype'
-                                'in line %i, skipping' % li)
+                                  'in line %i, skipping' % li)
                         li += 1
                         continue
                 if not hasattr(params, 'se'):
@@ -3177,14 +3203,14 @@ def subs2grph(subsfile):
     return calc_grph(ab, am)
 
 
-def find_first_match(name, path,incl_path=False):
+def find_first_match(name, path, incl_path=False):
     '''
     This will find the first match,
     name : string, e.g., 'patern*'
     incl_root: boolean, if true will add full path, otherwise, the name.
     path : sring, e.g., '.'
     '''
-    originalpath=os.getcwd()
+    originalpath = os.getcwd()
     os.chdir(path)
     for file in glob(name):
         if incl_path:

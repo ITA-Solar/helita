@@ -2,15 +2,17 @@
 Set of routines to read and work with input and output from Multi3D
 """
 import os
+
+import astropy.units as u
 import numpy as np
 import scipy.io
-import astropy.units as u
 
 
 class Geometry:
     """
     class def for geometry
     """
+
     def __init__(self):
         self.nx = -1
         self.ny = -1
@@ -29,6 +31,7 @@ class Atom:
     """
     class def for atom
     """
+
     def __init__(self):
         self.nrad = -1
         self.nrfix = -1
@@ -50,10 +53,12 @@ class Atom:
         self.totn = None
         self.dopfac = None
 
+
 class Atmos:
     """
     class def for atmos
     """
+
     def __init__(self):
         self.ne = None
         self.tg = None
@@ -70,6 +75,7 @@ class Spectrum:
     """
     class def for spectrum
     """
+
     def __init__(self):
         self.nnu = -1
         self.maxal = -1
@@ -86,6 +92,7 @@ class Cont:
     """
     class def for continuum
     """
+
     def __init__(self):
         self.f_type = None
         self.j = -1
@@ -106,6 +113,7 @@ class Line:
     """
     class def for spectral line
     """
+
     def __init__(self):
         self.profile_type = None
         self.ga = -1.0
@@ -136,6 +144,7 @@ class Transition:
     """
     class to hold transition info for IO
     """
+
     def __init__(self):
         self.i = -1
         self.j = -1
@@ -262,7 +271,6 @@ class Multi3dOut:
         self.geometry.ny = self.theinput["ny"]
         self.geometry.nz = self.theinput["nz"]
 
-
     def readpar(self):
         """
         reads the out_par file
@@ -330,7 +338,7 @@ class Multi3dOut:
             c.nu = f.read_reals(dtype=self.floattype)
             c.wnu = f.read_reals(dtype=self.floattype)
 
-        #line info
+        # line info
         self.line = [Line() for i in range(self.atom.nline)]
         for l in self.line:
             l.profile_type = f.read_record(dtype='S72')[0].strip()
@@ -403,7 +411,7 @@ class Multi3dOut:
                                    shape=s, offset=gs*5, order='F')
         self.atmos.nh = np.memmap(fname, dtype='float32', mode='r', order='F',
                                   shape=(nx, ny, nz, nhl), offset=gs * 6)
-        #self.atmos.vturb = np.memmap(fname, dtype='float32', mode='r',
+        # self.atmos.vturb = np.memmap(fname, dtype='float32', mode='r',
         #                             shape=s ,offset=gs*12, order='F' )
         if self.printinfo:
             print("reading " + fname)
@@ -558,6 +566,7 @@ class Multi3dAtmos:
     read_vturb : bool, optional
         If True, will read/write turbulent velocity. Default is False.
     """
+
     def __init__(self, infile, nx, ny, nz, mode='r', **kwargs):
         if os.path.isfile(infile) or (mode == "w+"):
             self.open_atmos(infile, nx, ny, nz, mode=mode, **kwargs)

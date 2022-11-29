@@ -9,7 +9,7 @@ vardict = {
     {
         QUANTDOC     : 'meta_quant_1 description',
         TYPE_QUANT_1 :                            # example: "GLOBAL_QUANT"
-            {     
+            {
             QUANTDOC     : 'TYPE_QUANT_1 description',
             # '_DOC_QUANT' : 'global variables; calculated by looping through species',   # example
             mq1tq1_var_1 : 'mq1tq1_var_1 description',
@@ -18,7 +18,7 @@ vardict = {
             ...
             },
         TYPE_QUANT_2 :                            # example: "PLASMA_QUANT"
-            {     
+            {
             QUANTDOC     : 'TYPE_QUANT_2 description',
             mq1tq2_var_1 : 'mq1tq2_var_1 description',
             ...
@@ -26,7 +26,7 @@ vardict = {
         ...
     },
     meta_quant_2 :                                # example "arithmetic_quantities"
-    {      
+    {
         QUANTDOC     : 'meta_quant_2 description',
         TYPE_QUANT_1 :
             {
@@ -41,40 +41,40 @@ vardict = {
 
 """
 
+import copy  # for deepcopy for QuantTree
 # import built-ins
-import math #for pretty strings
-import collections
+import math  # for pretty strings
 import functools
-import copy   # for deepcopy for QuantTree
+import collections
 
 # import internal modules
-from . import units       # not used heavily; just here for setting defaults, and setting obj.get_units
+from . import units  # not used heavily; just here for setting defaults, and setting obj.get_units
 from . import tools
 
-VARDICT = 'vardict'   #name of attribute (of obj) which should store documentation about vars.
-NONEDOC = '(not yet documented)'        #default documentation if none is provided.
-QUANTDOC = '_DOC_QUANT'                 #key for dd.vardict[TYPE_QUANT] containing doc for what TYPE_QUANT means.
-NFLUID  = 'nfluid'    #key which stores number of fluids. (e.g. 0 for none; 1 for "uses ifluid but not jfluid". 
-CREATING_VARDICT = '_creating_vardict'  #attribute of obj which tells if we are running get_var('') to create vardict.
+VARDICT = 'vardict'  # name of attribute (of obj) which should store documentation about vars.
+NONEDOC = '(not yet documented)'  # default documentation if none is provided.
+QUANTDOC = '_DOC_QUANT'  # key for dd.vardict[TYPE_QUANT] containing doc for what TYPE_QUANT means.
+NFLUID = 'nfluid'  # key which stores number of fluids. (e.g. 0 for none; 1 for "uses ifluid but not jfluid".
+CREATING_VARDICT = '_creating_vardict'  # attribute of obj which tells if we are running get_var('') to create vardict.
 
 # defaults for quant tracking
-## attributes of obj
-VARNAME_INPUT   = '_varname_input'      #stores name of most recent variable which was input to get_var.
-QUANT_SELECTED  = '_quant_selected'     #stores vardict lookup info for the latest quant selected.
-QUANTS_SELECTED = '_quants_selected'    #stores quant_selected for QUANT_NTRACKING recent quants.
-QUANTS_BY_LEVEL = '_quants_by_level'    #stores quant_selected by level.
-QUANTS_TREE     = '_quants_tree'        #stores quant_selected as a tree. 
-QUANT_SELECTION = '_quant_selection'    #stores info for latest quant selected; use for hesitant setting.
-QUANT_NTRACKING = '_quant_ntracking'    #if it exists, sets maxlen for _quants_selected deque.
+# attributes of obj
+VARNAME_INPUT = '_varname_input'  # stores name of most recent variable which was input to get_var.
+QUANT_SELECTED = '_quant_selected'  # stores vardict lookup info for the latest quant selected.
+QUANTS_SELECTED = '_quants_selected'  # stores quant_selected for QUANT_NTRACKING recent quants.
+QUANTS_BY_LEVEL = '_quants_by_level'  # stores quant_selected by level.
+QUANTS_TREE = '_quants_tree'  # stores quant_selected as a tree.
+QUANT_SELECTION = '_quant_selection'  # stores info for latest quant selected; use for hesitant setting.
+QUANT_NTRACKING = '_quant_ntracking'  # if it exists, sets maxlen for _quants_selected deque.
 
-## misc
-QUANT_TRACKING_N = 1000       #default for number of quant selections to remember.
-QUANT_BY_LEVEL_N = 50         #default for number of quant selections to remember at each level.
-QUANT_NOT_FOUND  = '???'      #default for typequant and metaquant when quant is not found. Do not use None.
+# misc
+QUANT_TRACKING_N = 1000  # default for number of quant selections to remember.
+QUANT_BY_LEVEL_N = 50  # default for number of quant selections to remember at each level.
+QUANT_NOT_FOUND = '???'  # default for typequant and metaquant when quant is not found. Do not use None.
 
 # defaults for loading level tracking
-## attribute of obj which tells how deep we are into loading a quantity right now. 0 = top level.
-LOADING_LEVEL    = '_loading_level'
+# attribute of obj which tells how deep we are into loading a quantity right now. 0 = top level.
+LOADING_LEVEL = '_loading_level'
 
 
 HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file when showing error traceback.
@@ -83,6 +83,7 @@ HIDE_DECORATOR_TRACEBACKS = True  # whether to hide decorators from this file wh
 METAQUANT = None
 
 ''' ----------------------------- create vardict ----------------------------- '''
+
 
 def set_meta_quant(obj, name, QUANT_DOC=NONEDOC):
     '''sets the current "meta_quant". You must use this before starting documentation.
@@ -104,6 +105,7 @@ def set_meta_quant(obj, name, QUANT_DOC=NONEDOC):
     if METAQUANT not in vardict.keys():
         vardict[METAQUANT] = dict()
     vardict[METAQUANT][QUANTDOC] = QUANT_DOC
+
 
 def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=None, rewrite=False, **kw__defaults):
     '''function factory; returns function(varname, vardoc, nfluid=None) which writes documentation of var.
@@ -144,9 +146,9 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
     also sets obj.vardict[METAQUANT][TYPE_QUANT][document_vars.QUANTDOC] = QUANT_DOC.
     '''
     if METAQUANT is None:
-        raise ValueError('METAQUANT cannot be None when calling vars_documenter. ' + \
+        raise ValueError('METAQUANT cannot be None when calling vars_documenter. ' +
                          'Use document_vars.set_meta_quant() to set METAQUANT.')
-    vardict = getattr(obj, VARDICT)[METAQUANT]   #sets vardict = obj.vardict[METAQUANT]
+    vardict = getattr(obj, VARDICT)[METAQUANT]  # sets vardict = obj.vardict[METAQUANT]
     write = rewrite
     if not TYPE_QUANT in vardict.keys():
         vardict[TYPE_QUANT] = dict()
@@ -167,9 +169,9 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
             '''
             if (QUANT_VARS is not None) and (varname not in QUANT_VARS):
                 return
-            
+
             tqd = vardict[TYPE_QUANT]
-            if not copy: # case "basic usage" (copy=False)
+            if not copy:  # case "basic usage" (copy=False)
                 var_info_dict = {'doc': vardoc, 'nfluid': nfluid, **kw__defaults, **kw__more_info_about_var}
             else:        # case "aliasing" (copy=True)
                 var_info_dict = tqd[vardoc]   # obj(varname) == obj(args[1]). (but for "basic" case, args[1]==vardoc.)
@@ -179,7 +181,6 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
                 tqd[varname] = var_info_dict
             else:                   # if vd assignment was successful, set info.
                 vd.update(var_info_dict)
-
 
         # initialize documentation to NONEDOC for var in QUANT_VARS
         if QUANT_VARS is not None:
@@ -197,6 +198,7 @@ def vars_documenter(obj, TYPE_QUANT, QUANT_VARS=None, QUANT_DOC=NONEDOC, nfluid=
             return
         return dont_document_var
 
+
 def create_vardict(obj):
     '''call obj.get_var('') but with prints turned off.
     Afterwards, obj.vardict will be full of documentation.
@@ -212,18 +214,20 @@ def create_vardict(obj):
     obj.get_var('')
     setattr(obj, CREATING_VARDICT, False)
     # set some other useful functions in obj.
+
     def _make_weak_bound_method(f):
         @functools.wraps(f)
         def _weak_bound_method(*args, **kwargs):
             __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             return f(obj, *args, **kwargs)   # << obj which was passed to create_vardict
         return _weak_bound_method
-    obj.gotten_vars    = _make_weak_bound_method(gotten_vars)
-    obj.got_vars_tree  = _make_weak_bound_method(got_vars_tree)
+    obj.gotten_vars = _make_weak_bound_method(gotten_vars)
+    obj.got_vars_tree = _make_weak_bound_method(got_vars_tree)
     obj.get_quant_info = _make_weak_bound_method(get_quant_info)
-    obj.get_var_info   = obj.get_quant_info   # alias
-    obj.quant_lookup   = _make_weak_bound_method(quant_lookup)
-    obj.get_units      = _make_weak_bound_method(units.get_units)
+    obj.get_var_info = obj.get_quant_info   # alias
+    obj.quant_lookup = _make_weak_bound_method(quant_lookup)
+    obj.get_units = _make_weak_bound_method(units.get_units)
+
 
 def creating_vardict(obj, default=False):
     '''return whether obj is currently creating vardict. If unsure, return <default>.'''
@@ -232,13 +236,16 @@ def creating_vardict(obj, default=False):
 
 ''' ----------------------------- search vardict ----------------------------- '''
 
+
 def _apply_keys(d, keys):
     '''result result of successive application of (key for key in in keys) to dict of dicts, d.'''
     for key in keys:
         d = d[key]
     return d
 
+
 search_result = collections.namedtuple('vardict_search_result', ('result', 'type', 'keys'))
+
 
 def search_vardict(vardict, x):
     '''search vardict for x. x is the key we are looking for.
@@ -265,13 +272,15 @@ def search_vardict(vardict, x):
         return search_result(result=v[x], type='metaquant', keys=[x])
     for metaquant in vardict.keys():
         v = vardict[metaquant]
-        if not isinstance(v, dict): continue   # skip QUANTDOC
+        if not isinstance(v, dict):
+            continue   # skip QUANTDOC
         if x in v.keys():
             return search_result(result=v[x], type='typequant', keys=[metaquant, x])
     for metaquant in vardict.keys():
         for typequant in vardict[metaquant].keys():
             v = vardict[metaquant][typequant]
-            if not isinstance(v, dict): continue   # skip QUANTDOC
+            if not isinstance(v, dict):
+                continue   # skip QUANTDOC
             if x in v.keys():
                 return search_result(result=v[x], type='var', keys=[metaquant, typequant, x])
     return False
@@ -280,21 +289,24 @@ def search_vardict(vardict, x):
 ''' ----------------------------- prettyprint vardict ----------------------------- '''
 
 TW = 3   # tabwidth
-WS = ' ' # whitespace
+WS = ' '  # whitespace
+
 
 def _underline(s, underline='-', minlength=0):
     '''return underlined s'''
-    if len(underline.strip())==0:
+    if len(underline.strip()) == 0:
         return s
     line = underline * math.ceil(max(len(s), minlength)/len(underline))
     return s + '\n' + line
 
+
 def _intro_line(text, length=80):
     '''return fancy formatting of text as "intro line".'''
     left, right = '(<< ', ' >>)'
-    length  = max(0, (length - len(left) - len(right)))
+    length = max(0, (length - len(left) - len(right)))
     fmtline = '{:^' + str(length) + '}'   # {:^N} makes for line which is N long, and centered.
     return (left + fmtline + right).format(text)
+
 
 def _vardocs_var(varname, vd, q=WS*TW*2):
     '''docs for vd (var_dict). returns list containing one string, or None (if undocumented)'''
@@ -309,6 +321,7 @@ def _vardocs_var(varname, vd, q=WS*TW*2):
         rstr += str(vardoc)
         return [rstr]
 
+
 def _vardocs_typequant(typequant_dict, tqd=WS*TW, q=WS*TW*2, ud=WS*TW*3):
     '''docs for typequant_dict. returns list of strings, each string is one line.'''
     result = []
@@ -317,16 +330,17 @@ def _vardocs_typequant(typequant_dict, tqd=WS*TW, q=WS*TW*2, ud=WS*TW*3):
         s = s.rstrip() + '\n'   # make end have exactly 1 newline.
         result += [tqd + s]
     undocumented = []
-    for varname in (key for key in sorted(typequant_dict.keys()) if key!=QUANTDOC):
+    for varname in (key for key in sorted(typequant_dict.keys()) if key != QUANTDOC):
         vd = typequant_dict[varname]
         vdv = _vardocs_var(varname, vd, q=q)
         if vdv is None:
             undocumented += [varname]
         else:
             result += vdv
-    if undocumented!=[]:
+    if undocumented != []:
         result += ['\n' + q + 'existing but undocumented vars:\n' + ud + ', '.join(undocumented)]
     return result
+
 
 def _vardocs_metaquant(metaquant_dict, underline='-',
                        mqd=''*TW, tq=WS*TW, tqd=WS*TW, q=WS*TW*2, ud=WS*TW*3):
@@ -334,11 +348,12 @@ def _vardocs_metaquant(metaquant_dict, underline='-',
     result = []
     if QUANTDOC in metaquant_dict.keys():
         result += [mqd + str(metaquant_dict[QUANTDOC]).lstrip().replace('\n', mqd+'\n')]
-    for typequant in (key for key in sorted(metaquant_dict.keys()) if key!=QUANTDOC):
+    for typequant in (key for key in sorted(metaquant_dict.keys()) if key != QUANTDOC):
         result += ['', _underline(tq + typequant, underline)]
         typequant_dict = metaquant_dict[typequant]
         result += _vardocs_typequant(typequant_dict, tqd=tqd, q=q, ud=ud)
     return result
+
 
 def _vardocs_print(result, printout=True):
     '''x = '\n'.join(result). if printout, print x. Else, return x.'''
@@ -347,6 +362,7 @@ def _vardocs_print(result, printout=True):
         print(stresult)
     else:
         return stresult
+
 
 def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
                 mqd=''*TW, tq=WS*TW, tqd=WS*TW, q=WS*TW*2, ud=WS*TW*3):
@@ -364,7 +380,7 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
             'Following is documentation for vars compatible with self.get_var(var).',
             _intro_line('Documentation contents available in dictionary form via self.{}'.format(VARDICT)),
             _intro_line('Documentation string available via self.vardocs(printout=False)'),
-            ]
+        ]
         vardict = getattr(obj, VARDICT)
         for metaquant in sorted(vardict.keys()):
             result += ['', '', _underline(metaquant, underline, minlength=min_mq_underline)]
@@ -415,7 +431,8 @@ def set_vardocs(obj, printout=True, underline='-', min_mq_underline=80,
 ''' ----------------------------- quant tracking ----------------------------- '''
 
 QuantInfo = collections.namedtuple('QuantInfo', ('varname', 'quant', 'typequant', 'metaquant', 'level'),
-                                   defaults = [None, None, None, None, None])
+                                   defaults=[None, None, None, None, None])
+
 
 def setattr_quant_selected(obj, quant, typequant, metaquant=None, varname=None, level=None, delay=False):
     '''sets QUANT_SELECTED to QuantInfo(varname, quant, typequant, metaquant, level).
@@ -446,7 +463,6 @@ def setattr_quant_selected(obj, quant, typequant, metaquant=None, varname=None, 
         metaquant = METAQUANT
     if level is None:
         level = getattr(obj, LOADING_LEVEL, 0)
-        loading_level = level
     info = QuantInfo(varname=varname, quant=quant, typequant=typequant, metaquant=metaquant, level=level)
     if delay:
         setattr(obj, QUANT_SELECTION, info)
@@ -454,6 +470,7 @@ def setattr_quant_selected(obj, quant, typequant, metaquant=None, varname=None, 
         setattr(obj, QUANT_SELECTED, info)
         _track_quants_selected(obj, info)
     return info
+
 
 def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
     '''updates obj._quants_selected with info.
@@ -474,7 +491,7 @@ def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
     loading_level = getattr(obj, LOADING_LEVEL, 0)
     if not hasattr(obj, QUANTS_BY_LEVEL):
         setattr(obj, QUANTS_BY_LEVEL,
-                {loading_level : collections.deque([info], maxlen=QUANT_BY_LEVEL_N)})
+                {loading_level: collections.deque([info], maxlen=QUANT_BY_LEVEL_N)})
     else:
         qbl_dict = getattr(obj, QUANTS_BY_LEVEL)
         try:
@@ -489,6 +506,7 @@ def _track_quants_selected(obj, info, maxlen=QUANT_TRACKING_N):
     # return QUANTS_SELECTED
     return getattr(obj, QUANTS_SELECTED)
 
+
 def select_quant_selection(obj, info_default=None):
     '''puts data from QUANT_SELECTION into QUANT_SELECTED.
     Also, updates QUANTS_SELECTED with the info.
@@ -499,6 +517,7 @@ def select_quant_selection(obj, info_default=None):
     setattr(obj, QUANT_SELECTED, info)
     _track_quants_selected(obj, info)
     return info
+
 
 def quant_tracking_simple(typequant, metaquant=None):
     '''returns a function dectorator which turns f(obj, quant, *args, **kwargs) into:
@@ -523,8 +542,8 @@ def quant_tracking_simple(typequant, metaquant=None):
         def f_but_quant_tracking(obj, quant, *args, **kwargs):
             __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
             # we need to save original METAQUANT now, because doing f might change METAQUANT.
-            ## (quant_tracking_simple is meant to wrap a function inside a load_..._quantities file,
-            ## so when that function (f) is called, METAQUANT will be the correct value.)
+            # (quant_tracking_simple is meant to wrap a function inside a load_..._quantities file,
+            # so when that function (f) is called, METAQUANT will be the correct value.)
             if metaquant is None:
                 remembered_metaquant = METAQUANT
             else:
@@ -539,16 +558,18 @@ def quant_tracking_simple(typequant, metaquant=None):
         return f_but_quant_tracking
     return decorator
 
+
 class QuantTree:
     '''use for tree representation of quants.
 
     Notes:
     - level should always be larger for children than for their parents.
     '''
+
     def __init__(self, data, level=-1):
-        self.data     = data
+        self.data = data
         self.children = []
-        self._level   = level
+        self._level = level
         self.hide_level = None
 
     def add_child(self, child, adjusted_level=False):
@@ -580,6 +601,7 @@ class QuantTree:
         if len(self.children) == 0:
             return (lvlstr + '{data}').format(data=self.data)
         # else, we have children, so return a string with level, data, and children
+
         def _child_to_str(child):
             return '\n' + child.str(self.hide_level, count_from_here=False)
         children_strs = ','.join([_child_to_str(child) for child in self.children])
@@ -629,7 +651,7 @@ class QuantTree:
             return self.children[i_child]
         else:
             return self.children[::-1][i_child]
-        
+
     def set_base_level(self, level):
         '''sets self._level to level; also adjusts level of all children appropriately.
 
@@ -665,16 +687,17 @@ class QuantTree:
 
 def _get_orig_tree(obj):
     '''gets QUANTS_TREE from obj (when LOADING_LEVEL is not -1; else, returns a new QuantTree).'''
-    loading_level = getattr(obj, LOADING_LEVEL, -1) # get loading_level. Outside of f, the default is -1.
-    if (loading_level== -1) or (not hasattr(obj, QUANTS_TREE)):
+    loading_level = getattr(obj, LOADING_LEVEL, -1)  # get loading_level. Outside of f, the default is -1.
+    if (loading_level == -1) or (not hasattr(obj, QUANTS_TREE)):
         orig_tree = QuantTree(None, level=-1)
     else:
         orig_tree = getattr(obj, QUANTS_TREE)
     return orig_tree
 
+
 def quant_tree_tracking(f):
     '''wrapper for f which makes it track quant tree.
-    
+
     QUANTS_TREE (attr of obj) will be a tree like:
     (L(N-1)) None :
     (L(N)) QuantInfo(var_current_layer) :
@@ -682,7 +705,7 @@ def quant_tree_tracking(f):
       (L(N+2)) ... (tree for var_1)
      (L(N+1)) QuantInfo(var_2, i.e. 2nd var gotten while calcualting var_current_layer) :
       (L(N+2)) ... (tree for var_2)
-    
+
     Another way to write it; it will be a tree like:
     QuantTree(data=None, level=N-1, children= \
     [
@@ -697,7 +720,7 @@ def quant_tree_tracking(f):
     @functools.wraps(f)
     def f_but_quant_tree_tracking(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        orig_tree  = _get_orig_tree(obj)
+        orig_tree = _get_orig_tree(obj)
         tree_child = orig_tree.add_child(None)
         setattr(obj, QUANTS_TREE, tree_child)
         # call f.
@@ -708,6 +731,7 @@ def quant_tree_tracking(f):
         return result
     return f_but_quant_tree_tracking
 
+
 def quant_tracking_top_level(f):
     '''decorator which improves quant tracking. (decorate _load_quantities using this.)'''
     @quant_tree_tracking
@@ -715,13 +739,13 @@ def quant_tracking_top_level(f):
     @functools.wraps(f)
     def f_but_quant_tracking_level(obj, varname, *args, **kwargs):
         __tracebackhide__ = HIDE_DECORATOR_TRACEBACKS
-        setattr(obj, LOADING_LEVEL, getattr(obj, LOADING_LEVEL, -2) + 1) # increment LOADING_LEVEL.
+        setattr(obj, LOADING_LEVEL, getattr(obj, LOADING_LEVEL, -2) + 1)  # increment LOADING_LEVEL.
         # << if obj didn't have LOADING_LEVEL, its LOADING_LEVEL will now be -1.
         setattr(obj, VARNAME_INPUT, varname)      # save name of the variable which was input.
         setattr(obj, QUANT_SELECTED, QuantInfo(None))  # smash QUANT_SELECTED before doing f.
         result = f(obj, varname, *args, **kwargs)
         # even if we don't recognize this quant (because we didn't put quant tracking document_vars code for it (yet)),
-        ## we should still set QUANT_SELECTED to the info we do know (i.e. the varname), with blanks for what we dont know.
+        # we should still set QUANT_SELECTED to the info we do know (i.e. the varname), with blanks for what we dont know.
         quant_info = getattr(obj, QUANT_SELECTED, QuantInfo(None))
         if quant_info.varname is None:  # f did not set varname for quant_info, so we'll do it now.
             setattr_quant_selected(obj, quant=QUANT_NOT_FOUND, typequant=QUANT_NOT_FOUND, metaquant=QUANT_NOT_FOUND,
@@ -739,28 +763,29 @@ def get_quant_tracking_state(obj, from_internal=False):
         False <-> use when we are caching due to the "@with_caching" wrapper.
     '''
     if not hasattr(obj, QUANTS_TREE):   # not sure if this ever happens.
-        quants_tree = QuantTree(None)   #   if it does, return an empty QuantTree so we don't crash.
+        quants_tree = QuantTree(None)  # if it does, return an empty QuantTree so we don't crash.
     elif from_internal:   # we are saving state while INSIDE quant_tree_tracking (inside _load_quantity).
         # QUANTS_TREE looks like QuantTree(None) but it is the child of the tree which will have
-        ## the data that we are getting from this call of get_var (which we are inside now).
-        ## Thus, when the call to get_var is completed, the data for this tree will be filled
-        ## with the appropriate QuantInfo about the quant we are getting now.
-        quants_tree = getattr(obj, QUANTS_TREE) 
+        # the data that we are getting from this call of get_var (which we are inside now).
+        # Thus, when the call to get_var is completed, the data for this tree will be filled
+        # with the appropriate QuantInfo about the quant we are getting now.
+        quants_tree = getattr(obj, QUANTS_TREE)
     else:                 # we are saving state while OUTSIDE quant_tree_tracking (outside _load_quantity).
         # QUANTS_TREE looks like [None : [..., QuantTree(QuantInfo( v ))]] where
-        ## v is the var we just got with the latest call to _load_quantity.
+        # v is the var we just got with the latest call to _load_quantity.
         quants_tree = getattr(obj, QUANTS_TREE).get_child(-1)  # get the newest child.
-    state = dict(quants_tree    = quants_tree,
-                 quant_selected = getattr(obj, QUANT_SELECTED, QuantInfo(None)),
-                 _from_internal = from_internal,  # not used, but maybe helpful for debugging.
-                 _ever_restored = False # whether we have ever restored this state.
-                )
+    state = dict(quants_tree=quants_tree,
+                 quant_selected=getattr(obj, QUANT_SELECTED, QuantInfo(None)),
+                 _from_internal=from_internal,  # not used, but maybe helpful for debugging.
+                 _ever_restored=False  # whether we have ever restored this state.
+                 )
     return state
+
 
 def restore_quant_tracking_state(obj, state):
     '''restores the quant tracking state of obj.'''
-    state_tree   = state['quants_tree']
-    obj_tree     = _get_orig_tree(obj)
+    state_tree = state['quants_tree']
+    obj_tree = _get_orig_tree(obj)
     child_to_add = state_tree   # add state tree as child of obj_tree.
     if not state['_ever_restored']:
         state['_ever_restored'] = True
@@ -778,6 +803,7 @@ def restore_quant_tracking_state(obj, state):
 
 
 ''' ----------------------------- quant tracking - lookup ----------------------------- '''
+
 
 def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info: False,
                 hide_quants=[], hide_typequants=[], hide_metaquants=[]):
@@ -827,6 +853,7 @@ def gotten_vars(obj, hide_level=3, hide_interp=True, hide=[], hidef=lambda info:
         result.append(info)
     return result
 
+
 def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=True):
     '''prints QUANTS_TREE for obj.
     This tree shows the vars which were gotten during the most recent "level 0" call to get_var.
@@ -845,17 +872,18 @@ def got_vars_tree(obj, as_data=False, hide_level=None, i_child=0, oldest_first=T
         False -> the order is reversed, e.g. -1 is the oldest child instead.
     '''
     # Get QUANTS_TREE attr. Since this function (got_vars_tree) is optional, and for end-user,
-    ## crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.
+    # crash elegantly if obj doesn't have QUANTS_TREE, instead of trying to handle the crash.
     quants_tree = getattr(obj, QUANTS_TREE)
     # By design, data in top level of QUANTS_TREE is always None
-    ## (except inside the wrapper quant_tree_tracking, which is the code that manages the tree).
-    ## Thus the top level of quants_tree is not useful data, so we go to a child instead.
+    # (except inside the wrapper quant_tree_tracking, which is the code that manages the tree).
+    # Thus the top level of quants_tree is not useful data, so we go to a child instead.
     quants_tree = quants_tree.get_child(i_child, oldest_first)
     # if as_data, return. Else, print.
     if as_data:
         return quants_tree
     else:
         print(quants_tree.str(hide_level=hide_level))
+
 
 def quant_lookup(obj, quant_info):
     '''returns entry in obj.vardict related to quant_info (a QuantInfo object).
@@ -869,15 +897,16 @@ def quant_lookup(obj, quant_info):
     quant_dict = dict()  # default value
     vardict = getattr(obj, VARDICT, dict())
     try:
-        metaquant_dict =        vardict[quant_info.metaquant]
+        metaquant_dict = vardict[quant_info.metaquant]
         typequant_dict = metaquant_dict[quant_info.typequant]
-        quant_dict     = typequant_dict[quant_info.quant]
+        quant_dict = typequant_dict[quant_info.quant]
     except KeyError:
         if quant_info.metaquant in getattr(obj, 'VDSEARCH_IF_META', []):
             search = search_vardict(vardict, quant_info.quant)
             if search:
                 quant_dict = search.result
     return quant_dict
+
 
 def get_quant_info(obj, lookup_in_vardict=False):
     '''returns QuantInfo object for the top-level quant in got_vars_tree.
