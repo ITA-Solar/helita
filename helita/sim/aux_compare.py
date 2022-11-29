@@ -45,7 +45,7 @@ High-level use-case: compare a single aux var with its helita counterpart!
     #>> output:
     auxvar mfr_nu_es  ( 1, 1)           min= 3.393e+04, mean= 3.393e+04,  max= 3.393e+04
     helvar     nu_ij   -1     ( 1, 1)   min= 1.715e+04, mean= 1.715e+04,  max= 1.715e+04;   mean ratio (aux / helita):  1.978e+00
-                                                                                         >>> WARNING: RATIO DIFFERS FROM 1.000 <<<<
+    WARNING: RATIO DIFFERS FROM 1.000
     ------------------------------------------------------------------------------------------------------------------------------------
     auxvar mfr_nu_es  ( 1, 2)           min= 1.621e+05, mean= 1.621e+05,  max= 1.621e+05
     helvar     nu_ij   -1     ( 1, 2)   min= 1.622e+05, mean= 1.622e+05,  max= 1.622e+05;   mean ratio (aux / helita):  9.993e-01
