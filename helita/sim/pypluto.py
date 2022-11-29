@@ -16,9 +16,6 @@ from .load_noeos_quantities import *
 from .load_quantities import *
 from .tools import *
 
-#from matplotlib.pyplot import *
-#from matplotlib.mlab import *
-
 ####### Check for h5py to Read AMR data ######
 try:
     import h5py as h5
