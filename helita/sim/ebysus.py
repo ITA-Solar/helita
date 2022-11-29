@@ -768,7 +768,26 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         kw__load_quantity = dict(panic=panic, **kw__caching)
         kw__postprocess = dict(original_slice=original_slice)
         return (kw__load_quantity, kw__postprocess)
+    
 
+    def genvar(self): 
+        '''
+        Dictionary of original variables which will allow to convert to cgs. 
+        '''
+        self.varn={}
+        self.varn['rho']= 'r'
+        self.varn['ne']= 'nel'
+        self.varn['tg'] = 'tg'
+        self.varn['pg'] = 'p'
+        self.varn['ux'] = 'ux'
+        self.varn['uy'] = 'uy'
+        self.varn['uz'] = 'uz'
+        self.varn['e']  = 'e'
+        self.varn['bx'] = 'bx'
+        self.varn['by'] = 'by'
+        self.varn['bz'] = 'bz'
+
+    
     def simple_trans2comm(self, varname, snap=None, mf_ispecies=None, mf_ilevel=None, *args, **kwargs):
         ''' Simple form of trans2com, can select species and ionized level'''
 

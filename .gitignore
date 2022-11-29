@@ -98,3 +98,5 @@ helita/io/anapyio.c
 helita/sim/cstagger.c
 helita/utils/radtrans.c
 helita/utils/utilsfast.c
+
+*~
