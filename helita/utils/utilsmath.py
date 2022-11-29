@@ -209,7 +209,7 @@ def translate(data, z, mu, phi, dx=1, dy=1):
 
 @vectorize([float32(float32, float32), float64(float64, float64)])
 def voigt(a, v):
-    """
+    r"""
     Returns the Voigt function:
 
     H(a,v) = a/pi * \int_{-Inf}^{+Inf} exp(-y**2)/[(v-y)**2 + a**2] dy

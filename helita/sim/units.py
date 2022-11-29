@@ -6,7 +6,7 @@ purpose:
     2) enable "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
 
 TL;DR:
-    >>>> Use obj.get_units() to see the units for the most-recent quantity that obj got with get_var(). <<<<
+    Use obj.get_units() to see the units for the most-recent quantity that obj got with get_var().
 
 The idea is to:
 - have all load_quantities functions return values in simulation units.
@@ -17,7 +17,7 @@ EXAMPLE USAGE:
     dd = EbysusData(...)
     b_squared = dd.get_var('b2')
     dd.get_units('si')                # 'si' by default; other option is cgs.
-    >>> EvaluatedUnits(factor=1.2566e-11, name='T^{2}')
+    EvaluatedUnits(factor=1.2566e-11, name='T^{2}')
     b_squared * dd.get_units('si').factor   # == magnetic field squared, in SI units.
 
 
