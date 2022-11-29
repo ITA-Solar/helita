@@ -1,4 +1,3 @@
-import imp
 from math import ceil
 
 import numpy as np
@@ -10,12 +9,6 @@ from .load_arithmetic_quantities import *
 from .load_noeos_quantities import *
 from .load_quantities import *
 from .tools import *
-
-try:
-    imp.find_module('pycuda')
-    found = True
-except ImportError:
-    found = False
 
 
 class radyn(object):

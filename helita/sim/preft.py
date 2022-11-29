@@ -1,4 +1,3 @@
-import imp
 from math import ceil
 
 import numpy as np
@@ -7,15 +6,8 @@ from scipy.sparse import coo_matrix
 
 from .load_arithmetic_quantities import *
 from .load_noeos_quantities import *
-#import radynpy as rd
 from .load_quantities import *
 from .tools import *
-
-try:
-    imp.find_module('pycuda')
-    found = True
-except ImportError:
-    found = False
 
 
 class preft(object):
