@@ -23,9 +23,11 @@ class BifrostData(object):
         will be added afterwards, and directory will be added before.
     snap - integer, optional
         Snapshot number. If None, will read first snapshot in sequence.
-    meshfile - string, optional
+    meshfile - string
         File name (including full path) for file with mesh. If set
-        to None (default), a uniform mesh will be created.
+        to None (default), will try to read file listed in Bifrost files.
+        If set to "uniform", will create a uniform mesh. Do not use "uniform"
+        unless you really know what you're doing! 
     fdir - string, optional
         Directory where simulation files are. Must be a real path.
     verbose - bool, optional
@@ -296,8 +298,7 @@ class BifrostData(object):
                     self.dzidzdn,
                     np.repeat(self.dzidzdn[-1], self.nb)))
                 self.nz = self.nzb
-        else:  # no mesh file
-            print('(WWW) Mesh file %s does not exist.' % meshfile)
+        elif meshfile.lower() == "uniform":
             if self.dx == 0.0:
                 self.dx = 1.0
             if self.dy == 0.0:
@@ -323,6 +324,9 @@ class BifrostData(object):
             self.zdn = self.z - 0.5 * self.dz
             self.dzidzup = np.zeros(self.nz) + 1. / self.dz
             self.dzidzdn = np.zeros(self.nz) + 1. / self.dz
+        else:
+            raise ValueError("No meshfile available. Either file was not found"
+                             " or meshfile was not set to 'uniform'.")
 
         if self.nz > 1:
             self.dz1d = np.gradient(self.z)
