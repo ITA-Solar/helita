@@ -486,12 +486,12 @@ class AtomFile:
         ### Sorting and renaming things to make writing to file easier: 
         ###
 
-        def __dict_to_yaml(dict):
+        def __dict_to_yaml(dict, default_flow_style=True):
             if type(dict) in [float, int, str]:
                 return f"{dict}\n"
             else:
                 return yaml.safe_dump(dict,
-                                 default_flow_style=True, sort_keys=False,
+                                 default_flow_style=default_flow_style, sort_keys=False,
                                  allow_unicode=True, width=200)
 
         # LEVELS:
@@ -555,55 +555,69 @@ class AtomFile:
             else:
                 line_dict['type_profile'] = (line_i[ityp][0] 
                                                 + line_i[ityp][1:].lower())
-            line_dict['γ_rad'] = {'value': float(line_i[igr]), 
-                                  'unit': UNITS['natural_broadening']}
+            line_dict['broadening'] = []
+            line_dict['broadening'].append({
+                'type': 'Natural', 
+                'value': float(line_i[igr]),  
+                'unit': UNITS['natural_broadening'],
+            })
+            
             stark_tmp = float(line_i[ibs])
             if self.format == 'RH':
                 if stark_tmp < 0:
-                    line_dict['broadening_stark'] = {
-                        "C_4": {"value": abs(stark_tmp), "unit": UNITS['stark_c4']}
-                    }
+                    line_dict['broadening'].append({
+                        'type': 'Stark_quadratic', 
+                        "c_4": {"value": abs(stark_tmp), "unit": UNITS['stark_c4']}
+                    })
                 else:  # Empty, use Traving recipe
-                    line_dict['broadening_stark'] = {'coefficient': stark_tmp}
+                    line_dict['broadening'].append({
+                        'type': 'Stark_quadratic', 
+                        "coefficient": stark_tmp
+                    })
                 vdWtype = line_i[idWt]
                 vdWval = line_i[ivdW]
                 if vdWtype == 'UNSOLD':
-                    line_dict['broadening_vanderwaals'] = {
-                        'type': 'Unsold', 
+                    line_dict['broadening'].append({
+                        'type': 'VanderWaals_Unsold', 
                         'h_coefficient': float(vdWval[0]), 
-                        'he_coefficient': float(vdWval[2])}
+                        'he_coefficient': float(vdWval[2])
+                    })
                 elif vdWtype == 'PARAMTR':
-                    line_dict['broadening_vanderwaals'] = {
-                        'type': 'Deridder_Rensbergen', 
+                    line_dict['broadening'].append({
+                        'type': 'VanderWaals_Deridder_Rensbergen', 
                         'h': {'α': {'value': float(vdWval[0]), 
                                     'unit': UNITS['vdW_broadening']['DR_α']['h']},
                               'β': float(vdWval[1])},
                         'he': {'α': {'value': float(vdWval[2]), 
                                      'unit': UNITS['vdW_broadening']['DR_α']['he']},
                                'β': float(vdWval[3])}
-                    }
+                    })
                 elif vdWtype == 'BARKLEM':
-                    line_dict['broadening_vanderwaals'] = [{
-                        'type': 'ABO', 
+                    line_dict['broadening'].append({
+                        'type': 'VanderWaals_ABO', 
                         'σ': {'value': float(vdWval[0]), 
                               'unit': UNITS['vdW_broadening']['ABO_σ']}, 
                         'α': {'value': float(vdWval[1]), 
                               'unit': UNITS['vdW_broadening']['ABO_α']}
-                    }]
-                    line_dict['broadening_vanderwaals'] += [{
-                        'type': 'Unsold',
+                    })
+                    line_dict['broadening'].append({
+                        'type': 'VanderWaals_Unsold',
                         'he_coefficient': float(vdWval[2])
-                    }]
+                    })
                 else:
                     raise NotImplementedError(
                             'vdWtype not recognized: %s'%vdWtype)
             elif self.format == "MULTI":
                 if stark_tmp >= 0:
-                    line_dict['broadening_stark'] = {
-                        "C_4": {"value": stark_tmp, "unit": UNITS['stark_c4']}
-                    }
+                    line_dict['broadening'].append({
+                        'type': 'Stark_quadratic', 
+                        "c_4": {"value": stark_tmp, "unit": UNITS['stark_c4']}
+                    })
                 else:
-                    line_dict['broadening_stark'] = {'coefficient': stark_tmp}
+                    line_dict['broadening'].append({
+                        'type': 'Stark_quadratic', 
+                        "coefficient": stark_tmp
+                    })
                     warnings.warn(
                         ("Stark coefficients given for Gray recipe (MULTI), which "
                         "is not yet supported. Double check Stark coefficients."),
@@ -614,17 +628,19 @@ class AtomFile:
                     # Recipe from MULTI, not multiplying by a_0^2 here
                     sigma = int(coeff)
                     alpha = coeff - sigma
-                    line_dict['broadening_vanderwaals'] = [
-                        {'type': 'ABO', 
-                         'σ': {'value': sigma, 
-                               'unit': str(UNITS['vdW_broadening']['ABO_σ'])}, 
-                         'α': {'value': alpha, 
-                               'unit': str(UNITS['vdW_broadening']['ABO_α'])}}]
+                    line_dict['broadening'].append({
+                        'type': 'VanderWaals_ABO', 
+                        'σ': {'value': sigma, 
+                              'unit': str(UNITS['vdW_broadening']['ABO_σ'])}, 
+                        'α': {'value': alpha, 
+                              'unit': str(UNITS['vdW_broadening']['ABO_α'])}
+                    })
                 else:
-                    line_dict['broadening_vanderwaals'] = {
-                            'type': 'Unsold', 
-                            'h_coefficient': coeff, 
-                            'he_coefficient': 0.0}
+                    line_dict['broadening'].append({
+                        'type': 'VanderWaals_Unsold', 
+                        'h_coefficient': coeff, 
+                        'he_coefficient': 0.0,
+                    })
             line_dict['wavelengths'] = {'type': self.format, 
                                         'nλ': int(line_i[inw]), 
                                         qwing: float(line_i[iqw]), 
@@ -776,7 +792,12 @@ class AtomFile:
             output_file.write(f"{tab2}- transition: [{up}, {lo}]\n")
             del line['transition']
             for key, val in line.items():
-                output_file.write(f"{tab4}{key}: {__dict_to_yaml(val)}")
+                if key == 'broadening':
+                    output_file.write(f"{tab4}broadening:\n")
+                    for item in val:
+                        output_file.write(f"{tab6}- {__dict_to_yaml(item)}")
+                else:
+                    output_file.write(f"{tab4}{key}: {__dict_to_yaml(val)}")
 
         # Radiative bound-free:
         output_file.write('\nradiative_bound_free:\n')
