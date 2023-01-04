@@ -987,6 +987,8 @@ def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=No
     VARS4D = ['temperature', 'B_x', 'B_y', 'B_z', 'density', 'velocity_x',
               'velocity_y', 'velocity_z', 'velocity_turbulent', 'density',
               'electron_density']
+    if z.shape == 3:
+        VARS4D.append(z)
     # Remove variables not given
     data = {key: data[key] for key in data if data[key][0] is not None}
     if (nH is None) and (rho is None):
