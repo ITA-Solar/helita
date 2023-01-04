@@ -960,8 +960,6 @@ def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=No
         Grid distances in m. Same shape as first index of T.
     y : 1-D array, optional
         Grid distances in m. Same shape as second index of T.
-    x : 1-D array, optional
-        Grid distances in m. Same shape as first index of T.
     snap : array-like, optional
         Snapshot number(s).
     desc : string, optional
@@ -995,10 +993,14 @@ def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=No
         raise ValueError("Missing nH or rho. Need at least one of them")
     if (append and not os.path.isfile(outfile)):
         append = False
-    idx = [None] * (4 - len(T.shape)) + [Ellipsis]  # empty axes for 1D/2D/3D
+    # Fill up 4 dimensions with empty axes when necessary
+    new_shape = [1] * (4 - len(T.shape)) + list(T.shape)
+    new_shape_nH = [1] * (5 - len(nH.shape)) + list(nH.shape)
     for var in data:
-        if var not in ['x', 'y']:  # these are always 1D
-            data[var][0] = data[var][0][idx]
+        if var in VARS4D:
+            data[var][0] = np.reshape(data[var][0], new_shape)
+        elif var == 'hydrogen_populations':
+            data[var][0] = np.reshape(data[var][0], new_shape_nH)
     if len(data['temperature'][0].shape) != 4:
         raise ValueError('Invalid shape for T')
     nt, nx, ny, nz = data['temperature'][0].shape
