@@ -71,21 +71,19 @@ except ImportError:
 import numpy as np
 
 try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    plt = tools.ImportFailed('matplotlib.pyplot')
-try:
     import zarr
 except ImportError:
     zarr = tools.ImportFailed('zarr')
 
 # import external private modules
 try:
-    from at_tools import atom_tools as at
-except ImportError:
-    at = tools.ImportFailed('at_tools.atom_tools')
+    from atom_py.at_tools import atom_tools as at
+    at_tools_exists = True
+except:
+    at_tools_exists = False
+    #at = tools.ImportFailed('at_tools.atom_tools')
 try:
-    from at_tools import fluids as fl
+    from atom_py.at_tools import fluids as fl
 except ImportError:
     fl = tools.ImportFailed('at_tools.fluids')
 
@@ -1441,31 +1439,6 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         snaps = snaps if snaps is not None else self.snaps
         result = {snap: self.get_snap_files(snap=snap, include_aux=include_aux) for snap in snaps}
         return result
-
-    ## PLOTTING ##
-    def plot(self, var, axes=None, nfluid=None):
-        '''make a 1D or 2D plot of var,
-        labeling nicely the axes, the relevant fluids, and var name.
-        var: str or arr
-            str --> plot self.get_var(var). Also use var in the title.
-            arr --> plot this value.
-        axes: None, string, or list of strings, using values in ('x', 'y', 'z')
-            axes to use for this plot.
-            number of axes determines dimensionality of the plot
-                1 axis --> plt.plot(coord, value of var)
-                2 axes --> plt.imshow(value of var, extent=(extent determined by axes))
-            None -->
-                guess based on shape of self
-                e.g. if self has shape (50, 1, 40), use axes=('x', 'z').
-                e.g. if self has shape (1, 700, 1), use axes='y'
-            slice other axes at index 0.
-        nfluid: None, 0, 1, or 2
-            number of fluids related to var.
-            The relevant fluid names will be included in the plot's title.
-            e.g. plot('bz', nfluid=None) --> plt.title('bz')
-            e.g. plot('nr', nfluid=1) --> plt.title('nr (self.get_fluid_name(
-        '''
-        raise NotImplementedError('EbysusData.plot')
 
     ## CONVENIENCE METHODS ##
     def print_values(self, fmtval='{: .1e}', fmtname='{:5s}',

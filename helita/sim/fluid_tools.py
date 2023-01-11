@@ -16,7 +16,7 @@ from .load_mf_quantities import MATCH_AUX, MATCH_PHYSICS
 
 # import external private modules
 try:
-    from at_tools import fluids as fl
+    from atom_py.at_tools import fluids as fl
 except ImportError:
     fl = tools.ImportFailed('at_tools.fluids')
 
