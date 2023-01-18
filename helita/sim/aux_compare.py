@@ -87,7 +87,7 @@ from . import fluid_tools, tools
 
 # import external private modules
 try:
-    from at_tools import fluids as fl
+    from atom_py.at_tools import fluids as fl
 except ImportError:
     fl = tools.ImportFailed('at_tools.fluids')
 
