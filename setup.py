@@ -25,8 +25,6 @@ EXT_PACKAGES = {   # C and Fortran extensions
                   os.path.join(NAME, "io/src/libf0.c"),
                   os.path.join(NAME, "io/src/anacompress.c"),
                   os.path.join(NAME, "io/src/anadecompress.c")]],
-    "cstagger" : ["sim", [NUMPY_INC],
-                  [os.path.join(NAME, "sim/cstagger" + ext)]],
     "radtrans" : ["utils", [NUMPY_INC],
                   [os.path.join(NAME, "utils/radtrans" + ext)]],
     "utilsfast" : ["utils", [NUMPY_INC],
