@@ -6,7 +6,7 @@ import os
 import warnings
 from glob import glob
 import numpy as np
-from . import cstagger
+from . import stagger
 from scipy import interpolate
 from scipy.ndimage import map_coordinates
 from multiprocessing.dummy import Pool as ThreadPool
@@ -40,11 +40,8 @@ class BifrostData(object):
     ghost_analyse - bool, optional
         If True, will read data from ghost zones when this is saved
         to files. Default is never to read ghost zones.
-    cstagop - bool, optional
-        Use true only if data is too big to load. Danger:
-        it will do quantity operations without correcting the stagger mesh.
     lowbus  - bool, optional
-        Use True only if data is too big to load. It will do cstagger
+        Use True only if data is too big to load. It will do stagger
         operations layer by layer using threads (slower).
     numThreads - integer, optional
         number of threads for certain operations that use parallelism.
@@ -69,21 +66,19 @@ class BifrostData(object):
     snap = None
 
     def __init__(self, file_root, snap=None, meshfile=None, fdir='.',
-                 verbose=True, dtype='f4', big_endian=False, cstagop=True,
+                 verbose=True, dtype='f4', big_endian=False,
                  ghost_analyse=False, lowbus=False, numThreads=1):
         """
         Loads metadata and initialises variables.
         """
         self.fdir = fdir
         self.verbose = verbose
-        self.cstagop = cstagop
         self.lowbus = lowbus
         self.numThreads = numThreads
         self.file_root = os.path.join(self.fdir, file_root)
         self.root_name = file_root
         self.meshfile = meshfile
         self.ghost_analyse = ghost_analyse
-        self.cstagop = cstagop
         self.lowbus = lowbus
         self.numThreads = numThreads
         # endianness and data type
@@ -358,9 +353,6 @@ class BifrostData(object):
                     print(('(WWW) init_vars: could not read '
                            'variable %s' % var))
         rdt = self.r.dtype
-        cstagger.init_stagger(self.nz, self.dx, self.dy, self.z.astype(rdt),
-                              self.zdn.astype(rdt), self.dzidzup.astype(rdt),
-                              self.dzidzdn.astype(rdt))
 
     def get_varTime(self, var, snap=None, iix=None, iiy=None, iiz=None,
                     *args, **kwargs):
@@ -498,13 +490,6 @@ class BifrostData(object):
                 if self.verbose:
                     print('(get_var): iiz ', iiz, self.iiz)
                 self.set_domain_iiaxis(iinum=iiz, iiaxis='z')
-
-        if self.cstagop and ((self.iix != slice(None)) or
-                             (self.iiy != slice(None)) or
-                             (self.iiz != slice(None))):
-            self.cstagop = False
-            print('WARNING: cstagger use has been turned off,',
-                  'turn it back on with "dd.cstagop = True"')
 
         if var in ['x', 'y', 'z']:
             return getattr(self, var)
@@ -657,10 +642,10 @@ class BifrostData(object):
         """
         if var in ['ux', 'uy', 'uz']:  # velocities
             p = self.get_var('p' + var[1], order='F')
-            if getattr(self, 'n' + var[1]) < 5 or not self.cstagop:
+            if getattr(self, 'n' + var[1]) < 5:
                 return p / self.get_var('r')  # do not recentre for 2D cases
             else:  # will call xdn, ydn, or zdn to get r at cell faces
-                return p / cstagger.do(self.get_var('r'), var[1] + 'dn')
+                return p / stagger.do(self.get_var('r'), var[1] + 'dn')
         elif var == 'ee':   # internal energy
             return self.get_var('e') / self.get_var('r')
         elif var == 's':   # entropy?
@@ -844,7 +829,7 @@ class BifrostData(object):
             var = self.get_var(q)
 
             def deriv_loop(var, quant):
-                return cstagger.do(var, 'd' + quant[0])
+                return stagger.do(var, 'd' + quant[0])
 
             if getattr(self, 'n' + axis) < 5:  # 2D or close
                 print('(WWW) get_quantity: DERIV_QUANT: '
@@ -867,19 +852,19 @@ class BifrostData(object):
                         if axis != 'z':
                             for iiz in range(self.nz):
                                 output[:, :, iiz] = np.reshape(
-                                    cstagger.do(var[:, :, iiz].reshape((self.nx, self.ny, 1)),
-                                                'd' + quant[-4:]),
+                                    stagger.do(var[:, :, iiz].reshape((self.nx, self.ny, 1)),
+                                               'd' + quant[-4:]),
                                     (self.nx, self.ny))
                         else:
                             for iiy in range(self.ny):
                                 output[:, iiy, :] = np.reshape(
-                                    cstagger.do(var[:, iiy, :].reshape((self.nx, 1, self.nz)),
-                                                'd' + quant[-4:]),
+                                    stagger.do(var[:, iiy, :].reshape((self.nx, 1, self.nz)),
+                                               'd' + quant[-4:]),
                                     (self.nx, self.nz))
 
                         return output
                     else:
-                        return cstagger.do(var, 'd' + quant[-4:])
+                        return stagger.do(var, 'd' + quant[-4:], getattr(self,'d' + axis +'i' + quant[-4:]))
 
         elif quant[-2:] in CENTRE_QUANT:
             # This brings a given vector quantity to cell centres
@@ -898,7 +883,7 @@ class BifrostData(object):
             var = self.get_var(q, **kwargs)
 
             # 2D
-            if getattr(self, 'n' + axis) < 5 or self.cstagop is False:
+            if getattr(self, 'n' + axis) < 5:
                 return var
             else:
                 if len(transf) == 2:
@@ -906,51 +891,51 @@ class BifrostData(object):
                         output = np.zeros_like(var)
                         if transf[0][0] != 'z':
                             for iiz in range(self.nz):
-                                output[:, :, iiz] = np.reshape(cstagger.do(
+                                output[:, :, iiz] = np.reshape(stagger.do(
                                     var[:, :, iiz].reshape(
                                         (self.nx, self.ny, 1)),
                                     transf[0]), (self.nx, self.ny))
                         else:
                             for iiy in range(self.ny):
-                                output[:, iiy, :] = np.reshape(cstagger.do(
+                                output[:, iiy, :] = np.reshape(stagger.do(
                                     var[:, iiy, :].reshape(
                                         (self.nx, 1, self.nz)),
                                     transf[0]), (self.nx, self.nz))
 
                         if transf[1][0] != 'z':
                             for iiz in range(self.nz):
-                                output[:, :, iiz] = np.reshape(cstagger.do(
+                                output[:, :, iiz] = np.reshape(stagger.do(
                                     output[:, :, iiz].reshape(
                                         (self.nx, self.ny, 1)),
                                     transf[1]), (self.nx, self.ny))
                         else:
                             for iiy in range(self.ny):
-                                output[:, iiy, :] = np.reshape(cstagger.do(
+                                output[:, iiy, :] = np.reshape(stagger.do(
                                     output[:, iiy, :].reshape(
                                         (self.nx, 1, self.nz)),
                                     transf[1]), (self.nx, self.nz))
                         return output
                     else:
-                        tmp = cstagger.do(var, transf[0])
-                        return cstagger.do(tmp, transf[1])
+                        tmp = stagger.do(var, transf[0])
+                        return stagger.do(tmp, transf[1])
                 else:
                     if self.lowbus:
                         output = np.zeros_like(var)
                         if axis != 'z':
                             for iiz in range(self.nz):
-                                output[:, :, iiz] = np.reshape(cstagger.do(
+                                output[:, :, iiz] = np.reshape(stagger.do(
                                     var[:, :, iiz].reshape(
                                         (self.nx, self.ny, 1)),
                                     transf[0]), (self.nx, self.ny))
                         else:
                             for iiy in range(self.ny):
-                                output[:, iiy, :] = np.reshape(cstagger.do(
+                                output[:, iiy, :] = np.reshape(stagger.do(
                                     var[:, iiy, :].reshape(
                                         (self.nx, 1, self.nz)),
                                     transf[0]), (self.nx, self.nz))
                         return output
                     else:
-                        return cstagger.do(var, transf[0])
+                        return stagger.do(var, transf[0])
 
         elif quant[:6] in GRADVECT_QUANT or quant[:3] in GRADVECT_QUANT:
             if quant[:3] == 'chk':
@@ -1200,7 +1185,7 @@ class BifrostData(object):
                     if getattr(self, 'nx') < 5:
                         return np.zeros_like(var)
                     else:
-                        return 1. / (cstagger.do(var, 'ddzup') + 1e-12)
+                        return 1. / (stagger.do(var, 'ddzup', self.dzidzup) + 1e-12)
                 elif quant == 'cs':
                     return np.sqrt(self.params['gamma'][self.snapInd] *
                                    var / self.get_var('r'))
@@ -1254,13 +1239,13 @@ class BifrostData(object):
             if quant == 'alf':
                 uperb = self.get_var('uperb')
                 uperbVect = uperb * unitB
-                # cross product (uses cstagger bc no variable gets uperbVect)
-                curlX = (cstagger.do(cstagger.do(uperbVect[2], 'ddydn'), 'yup') -
-                         cstagger.do(cstagger.do(uperbVect[1], 'ddzdn'), 'zup'))
-                curlY = (-cstagger.do(cstagger.do(uperbVect[2], 'ddxdn'), 'xup')
-                         + cstagger.do(cstagger.do(uperbVect[0], 'ddzdn'), 'zup'))
-                curlZ = (cstagger.do(cstagger.do(uperbVect[1], 'ddxdn'), 'xup') -
-                         cstagger.do(cstagger.do(uperbVect[0], 'ddydn'), 'yup'))
+                # cross product (uses stagger bc no variable gets uperbVect)
+                curlX = ( stagger.do(stagger.do(uperbVect[2], 'ddydn', self.dyidydn), 'yup') 
+                         -stagger.do(stagger.do(uperbVect[1], 'ddzdn', self.dzidzdn), 'zup'))
+                curlY = (-stagger.do(stagger.do(uperbVect[2], 'ddxdn', self.dxidxdn), 'xup')
+                         +stagger.do(stagger.do(uperbVect[0], 'ddzdn', self.dzidzdn), 'zup'))
+                curlZ = ( stagger.do(stagger.do(uperbVect[1], 'ddxdn', self.dxidxdn), 'xup')
+                         -stagger.do(stagger.do(uperbVect[0], 'ddydn', self.dyidydn), 'yup'))
                 curl = np.stack((curlX, curlY, curlZ))
                 # dot product
                 result = np.abs((unitB * curl).sum(0))
@@ -1268,17 +1253,18 @@ class BifrostData(object):
                 uperb = self.get_var('uperb')
                 uperbVect = uperb * unitB
 
-                result = np.abs(cstagger.do(cstagger.do(
-                    uperbVect[0], 'ddxdn'), 'xup') + cstagger.do(cstagger.do(
-                        uperbVect[1], 'ddydn'), 'yup') + cstagger.do(
-                            cstagger.do(uperbVect[2], 'ddzdn'), 'zup'))
+                result = np.abs(stagger.do(stagger.do(
+                    uperbVect[0], 'ddxdn', self.dxidxdn), 'xup') + stagger.do(stagger.do(
+                    uperbVect[1], 'ddydn', self.dyidydn), 'yup') + stagger.do(stagger.do(
+                    uperbVect[2], 'ddzdn', self.dzidzdn), 'zup'))
             else:
                 dot1 = self.get_var('uparb')
-                grad = np.stack((cstagger.do(cstagger.do(dot1, 'ddxdn'),
-                                             'xup'), cstagger.do(cstagger.do(
-                                                 dot1, 'ddydn'), 'yup'),
-                                 cstagger.do(cstagger.do(dot1, 'ddzdn'),
-                                             'zup')))
+                grad = np.stack((stagger.do(
+                                 stagger.do(dot1, 'ddxdn', self.dxidxdn),'xup'), 
+                                 stagger.do(
+                                 stagger.do(dot1, 'ddydn', self.dyidydn),'yup'),
+                                 stagger.do(
+                                 stagger.do(dot1, 'ddzdn', self.dzidzdn),'zup')))
                 result = np.abs((unitB * grad).sum(0))
             return result
 
@@ -1686,9 +1672,9 @@ class BifrostData(object):
         rho = self.r[sx, sy, sz]
 
         if self.do_mhd:
-            Bx = cstagger.xup(self.bx)[sx, sy, sz]
-            By = cstagger.yup(self.by)[sx, sy, sz]
-            Bz = cstagger.zup(self.bz)[sx, sy, sz]
+            Bx = stagger.xup(self.bx)[sx, sy, sz]
+            By = stagger.yup(self.by)[sx, sy, sz]
+            Bz = stagger.zup(self.bz)[sx, sy, sz]
             # Change sign of Bz (because of height scale) and By
             # (to make right-handed system)
             Bx = Bx * ub
@@ -1697,12 +1683,12 @@ class BifrostData(object):
         else:
             Bx = By = Bz = None
 
-        vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
+        vz = stagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         if write_all_v:
-            vx = cstagger.xup(self.px)[sx, sy, sz] / rho
+            vx = stagger.xup(self.px)[sx, sy, sz] / rho
             vx *= uv
-            vy = cstagger.yup(self.py)[sx, sy, sz] / rho
+            vy = stagger.yup(self.py)[sx, sy, sz] / rho
             vy *= -uv
         else:
             vx = None
@@ -1763,7 +1749,7 @@ class BifrostData(object):
         ur = self.params['u_r'][self.snapInd]   # to g/cm^3  (for ne_rt_table)
         ut = self.params['u_t'][self.snapInd]   # to seconds
         uv = ul / ut / 1e5        # to km/s
-        ub = self.params['u_b'][self.snapInd] # to G
+        ub = self.params['u_b'][self.snapInd]  # to G
         ue = self.params['u_ee'][self.snapInd]  # to erg/g
         nh = None
         if self.verbose:
@@ -1772,11 +1758,11 @@ class BifrostData(object):
         rho = self.r[sx, sy, sz]
         # Change sign of vz (because of height scale) and vy (to make
         # right-handed system)
-        vx = cstagger.xup(self.px)[sx, sy, sz] / rho
+        vx = stagger.xup(self.px)[sx, sy, sz] / rho
         vx *= uv
-        vy = cstagger.yup(self.py)[sx, sy, sz] / rho
+        vy = stagger.yup(self.py)[sx, sy, sz] / rho
         vy *= -uv
-        vz = cstagger.zup(self.pz)[sx, sy, sz] / rho
+        vz = stagger.zup(self.pz)[sx, sy, sz] / rho
         vz *= -uv
         rho = rho * ur  # to cgs
         x = self.x[sx] * ul
@@ -1807,9 +1793,9 @@ class BifrostData(object):
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
         if write_magnetic:
-            Bx = cstagger.xup(self.bx)[sx, sy, sz]
-            By = cstagger.yup(self.by)[sx, sy, sz]
-            Bz = cstagger.zup(self.bz)[sx, sy, sz]
+            Bx = stagger.xup(self.bx)[sx, sy, sz]
+            By = stagger.yup(self.by)[sx, sy, sz]
+            Bz = stagger.zup(self.bz)[sx, sy, sz]
             # Change sign of Bz (because of height scale) and By
             # (to make right-handed system)
             Bx = Bx * ub
@@ -1819,8 +1805,6 @@ class BifrostData(object):
             fout3.Bx[:] = Bx
             fout3.By[:] = By
             fout3.Bz[:] = Bz
-
-
 
 
 class Create_new_br_files:
@@ -2600,15 +2584,12 @@ def bifrost2d_to_rh15d(snaps, outfile, file_root, meshfile, fdir, writeB=False,
     z = data.z[sz] * (-ul)
 
     rdt = data.r.dtype
-    cstagger.init_stagger(data.nz, data.dx, data.dy, data.z.astype(rdt),
-                          data.zdn.astype(rdt), data.dzidzup.astype(rdt),
-                          data.dzidzdn.astype(rdt))
 
     for i, s in enumerate(snaps):
         data.set_snap(s)
         tgas[:, i] = np.squeeze(data.tg)[sx, sz]
         rho = data.r[sx, sz]
-        vz[:, i] = np.squeeze(cstagger.zup(data.pz)[sx, sz] / rho) * (-uv)
+        vz[:, i] = np.squeeze(stagger.zup(data.pz)[sx, sz] / rho) * (-uv)
         if writeB:
             Bx[:, i] = np.squeeze(data.bx)[sx, sz] * ub
             By[:, i] = np.squeeze(-data.by)[sx, sz] * ub
