@@ -1916,8 +1916,8 @@ class Create_new_br_files:
             f.write(str(getattr(self, 'n' + p)) + "\n")
             f.write(" ".join(map("{:.5f}".format, getattr(self, p))) + "\n")
             f.write(" ".join(map("{:.5f}".format, xmdn)) + "\n")
-            f.write(" ".join(map("{:.5f}".format, dxidxup)) + "\n")
-            f.write(" ".join(map("{:.5f}".format, dxidxdn)) + "\n")
+            f.write(" ".join(map("{:.5f}".format, 1. / dxidxup)) + "\n")
+            f.write(" ".join(map("{:.5f}".format, 1. / dxidxdn)) + "\n")
         f.close()
 
 
