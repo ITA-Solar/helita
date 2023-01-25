@@ -91,15 +91,23 @@ class BifrostData(object):
         self.set_snap(snap)
         try:
             tmp = find_first_match("%s*%d*.idl" % (file_root, snap), fdir)
+            if tmp == None:
+                raise IndexError
         except IndexError:
             try:
                 tmp = find_first_match("%s*idl" % file_root, fdir)
+                if tmp == None:
+                    raise IndexError
             except IndexError:
                 try:
                     tmp = find_first_match("%s*idl.scr" % file_root, fdir)
+                    if tmp == None:
+                        raise IndexError
                 except IndexError:
                     try:
                         tmp = find_first_match("mhd.in", fdir)
+                        if tmp == None:
+                            raise IndexError
                     except IndexError:
                         raise ValueError(("(EEE) init: no .idl or mhd.in files "
                                           "found"))
