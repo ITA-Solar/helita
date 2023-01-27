@@ -242,7 +242,7 @@ def do(var, operation='xup', diff=None, pad_mode=None, stagger_kind=DEFAULT_STAG
     else:
         out = np.pad(var, padding, mode=pad_mode)
         out_diff = np.pad(diff, extra_dims, mode=pad_mode)
-        if stagger_kind in ['fifth','first'] :
+        if stagger_kind in ['fifth', 'first']:
             func = {'x': _xshift, 'y': _yshift, 'z': _zshift}[x]
             result = func(out, out_diff, up=up, order=order, derivative=derivative)
         elif stagger_kind == 'fifth_improved':
@@ -280,9 +280,9 @@ def _xshift(var, diff, up=True, order=5, derivative=False):
             for j in prange(ny):
                 for i in prange(start, nx + end):
                     out[i, j, k] = diff[i] * (a * (var[i + grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
-                                          b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
-                                          c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
-    elif order == 1: 
+                                              b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
+                                              c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
+    elif order == 1:
         if derivative:
             pm, (a, b, c) = -1, CONSTANTS_DERIV_o1
         else:
@@ -310,8 +310,8 @@ def _yshift(var, diff, up=True, order=5, derivative=False):
             for j in prange(start, ny + end):
                 for i in prange(nx):
                     out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] + pm * var[i, j - 1 + grdshf, k]) +
-                                          b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
-                                          c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
+                                              b * (var[i, j + 1 + grdshf, k] + pm * var[i, j - 2 + grdshf, k]) +
+                                              c * (var[i, j + 2 + grdshf, k] + pm * var[i, j - 3 + grdshf, k]))
     elif order == 1:
         if derivative:
             pm, (a, b, c) = -1, CONSTANTS_DERIV_o1
@@ -340,9 +340,9 @@ def _zshift(var, diff, up=True, order=5, derivative=False):
             for j in prange(ny):
                 for i in prange(nx):
                     out[i, j, k] = diff[k] * (a * (var[i, j, k + grdshf] + pm * var[i, j, k - 1 + grdshf]) +
-                                          b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
-                                          c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
-    elif order == 1: 
+                                              b * (var[i, j, k + 1 + grdshf] + pm * var[i, j, k - 2 + grdshf]) +
+                                              c * (var[i, j, k + 2 + grdshf] + pm * var[i, j, k - 3 + grdshf]))
+    elif order == 1:
         if derivative:
             pm, (a, b, c) = -1, CONSTANTS_DERIV_o1
         else:
@@ -372,16 +372,16 @@ def _xshift_improved(var, diff, up=True, derivative=False):
                     out[i, j, k] = diff[i] * (a * (var[i + grdshf, j, k] + pm * var[i - 1 + grdshf, j, k]) +
                                               b * (var[i + 1 + grdshf, j, k] + pm * var[i - 2 + grdshf, j, k]) +
                                               c * (var[i + 2 + grdshf, j, k] + pm * var[i - 3 + grdshf, j, k]))
-    else: 
+    else:
         for k in prange(nz):
             for j in prange(ny):
                 for i in prange(start, nx + end):
-                    out[i, j, k] = diff[i] * (a * (var[i + grdshf, j, k]  - var[i - 1 + grdshf, j, k]) +
+                    out[i, j, k] = diff[i] * (a * (var[i + grdshf, j, k] - var[i - 1 + grdshf, j, k]) +
                                               b * (var[i + 1 + grdshf, j, k] - var[i - 1 + grdshf, j, k] +
-                                                var[i - 2 + grdshf, j, k] - var[i - 1 + grdshf, j, k]) +
-                                              c * (var[i + 2 + grdshf, j, k] - var[i - 1 + grdshf, j, k] + 
-                                                var[i - 3 + grdshf, j, k] - var[i - 1 + grdshf, j, k]) + 
-                                                var[i - 1 + grdshf, j, k])
+                                                   var[i - 2 + grdshf, j, k] - var[i - 1 + grdshf, j, k]) +
+                                              c * (var[i + 2 + grdshf, j, k] - var[i - 1 + grdshf, j, k] +
+                                                   var[i - 3 + grdshf, j, k] - var[i - 1 + grdshf, j, k]) +
+                                              var[i - 1 + grdshf, j, k])
 
     return out[start:end, :, :]
 
@@ -410,10 +410,10 @@ def _yshift_improved(var, diff, up=True, derivative=False):
                 for i in prange(nx):
                     out[i, j, k] = diff[j] * (a * (var[i, j + grdshf, k] - var[i, j - 1 + grdshf, k]) +
                                               b * (var[i, j + 1 + grdshf, k] - var[i, j - 1 + grdshf, k] +
-                                                var[i, j - 2 + grdshf, k] - var[i, j - 1 + grdshf, k]) +
-                                              c * (var[i, j + 2 + grdshf, k] - var[i, j - 1 + grdshf, k] + 
-                                                var[i, j - 3 + grdshf, k] - var[i, j - 1 + grdshf, k]) + 
-                                                var[i, j - 1 + grdshf, k])
+                                                   var[i, j - 2 + grdshf, k] - var[i, j - 1 + grdshf, k]) +
+                                              c * (var[i, j + 2 + grdshf, k] - var[i, j - 1 + grdshf, k] +
+                                                   var[i, j - 3 + grdshf, k] - var[i, j - 1 + grdshf, k]) +
+                                              var[i, j - 1 + grdshf, k])
     return out[:, start:end, :]
 
 
@@ -440,11 +440,11 @@ def _zshift_improved(var, diff, up=True, derivative=False):
             for j in prange(ny):
                 for i in prange(nx):
                     out[i, j, k] = diff[k] * (a * (var[i, j, k + grdshf] - var[i, j, k - 1 + grdshf]) +
-                                              b * (var[i, j, k + 1 + grdshf] - var[i, j, k - 1 + grdshf] + 
-                                                var[i, j, k - 2 + grdshf] - var[i, j, k - 1 + grdshf]) +
-                                              c * (var[i, j, k + 2 + grdshf] - var[i, j, k - 1 + grdshf] + 
-                                                var[i, j, k - 3 + grdshf] - var[i, j, k - 1 + grdshf]) + 
-                                                var[i, j, k - 1 + grdshf])
+                                              b * (var[i, j, k + 1 + grdshf] - var[i, j, k - 1 + grdshf] +
+                                                   var[i, j, k - 2 + grdshf] - var[i, j, k - 1 + grdshf]) +
+                                              c * (var[i, j, k + 2 + grdshf] - var[i, j, k - 1 + grdshf] +
+                                                   var[i, j, k - 3 + grdshf] - var[i, j, k - 1 + grdshf]) +
+                                              var[i, j, k - 1 + grdshf])
     return out[:, :, start:end]
 
 

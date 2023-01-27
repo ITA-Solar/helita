@@ -262,12 +262,14 @@ class FakeEbysusData(ebysus.EbysusData):
         also_set_var = (not fundamental_only)
         # units
         units_input = units if units is not None else self.units_input_fundamental
-        units_output = self.units_output
+        self.units_output
+
         def u_in2simu(key):
             return self.uni(key, 'simu', units_input)
+
         def get_in_simu(vname):
             with tools.MaintainingAttrs(self, 'units_output'):
-                self.units_output='simu'
+                self.units_output = 'simu'
                 return self(vname)
         # # below, we calculate the value in 'simu' units, then set vars in 'simu' units as appropriate.
         # set fundamental var.
@@ -277,11 +279,11 @@ class FakeEbysusData(ebysus.EbysusData):
             if var == 'r':
                 ukey = 'r'
                 also_set_var = False
-                value_simu   = value * u_in2simu(ukey)  # value_simu   = '<value> (input) in simu units'
+                value_simu = value * u_in2simu(ukey)  # value_simu   = '<value> (input) in simu units'
                 fundval_simu = value_simu               # fundval_simu = 'value of fundvar in simu units'
             elif var == 'nr':   # r = nr * m
                 ukey = 'nr'
-                value_simu   = value * u_in2simu(ukey) 
+                value_simu = value * u_in2simu(ukey)
                 fundval_simu = value_simu * self.get_mass(units='simu')
         # # 'e' - energy density
         elif var in ['e', 'p', 'tg']:
@@ -289,15 +291,15 @@ class FakeEbysusData(ebysus.EbysusData):
             if var == 'e':
                 ukey = 'e'
                 also_set_var = False
-                value_simu   = value * u_in2simu(ukey)
+                value_simu = value * u_in2simu(ukey)
                 fundval_simu = value_simu
             elif var == 'p':    # e = p / (gamma - 1)
                 ukey = 'e'  # 'p' units are same as 'e' units.
-                value_simu   = value * u_in2simu(ukey)  
+                value_simu = value * u_in2simu(ukey)
                 fundval_simu = value_simu / (self.uni.gamma - 1)
             elif var == 'tg':   # e = T / e_to_tg
-                ukey = None # T always in [K].
-                value_simu   = value
+                ukey = None  # T always in [K].
+                value_simu = value
                 e_to_tg_simu = get_in_simu('e_to_tg')
                 fundval_simu = value_simu / e_to_tg_simu
         # # 'p{x}' - momentum density ({x}-component)
@@ -307,12 +309,12 @@ class FakeEbysusData(ebysus.EbysusData):
             if base == 'p':
                 ukey = 'pm'
                 also_set_var = False
-                value_simu   = value * u_in2simu(ukey)
+                value_simu = value * u_in2simu(ukey)
                 fundval_simu = value_simu
-            elif base in ['u', 'ui']: # px = ux * rxdn
+            elif base in ['u', 'ui']:  # px = ux * rxdn
                 ukey = 'u'
-                value_simu   = value * u_in2simu(ukey)
-                r_simu       = get_in_simu('r'+f'{x}dn')
+                value_simu = value * u_in2simu(ukey)
+                r_simu = get_in_simu('r'+f'{x}dn')
                 fundval_simu = value_simu * r_simu
         # # 'b{x}' - magnetic field ({x}-component)
         elif var in tuple(f'b{x}' for x in AXES):
@@ -321,7 +323,7 @@ class FakeEbysusData(ebysus.EbysusData):
             if base == 'b':
                 ukey = 'b'
                 also_set_var = False
-                value_simu   = value * u_in2simu(ukey)
+                value_simu = value * u_in2simu(ukey)
                 fundval_simu = value_simu
         else:
             raise NotImplementedError(f'{var} in set_fundamental_var')

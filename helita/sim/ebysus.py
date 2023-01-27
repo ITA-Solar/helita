@@ -1475,6 +1475,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         def fmtv(val): return fmtval.format(val)  # format value
         def fmtn(name): return fmtname.format(name)  # format fluid name
         def fmtg(gvar): return fmtgvar.format(gvar)  # format global var name
+
         def getv(var, **kw):
             return self.get_var_gracefully(var, **kw) if skip_errors else self.get_var(var, **kw)
         for var in (*GLOBAL_VARS, *FLUID_VARS):
@@ -1498,7 +1499,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
                     gvarline = []
                 else:
                     gvarline.append(f"{fmtg(display_names[var])} = {fmtv(np.mean(getv(var)))}")
-                i+=1
+                i += 1
             lines.append(' | '.join(gvarline))
             # put a new line before FLUID_VARS if there are any FLUID_VARS.
             if len(FLUID_VARS) > 0:
