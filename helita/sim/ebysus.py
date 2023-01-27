@@ -1871,7 +1871,7 @@ def write_fundamentals(rootname, fluids, B, ee, zero=0):
     Example Usage:
     --------------
     # This is an example which performs the same task as a simple make_mf_snap.py file.
-    import at_tools.fluids as fl
+    from atom_py.at_tools import fluids as fl
     import helita.sim.ebysus as eb
     uni           = eb.Bifrost_units('mhd.in')   # get units
     # put code here which sets the values for:
