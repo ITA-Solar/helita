@@ -256,7 +256,7 @@ class FakeEbysusData(ebysus.EbysusData):
             None --> use self.units_input_fundamental.
             else --> use the value of this kwarg.
 
-        returns (name of fundamental var which was set, value to which it was set)
+        returns (name of fundamental var which was set, value to which it was set [in self.units_output units])
         '''
         assert var in self.FUNDAMENTAL_SETTABLES, f"I don't know how this var relates to a fundamental var: '{var}'"
         self._warning_during_setvar_if_slicing_and_stagger()
@@ -266,76 +266,85 @@ class FakeEbysusData(ebysus.EbysusData):
         also_set_var = (not fundamental_only)
         # units
         units_input = units if units is not None else self.units_input_fundamental
-        def ulookup(key):
-            '''return self.uni(key, units_input, 'simu').
-            if key is for variable (e.g. 'u', 'r'), value [simu] * ulookup(key) == value [units_input]
-            if key is for constant (e.g. 'kB'), ulookup(key) is value of constant in [units_input] system.'''
-            return self.uni(key, units_input, 'simu')
-        ## more units: we will set the following values below:
-        ###  u_res = divide result by this value to convert to units for internal storage.
-        ###  u_var = divide   var  by this value to convert to units for internal storage.
-        # set fundamental var
+        units_output = self.units_output
+        def u_in2simu(key):
+            return self.uni(key, 'simu', units_input)
+        def get_in_simu(vname):
+            with tools.MaintainingAttrs(self, 'units_output'):
+                self.units_output='simu'
+                return self(vname)
+        ## below, we calculate the value in 'simu' units, then set vars in 'simu' units as appropriate.
+        # set fundamental var.
         ## 'r' - mass density
         if var in ['r', 'nr']:
-            setting = 'r'
-            u_res   = ulookup('r')
+            fundvar = 'r'     # fundvar = 'the corresponding fundamental var'
             if var == 'r':
+                ukey = 'r'
                 also_set_var = False
-                result = value
-            elif var == 'nr':   # nr = r / m
-                u_var  = ulookup('nr')
-                result = value * self.get_mass(units=units_input)
+                value_simu   = value * u_in2simu(ukey)  # value_simu   = '<value> (input) in simu units'
+                fundval_simu = value_simu               # fundval_simu = 'value of fundvar in simu units'
+            elif var == 'nr':   # r = nr * m
+                ukey = 'nr'
+                value_simu   = value * u_in2simu(ukey) 
+                fundval_simu = value_simu * self.get_mass(units='simu')
         ## 'e' - energy density
         elif var in ['e', 'p', 'tg']:
-            setting = 'e'
-            u_res   = ulookup('e')
+            fundvar = 'e'
             if var == 'e':
+                ukey = 'e'
                 also_set_var = False
-                result = value
-            elif var == 'p':    # p = e * (gamma - 1)
-                u_var  = u_res
-                result = value / (self.uni.gamma - 1)
-            elif var == 'tg':   # T = p / (nr * kB) = (e * (gamma - 1)) / (nr * kB)
-                u_var  = 1   # temperature units always K.
-                e_to_tg = self('e_to_tg')
-                result  = value / e_to_tg
+                value_simu   = value * u_in2simu(ukey)
+                fundval_simu = value_simu
+            elif var == 'p':    # e = p / (gamma - 1)
+                ukey = 'e'  # 'p' units are same as 'e' units.
+                value_simu   = value * u_in2simu(ukey)  
+                fundval_simu = value_simu / (self.uni.gamma - 1)
+            elif var == 'tg':   # e = T / e_to_tg
+                ukey = None # T always in [K].
+                value_simu   = value
+                e_to_tg_simu = get_in_simu('e_to_tg')
+                fundval_simu = value_simu / e_to_tg_simu
         ## 'p{x}' - momentum density ({x}-component)
         elif var in tuple(f'{v}{x}' for x in AXES for v in ('p', 'u', 'ui')):
             base, x = var[:-1], var[-1]
-            setting = f'p{x}'
-            u_res   = ulookup('pm')
+            fundvar = f'p{x}'
             if base == 'p':
+                ukey = 'pm'
                 also_set_var = False
-                result = value
-            elif base in ['u', 'ui']: # u = p / rxdn
-                u_var  = ulookup('u')
-                r      = self('r'+f'{x}dn') * ulookup('r')
-                result = value * r
+                value_simu   = value * u_in2simu(ukey)
+                fundval_simu = value_simu
+            elif base in ['u', 'ui']: # px = ux * rxdn
+                ukey = 'u'
+                value_simu   = value * u_in2simu(ukey)
+                r_simu       = get_in_simu('r'+f'{x}dn')
+                fundval_simu = value_simu * r_simu
         ## 'b{x}' - magnetic field ({x}-component)
         elif var in tuple(f'b{x}' for x in AXES):
             base, x = var[:-1], var[-1]
-            setting = f'b{x}'
-            u_res   = ulookup('b')
+            fundvar = f'b{x}'
             if base == 'b':
+                ukey = 'b'
                 also_set_var = False
-                result = value
+                value_simu   = value * u_in2simu(ukey)
+                fundval_simu = value_simu
         else:
             raise NotImplementedError(f'{var} in set_fundamental_var')
 
         # set fundamental var
-        self.set_var(setting, result / u_res, *args, **kwargs,
+        self.set_var(fundvar, fundval_simu, *args, **kwargs,
                      units='simu',          # we already handled the units; set_var shouldn't mess with them.
                      fundamental=False,     # we already handled the 'fundamental' possibility.
                      _skip_preprocess=True, # we already handled preprocessing.
                      )
         # set var (the one that was entered to this function)
         if also_set_var:
-            self.set_var(var, value / u_var, *args, **kwargs,
+            self.set_var(var, value_simu, *args, **kwargs,
                          units='simu',          # we already handled the units; set_var shouldn't mess with them.
                          fundamental=False,     # we already handled the 'fundamental' possibility.
                          _skip_preprocess=True, # we already handled preprocessing.
                          )
-        return (setting, result)
+        u_simu2out = (1 if ukey is None else self.uni(ukey, self.units_output, 'simu'))
+        return (fundvar, fundval_simu * u_simu2out)
 
     def _warn_if_slicing_and_stagger(self, message):
         '''if any slice is not slice(None), and do_stagger=True, warnings.warn(message)'''
