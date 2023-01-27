@@ -1,7 +1,7 @@
 """
 File purpose:
     Access the load_..._quantities calculations without needing to write a full snapshot.
-    
+
     Examples where this module is particularly useful:
         - quickly testing values of quantities from helita postprocessing, for small arrays of data.
         - check what would happen if a small number of changes are made to existing data.
@@ -13,29 +13,24 @@ File purpose:
       (which, by default, gets called from set_var for var in FUNDAMENTAL_SETTABLES).
 """
 
+import os
 # import built-ins
 import shutil
-import os
-import collections
 import warnings
-
-# import internal modules
-from . import ebysus
-from . import tools
-from . import document_vars
-from . import file_memory
-from . import units
+import collections
 
 # import external public modules
 import numpy as np
 
+# import internal modules
+from . import document_vars, ebysus, file_memory, tools, units
 
 AXES = ('x', 'y', 'z')
 
 
 class FakeEbysusData(ebysus.EbysusData):
     '''Behaves like EbysusData but allows to choose artificial values for any quant.
-    
+
     If a quant is requested (via self(quant) or self.get_var(quant)),
     first check if that quant has been set artificially, using the artificial value if found.
     If the quant has not been set artificially, try to read it from snapshot as normal.
@@ -47,7 +42,7 @@ class FakeEbysusData(ebysus.EbysusData):
         - any relevant .atom files
         - collision tables if collision module(s) are enabled:
             - mf_coltab.in, mf_ecoltab.in
-            - any collision files referenced by those files ^ 
+            - any collision files referenced by those files ^
         ^(footnote) if mhd.in is provided:
             if snapname is not entered at __init__, use snapname from mhd.in.
             if snapname.idl file does exist, copy mhd.in to a new file named snapname.idl.
@@ -77,7 +72,7 @@ class FakeEbysusData(ebysus.EbysusData):
         self.units_input_fundamental = units_input_fundamental
 
         # make snapname.idl if necessary.
-        snapname = args[0] if len(args)>0 else ebysus.get_snapname()
+        snapname = args[0] if len(args) > 0 else ebysus.get_snapname()
         idlfilename = f'{snapname}.idl'
         if not os.path.isfile(idlfilename):
             shutil.copyfile('mhd.in', idlfilename)
@@ -92,9 +87,10 @@ class FakeEbysusData(ebysus.EbysusData):
         None --> use same mode as units_input.
         '''
         result = getattr(self, '_units_input_fundamental', None)
-        if result is None: 
+        if result is None:
             result = getattr(self, 'units_input', 'simu')
         return result
+
     @units_input_fundamental.setter
     def units_input_fundamental(self, value):
         if value is not None:
@@ -112,6 +108,7 @@ class FakeEbysusData(ebysus.EbysusData):
         if result is None:
             result = getattr(self, 'units_output', 'simu')
         return result
+
     @units_input.setter
     def units_input(self, value):
         if value is not None:
@@ -125,7 +122,6 @@ class FakeEbysusData(ebysus.EbysusData):
         '''do nothing and return None.
         (overriding the initial data grabbing from EbysusData.)
         '''
-        pass
 
     ## SET_VAR ##
     def set_var(self, var, value, *args, nfluid=None, units=None, fundamental=None,
@@ -232,7 +228,7 @@ class FakeEbysusData(ebysus.EbysusData):
                                                      varname=var, level='(FROM SETVARS)', delay=False)
                 return result
             except KeyError:  # var is in memory, but not with appropriate metadata.
-                pass          #    e.g. we know some 'nr', but not for the currently-set ifluid.
+                pass  # e.g. we know some 'nr', but not for the currently-set ifluid.
         # else
         return self._raw_load_quantity(var, *args, **kwargs)
 
@@ -245,7 +241,7 @@ class FakeEbysusData(ebysus.EbysusData):
             e - tg, p
             p{x} - u{x}, ui{x}   (for {x} in 'x', 'y', 'z')
             b{x} – (no alternates.)
-        
+
         fundamental_only: True (default) or False
             True  --> only set value of fundamental quantity corresponding to var.
             False --> also set value of var.
@@ -273,9 +269,9 @@ class FakeEbysusData(ebysus.EbysusData):
             with tools.MaintainingAttrs(self, 'units_output'):
                 self.units_output='simu'
                 return self(vname)
-        ## below, we calculate the value in 'simu' units, then set vars in 'simu' units as appropriate.
+        # # below, we calculate the value in 'simu' units, then set vars in 'simu' units as appropriate.
         # set fundamental var.
-        ## 'r' - mass density
+        # # 'r' - mass density
         if var in ['r', 'nr']:
             fundvar = 'r'     # fundvar = 'the corresponding fundamental var'
             if var == 'r':
@@ -287,7 +283,7 @@ class FakeEbysusData(ebysus.EbysusData):
                 ukey = 'nr'
                 value_simu   = value * u_in2simu(ukey) 
                 fundval_simu = value_simu * self.get_mass(units='simu')
-        ## 'e' - energy density
+        # # 'e' - energy density
         elif var in ['e', 'p', 'tg']:
             fundvar = 'e'
             if var == 'e':
@@ -304,7 +300,7 @@ class FakeEbysusData(ebysus.EbysusData):
                 value_simu   = value
                 e_to_tg_simu = get_in_simu('e_to_tg')
                 fundval_simu = value_simu / e_to_tg_simu
-        ## 'p{x}' - momentum density ({x}-component)
+        # # 'p{x}' - momentum density ({x}-component)
         elif var in tuple(f'{v}{x}' for x in AXES for v in ('p', 'u', 'ui')):
             base, x = var[:-1], var[-1]
             fundvar = f'p{x}'
@@ -318,7 +314,7 @@ class FakeEbysusData(ebysus.EbysusData):
                 value_simu   = value * u_in2simu(ukey)
                 r_simu       = get_in_simu('r'+f'{x}dn')
                 fundval_simu = value_simu * r_simu
-        ## 'b{x}' - magnetic field ({x}-component)
+        # # 'b{x}' - magnetic field ({x}-component)
         elif var in tuple(f'b{x}' for x in AXES):
             base, x = var[:-1], var[-1]
             fundvar = f'b{x}'
@@ -334,30 +330,30 @@ class FakeEbysusData(ebysus.EbysusData):
         self.set_var(fundvar, fundval_simu, *args, **kwargs,
                      units='simu',          # we already handled the units; set_var shouldn't mess with them.
                      fundamental=False,     # we already handled the 'fundamental' possibility.
-                     _skip_preprocess=True, # we already handled preprocessing.
+                     _skip_preprocess=True,  # we already handled preprocessing.
                      )
         # set var (the one that was entered to this function)
         if also_set_var:
             self.set_var(var, value_simu, *args, **kwargs,
                          units='simu',          # we already handled the units; set_var shouldn't mess with them.
                          fundamental=False,     # we already handled the 'fundamental' possibility.
-                         _skip_preprocess=True, # we already handled preprocessing.
+                         _skip_preprocess=True,  # we already handled preprocessing.
                          )
         u_simu2out = (1 if ukey is None else self.uni(ukey, self.units_output, 'simu'))
         return (fundvar, fundval_simu * u_simu2out)
 
     def _warn_if_slicing_and_stagger(self, message):
         '''if any slice is not slice(None), and do_stagger=True, warnings.warn(message)'''
-        if self.do_stagger and any(iiax!=slice(None) for iiax in (self.iix, self.iiy, self.iiz)):
+        if self.do_stagger and any(iiax != slice(None) for iiax in (self.iix, self.iiy, self.iiz)):
             warnings.warn(message)
 
     def _warning_during_setvar_if_slicing_and_stagger(self):
         self._warn_if_slicing_and_stagger((
-          'setting var with iix, iiy, or iiz != slice(None) and do_stagger=True'
-          ' may lead to unexpectedly not using values from setvars. \n\n(Internally,'
-          ' when do_stagger=True, slices are set to slice(None) while getting vars, and'
-          ' the original slices are only applied after completing all other calculations.)'
-          f'\n\nGot slices: iix={self.iix}, iiy={self.iiy}, iiz={self.iiz}'
+            'setting var with iix, iiy, or iiz != slice(None) and do_stagger=True'
+            ' may lead to unexpectedly not using values from setvars. \n\n(Internally,'
+            ' when do_stagger=True, slices are set to slice(None) while getting vars, and'
+            ' the original slices are only applied after completing all other calculations.)'
+            f'\n\nGot slices: iix={self.iix}, iiy={self.iiy}, iiz={self.iiz}'
         ))
 
     ## UNSET_VAR ##
@@ -402,7 +398,7 @@ class FakeEbysusData(ebysus.EbysusData):
             whether to iterate through this fundamental var.
         AXES: string or list of strings from ('x', 'y', 'z')
             axes to use when iterating through fundamental vars.
-        
+
         yields var name. (sets ifluid immediately before yielding each value.)
         '''
         if b:
@@ -465,7 +461,7 @@ class FakeEbysusData(ebysus.EbysusData):
         if not self._confirm_write('Snapshot 0 mass densities', warning):
             return   # skip writing unless confirmed.
         for ifluid in self.iter_fluid_SLs(with_electrons=False):
-            r_i = self.reshape_if_necessary( self('r', ifluid=ifluid) )
+            r_i = self.reshape_if_necessary(self('r', ifluid=ifluid))
             ebysus.write_mfr(self.root_name, r_i, ifluid=ifluid)
 
     @tools.with_attrs(units_output='simu')
@@ -475,7 +471,7 @@ class FakeEbysusData(ebysus.EbysusData):
             return   # skip writing unless confirmed.
         for ifluid in self.iter_fluid_SLs(with_electrons=False):
             self.ifluid = ifluid
-            p_xyz_i = [self.reshape_if_necessary( self(f'p{x}') ) for x in AXES]
+            p_xyz_i = [self.reshape_if_necessary(self(f'p{x}')) for x in AXES]
             ebysus.write_mfp(self.root_name, *p_xyz_i, ifluid=ifluid)
 
     @tools.with_attrs(units_output='simu')
@@ -490,21 +486,21 @@ class FakeEbysusData(ebysus.EbysusData):
         if not self._confirm_write('Snapshot 0 energy densities', warning):
             return   # skip writing unless confirmed.
         for ifluid in non_e_fluids:
-            e_i = self.reshape_if_necessary( self('e', ifluid=ifluid) )
+            e_i = self.reshape_if_necessary(self('e', ifluid=ifluid))
             ebysus.write_mfe(self.root_name, e_i, ifluid=ifluid)
-        e_e = self.reshape_if_necessary( self('e', ifluid=(-1,0)) )
+        e_e = self.reshape_if_necessary(self('e', ifluid=(-1, 0)))
         ebysus.write_mf_e(self.root_name, e_e)
 
     @tools.with_attrs(units_output='simu')
     def write_mf_common(self, warning=True):
         '''write magnetic field from self to snapshot 0. (Also writes energy density if singlefluid.)'''
-        b_xyz = [self.reshape_if_necessary( self(f'b{x}') ) for x in AXES]
+        b_xyz = [self.reshape_if_necessary(self(f'b{x}')) for x in AXES]
         non_e_fluids = self.fluid_SLs(with_electrons=False)
         if len(non_e_fluids) == 1:
             if not self._confirm_write('Snapshot 0 magnetic field and single fluid energy density', warning):
                 return   # skip writing unless confirmed.
             self.ifluid = non_e_fluids[0]
-            e_singlefluid = self.reshape_if_necessary( self('e') )
+            e_singlefluid = self.reshape_if_necessary(self('e'))
             ebysus.write_mf_common(self.root_name, *b_xyz, e_singlefluid)
         else:
             if not self._confirm_write('Snapshot 0 magnetic field', warning):

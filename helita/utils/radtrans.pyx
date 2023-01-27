@@ -23,7 +23,7 @@ def piecewise_1D(np.ndarray[DTYPE_t, ndim=1] height,
     Parameters
     ----------
     height, chi, S:  1D arrays, float32
-        height scale, absorption coefficient, source function. Height 
+        height scale, absorption coefficient, source function. Height
         and chi must have consistent units (typically m and m^-1, respectively).
 
     Returns

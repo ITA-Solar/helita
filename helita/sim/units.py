@@ -6,7 +6,7 @@ purpose:
     2) enable "units" mode for DataClass objects (e.g. BifrostData, EbysusData).
 
 TL;DR:
-    >>>> Use obj.get_units() to see the units for the most-recent quantity that obj got with get_var(). <<<< 
+    Use obj.get_units() to see the units for the most-recent quantity that obj got with get_var().
 
 The idea is to:
 - have all load_quantities functions return values in simulation units.
@@ -17,7 +17,7 @@ EXAMPLE USAGE:
     dd = EbysusData(...)
     b_squared = dd.get_var('b2')
     dd.get_units('si')                # 'si' by default; other option is cgs.
-    >>> EvaluatedUnits(factor=1.2566e-11, name='T^{2}')
+    EvaluatedUnits(factor=1.2566e-11, name='T^{2}')
     b_squared * dd.get_units('si').factor   # == magnetic field squared, in SI units.
 
 
@@ -94,7 +94,7 @@ USER FRIENDLY GUIDE
                     docvar(..., usi=U_TUPLE(ufunc, uname)
                     docvar(..., usi_f=ufunc, usi_name=uname)
                 This also applies similarly to ucgs and uni (in place of usi).
-            
+
             UnitsTuple objects can be manipulated intuitively using *, /, **.
             Example: U_TUPLE(fA, nameA) ** 3 / (U_TUPLE(fB, nameB) * U_TUPLE(fC, nameC))
                 --> U_TUPLE(fA**3 / (fB * fC), nameA**3 / (nameB * nameC))
@@ -145,17 +145,16 @@ USER FRIENDLY GUIDE
     code which actively tries to get the relevant units.
 """
 
+import weakref
 # import built-ins
 import operator
-import functools
 import collections
-import weakref
-
-# import internal modules
-from . import tools
 
 # import external public modules
 import numpy as np
+
+# import internal modules
+from . import tools
 
 ''' ----------------------------- Set Defaults ----------------------------- '''
 
@@ -164,27 +163,33 @@ HIDE_INTERNAL_TRACEBACKS = True
 
 # UNIT_SYSTEMS are the allowed names for units_output.
 # units_output will dictate the units for the output of get_var.
-## additionally, get_units will give (1, units name) if units_output matches the request,
-## or raise NotImplementedError if units_output is not 'simu' and does not match the request.
+# additionally, get_units will give (1, units name) if units_output matches the request,
+# or raise NotImplementedError if units_output is not 'simu' and does not match the request.
 # For example:
 #  for obj.units_output='simu', get_units('si') tells (conversion to SI, string for SI units name)
 #  for obj.units_output='si', get_units('si') tells (1, string for SI units name)
 #  for obj.units_output='si', get_units('cgs') raises NotImplementedError.
 UNIT_SYSTEMS = ('simu', 'si', 'cgs')
 
+
 def ASSERT_UNIT_SYSTEM(value):
     assert value in UNIT_SYSTEMS, f"expected unit system from {UNIT_SYSTEMS}, but got {value}"
+
+
 def ASSERT_UNIT_SYSTEM_OR(value, *alternates):
     VALID_VALUES = (*alternates, *UNIT_SYSTEMS)
     assert value in VALID_VALUES, f"expected unit system from {UNIT_SYSTEMS} or value in {alternates}, but got {value}"
 
 # UNITS_OUTPUT property
+
+
 def UNITS_OUTPUT_PROPERTY(internal_name='_units_output', default='simu'):
     '''creates a property which manages units_output.
     uses the internal name provided, and returns the default if property value has not been set.
 
     only allows setting of units_output to valid names (as determined by helita.sim.units.UNIT_SYSTEMS).
     '''
+
     def get_units_output(self):
         return getattr(self, internal_name, default)
 
@@ -208,15 +213,15 @@ def UNITS_OUTPUT_PROPERTY(internal_name='_units_output', default='simu'):
 
 
 # for ATF = AttrsFunclike(..., format_attr=None, **kw__entered),
-## if kw__entered[ATTR_FORMAT_KWARG] (:=kw_fmt) exists,
-### for any required kwargs which haven't been entered,
-#### try to use the attribute of obj: kw_fmt(kwarg).
-#### (Instead of trying to use the attribute of obj: kwarg.)
+# if kw__entered[ATTR_FORMAT_KWARG] (:=kw_fmt) exists,
+# for any required kwargs which haven't been entered,
+# try to use the attribute of obj: kw_fmt(kwarg).
+# (Instead of trying to use the attribute of obj: kwarg.)
 ATTR_FORMAT_KWARG = '_attr_format'
 
 # when doing any of the quant_child methods in UnitsFuncBuilder,
 # use UNITS_KEY_KWARG to set units_key, unless self.units_key is set (e.g. at initialization).
-## This affects UNI (for which self.units_key is None), but not USI nor UCGS.
+# This affects UNI (for which self.units_key is None), but not USI nor UCGS.
 UNITS_KEY_KWARG = '_units_key'
 
 # UNITS_MODES stores the internal ("behind-the-scenes") info for unit conversion modes.
@@ -224,16 +229,16 @@ UNITS_KEY_KWARG = '_units_key'
 #               units_tuple = obj.vardict[metaquant][typequant][quant][units_key]
 #   attr_format = value to pass to ATTR_FORMAT_KWARG. (See ATTR_FORMAT_KWARG above for more info.)
 UNITS_MODES = \
-{
-    # mode : (units_key, attr_format)
-    'si'   : ('usi', 'usi_{}'),
-    'cgs'  : ('ucgs', 'u_{}'),
-}
+    {
+        # mode : (units_key, attr_format)
+        'si': ('usi', 'usi_{}'),
+        'cgs': ('ucgs', 'u_{}'),
+    }
 
 # UNITS_UNIVERSAL_KEY is a key which allows to use only one UnitsTuple to represent multiple unit systems.
 # In vardict when searching for original units_key, if it is not found, we will also search for this key;
 # i.e. if vardict[metaquant][typequant][quant][UNITS_UNIVERSAL_KEY] (:= this_unit_tuple) exists,
-## then we will call this_unit_tuple(obj.uni, obj, ATTR_FORMAT_KWARG = units_key)
+# then we will call this_unit_tuple(obj.uni, obj, ATTR_FORMAT_KWARG = units_key)
 # For example, a velocity is represented by obj.uni.usi_u or obj.uni.u_u, but these are very similar.
 # So, instead of setting usi and ucgs separately for docvar('uix'), we can just set uni:
 # docvar('uix', 'x-component of ifluid velocity', uni = UNI.l)
@@ -247,6 +252,7 @@ UNITS_KEY_NAME = '{}_name'
 
 
 ''' ============================= Helita Units ============================= '''
+
 
 class HelitaUnits(object):
     '''stores units as attributes.
@@ -305,7 +311,7 @@ class HelitaUnits(object):
         # bookkeeping
         self._parent_ref = (lambda: None) if parent is None else weakref.ref(parent)  # weakref to avoid circular reference.
         self.units_output = units_output
-        self.units_input  = units_input
+        self.units_input = units_input
 
         # set many unit constants (e.g. cm_to_m, amu, gsun).
         tools.globalvars(self)
@@ -329,6 +335,7 @@ class HelitaUnits(object):
             else:
                 result = self.parent.units_output
         return result
+
     @units_output.setter
     def units_output(self, value):
         ASSERT_UNIT_SYSTEM_OR(value, None)
@@ -338,6 +345,7 @@ class HelitaUnits(object):
     def units_input(self):
         ''''self(ustr) * value [self.units_input units] == value [self.units_output units]'''
         return getattr(self, '_units_input', 'simu')
+
     @units_input.setter
     def units_input(self, value):
         ASSERT_UNIT_SYSTEM(value)
@@ -390,22 +398,23 @@ class HelitaUnits(object):
             (Note: self.units_input always defaults to 'simu')
         '''
         try:
-            cname = self._constant_name(ustr)
+            self._constant_name(ustr)
         except KeyError:
-            conversion_mode=True
+            conversion_mode = True
         else:
-            conversion_mode=False
+            conversion_mode = False
         if conversion_mode:
             if not self._unit_exists(ustr):
-                raise ValueError(f'units do not exist: u_{ustr}, usi_{ustr}. ' +\
+                raise ValueError(f'units do not exist: u_{ustr}, usi_{ustr}. ' +
                                  f'And, {ustr} is not a constant from constant_lookup.')
             simu_to_out = self.get_conversion_from_simu(ustr, units_output)
-            if units_input is None: units_input = self.units_input
+            if units_input is None:
+                units_input = self.units_input
             ASSERT_UNIT_SYSTEM(units_input)
-            simu_to_in  = self.get_conversion_from_simu(ustr, units_input)
+            simu_to_in = self.get_conversion_from_simu(ustr, units_input)
             out_from_in = simu_to_out / simu_to_in    # in_to_simu = 1 / simu_to_in.
             return out_from_in
-        else: # "constants mode"
+        else:  # "constants mode"
             try:
                 result = self.get_constant(ustr, units_output)
             except KeyError:
@@ -424,7 +433,8 @@ class HelitaUnits(object):
             unit system for output. Result converts from 'simu' to units_output.
             if None, use self.units_output.
         '''
-        if units_output is None: units_output = self.units_output
+        if units_output is None:
+            units_output = self.units_output
         ASSERT_UNIT_SYSTEM(units_output)
         if units_output == 'simu':
             return 1
@@ -444,28 +454,29 @@ class HelitaUnits(object):
             unit system for output. Result converts from 'simu' to units_output.
             if None, use self.units_output.
         '''
-        if units_output is None: units_output = self.units_output
+        if units_output is None:
+            units_output = self.units_output
         ASSERT_UNIT_SYSTEM(units_output)
         cdict = self.constant_lookup[constant_name]
-        ckey  = cdict[units_output]
+        ckey = cdict[units_output]
         return getattr(self, ckey)
 
     ## INITIALIZING UNITS AND CONSTANTS ##
     def _initialize_extras(self):
         '''initializes all the units other than the base units.'''
-        import scipy.constants as const          # import here to reduce overhead of the module.
+        import scipy.constants as const  # import here to reduce overhead of the module.
         from astropy import constants as aconst  # import here to reduce overhead of the module.
 
         # set cgs units
-        self.u_u  = self.u_l / self.u_t
-        self.u_p  = self.u_r * (self.u_u)**2           # Pressure [dyne/cm2]
+        self.u_u = self.u_l / self.u_t
+        self.u_p = self.u_r * (self.u_u)**2           # Pressure [dyne/cm2]
         self.u_kr = 1 / (self.u_r * self.u_l)         # Rosseland opacity [cm2/g]
         self.u_ee = self.u_u**2
-        self.u_e  = self.u_p      # energy density units are the same as pressure units.
+        self.u_e = self.u_p      # energy density units are the same as pressure units.
         self.u_te = self.u_e / self.u_t * self.u_l  # Box therm. em. [erg/(s ster cm2)]
-        self.u_n  = 3.00e+10                      # Density number n_0 * 1/cm^3
-        self.pi   = const.pi
-        self.u_b  = self.u_u * np.sqrt(4. * self.pi * self.u_r)
+        self.u_n = 3.00e+10                      # Density number n_0 * 1/cm^3
+        self.pi = const.pi
+        self.u_b = self.u_u * np.sqrt(4. * self.pi * self.u_r)
         self.u_tg = (self.m_h / self.k_b) * self.u_ee
         self.u_tge = (self.m_e / self.k_b) * self.u_ee
 
@@ -496,11 +507,11 @@ class HelitaUnits(object):
         self.docu('b', 'magnetic field')
 
         # setup self.uni. (tells how to convert from simu. units to cgs units, for simple vars.)
-        self.uni={}
+        self.uni = {}
         self.uni['l'] = self.u_l
         self.uni['t'] = self.u_t
         self.uni['rho'] = self.u_r
-        self.uni['p'] = self.u_r * self.u_u # self.u_p
+        self.uni['p'] = self.u_r * self.u_u  # self.u_p
         self.uni['u'] = self.u_u
         self.uni['e'] = self.u_e
         self.uni['ee'] = self.u_ee
@@ -513,50 +524,50 @@ class HelitaUnits(object):
 
         # additional units (added for convenience) - started by SE, Apr 26 2021
         self.docu('m', 'mass')
-        self.u_m    = self.u_r   * self.u_l**3   # rho = mass / length^3
-        self.usi_m  = self.usi_r * self.usi_l**3 # rho = mass / length^3
+        self.u_m = self.u_r * self.u_l**3   # rho = mass / length^3
+        self.usi_m = self.usi_r * self.usi_l**3  # rho = mass / length^3
         self.docu('ef', 'electric field')
-        self.u_ef   = self.u_b                   # in cgs: F = q(E + (u/c) x B)
+        self.u_ef = self.u_b                   # in cgs: F = q(E + (u/c) x B)
         self.usi_ef = self.usi_b * self.usi_u    # in SI:  F = q(E + u x B)
         self.docu('f', 'force')
-        self.u_f    = self.u_p   * self.u_l**2   # pressure = force / area
-        self.usi_f  = self.usi_p * self.usi_l**2 # pressure = force / area
+        self.u_f = self.u_p * self.u_l**2   # pressure = force / area
+        self.usi_f = self.usi_p * self.usi_l**2  # pressure = force / area
         self.docu('q', 'charge')
-        self.u_q    = self.u_f   / self.u_ef     # F = q E
-        self.usi_q  = self.usi_f / self.usi_ef   # F = q E
+        self.u_q = self.u_f / self.u_ef     # F = q E
+        self.usi_q = self.usi_f / self.usi_ef   # F = q E
         self.docu('nr', 'number density')
-        self.u_nr   = self.u_r   / self.u_m      # nr = r / m
+        self.u_nr = self.u_r / self.u_m      # nr = r / m
         self.usi_nr = self.usi_r / self.usi_m    # nr = r / m
         self.docu('nq', 'charge density')
-        self.u_nq   = self.u_q   * self.u_nr
+        self.u_nq = self.u_q * self.u_nr
         self.usi_nq = self.usi_q * self.usi_nr
         self.docu('pm', 'momentum density')
-        self.u_pm   = self.u_u   * self.u_r      # mom. dens. = mom * nr = u * r
+        self.u_pm = self.u_u * self.u_r      # mom. dens. = mom * nr = u * r
         self.usi_pm = self.usi_u * self.usi_r
         self.docu('hz', 'frequency')
-        self.u_hz   = 1./self.u_t
+        self.u_hz = 1./self.u_t
         self.usi_hz = 1./self.usi_t
         self.docu('phz', 'momentum density frequency (see e.g. momentum density exchange terms)')
-        self.u_phz  = self.u_pm   * self.u_hz
-        self.usi_phz= self.usi_pm * self.usi_hz
+        self.u_phz = self.u_pm * self.u_hz
+        self.usi_phz = self.usi_pm * self.usi_hz
         self.docu('i', 'current per unit area')
-        self.u_i    = self.u_nq   * self.u_u     # ue = ... + J / (ne qe)
-        self.usi_i  = self.usi_nq * self.usi_u
+        self.u_i = self.u_nq * self.u_u     # ue = ... + J / (ne qe)
+        self.usi_i = self.usi_nq * self.usi_u
 
         # additional constants (added for convenience)
-        ## masses
+        # masses
         self.simu_amu = self.amu / self.u_m         # 1 amu
         self.simu_m_e = self.m_electron / self.u_m  # 1 electron mass
-        ## charge (1 elementary charge)
-        self.simu_q_e   = self.q_electron   / self.u_q   # [derived from cgs]
-        self.simu_qsi_e = self.qsi_electron / self.usi_q # [derived from si]
-        ### note simu_q_e != simu_qsi_e because charge is defined
-        ### by different equations, for cgs and si. 
-        ## permeability (magnetic constant) (mu0) (We expect mu0_simu == 1.)
+        # charge (1 elementary charge)
+        self.simu_q_e = self.q_electron / self.u_q   # [derived from cgs]
+        self.simu_qsi_e = self.qsi_electron / self.usi_q  # [derived from si]
+        # note simu_q_e != simu_qsi_e because charge is defined
+        # by different equations, for cgs and si.
+        # permeability (magnetic constant) (mu0) (We expect mu0_simu == 1.)
         self.simu_mu0 = self.mu0si * (1/self.usi_b) * (self.usi_l) * (self.usi_i)
-        ### J = curl(B) / mu0 --> mu0 = curl(B) / J --> [mu0] = [B] [length]^-1 [J]^-1
-        ### --> mu0[simu] / mu0[SI] = (B[simu] / B[SI]) * (L[SI] / L[simu]) * (J[SI]/J[simu])
-        ## boltzmann constant
+        # J = curl(B) / mu0 --> mu0 = curl(B) / J --> [mu0] = [B] [length]^-1 [J]^-1
+        # --> mu0[simu] / mu0[SI] = (B[simu] / B[SI]) * (L[SI] / L[simu]) * (J[SI]/J[simu])
+        # boltzmann constant
         self.simu_kB = self.ksi_b * (self.usi_nr / self.usi_e)   # kB [simu energy / K]
 
         # update the dict doc_units with the values of units
@@ -572,6 +583,7 @@ class HelitaUnits(object):
         Also creates constant_lookup_reverse, which tells constant_name given attr.
         '''
         self.constant_lookup = collections.defaultdict(dict)
+
         def addc(c, doc=None, cgs=None, si=None, simu=None):
             '''add constant c to lookup table with the units provided.
             also adds documentation if provided.'''
@@ -600,7 +612,7 @@ class HelitaUnits(object):
     def __repr__(self):
         '''show self in a pretty way (i.e. including info about base units)'''
         return "<{} with base_units=dict({})>".format(type(self),
-                            self.prettyprint_base_units(printout=False))
+                                                      self.prettyprint_base_units(printout=False))
 
     def base_units(self):
         '''returns dict of u_l, u_t, u_r, gamma, for self.'''
@@ -612,8 +624,8 @@ class HelitaUnits(object):
         fmtgam = '{}'   # formatting for key gamma
         s = []
         for unit in self.BASE_UNITS:
-            val = getattr(self,unit)
-            if unit=='gamma':
+            val = getattr(self, unit)
+            if unit == 'gamma':
                 valstr = fmtgam.format(val)
             else:
                 valstr = fmt.format(val)
@@ -622,16 +634,16 @@ class HelitaUnits(object):
         if printout:
             print(result)
         else:
-            return(result)
+            return (result)
 
     ## DOCS ##
     def docu(self, u, doc):
         '''documents u by adding u=doc to dict self.doc_units'''
-        self.doc_units[u]=doc
+        self.doc_units[u] = doc
 
     def docc(self, c, doc):
         '''documents c by adding c=doc to dict self.doc_constants'''
-        self.doc_constants[c]=doc
+        self.doc_constants[c] = doc
 
     def _unit_name(self, u):
         '''returns name of unit u. e.g. u_r -> 'r'; usi_hz -> 'hz', 'nq' -> 'nq'.'''
@@ -647,7 +659,7 @@ class HelitaUnits(object):
         '''
         u = self._unit_name(u)
         result = {}
-        u_u   = 'u_'+u
+        u_u = 'u_'+u
         usi_u = 'usi_'+u
         result = {key: getattr(self, key) for key in [u, u_u, usi_u] if hasattr(self, key)}
         return result
@@ -674,7 +686,7 @@ class HelitaUnits(object):
         '''for u in self.doc_units, update self.doc_units[u] with values of u.'''
         for u, doc in self.doc_units.items():
             valstr = self.prettyprint_unit_values(u, printout=False)
-            if len(valstr)>0:
+            if len(valstr) > 0:
                 doc = sep.join([fmtdoc.format(doc), valstr])
                 self.doc_units[u] = doc
 
@@ -689,7 +701,7 @@ class HelitaUnits(object):
         except KeyError:
             raise ValueError(f'constant not found in constant_lookup table: {repr(c)}') from None
         else:
-            return {usys : (ckey, getattr(self, ckey)) for (usys,ckey) in clookup.items()}
+            return {usys: (ckey, getattr(self, ckey)) for (usys, ckey) in clookup.items()}
 
     def prettyprint_constant_values(self, x, printout=True, fmtname='{:<10s}', fmtval='{:.2e}', sep=' ;  '):
         '''pretty string for constant values. print if printout, else return string.'''
@@ -708,7 +720,7 @@ class HelitaUnits(object):
         '''for c in self.doc_constants, update self.doc_constants[c] with values of c.'''
         for c, doc in self.doc_constants.items():
             valstr = self.prettyprint_constant_values(c, printout=False)
-            if len(valstr)>0:
+            if len(valstr) > 0:
                 doc = sep.join([fmtdoc.format(doc), valstr])
                 self.doc_constants[c] = doc
 
@@ -777,7 +789,7 @@ class HelitaUnits(object):
                 rat = value / val
             except TypeError:
                 continue
-            if sign_sensitive: 
+            if sign_sensitive:
                 rat = abs(rat)
             compare_val = abs(rat - 1)
             if best == 0:  # we handle this separately to prevent division by 0 error.
@@ -794,15 +806,15 @@ class HelitaUnits(object):
 ''' ============================= UNITS OUTPUT SYSTEM ============================= '''
 
 
-
 ''' ----------------------------- Hesitant Execution ----------------------------- '''
 # in this section, establish objects which can be combined like math terms but
 # create a function which can be evaluated later, instead of requiring evaluation right away.
 # See examples in FuncBuilder documentation.
 
+
 class FuncBuilder:
     '''use this object to build a function one arg / kwarg at a time.
-    
+
     use attributes for kwargs, indices for args.
 
     Examples:
@@ -827,6 +839,7 @@ class FuncBuilder:
         f(0.1, 10, x=3, r=5, y=37)
         >>> 32.9            # ((3 + 5) * 10) - (37 + 0.1 + 10)
     '''
+
     def __init__(self, FunclikeType=None, **kw__funclike_init):
         '''convert functions to funcliketype object.'''
         self.FunclikeType = Funclike if (FunclikeType is None) else FunclikeType
@@ -838,13 +851,13 @@ class FuncBuilder:
             '''returns kwargs[{a}]'''
             try:
                 return kwargs[a]
-            except KeyError as e:
+            except KeyError:
                 message = 'Expected kwargs to contain key {} but they did not!'.format(repr(a))
                 raise KeyError(message) from None
-        f_a.__doc__  = f_a.__doc__.replace('{a}', repr(a))
+        f_a.__doc__ = f_a.__doc__.replace('{a}', repr(a))
         f_a.__name__ = a
         return self.FunclikeType(f_a, required_kwargs=[a], **self._kw__funclike_init)
-    
+
     def __getitem__(self, i):
         '''returns f(*args, **kwargs) --> args[i]. i must be an integer.'''
         def f_i(*args, **kwargs):
@@ -853,20 +866,21 @@ class FuncBuilder:
                 return args[i]
             except IndexError:
                 raise IndexError('Expected args[{}] to exist but it did not!'.format(i))
-        f_i.__doc__  = f_i.__doc__.replace('{i}', repr(i))
+        f_i.__doc__ = f_i.__doc__.replace('{i}', repr(i))
         f_i.__name__ = 'arg' + str(i)
         return self.FunclikeType(f_i, required_args=[i], **self._kw__funclike_init)
-    
+
+
 def make_Funclike_magic(op, op_name=None, reverse=False):
     '''makes magic funclike for binary operator
     it will be named magic + op_name.
-    
+
     Example:
         f = make_Funclike_magic(operator.__mul__, '__times__')
         >>> a function named magic__times__ which returns a Funclike object that does a * b.
-    
+
     make_Funclike_magic is a low-level function which serves as a helper function for the Funclike class.
-        
+
     make_Funclike_magic returns a function of (a, b) which returns a Funclike-like object that does op(a, b).
     type(result) will be type(a) unless issubclass(b, a), in which case it will be type(b).
 
@@ -889,6 +903,7 @@ def make_Funclike_magic(op, op_name=None, reverse=False):
         if reverse:
             (a, b) = (b, a)
         # apply operation
+
         def f(*args, **kwargs):
             __tracebackhide__ = HIDE_INTERNAL_TRACEBACKS
             a_val = a if not callable(a) else a(*args, **kwargs)
@@ -902,12 +917,13 @@ def make_Funclike_magic(op, op_name=None, reverse=False):
             ReturnType = type_B0
         else:
             ReturnType = type_A0
-        result = ReturnType(f, parents=[a,b])
+        result = ReturnType(f, parents=[a, b])
         return result
     if op_name is not None:
         magic.__name__ = 'magic' + op_name
     return magic
-    
+
+
 class Funclike:
     '''function-like object. Useful for combining with other Funclike objects.
     Allows for "hesitant execution":
@@ -927,52 +943,53 @@ class Funclike:
         get0           = lambda *args, **kwargs: args[0]
         funclike_get0  = Funclike(get0)
         add_arg0_to_y  = funclike_get0 + funclike_gety
-        add_arg0_to_y(3, y=10) 
-        >>> 13      # 3 + 10    
+        add_arg0_to_y(3, y=10)
+        >>> 13      # 3 + 10
         # --- combine the basic examples ---
         add_arg0_to_y_then_subtract_2x = add_arg0_to_y - mult_x_by_2
         add_arg0_to_y_then_subtract_2x(7, y=8, x=50)
         >>> -85     # (7 + 8) - 50 * 2
     '''
+
     def __init__(self, f, required_args=[], required_kwargs=[], parents=[]):
         self._tracebackhide = HIDE_INTERNAL_TRACEBACKS
         self.f = f
         self.__name__ = f.__name__
-        self._required_args   = required_args     # list of  args  which must be provided for a function call to self.
+        self._required_args = required_args     # list of  args  which must be provided for a function call to self.
         self._required_kwargs = required_kwargs   # list of kwargs which must be provided for a function call to self.
         for parent in parents:
-            parent_req_args   = getattr(parent, '_required_args', [])
+            parent_req_args = getattr(parent, '_required_args', [])
             parent_req_kwargs = getattr(parent, '_required_kwargs', [])
-            if len(parent_req_args)>0:
+            if len(parent_req_args) > 0:
                 self._add_to_required('_required_args', parent_req_args)
-            if len(parent_req_kwargs)>0:
+            if len(parent_req_kwargs) > 0:
                 self._add_to_required('_required_kwargs', parent_req_kwargs)
-        
+
     def _add_to_required(self, original_required, new_required):
         orig = getattr(self, original_required, [])
-        setattr(self, original_required,  sorted(list( set(orig + new_required) ))  )
+        setattr(self, original_required,  sorted(list(set(orig + new_required))))
 
     # make Funclike behave like a function (i.e. it is callable)
     def __call__(self, *args, **kwargs):
         __tracebackhide__ = self._tracebackhide
         return self.f(*args, **kwargs)
-        
-    # make Funclike behave like a number (i.e. it can participate in arithmetic)
-    __mul__     = make_Funclike_magic(operator.__mul__,     ' * ')    # multiply
-    __add__     = make_Funclike_magic(operator.__add__,     ' + ')    # add
-    __sub__     = make_Funclike_magic(operator.__sub__,     ' - ')    # subtract
-    __truediv__ = make_Funclike_magic(operator.__truediv__, ' / ')    # divide
-    __pow__     = make_Funclike_magic(operator.__pow__,     ' ** ')   # raise to a power
 
-    __rmul__     = make_Funclike_magic(operator.__mul__,     ' * ', reverse=True)    # rmultiply
-    __radd__     = make_Funclike_magic(operator.__add__,     ' + ', reverse=True)    # radd
-    __rsub__     = make_Funclike_magic(operator.__sub__,     ' - ', reverse=True)    # rsubtract
+    # make Funclike behave like a number (i.e. it can participate in arithmetic)
+    __mul__ = make_Funclike_magic(operator.__mul__,     ' * ')    # multiply
+    __add__ = make_Funclike_magic(operator.__add__,     ' + ')    # add
+    __sub__ = make_Funclike_magic(operator.__sub__,     ' - ')    # subtract
+    __truediv__ = make_Funclike_magic(operator.__truediv__, ' / ')    # divide
+    __pow__ = make_Funclike_magic(operator.__pow__,     ' ** ')   # raise to a power
+
+    __rmul__ = make_Funclike_magic(operator.__mul__,     ' * ', reverse=True)    # rmultiply
+    __radd__ = make_Funclike_magic(operator.__add__,     ' + ', reverse=True)    # radd
+    __rsub__ = make_Funclike_magic(operator.__sub__,     ' - ', reverse=True)    # rsubtract
     __rtruediv__ = make_Funclike_magic(operator.__truediv__, ' / ', reverse=True)    # rdivide
 
     def _strinfo(self):
         '''info about self. (goes to repr)'''
         return 'required_args={}, required_kwargs={}'.format(
-                    self._required_args, self._required_kwargs)
+            self._required_args, self._required_kwargs)
 
     def __repr__(self):
         return f'(Funclike with operation {repr(self.__name__)})'
@@ -980,7 +997,7 @@ class Funclike:
     def _repr_adv_(self):
         '''very detailed repr of self.'''
         return '<{} named {} with {}>'.format(
-                object.__repr__(self), repr(self.__name__), self._strinfo())
+            object.__repr__(self), repr(self.__name__), self._strinfo())
 
 
 class AttrsFunclike(Funclike):
@@ -995,25 +1012,27 @@ class AttrsFunclike(Funclike):
                  However, if special kwarg ATTR_FORMAT_KWARG (defined at top of units.py)
                  is passed to this function, use its value to format the required kwargs.
     '''
+
     def __init__(self, f, argn=0, format_attr=None, **kw__funclike_init):
         '''f should be a Funclike object.'''
         Funclike.__init__(self, f, **kw__funclike_init)
-        self.argn=argn
-        self.format_attr=format_attr
+        self.argn = argn
+        self.format_attr = format_attr
         self._add_to_required('_required_args', [argn])
         self._add_to_required('_required_args_special', [argn])
-        f               = self.f
+        f = self.f
         required_kwargs = self._required_kwargs
+
         def f_attrs(*args, **kwargs):
             __tracebackhide__ = self._tracebackhide
-            obj     = args[argn]
-            kwdict  = kwargs
+            obj = args[argn]
+            kwdict = kwargs
             if self.format_attr is None:
                 format_attr = kwargs.get(ATTR_FORMAT_KWARG, '{}')
             else:
                 format_attr = self.format_attr
             # for any required kwargs which haven't been entered,
-            ## try to use the attribute (format_attr.format(kwarg)) of obj, if possible.
+            # try to use the attribute (format_attr.format(kwarg)) of obj, if possible.
             for kwarg in required_kwargs:
                 if kwarg not in kwargs:
                     attr_name = format_attr.format(kwarg)
@@ -1034,8 +1053,8 @@ class AttrsFunclike(Funclike):
     def _strinfo(self):
         '''info about self. (goes to repr)'''
         return 'required_args={}, required_kwargs={}. special_args={}: {}'.format(
-                    self._required_args, self._required_kwargs,
-                    self._required_args_special, self._special_args_info())
+            self._required_args, self._required_kwargs,
+            self._required_args_special, self._special_args_info())
 
 
 ''' -------------------------------------------------------------------------- '''
@@ -1047,6 +1066,8 @@ class AttrsFunclike(Funclike):
 ''' ----------------------------- Units Naming ----------------------------- '''
 
 # string manipulation helper functions
+
+
 def _pretty_str_unit(name, value, flip=False, flip_neg=False):
     '''returns string for name, value. name is name of unit; value is exponent.
     flip --> pretend result is showing up in denominator (i.e. multiply exponent by -1).
@@ -1066,10 +1087,11 @@ def _pretty_str_unit(name, value, flip=False, flip_neg=False):
         result = name + '^{' + str(value) + '}'
     return (result, flipped)
 
+
 def _join_strs(strs, sep=' '):
-        '''joins strings, separating by sep. Ignores Nones and strings of length 0.'''
-        ss = [s for s in strs if (s is not None) and (len(s)>0)]
-        return sep.join(ss)
+    '''joins strings, separating by sep. Ignores Nones and strings of length 0.'''
+    ss = [s for s in strs if (s is not None) and (len(s) > 0)]
+    return sep.join(ss)
 
 
 class UnitsExpression():
@@ -1090,12 +1112,13 @@ class UnitsExpression():
 
     TODO: make display mode options (e.g. "latex", "pythonic", etc)
     '''
+
     def __init__(self, contents=collections.OrderedDict(), order='entered', frac=True, unknown=False):
         self.contents = contents
-        self.order    = order
-        self.frac     = frac      # whether to show negatives in denominator
-        self.unknown  = unknown   # whether the units are actually unknown.
-        self._mode    = None      # mode for units. unused unless unknown is True.
+        self.order = order
+        self.frac = frac      # whether to show negatives in denominator
+        self.unknown = unknown   # whether the units are actually unknown.
+        self._mode = None      # mode for units. unused unless unknown is True.
 
     def _order_exponent(self, ascending=False):
         '''returns keys for self.contents, ordered by exponent.
@@ -1115,7 +1138,7 @@ class UnitsExpression():
         '''returns keys for self.contents in alphabetical order.
         not reverse --> a first; reverse --> a last.
         '''
-        #TODO: handle case of '$' included in key name (e.g. for greek letters)
+        # TODO: handle case of '$' included in key name (e.g. for greek letters)
         return sorted(list(self.contents.keys()), reverse=reverse)
 
     def _order_entered(self, reverse=False):
@@ -1154,7 +1177,7 @@ class UnitsExpression():
             raise ValueError(errmsg)
         x = [self._pretty_str_key(key, flip_neg=self.frac) for key in key_order]
         numer = [s for s, flipped in x if not flipped]
-        denom = [s for s, flipped in x   if   flipped] # and s != ''
+        denom = [s for s, flipped in x if flipped]  # and s != ''
         numer_str = _join_strs(numer, ' ')
         if len(denom) == 0:
             result = numer_str
@@ -1237,13 +1260,16 @@ class UnitSymbol(UnitsExpression):
             str(result)
             >>> 'V^{2} / m'
     '''
+
     def __init__(self, name, *args, **kwargs):
         self.name = name
         contents = collections.OrderedDict()
         contents[name] = 1
         UnitsExpression.__init__(self, contents, *args, **kwargs)
 
+
 UnitsSymbol = UnitSymbol    # alias
+
 
 def UnitSymbols(names, *args, **kwargs):
     '''returns UnitSymbol(name, *args, **kwargs) for name in names.
@@ -1260,6 +1286,7 @@ def UnitSymbols(names, *args, **kwargs):
         names = names.split()
     return tuple(UnitSymbol(name, *args, **kwargs) for name in names)
 
+
 UnitsSymbols = UnitSymbols  # alias
 
 
@@ -1268,6 +1295,7 @@ class UnitsExpressionDict(UnitsExpression):
 
     Contains multiple UnitsExpression.
     '''
+
     def __init__(self, contents=dict(), **kw__units_expression_init):
         '''contents should be a dict with:
             keys = units_keys;
@@ -1324,10 +1352,10 @@ class UnitsExpressionDict(UnitsExpression):
         return UnitsExpressionDict(result, **self._kw__units_expression_init)
 
     # handle cases of (b * a) and (b / a), for b=UnitsExpression(...), a=UnitsExpressionDict(...).
-    ## b * a --> TypeError --> try a.__rmul__(b).
+    # b * a --> TypeError --> try a.__rmul__(b).
     __rmul__ = __mul__
 
-    ## b / a --> TypeError --> try a.__rtrudiv__(b).
+    # b / a --> TypeError --> try a.__rtrudiv__(b).
     def __rtruediv__(self, b):
         '''division of b / self. (b is another UnitsExpression or UnitsExpressionDict object).'''
         result = dict()
@@ -1352,6 +1380,7 @@ class UnitsExpressionDict(UnitsExpression):
         uexpr = self.contents[units_key]   # relevant UnitsExpression based on units_key
         return uexpr
 
+
 class UnitSymbolDict(UnitsExpressionDict):
     '''a dict of symbols for unit.
 
@@ -1360,6 +1389,7 @@ class UnitSymbolDict(UnitsExpressionDict):
 
     the properties kwarg is passed to UnitsExpressionDict.__init__() as **properties.
     '''
+
     def __init__(self, properties=dict(), **symbols_dict):
         self.symbols_dict = symbols_dict
         contents = {key: UnitSymbol(val) for (key, val) in symbols_dict.items()}
@@ -1369,15 +1399,16 @@ class UnitSymbolDict(UnitsExpressionDict):
 # make custom error class for when units are not found.
 class UnitsNotFoundError(Exception):
     '''base class for telling that units have not been found.'''
-    pass
+
 
 def _default_units_f(info=''):
     def f(*args, **kwargs):
         errmsg = ("Cannot calculate units. Either the original quant's units are unknown,"
-                   " or one of the required children quants' units are unknown.\n"
-                   "Further info provided: " + str(info))
+                  " or one of the required children quants' units are unknown.\n"
+                  "Further info provided: " + str(info))
         raise UnitsNotFoundError(errmsg)
     return Funclike(f)
+
 
 DEFAULT_UNITS_F = _default_units_f()
 DEFAULT_UNITS_NAME = UnitSymbol('???', unknown=True)
@@ -1388,10 +1419,11 @@ UnitsTupleBase = collections.namedtuple('Units', ('f', 'name', 'evaluated'),
                                         defaults=[DEFAULT_UNITS_F, DEFAULT_UNITS_NAME, False]
                                         )
 
+
 def make_UnitsTuple_magic(op, op_name=None, reverse=False):
     '''makes magic func for binary operator acting on UnitsTuple object.
     it will be named magic + op_name.
-    
+
     make_UnitsTuple_magic is a low-level function which serves as a helper function for the UnitsTuple class.
     '''
     def magic(a, b):
@@ -1408,13 +1440,14 @@ def make_UnitsTuple_magic(op, op_name=None, reverse=False):
         else:
             b_f, b_name = b,   b
         # apply operation
-        f    = op(a_f, b_f)
+        f = op(a_f, b_f)
         name = op(a_name, b_name)
         return UnitsTuple(f, name)
     # rename magic (based on op_name)
     if op_name is not None:
         magic.__name__ = 'magic' + op_name
     return magic
+
 
 class UnitsTuple(UnitsTupleBase):
     '''UnitsTuple tells:
@@ -1428,15 +1461,15 @@ class UnitsTuple(UnitsTupleBase):
     '''
 
     # make Funclike behave like a number (i.e. it can participate in arithmetic)
-    __mul__     = make_UnitsTuple_magic(operator.__mul__,     ' * ')    # multiply
-    __add__     = make_UnitsTuple_magic(operator.__add__,     ' + ')    # add
-    __sub__     = make_UnitsTuple_magic(operator.__sub__,     ' - ')    # subtract
+    __mul__ = make_UnitsTuple_magic(operator.__mul__,     ' * ')    # multiply
+    __add__ = make_UnitsTuple_magic(operator.__add__,     ' + ')    # add
+    __sub__ = make_UnitsTuple_magic(operator.__sub__,     ' - ')    # subtract
     __truediv__ = make_UnitsTuple_magic(operator.__truediv__, ' / ')    # divide
-    __pow__     = make_UnitsTuple_magic(operator.__pow__,     ' ** ')   # raise to a power
+    __pow__ = make_UnitsTuple_magic(operator.__pow__,     ' ** ')   # raise to a power
 
-    __rmul__     = make_UnitsTuple_magic(operator.__mul__,     ' * ', reverse=True)    # rmultiply
-    __radd__     = make_UnitsTuple_magic(operator.__add__,     ' + ', reverse=True)    # radd
-    __rsub__     = make_UnitsTuple_magic(operator.__sub__,     ' - ', reverse=True)    # rsubtract
+    __rmul__ = make_UnitsTuple_magic(operator.__mul__,     ' * ', reverse=True)    # rmultiply
+    __radd__ = make_UnitsTuple_magic(operator.__add__,     ' + ', reverse=True)    # radd
+    __rsub__ = make_UnitsTuple_magic(operator.__sub__,     ' - ', reverse=True)    # rsubtract
     __rtruediv__ = make_UnitsTuple_magic(operator.__truediv__, ' / ', reverse=True)    # rdivide
 
     # make Funclike behave like a function (i.e. it is callable)
@@ -1452,33 +1485,38 @@ class UnitsTuple(UnitsTupleBase):
     def __repr__(self):
         return f'{type(self).__name__}(f={self.f}, name={repr(self.name)}, evaluated={self.evaluated})'
 
+
 ''' ----------------------------- Dimensionless Tuple ----------------------------- '''
 # in this section is a units tuple which should be used for dimensionless quantities.
+
 
 def dimensionless_units_f(*args, **kwargs):
     '''returns 1, regardless of args and kwargs.'''
     return 1
 
+
 DIMENSIONLESS_UNITS = Funclike(dimensionless_units_f)
 
-DIMENSIONLESS_NAME  = UnitsExpression()
+DIMENSIONLESS_NAME = UnitsExpression()
 
 DIMENSIONLESS_TUPLE = UnitsTuple(DIMENSIONLESS_UNITS, DIMENSIONLESS_NAME)
 
 
 ''' ----------------------------- Units FuncBuilder ----------------------------- '''
 
+
 class UnitsFuncBuilder(FuncBuilder):
     '''FuncBuilder but also qc attribute will get quant children of obj.
     FunclikeType must be (or be a subclass of) AttrsFunclike.
     '''
+
     def __init__(self, FunclikeType=AttrsFunclike, units_key=None, **kw__funclike_init):
         FuncBuilder.__init__(self, FunclikeType=FunclikeType, **kw__funclike_init)
         self.units_key = units_key
 
     def _quant_child(self, i, oldest_first=True, return_type='tuple'):
         '''returns a Funclike which gets i'th quant child in QUANTS_TREE for object=args[1].
-        
+
         not intended to be called directly; instead use alternate functions as described below.
 
         return_type: string (default 'tuple')
@@ -1491,19 +1529,20 @@ class UnitsFuncBuilder(FuncBuilder):
         '''
         return_type = return_type.lower()
         assert return_type in ('tuple', 'ufunc', 'name'), 'Got invalid return_type(={})'.format(repr(return_type))
+
         def f_qc(obj_uni, obj, quant_tree, *args, **kwargs):
             '''gets quant child number {i} from quant tree of obj,
             sorting from i=0 as {age0} to i=-1 as {agef}.
             '''
             #print('f_qc called with uni, obj, args, kwargs:', obj_uni, obj, *args, **kwargs)
             __tracebackhide__ = self._tracebackhide
-            child_tree  = quant_tree.get_child(i, oldest_first)
+            child_tree = quant_tree.get_child(i, oldest_first)
             if self.units_key is None:
                 units_key = kwargs[UNITS_KEY_KWARG]
             else:
                 units_key = self.units_key
             units_tuple = _units_lookup_by_quant_info(obj, child_tree.data, units_key)
-            result      = units_tuple(obj_uni, obj, child_tree, *args, **kwargs)
+            result = units_tuple(obj_uni, obj, child_tree, *args, **kwargs)
             if return_type == 'ufunc':
                 return result.f
             elif return_type == 'name':
@@ -1512,8 +1551,8 @@ class UnitsFuncBuilder(FuncBuilder):
                 return result
         # make pretty documentation for f_qc.
         youngest, oldest = 'youngest (added most-recently)', 'oldest (added first)'
-        age0, agef       = (oldest, youngest) if oldest_first else (youngest, oldest)
-        f_qc.__doc__  = f_qc.__doc__.format(i=i, age0=age0, agef=agef)
+        age0, agef = (oldest, youngest) if oldest_first else (youngest, oldest)
+        f_qc.__doc__ = f_qc.__doc__.format(i=i, age0=age0, agef=agef)
         f_qc.__name__ = 'child_' + str(i) + '__' + ('oldest' if oldest_first else 'youngest') + '_is_0'
         _special_args_info = 'arg[1] is assumed to be an obj with attribute got_vars_tree() which returns a QuantTree.'
         required_kwargs = [UNITS_KEY_KWARG] if self.units_key is None else []
@@ -1560,13 +1599,14 @@ def _units_lookup_by_quant_info(obj, info, units_key=UNITS_UNIVERSAL_KEY,
         return utuple
     # else:    # failed to get units tuple.
     # try to get units f and units name separately.
-    keys_to_check_f    = [UNITS_KEY_F.format(key)    for key in keys_to_check]
+    keys_to_check_f = [UNITS_KEY_F.format(key) for key in keys_to_check]
     keys_to_check_name = [UNITS_KEY_NAME.format(key) for key in keys_to_check]
     msg_if_err = '\n  units_key = {}\n  quant_info = {}\n  quant_lookup_result = {}'.format(repr(units_key), info, x)
-    u_f    = _multiple_lookup(x, *keys_to_check_f,    default=default_f(msg_if_err))
+    u_f = _multiple_lookup(x, *keys_to_check_f,    default=default_f(msg_if_err))
     u_name = _multiple_lookup(x, *keys_to_check_name, default=default_name)
     utuple_ = UnitsTuple(u_f, u_name)
     return utuple_
+
 
 def _multiple_lookup(x, *keys, default=None):
     '''try to get keys from x. return result for first key found. return None if fail.'''
@@ -1576,11 +1616,13 @@ def _multiple_lookup(x, *keys, default=None):
             return result
     return default
 
+
 ''' ----------------------------- Evaluate Units ----------------------------- '''
 
 EvaluatedUnitsTuple = collections.namedtuple('EvaluatedUnits', ('factor', 'name'))
 # TODO: make prettier formatting for the units (e.g. {:.3e})
 # TODO: allow to change name formatting (via editting "order" and "frac" of underlying UnitsExpression object)
+
 
 class EvaluatedUnits(EvaluatedUnitsTuple):
     '''tuple of (factor, name).
@@ -1590,20 +1632,26 @@ class EvaluatedUnits(EvaluatedUnitsTuple):
         np.array([1, 2, 3]) * EvaluatedUnits(factor=10, name='m / s')
         >>> EvaluatedUnits(factor=np.array([10, 20, 30]), name='m / s')
     '''
+
     def __mul__(self, b):      # self * b
         return EvaluatedUnits(self.factor * b, self.name)
+
     def __rmul__(self, b):     # b * self
         return EvaluatedUnits(b * self.factor, self.name)
+
     def __truediv__(self, b):  # self / b
         return EvaluatedUnits(self.factor / b, self.name)
-    def __rtruediv__(self, b): # b / self
+
+    def __rtruediv__(self, b):  # b / self
         return EvaluatedUnits(b / self.factor, self.name)
+
     def __pow__(self, b):      # self ** b
         return EvaluatedUnits(self.factor ** b, self.name)
     # the next line is to tell numpy that when b is a numpy array,
     # we should use __rmul__ for b * self and __rtruediv__ for b / self,
     # instead of making a UfuncTypeError.
     __array_ufunc__ = None
+
 
 def _get_units_info_from_mode(mode='si'):
     '''returns units_key, format_attr given units mode. Case-insensitive.'''
@@ -1612,13 +1660,14 @@ def _get_units_info_from_mode(mode='si'):
     units_key, format_attr = UNITS_MODES[mode]
     return units_key, format_attr
 
+
 def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', _force_from_simu=False, **kw__units_tuple):
     '''evaluates units for units_tuple using the attrs of obj and the selected units mode.
 
     units_tuple is called with units_tuple(obj.uni, obj, *args__units_tuple, **kw__units_tuple).
         Though, first, ATTR_FORMAT_KWARG and UNITS_KEY_KWARG will be set in kw__units_tuple,
         to their "default" values (based on mode), unless other values are provided in kw__units_tuple.
-    
+
     Accepted modes are 'si' for SI units, and 'cgs' for cgs units. Case-insensitive.
 
     if _force_from_simu, always give the conversion factor from simulation units,
@@ -1629,7 +1678,7 @@ def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', _force
     units_key, format_attr = _get_units_info_from_mode(mode=mode)
     # set defaults based on mode (unless they are already set in kw__units_tuple)
     kw__units_tuple[ATTR_FORMAT_KWARG] = kw__units_tuple.get(ATTR_FORMAT_KWARG, format_attr)
-    kw__units_tuple[UNITS_KEY_KWARG]   = kw__units_tuple.get(UNITS_KEY_KWARG,   units_key  )
+    kw__units_tuple[UNITS_KEY_KWARG] = kw__units_tuple.get(UNITS_KEY_KWARG,   units_key)
     # evaluate units_tuple, using obj and **kwargs.
     result = units_tuple(obj.uni, obj, *args__units_tuple, **kw__units_tuple)
     # check obj's unit system.
@@ -1642,6 +1691,7 @@ def evaluate_units_tuple(units_tuple, obj, *args__units_tuple, mode='si', _force
     # make result formatting prettier and return result.
     result = EvaluatedUnits(f, str(result.name))
     return result
+
 
 def get_units(obj, mode='si', **kw__evaluate_units_tuple):
     '''evaluates units for most-recently-gotten var (at top of obj._quants_tree).
@@ -1656,13 +1706,12 @@ def get_units(obj, mode='si', **kw__evaluate_units_tuple):
     '''
     units_key, format_attr = _get_units_info_from_mode(mode=mode)
     # lookup info about most-recently-gotten var.
-    quant_info  = obj.get_quant_info(lookup_in_vardict=False)
+    quant_info = obj.get_quant_info(lookup_in_vardict=False)
     units_tuple = _units_lookup_by_quant_info(obj, quant_info, units_key=units_key)
-    quant_tree  = obj.got_vars_tree(as_data=True)
+    quant_tree = obj.got_vars_tree(as_data=True)
     # evaluate units_tuple, given obj.uni, obj, and **kwargs.
     result = evaluate_units_tuple(units_tuple, obj, quant_tree, mode=mode, **kw__evaluate_units_tuple)
     return result
-
 
 
 ''' ----------------------------- Aliases ----------------------------- '''
@@ -1681,32 +1730,32 @@ from .units import (
 """
 
 # for making "universal" units
-UNI     = UnitsFuncBuilder(units_key=None)  # , format_attr=None
+UNI = UnitsFuncBuilder(units_key=None)  # , format_attr=None
 # for making si units
-USI     = UnitsFuncBuilder(units_key=UNITS_MODES['si'][0],  format_attr=UNITS_MODES['si'][1] )
+USI = UnitsFuncBuilder(units_key=UNITS_MODES['si'][0],  format_attr=UNITS_MODES['si'][1])
 # for making cgs units
-UCGS    = UnitsFuncBuilder(units_key=UNITS_MODES['cgs'][0], format_attr=UNITS_MODES['cgs'][1])
+UCGS = UnitsFuncBuilder(units_key=UNITS_MODES['cgs'][0], format_attr=UNITS_MODES['cgs'][1])
 # for making "constant" units
-UCONST  = FuncBuilder(FunclikeType=AttrsFunclike, format_attr='{}')
+UCONST = FuncBuilder(FunclikeType=AttrsFunclike, format_attr='{}')
 
 # for making unit names ("UnitsExpression"s)
-Usym   = UnitSymbol      # returns a single symbol
-Usyms  = UnitSymbols     # returns multiple symbols
-UsymD  = UnitSymbolDict  # returns a dict of unit symbols
+Usym = UnitSymbol      # returns a single symbol
+Usyms = UnitSymbols     # returns multiple symbols
+UsymD = UnitSymbolDict  # returns a dict of unit symbols
 
 # for putting units info in vardict
 U_TUPLE = UnitsTuple      # tuple with (units function, units expression)
 
 # for dimensionless quantities
-DIMENSIONLESS  = DIMENSIONLESS_TUPLE     # dimensionless tuple (factor is 1 and name is '')
+DIMENSIONLESS = DIMENSIONLESS_TUPLE     # dimensionless tuple (factor is 1 and name is '')
 UNITS_FACTOR_1 = DIMENSIONLESS_UNITS     # dimensionless units (factor is 1)
-NO_NAME        = DIMENSIONLESS_NAME      # dimensionless name  (name is '')
+NO_NAME = DIMENSIONLESS_NAME      # dimensionless name  (name is '')
 
 # for "common" basic unit tuples
 UNI_length = U_TUPLE(UNI.l, UsymD(usi='m', ucgs='cm'))
-UNI_time   = U_TUPLE(UNI.t, Usym('s'))
-UNI_mass   = U_TUPLE(UNI.m, UsymD(usi='kg', ucgs='g'))
-UNI_speed  = U_TUPLE(UNI.u, UNI_length.name / UNI_time.name)
-UNI_rho    = U_TUPLE(UNI.r, UNI_mass.name / (UNI_length.name**3))  # mass density
-UNI_nr     = U_TUPLE(UNI.nr, UNI_length.name ** (-3))              # number density
-UNI_hz     = U_TUPLE(UNI.hz, Usym('s')**(-1))                      # frequency
+UNI_time = U_TUPLE(UNI.t, Usym('s'))
+UNI_mass = U_TUPLE(UNI.m, UsymD(usi='kg', ucgs='g'))
+UNI_speed = U_TUPLE(UNI.u, UNI_length.name / UNI_time.name)
+UNI_rho = U_TUPLE(UNI.r, UNI_mass.name / (UNI_length.name**3))  # mass density
+UNI_nr = U_TUPLE(UNI.nr, UNI_length.name ** (-3))              # number density
+UNI_hz = U_TUPLE(UNI.hz, Usym('s')**(-1))                      # frequency

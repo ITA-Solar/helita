@@ -1,9 +1,9 @@
 """
 set of tools to deal with crispex data
 """
-import xarray
 import numpy as np
 import scipy.interpolate as interp
+import xarray
 
 
 def write_buf(intensity, outfile, wave=None, stokes=False):

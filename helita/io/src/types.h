@@ -2,7 +2,7 @@
 #define __TYPES_H__
 
 //#define _64_BIT_OS_
-// Todo: 
+// Todo:
 // byte -> uint8_t
 // int08-> int8
 // others: stdtypes, include in configure

@@ -2,13 +2,25 @@
 Set of functions and widgets for radiative transfer visualisations
 """
 import warnings
+
+import bqplot.pyplot as plt
 import numpy as np
+from bqplot import LogScale
+from ipywidgets import (
+    Box,
+    Dropdown,
+    FloatSlider,
+    GridBox,
+    HBox,
+    HTMLMath,
+    IntSlider,
+    Layout,
+    VBox,
+    interactive,
+)
 from pkg_resources import resource_filename
 from scipy import interpolate as interp
-import bqplot.pyplot as plt
-from bqplot import LogScale
-from ipywidgets import (interactive, Layout, HBox, VBox, Box, GridBox,
-                        IntSlider, FloatSlider, Dropdown, HTMLMath)
+
 from ..utils.utilsmath import voigt
 
 
@@ -33,8 +45,8 @@ class Transp():
     # variable names inside data structure
     SFUNCTIONS = {"VAL3C Mg": "s_nu_mg", "VAL3C Ca": "s_nu_ca",
                   "VAL3C LTE": "s_nu_lte"}
-    TAUS =  {"VAL3C Mg": "t_500_mg", "VAL3C Ca": "t_500_ca",
-             "VAL3C LTE": "t_500_lte"}
+    TAUS = {"VAL3C Mg": "t_500_mg", "VAL3C Ca": "t_500_ca",
+            "VAL3C LTE": "t_500_lte"}
     # initial parameters
     mu = 1.0
     npts = 101
@@ -75,8 +87,8 @@ class Transp():
 
     def _make_plot(self):
         plt.close(1)
-        fig_margin = {'top': 25, 'bottom': 35, 'left': 35, 'right':25}
-        fig_layout = {'height': '100%', 'width': '100%' }
+        fig_margin = {'top': 25, 'bottom': 35, 'left': 35, 'right': 25}
+        fig_layout = {'height': '100%', 'width': '100%'}
         layout_args = {'fig_margin': fig_margin, 'layout': fig_layout,
                        'max_aspect_ratio': 1.618}
         self.voigt_fig = plt.figure(1, title='Voigt profile', **layout_args)
@@ -144,7 +156,6 @@ class Transp():
         self.tau_cont_plot.y = [self.source_function_cont / 1.5,
                                 self.source_function_cont * 1.5]
 
-
     def _make_widget(self):
         fig = GridBox(children=[self.voigt_fig, self.abs_fig,
                                 self.int_fig, self.source_fig],
@@ -158,9 +169,9 @@ class Transp():
         a_slider = FloatSlider(min=-5, max=0., step=0.01, value=self.a,
                                description='lg(a)')
         opa_cont_slider = FloatSlider(min=0., max=6., step=0.01,
-                 value=self.opa_cont, description=r"$\kappa_c / \kappa_{500}$")
+                                      value=self.opa_cont, description=r"$\kappa_c / \kappa_{500}$")
         opa_line_slider = FloatSlider(min=0., max=7., step=0.01,
-                 value=self.opa_line, description=r"$\kappa_l / \kappa_{500}$")
+                                      value=self.opa_line, description=r"$\kappa_l / \kappa_{500}$")
         mu_slider = FloatSlider(min=0.01, max=1., step=0.01,
                                 value=self.mu, description=r'$\mu$')
         xmax_slider = IntSlider(min=1, max=100, step=1, value=self.xmax,
@@ -241,16 +252,16 @@ def slab():
     widg = interactive(plot_update, i0=i0_slider, source=s_slider,
                        tau_cont=tau_c_slider, tau_line=tau_l_slider)
     help_w = HTMLMath("<p><b>Purpose: </b>"
-      "This widget-based procedure is used for "
-      "studying spectral line formation in a "
-      "homogeneous slab.</p>"
-      "<p><b>Inputs:</b></p>"
-      "<ul>"
-      r"   <li>$I_0$: The incident intensity.</li>"
-      r"   <li>$S$: The source function.</li>"
-      r"   <li>$\tau_{\mathrm{cont}}$ : The continuum optical depth.</li>"
-      r"   <li>$\tau_{\mathrm{line}}$ : The integrated optical depth in the spectral line.</li>"
-      "</ul>")
+                      "This widget-based procedure is used for "
+                      "studying spectral line formation in a "
+                      "homogeneous slab.</p>"
+                      "<p><b>Inputs:</b></p>"
+                      "<ul>"
+                      r"   <li>$I_0$: The incident intensity.</li>"
+                      r"   <li>$S$: The source function.</li>"
+                      r"   <li>$\tau_{\mathrm{cont}}$ : The continuum optical depth.</li>"
+                      r"   <li>$\tau_{\mathrm{line}}$ : The integrated optical depth in the spectral line.</li>"
+                      "</ul>")
     return HBox([VBox([widg, help_w],
                       layout=Layout(width='33%', top='50px', left='5px')),
                  Box([fig], layout=Layout(width='66%'))],

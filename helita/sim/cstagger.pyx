@@ -41,7 +41,7 @@ cpdef xup(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (mx == 1): 
+  if (mx == 1):
       o = f
   else:
     for k in range(mz):
@@ -105,7 +105,7 @@ cpdef yup(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (my == 1): 
+  if (my == 1):
     o = f
   else:
     for k in range(mz):
@@ -171,7 +171,7 @@ cpdef zup(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   tmp = <FLOAT_t *> zz.data
   # Pure C part
-  if (mz == 1): 
+  if (mz == 1):
     o = f
   else:
     for k in range(mz):
@@ -217,7 +217,7 @@ cpdef xdn(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (mx == 1): 
+  if (mx == 1):
     o = f
   else:
     for k in range(mz):
@@ -281,7 +281,7 @@ cpdef ydn(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (my == 1): 
+  if (my == 1):
     o = f
   else:
     for k in range(mz):
@@ -347,7 +347,7 @@ cpdef zdn(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   tmp = <FLOAT_t *> zz.data
   # Pure C part
-  if (mz == 1): 
+  if (mz == 1):
     o = f
   else:
     for k in range(mz):
@@ -393,7 +393,7 @@ cpdef ddxup(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (mx > 1): 
+  if (mx > 1):
     for k in range(mz):
       for j in range(my):
         l = j*mx + k*mx*my
@@ -455,7 +455,7 @@ cpdef ddyup(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (my > 1):  
+  if (my > 1):
     for k in range(mz):
       for i in range(mx):
         l = i + k*mx*my
@@ -519,7 +519,7 @@ cpdef ddzup(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   tmp = <FLOAT_t *> zz.data
   # Pure C part
-  if (mz > 1):  
+  if (mz > 1):
     for k in range(mz):
       m = k-2
       if (k < 3):
@@ -563,7 +563,7 @@ cpdef ddxdn(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (mx > 1): 
+  if (mx > 1):
     for k in range(mz):
       for j in range(my):
         l = j*mx + k*mx*my
@@ -625,7 +625,7 @@ cpdef ddydn(np.ndarray[FLOAT_t, ndim=3] inarr):
   f = <FLOAT_t *> inarr.data
   o = <FLOAT_t *> outarr.data
   # Pure C part
-  if (my > 1): 
+  if (my > 1):
     for k in range(mz):
       for i in range(mx):
         l = i + k*mx*my
@@ -689,7 +689,7 @@ cpdef ddzdn(np.ndarray[FLOAT_t, ndim=3] inarr):
   o = <FLOAT_t *> outarr.data
   tmp = <FLOAT_t *> zz.data
   # Pure C part
-  if (mz > 1): 
+  if (mz > 1):
     for k in range(mz):
       m = k-3
       if (k < 3):
