@@ -1454,9 +1454,9 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         raise NotImplementedError('EbysusData.plot')
 
     ## CONVENIENCE METHODS ##
-    def print_values(self, fmtval='{: .1e}', fmtname='{:5s}',
+    def print_values(self, fmtval='{: .1e}', fmtname='{:5s}', fmtgvar='{:s}', _show_units=True,
                      GLOBAL_VARS=['bx', 'by', 'bz'], FLUID_VARS=['nr', 'uix', 'uiy', 'uiz', 'tg'],
-                     SKIP_FLUIDS=[], as_string=False):
+                     SKIP_FLUIDS=[], display_names={}, as_string=False, skip_errors=True):
         '''prints fundamental values for self.
             bx, by, bz, AND for each fluid: nr, uix, uiy, uiz, tg
         Default behavior is to just print the mean of each value.
@@ -1466,22 +1466,54 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             format string for values.
         fmtname: str
             format string for fluid names.
+        fmtgvar: str
+            format string for GLOBAL_VARS (var names, not values).
+        _show_units: bool, default True
+            if True, show a string at the top indicating the units system (e.g. 'si', 'simu', 'cgs').
         GLOBAL_VARS: list of strings
             global vars to show. "global" --> "no fluids".
+            insert '' string(s) to put new line(s). Otherwise all will display on one line.
         FLUID_VARS: list of strings
             fluid vars to show. possibly a different value for each fluid.
         SKIP_FLUIDS: list of (species,level) tuples.
             skip any SL found in SKIP_FLUIDS.
+        rename: dict of {var: display_name}
+            display var name as display_name in the table.
         as_string: bool, default False
             if True, return result as a string instead of printing it.
+        skip_errors: bool, default True
+            if True, hide any values that have errors during get_var, instead of crashing.
         '''
-        def fmtv(val): return fmtval.format(val)
-        def fmtn(name): return fmtname.format(name)
+        # setup
+        def fmtv(val): return fmtval.format(val)  # format value
+        def fmtn(name): return fmtname.format(name)  # format fluid name
+        def fmtg(gvar): return fmtgvar.format(gvar)  # format global var name
+        def getv(var, **kw):
+            return self.get_var_gracefully(var, **kw) if skip_errors else self.get_var(var, **kw)
+        for var in (*GLOBAL_VARS, *FLUID_VARS):
+            if var not in display_names:
+                display_names[var] = var
+        lines = []
         # units
-        lines = [f"units = '{self.units_output}'"]
+        if _show_units:
+            lines.append(f"units = '{self.units_output}'")
         # globals
         if len(GLOBAL_VARS) > 0:
-            lines.append(' | '.join([f"{var} = {fmtv(np.mean(self(var)))}" for var in GLOBAL_VARS]))
+            # solution without allowing for newlines:
+            #lines.append(' | '.join([f"{display_names[var]} = {fmtv(np.mean(getv(var)))}" for var in GLOBAL_VARS]))
+            # solution which converts any '' to newline:
+            i = 0
+            gvarline = []
+            while i < len(GLOBAL_VARS):
+                var = GLOBAL_VARS[i]
+                if var == '':
+                    lines.append(' | '.join(gvarline))
+                    gvarline = []
+                else:
+                    gvarline.append(f"{fmtg(display_names[var])} = {fmtv(np.mean(getv(var)))}")
+                i+=1
+            lines.append(' | '.join(gvarline))
+            # put a new line before FLUID_VARS if there are any FLUID_VARS.
             if len(FLUID_VARS) > 0:
                 lines.append('')
         # table with fluids
@@ -1491,20 +1523,20 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
             values = {SL: {} for SL in SLs}
             for var in FLUID_VARS:
                 for SL in SLs:
-                    values[SL][var] = np.mean(self(var, iSL=SL))
+                    values[SL][var] = np.mean(getv(var, iSL=SL))
             #   convert values to strings   #
             vstrs = {SL: {var: fmtv(values[SL][var]) for var in FLUID_VARS} for SL in SLs}
             for SL in SLs:
                 vstrs[SL]['name'] = fmtn(self.get_fluid_name(SL))
             #   calculate string lengths   #
-            vlens = {var: max(*(len(vstrs[SL][var]) for SL in SLs), len(var)) for var in FLUID_VARS}
+            vlens = {var: max(*(len(vstrs[SL][var]) for SL in SLs), len(display_names[var])) for var in FLUID_VARS}
             vlens['name'] = max(len(vstrs[SL]['name']) for SL in SLs)
             #   convert strings to appropriate lengths for consistency   #
             vstrs_pretty = {SL: {var: vstrs[SL][var].rjust(vlens[var]) for var in FLUID_VARS} for SL in SLs}
             for SL in SLs:
                 vstrs_pretty[SL]['name'] = vstrs[SL]['name'].ljust(vlens['name'])
             #   add header   #
-            header = ' | '.join([' '*vlens['name'], *[var.center(vlens[var]) for var in FLUID_VARS]])
+            header = ' | '.join([' '*vlens['name'], *[display_names[var].center(vlens[var]) for var in FLUID_VARS]])
             lines.append(header)
             lines.append('-'*len(header))
             #   add rows   #
@@ -1520,6 +1552,13 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
 
     def get_nspecies(self):
         return len(self.mf_tabparam['SPECIES'])
+
+    def get_var_gracefully(self, var, *args, **kw):
+        '''returns self.get_var(*args, **kw) or return array of np.nan if get_var crashes.'''
+        try:
+            return self.get_var(var, *args, **kw)
+        except Exception:
+            return self.zero() + np.nan
 
     def get_var_nfluid(self, var):
         '''returns number of fluids which affect self.get_var(var).
