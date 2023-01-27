@@ -1986,7 +1986,7 @@ class Image(object):
         return flines
 
     def myfieldlines(self, Data, x0arr, y0arr, stream=False, **kwargs):
-        """ This method overplots the magnetic field lines at the footpoints given by (x0arr[i],y0arr[i]).
+        r""" This method overplots the magnetic field lines at the footpoints given by (x0arr[i],y0arr[i]).
 
         **Inputs:**
 
