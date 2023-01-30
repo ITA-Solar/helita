@@ -161,52 +161,6 @@ def trapz2d(z, x=None, y=None, dx=1., dy=1.):
     return 0.25 * dx * dy * (s1 + 2 * s2 + 4 * s3)
 
 
-def translate(data, z, mu, phi, dx=1, dy=1):
-    """
-    Horizontally rotates a 3D array with periodic horizontal boundaries
-    by a polar and azimuthal angle. Uses cubic splines, modifies data in-place
-    (therefore the rotation leads to an array with the same dimensions).
-
-    Parameters
-    ----------
-    data : 3D array, 32-bit float, F contiguous
-        Array with values. Last index should be height, the
-        non-periodic dimension. The rotation keeps the top and
-        bottom layers
-    z : 1D array, 32-bit float
-        Array with heights.
-    mu : float
-        Cosine of polar angle.
-    phi : float
-        Azimuthal angle in radians.
-    dx : float, optional
-        Grid separation in x dimension (same units as height). Default is 1.
-    dy : float, optional
-        Grid separation in y dimension (same units as height). Default is 1.
-
-    Returns
-    -------
-    None, data are modified in-place.
-    """
-    from math import cos, sin, acos
-    try:
-        from .trnslt import trnslt
-    except ModuleNotFoundError:
-        raise ModuleNotFoundError('trnslt not found, helita probably installed'
-                                  ' without a fortran compiler!')
-    assert data.shape[-1] == z.shape[0]
-    assert data.flags['F_CONTIGUOUS']
-    assert data.dtype == np.dtype("float32")
-    theta = acos(mu)
-    sinth = sin(theta)
-    tanth = sinth / mu
-    cosphi = cos(phi)
-    sinphi = sin(phi)
-    dxdz = tanth * cosphi
-    dydz = tanth * sinphi
-    trnslt(dx, dy, z, data, dxdz, dydz)
-
-
 @vectorize([float32(float32, float32), float64(float64, float64)])
 def voigt(a, v):
     r"""

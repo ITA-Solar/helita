@@ -31,9 +31,8 @@ ex_extras = dict(filter(lambda i: i[0] not in exclude_keys, extras.items()))
 extras['all'] = list(chain.from_iterable(ex_extras.values()))
 
 ################################################################################
-# Cython and Fortran extensions
+# Cython extensions
 ################################################################################
-USE_FORTRAN = fcompiler.get_default_fcompiler()
 NUMPY_INC = numpy.get_include()
 EXT_PACKAGES = {
     "anapyio": ["io", [NUMPY_INC, os.path.join("helita", "io/src")],
@@ -48,9 +47,6 @@ EXT_PACKAGES = {
     "utilsfast": ["utils", [NUMPY_INC],
                   [os.path.join("helita", "utils/utilsfast.pyx")]]
 }
-if USE_FORTRAN:
-    EXT_PACKAGES["trnslt"] = ["utils", [], [os.path.join("helita", "utils/trnslt.f90")]]
-
 extensions = [
     Extension(
         name=f"helita.{pprop[0]}.{pname}",
