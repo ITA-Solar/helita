@@ -1198,8 +1198,8 @@ class BifrostData():
             if os.access(tabfile, os.R_OK):
                 tabparams = read_idl_ascii(tabfile, obj=self)
             if 'abund' in tabparams and 'aweight' in tabparams:
-                abund = np.array(tabparams['abund']).astype('f')
-                aweight = np.array(tabparams['aweight']).astype('f')
+                abund = np.array(tabparams['abund'].split()).astype('f')
+                aweight = np.array(tabparams['aweight'].split()).astype('f')
                 grph = calc_grph(abund, aweight)
             elif os.access(subsfile, os.R_OK):
                 grph = subs2grph(subsfile)
