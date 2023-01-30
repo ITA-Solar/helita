@@ -527,13 +527,25 @@ def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
     use S=-1 for electrons. (e.g. iSL=(-1,1) represents electrons.)
     iSL, jSL, kw__fluids behavior is the same as in get_var.
 
-    result is 'EL' for elastic collisions, 'MX' for maxwell, 'CL' for coulomb, or None
-    In the following cases, return None:
-        - ifluid and jfluid are not both charged and 'EL' and 'MX' are not in their coll_keys.
-        - ifluid and jfluid   are   both charged and 'CL' is not in their coll_keys AND obj.match_type is not MATCH_PHYSICS.
     if ifluid or jfluid is electrons:
         if both are charged: return ('EE', 'CL')
         if one is neutral:   return ('EE', 'EL')
+
+    if obj.match_type != MATCH_AUX:
+        enforce that coll_keys=obj.coll_keys[(iSL, jSL)] MUST exist.
+        an appropriate key ('CL' if both charged; otherwise 'EL' or 'MX') MUST appear in coll_keys.
+        return the appropriate key if possible, else raise KeyError.
+    otherwise: (obj.match_type == MATCH_AUX)
+        return the appropriate key if possible, else return None
+
+    note that 'EL' and 'MX' are mutually exclusive; raise ValueError if both are found in coll_keys.
+
+    keys mean:
+        'EL' <--> elastic collisions,
+        'MX' <--> maxwell collisions,
+        'CL' <--> coulomb collisions.
+
+    returns one of: None, 'EL', 'MX', 'CL', ('EE', 'CL'), or ('EE', 'EL').
     '''
     iSL, jSL = obj.set_fluids(iSL=iSL, jSL=jSL, **kw__fluids)
     icharge = obj.get_charge(iSL)
@@ -541,30 +553,39 @@ def get_coll_type(obj, iSL=None, jSL=None, **kw__fluids):
     if icharge < 0 or jcharge < 0:
         implied_coll_key = 'CL' if (icharge != 0 and jcharge != 0) else 'EL'
         return ('EE', implied_coll_key)
+    matching_aux = (getattr(obj, 'match_type', MATCH_PHYSICS) == MATCH_AUX)
+    key_errmsg_start = ''   # no errmsg.
     try:
-        coll_keys = obj.coll_keys[(iSL[0], jSL[0])]   # obj.coll_keys only knows about species.
+        coll_keys = obj.coll_keys[(iSL[0], jSL[0])]   # note: obj.coll_keys only knows about species.
     except KeyError:
-        errmsg_collkey_missing = 'coll key not found for (iS, jS) = ({}, {})! '.format(iSL[0], jSL[0]) +\
-                                 'Common cause: mistakes / missing keys in COLL KEYS in mf_param_file.'
-        raise KeyError(errmsg_collkey_missing)
-    if icharge != 0 and jcharge != 0:    # two charged fluids --> return CL or None
-        if 'CL' in coll_keys or (MATCH_PHYSICS == getattr(obj, 'match_type', MATCH_AUX)):
-            return 'CL'
+        key_errmsg_start = 'no coll_keys found for (iS, jS) = ({}, {})!'.format(iSL[0], jSL[0])
+    if (len(key_errmsg_start)==0):
+        if (icharge != 0) and (jcharge != 0):
+            if 'CL' in coll_keys:
+                return 'CL'
+            elif matching_aux:  # and 'CL' not in coll_keys
+                return None
+            else:
+                key_errmsg_start = "did not find coll key 'CL' for collisions between charged fluids!"
         else:
-            return None
-    else:                                # at least one neutral --> return EL or MX or None.
-        EL = 'EL' in coll_keys
-        MX = 'MX' in coll_keys
-        if EL and MX:
-            errmsg = 'got EL and MX in coll_keys for ifluid={}, jfluid={}.' +\
-                     'But EL and MX are mutually exclusive. Crashing...'
-            raise ValueError(errmsg.format(ifluid=iSL, jfluid=jSL))
-        elif EL:
-            return 'EL'
-        elif MX:
-            return 'MX'
-        else:
-            return None
+            is_EL = 'EL' in coll_keys
+            is_MX = 'MX' in coll_keys
+            if is_EL and is_MX:
+                errmsg = 'got EL and MX in coll_keys for ifluid={}, jfluid={}.' +\
+                         'But EL and MX are mutually exclusive. Crashing...'
+                raise ValueError(errmsg.format(ifluid=iSL, jfluid=jSL))
+            elif is_EL:
+                return 'EL'
+            elif is_MX:
+                return 'MX'
+            elif matching_aux:  # and 'EL' not in coll_keys and 'MX' not in coll_keys
+                return None
+            else:
+                key_errmsg_start = "did not find either coll key 'EL' or 'MX' for collisions involving >=1 neutral fluid."
+    assert (len(key_errmsg_start) != 0), "code above should handle all cases where there is no error..."
+    key_errmsg = key_errmsg_start + '\n' + \
+            'Most common cause: mistakes or missing keys in COLL KEYS in mf_param_file. ' +\
+            'Alternative option: set obj.match_type = helita.sim.ebysus.MATCH_AUX to skip collisions with missing coll keys.'
 
 
 ''' --------------------- MultiFluid class --------------------- '''
