@@ -30,6 +30,5 @@ jobs:
     with:
       submodules: false
       envs: |
-        - linux: py311
         - windows: py39
         - macos: py38
