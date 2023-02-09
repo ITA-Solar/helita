@@ -1645,7 +1645,7 @@ def get_mf_cross(obj, var, CROSTAB_QUANT=None):
         except ValueError:  # we failed to get the cross section.
             if obj.match_aux():
                 if (obj.get_charge(obj.iSL) < 0) or (obj.get_charge(obj.jSL) < 0):  # one of them is electrons:
-                    cross = obj.zero()   # use 0 for cross section if match_aux and there was no defined cross section.
+                    cross = obj.zero_at_mesh_center()   # use 0 for cross section if match_aux and there was no defined cross section.
                 else:
                     errmsg = "expected this case was handled during get_var('nu_ij'), if getting a collision frequency."
                     raise NotImplementedError(errmsg)
