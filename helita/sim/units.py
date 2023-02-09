@@ -821,13 +821,13 @@ class FuncBuilder:
         u = FuncBuilder()
         f = ((u.x + u.r) * u[1])   # f is a function which does: return (kwarg['x'] + kwarg['r']) * arg[1]
         f(None, 10, x=3, r=5)
-        >>> 80
+             80
         f = u[0] + u[1] + u[2]     # f is a function which adds the first three args and returns the result.
         f(2, 3, 4)
-        >>> 9
+             9
         f = u[0] ** u[1]           # f(a,b) is equivalent to a**b
         f(7,2)
-        >>> 49
+             49
 
     Technically, this object returns Funclike objects, not functions.
     That means you can combine different FuncBuilder results into a single function.
@@ -837,7 +837,7 @@ class FuncBuilder:
         f2 = u.y + u[0] + u[1]
         f = f1 - f2
         f(0.1, 10, x=3, r=5, y=37)
-        >>> 32.9            # ((3 + 5) * 10) - (37 + 0.1 + 10)
+             32.9            # ((3 + 5) * 10) - (37 + 0.1 + 10)
     '''
 
     def __init__(self, FunclikeType=None, **kw__funclike_init):
@@ -877,7 +877,7 @@ def make_Funclike_magic(op, op_name=None, reverse=False):
 
     Example:
         f = make_Funclike_magic(operator.__mul__, '__times__')
-        >>> a function named magic__times__ which returns a Funclike object that does a * b.
+             a function named magic__times__ which returns a Funclike object that does a * b.
 
     make_Funclike_magic is a low-level function which serves as a helper function for the Funclike class.
 
@@ -936,7 +936,7 @@ class Funclike:
         funclike_getx  = Funclike(getx)
         mult_x_by_2    = funclike_getx * 2
         mult_x_by_2(x=7)
-        >>> 14      # 7 * 2
+             14      # 7 * 2
         # --- another basic example ---
         gety           = lambda *args, **kwargs: kwargs['y']
         funclike_gety  = Funclike(gety)
@@ -944,11 +944,11 @@ class Funclike:
         funclike_get0  = Funclike(get0)
         add_arg0_to_y  = funclike_get0 + funclike_gety
         add_arg0_to_y(3, y=10)
-        >>> 13      # 3 + 10
+             13      # 3 + 10
         # --- combine the basic examples ---
         add_arg0_to_y_then_subtract_2x = add_arg0_to_y - mult_x_by_2
         add_arg0_to_y_then_subtract_2x(7, y=8, x=50)
-        >>> -85     # (7 + 8) - 50 * 2
+             -85     # (7 + 8) - 50 * 2
     '''
 
     def __init__(self, f, required_args=[], required_kwargs=[], parents=[]):
@@ -1258,7 +1258,7 @@ class UnitSymbol(UnitsExpression):
             result.frac = True
         to see contents, convert to string:
             str(result)
-            >>> 'V^{2} / m'
+                 'V^{2} / m'
     '''
 
     def __init__(self, name, *args, **kwargs):
@@ -1280,7 +1280,7 @@ def UnitSymbols(names, *args, **kwargs):
     Example:
         V, m, s = units.UnitSymbols('V m s', order='absexp')
         str(V**2 / s * m**-4)
-        >>> 'V^{2} / (m^{4} s)'
+             'V^{2} / (m^{4} s)'
     '''
     if isinstance(names, str):
         names = names.split()
@@ -1630,7 +1630,7 @@ class EvaluatedUnits(EvaluatedUnitsTuple):
 
     Example:
         np.array([1, 2, 3]) * EvaluatedUnits(factor=10, name='m / s')
-        >>> EvaluatedUnits(factor=np.array([10, 20, 30]), name='m / s')
+             EvaluatedUnits(factor=np.array([10, 20, 30]), name='m / s')
     '''
 
     def __mul__(self, b):      # self * b

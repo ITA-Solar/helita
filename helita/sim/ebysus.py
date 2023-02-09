@@ -650,8 +650,8 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         """
         Reads a given variable from the relevant files.
 
-        >>> Use self.get_var('') for help.
-        >>> Use self.vardocs() to prettyprint the available variables and what they mean.
+            Use self.get_var('') for help.
+            Use self.vardocs() to prettyprint the available variables and what they mean.
 
         sets fluid-related attributes (e.g. self.ifluid) based on fluid-related kwargs.
 
@@ -711,7 +711,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         # do pre-processing
         kw__load_quantity, kw__postprocess = self._get_var_preprocess(var, **kw__preprocess)
 
-        # >>>>> actually get the value of var <<<<<
+        # actually get the value of var <<<<<
         val = self._load_quantity(var, **kw__load_quantity)
 
         # do post-processing (function is defined in bifrost.py)
@@ -948,7 +948,7 @@ class EbysusData(BifrostData, fluid_tools.Multifluid):
         if var not in self.simple_vars:
             return None
 
-        # >>>>> here is where we decide which file and what part of the file to load as a memmap <<<<<
+        # here is where we decide which file and what part of the file to load as a memmap <<<<<
         result = self._load_simple_var_from_file(var, order=order, mode=mode, panic=panic, **kwargs)
         result = self._assign_simple_var_mesh_location(result, var)  # convert to ArrayOnMesh, if mesh_location_tracking is enabled
         return result

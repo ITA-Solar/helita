@@ -269,9 +269,9 @@ def apply(x, fstr, *args, **kwargs):
 
     Examples:
         apply(x, 'test1', 3, 7, mykwarg=8)
-        >>> x.test1(3, 7, mykwarg=8) if hasattr(x, 'test1') else x
+             x.test1(3, 7, mykwarg=8) if hasattr(x, 'test1') else x
         apply(x, 'test2', mykwarg=8, default=None)
-        >>> x.test2(mykwarg=8) if hasattr(x, 'test2') else None
+             x.test2(mykwarg=8) if hasattr(x, 'test2') else None
     '''
     __tracebackhide__ = True
     # pop default if it was provided.
@@ -599,7 +599,7 @@ class ImportFailed():
     zarr.load(...)   # << attempt to use zarr
     # if zarr was imported successfully, it will work fine.
     # if zarr failed to import, this error will be raised:
-    >>> ImportFailedError: zarr. This module is required for compressing data.
+         ImportFailedError: zarr. This module is required for compressing data.
     '''
 
     def __init__(self, modulename, additional_error_message=''):
@@ -657,9 +657,9 @@ def rotation_align(vecs_source, vecs_destination):
     result = rotation_align(B_input, d_input)  # >> result has shape (100, 70, 50, 3, 3)
     # << result tells how to rotate such that B aligns with z
     rotation_apply(result, B_input)
-    # >>> matrix of [Bx', By', Bz'], which has Bx' == By' == 0, Bz' == |B|
+    #    matrix of [Bx', By', Bz'], which has Bx' == By' == 0, Bz' == |B|
     rotation_apply(result, u_input)
-    # >>> matrix of [ux', uy', uz'], where u' is in the coord. system with B in the z direction.
+    #    matrix of [ux', uy', uz'], where u' is in the coord. system with B in the z direction.
 
     # instead of rotation_apply(v1, v2), can use np.sum(v1 * np.expand_dims(v2, axis=(-2)), axis=-1).
 

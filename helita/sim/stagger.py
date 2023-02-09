@@ -461,9 +461,9 @@ class MeshLocation():
     Examples:
         m = MeshLocation([0, 0.5, 0])
         m.xup
-        >>> MeshLocation([0.5, 0.5, 0])
+            MeshLocation([0.5, 0.5, 0])
         m.xup.ydn.zdn
-        >>> MeshLocation([0.5, 0, -0.5])
+            MeshLocation([0.5, 0, -0.5])
     '''
 
     def __init__(self, loc=[0, 0, 0]):
@@ -521,11 +521,11 @@ class MeshLocation():
 
         Examples:
             MeshLocation([0.5, 0, 0]).as_operations()
-            >>> ['xup']
+                 ['xup']
             MeshLocation([0, -0.5, -0.5]).as_operations()
-            >>> ['ydn', 'zdn']
+                 ['ydn', 'zdn']
             MeshLocation([1.0, -0.5, -1.5]).as_operations()
-            >>> ['xup', 'xup', 'ydn', 'zdn', 'zdn', 'zdn']
+                 ['xup', 'xup', 'ydn', 'zdn', 'zdn', 'zdn']
         '''
         AXES = ('x', 'y', 'z')
         result = []
@@ -546,9 +546,9 @@ class MeshLocation():
 
         Examples:
             MeshLocation([0.5, 0, 0]).steps_from([0,0,0])
-            >>> ['xup']
+                 ['xup']
             MeshLocation([-0.5, 0, 0]).steps_from(MeshLocation([0.5, -0.5, -0.5]))
-            >>> ['xdn', 'xdn', 'yup', 'zup']
+                 ['xdn', 'xdn', 'yup', 'zup']
         '''
         return (self - other).as_operations()
 
@@ -557,9 +557,9 @@ class MeshLocation():
 
         Examples:
             MeshLocation([0.5, 0, 0]).steps_to([0,0,0])
-            >>> ['xdn']
+                 ['xdn']
             MeshLocation([-0.5, 0, 0]).steps_to(MeshLocation([0.5, -0.5, -0.5]))
-            >>> ['xup', 'xup', 'ydn', 'zdn']
+                 ['xup', 'xup', 'ydn', 'zdn']
         '''
         return (other - self).as_operations()
 

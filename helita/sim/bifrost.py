@@ -98,17 +98,17 @@ class BifrostData():
     This reads snapshot 383 from simulation "cb24bih", whose file
     root is "cb24bih", and is found at directory /data/cb24bih:
 
-    >>> a = BifrostData("cb24bih", snap=383, fdir="/data/cb24bih")
+        a = BifrostData("cb24bih", snap=383, fdir="/data/cb24bih")
 
     Scalar variables do not need de-staggering and are available as
     memory map (only loaded to memory when needed), e.g.:
 
-    >>> a.r.shape
-    (504, 504, 496)
+        a.r.shape
+        (504, 504, 496)
 
     Composite variables need to be obtained by get_var():
 
-    >>> vx = a.get_var("ux")
+        vx = a.get_var("ux")
     """
 
     ## CREATION ##
@@ -2703,7 +2703,7 @@ class Cross_sect:
 
     Examples
     --------
-    >>> a = cross_sect(['h-h-data2.txt','h-h2-data.txt'], fdir="/data/cb24bih")
+        a = cross_sect(['h-h-data2.txt','h-h2-data.txt'], fdir="/data/cb24bih")
 
     """
 

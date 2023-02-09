@@ -176,19 +176,19 @@ class Multi3dOut:
     Examples
     --------
 
-    >>> data = Multi3dOut(directory='./output')
-    >>> data.readall()
+        data = Multi3dOut(directory='./output')
+        data.readall()
 
     Now select transition (by upper / lower level):
 
-    >>> data.set_transition(3, 2)
-    >>> emergent_intensity = data.readvar('ie')
-    >>> source_function = data.readvar('snu')
-    >>> tau1_height = data.readvar('zt1')
+        data.set_transition(3, 2)
+        emergent_intensity = data.readvar('ie')
+        source_function = data.readvar('snu')
+        tau1_height = data.readvar('zt1')
 
     Wavelength for the selected transition is saved in data.d.l, e.g.:
 
-    >>> plt.plot(data.d.l, emergent_intensity[0, 0])
+        plt.plot(data.d.l, emergent_intensity[0, 0])
     """
 
     def __init__(self, inputfile="multi3d.input", directory='./', printinfo=True):
