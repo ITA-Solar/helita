@@ -1,10 +1,10 @@
 """
 Set of programs and tools to read the outputs from RH (Han's version)
 """
-import os
-import sys
 import io
+import os
 import xdrlib
+
 import numpy as np
 
 
@@ -46,6 +46,7 @@ class Rhout:
      (e.g. as in readatmos for all the elements and etc.). It also allows one to
      read directly into attribute of the class (with setattr(self,'aa',<data>))
     """
+
     def __init__(self, fdir='.', verbose=True):
         ''' Reads all the output data from a RH run.'''
         self.verbose = verbose
@@ -172,7 +173,7 @@ class Rhout:
         self.stokes = False
         if self.geometry_type != 'SPHERICAL_SYMMETRIC':
             try:
-                stokes = read_xdr_var(data, ('i',))
+                read_xdr_var(data, ('i',))
             except EOFError or IOError:
                 if self.verbose:
                     print('(WWW) read_atmos: no Stokes data in atmos.out,'
@@ -197,7 +198,6 @@ class Rhout:
                   'call read_atmos() first!')
             raise ValueError(em)
         data = read_xdr_file(infile)
-        profs = {}
         self.spec = {}
         nspect = read_xdr_var(data, ('i',))
         self.spec['nspect'] = nspect
@@ -290,8 +290,8 @@ class Rhout:
                   ' first!')
             raise ValueError(em)
         data = read_xdr_file(infile)
-        atmosID = read_xdr_var(data, ('s',)).strip()
-        nspace = read_xdr_var(data, ('i',))
+        read_xdr_var(data, ('s',)).strip()
+        read_xdr_var(data, ('i',))
         nspect = read_xdr_var(data, ('i',))
         if nspect != self.spec['nspect']:
             em = ('(EEE) read_brs: nspect in file different from atmos. '
@@ -473,7 +473,7 @@ class Rhout:
         if not (0 <= mu <= 1.):
             em = 'get_contrib_ray: invalid mu read: %f' % mu
             raise ValueError(em)
-        idx = self.ray['wave_idx']
+        self.ray['wave_idx']
         # Calculate optical depth
         self.tau = get_tau(self.geometry['height'], mu, self.ray['chi'])
         # Calculate contribution function
@@ -495,6 +495,7 @@ class RhAtmos:
     verbose : str, optional
         If True, will print more details.
     """
+
     def __init__(self, format="2D", filename=None, verbose=True):
         ''' Reads RH input atmospheres. '''
         self.verbose = verbose

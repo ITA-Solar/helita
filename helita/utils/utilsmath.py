@@ -1,6 +1,7 @@
-import numpy as np
-from numba import vectorize, float32, float64
 from math import exp
+
+import numpy as np
+from numba import float32, float64, vectorize
 
 
 def hist2d(x, y, nbins=30, norm=False, rx=0.08):
@@ -97,8 +98,8 @@ def planck(wavelength, temp, dist='wavelength'):
     For solid angle integrated one must multiply it by pi.
 
     """
-    from astropy.constants import c, h, k_B
     import astropy.units as u
+    from astropy.constants import c, h, k_B
 
     wave = wavelength.to('nm')
     if temp.shape and wave.shape:
@@ -130,8 +131,8 @@ def int_to_bt(inu, wave):
     brightness_temp : `Quantity` object (number or sequence)
         Brightness temperature in SI units of temperature.
     """
-    from astropy.constants import c, h, k_B
     import astropy.units as u
+    from astropy.constants import c, h, k_B
 
     bt = h * c / (wave * k_B * np.log(2 * h * c / (wave**3 * inu * u.rad**2) + 1))
     return bt.si
@@ -160,55 +161,9 @@ def trapz2d(z, x=None, y=None, dx=1., dy=1.):
     return 0.25 * dx * dy * (s1 + 2 * s2 + 4 * s3)
 
 
-def translate(data, z, mu, phi, dx=1, dy=1):
-    """
-    Horizontally rotates a 3D array with periodic horizontal boundaries
-    by a polar and azimuthal angle. Uses cubic splines, modifies data in-place
-    (therefore the rotation leads to an array with the same dimensions).
-
-    Parameters
-    ----------
-    data : 3D array, 32-bit float, F contiguous
-        Array with values. Last index should be height, the
-        non-periodic dimension. The rotation keeps the top and
-        bottom layers
-    z : 1D array, 32-bit float
-        Array with heights.
-    mu : float
-        Cosine of polar angle.
-    phi : float
-        Azimuthal angle in radians.
-    dx : float, optional
-        Grid separation in x dimension (same units as height). Default is 1.
-    dy : float, optional
-        Grid separation in y dimension (same units as height). Default is 1.
-
-    Returns
-    -------
-    None, data are modified in-place.
-    """
-    from math import acos, sin, cos
-    try:
-        from .trnslt import trnslt
-    except ModuleNotFoundError:
-        raise ModuleNotFoundError('trnslt not found, helita probably installed'
-                                  ' without a fortran compiler!')
-    assert data.shape[-1] == z.shape[0]
-    assert data.flags['F_CONTIGUOUS']
-    assert data.dtype == np.dtype("float32")
-    theta = acos(mu)
-    sinth = sin(theta)
-    tanth = sinth / mu
-    cosphi = cos(phi)
-    sinphi = sin(phi)
-    dxdz = tanth * cosphi
-    dydz = tanth * sinphi
-    trnslt(dx, dy, z, data, dxdz, dydz)
-
-
 @vectorize([float32(float32, float32), float64(float64, float64)])
 def voigt(a, v):
-    """
+    r"""
     Returns the Voigt function:
 
     H(a,v) = a/pi * \int_{-Inf}^{+Inf} exp(-y**2)/[(v-y)**2 + a**2] dy
@@ -247,7 +202,7 @@ def voigt(a, v):
         return exp(-v ** 2)
     z = v * 1j + a
     h = (((((((a6 * z + a5) * z + a4) * z + a3) * z + a2) * z + a1) * z + a0) /
-     (((((((z + b6) * z + b5) * z + b4) * z + b3) * z + b2) * z + b1) * z + b0))
+         (((((((z + b6) * z + b5) * z + b4) * z + b3) * z + b2) * z + b1) * z + b0))
     return h.real
 
 
