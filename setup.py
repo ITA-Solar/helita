@@ -40,8 +40,6 @@ EXT_PACKAGES = {
                  os.path.join("helita", "io/src/libf0.c"),
                  os.path.join("helita", "io/src/anacompress.c"),
                  os.path.join("helita", "io/src/anadecompress.c")]],
-    "cstagger": ["sim", [NUMPY_INC],
-                 [os.path.join("helita", "sim/cstagger.pyx")]],
     "radtrans": ["utils", [NUMPY_INC],
                  [os.path.join("helita", "utils/radtrans.pyx")]],
     "utilsfast": ["utils", [NUMPY_INC],
