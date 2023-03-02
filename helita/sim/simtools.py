@@ -2,8 +2,8 @@
 Tools to use with the simulation's syntetic spectra
 """
 import numpy as np
-from scipy import ndimage
 import scipy.interpolate as interp
+from scipy import ndimage
 
 
 def psf_diffr(ang, wave=777, D=1., pix=True):

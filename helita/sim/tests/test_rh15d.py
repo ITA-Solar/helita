@@ -4,6 +4,7 @@ Tests for the rh15d module
 """
 
 import numpy as np
+
 from helita.sim import rh15d
 
 TMP_ATOM_FILENAME = 'atom.tmp'
@@ -16,11 +17,11 @@ TEST_LEVELS = [
     " 95785.470   1.00    'CA III 3P6 1SE      '    2         5"
 ]
 
-TEST_LEVELS_DATA = np.array([(    0.  , 2., 'CA II 3P6 4S 2SE', 1, 0),
+TEST_LEVELS_DATA = np.array([(0., 2., 'CA II 3P6 4S 2SE', 1, 0),
                              (13650.19, 4., 'CA II 3P6 3D 2DE 3', 1, 1),
                              (13710.88, 6., 'CA II 3P6 3D 2DE 5', 1, 2),
                              (25191.51, 2., 'CA II 3P6 4P 2PO 1', 1, 3),
-                             (25414.4 , 4., 'CA II 3P6 4P 2PO 3', 1, 4),
+                             (25414.4, 4., 'CA II 3P6 4P 2PO 3', 1, 4),
                              (95785.47, 1., 'CA III 3P6 1SE', 2, 5)],
                             dtype=[('energy', '<f8'), ('g_factor', '<f8'),
                                    ('label', '<U30'), ('stage', '<i4'),
@@ -68,9 +69,11 @@ AR85-CEA   0   3  6.00e-01
 END
 """
 
+
 def test_read_atom_levels():
     assert np.array_equal(rh15d.AtomFile.read_atom_levels(TEST_LEVELS, format='RH'),
                           TEST_LEVELS_DATA)
+
 
 def test_AtomFile():
     temp_file = open(TMP_ATOM_FILENAME, 'w')

@@ -11,7 +11,6 @@ class SDFHeader:
         self.verbose = verbose
         self.query(filename)
 
-
     def query(self, filename, verbose=False):
         ''' Queries the file, returning datasets and shapes.'''
         f = open(filename, 'r')
@@ -31,7 +30,6 @@ class SDFHeader:
         f.close()
         self.header_data(header)
         return
-
 
     def header_data(self, header):
         ''' Breaks header string into variable informationp. '''

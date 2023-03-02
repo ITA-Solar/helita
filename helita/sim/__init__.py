@@ -4,10 +4,28 @@ and radiative transfer codes. Also includes routines for working
 with synthetic spectra.
 """
 
-__all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d", "simtools",
-           "synobs"]
+try:
+    found = True
+except ImportError:
+    found = False
 
-from . import bifrost
-from . import multi
-from . import muram
-from . import rh
+
+try:
+    PYCUDA_INSTALLED = True
+except ImportError:
+    PYCUDA_INSTALLED = False
+
+
+if found:
+    __all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
+               "simtools", "synobs", "ebysus", "cipmocct", "laresav",
+               "pypluto", "matsumotosav"]
+else:
+    __all__ = ["bifrost", "multi", "multi3d", "muram", "rh", "rh15d",
+               "simtools", "synobs"]
+
+
+from . import bifrost, multi, rh
+
+if found:
+    from . import muram

@@ -2,10 +2,11 @@
 Set of programs to degrade/convolve synthetic images/spectra to observational
 conditions
 """
-import math
 import os
-import scipy.interpolate as interp
+import math
+
 import numpy as np
+import scipy.interpolate as interp
 from scipy import ndimage, signal
 
 
@@ -203,7 +204,7 @@ def img_conv(spec, wave, psf, psfx, conv_type='IRIS_MgII_core', xMm=16.5491,
         widx = (wave[:] > wcent - 2. * wfwhm) & (wave[:] < wcent + 2. * wfwhm)
         # filtering function, here set to Gaussian
         wfilt = gaussian([wcent, wfwhm / (2 * math.sqrt(2 * math.log(2))),
-                                                        1., 0.], wave[widx])
+                          1., 0.], wave[widx])
         wfilt /= np.trapz(wfilt, x=wave[widx])
     else:
         widx = wfilt != 0
@@ -241,9 +242,9 @@ def img_conv(spec, wave, psf, psfx, conv_type='IRIS_MgII_core', xMm=16.5491,
     if graph:
         p.subplot(212)
         p.imshow(np.transpose(nspec),
-                              extent=(0, spec.shape[0] * pix2asec, 0,
-                                      spec.shape[1] * pix2asec),
-                              vmin=vmin, vmax=vmax,
+                 extent=(0, spec.shape[0] * pix2asec, 0,
+                         spec.shape[1] * pix2asec),
+                 vmin=vmin, vmax=vmax,
                  interpolation='nearest', cmap=p.cm.gist_gray)
         p.title('Filter + convolved %s' % (conv_type))
         p.xlabel('arcsec')
@@ -258,7 +259,9 @@ def get_hinode_psf(wave, psfdir='.'):
     Returns x scale (in arcsec), and psf (2D array, normalised).
     """
     from astropy.io import fits as pyfits
+
     from ..utils import utilsmath
+
     # Get ideal PSF
     ipsf = pyfits.getdata(os.path.join(psfdir, 'hinode_ideal_psf_555nm.fits'))
     ix = pyfits.getdata(os.path.join(psfdir, 'hinode_ideal_psf_scale_555nm.fits'))
@@ -321,8 +324,8 @@ def var_conv(var, xMm, psf, psfx, obs='iris_nuv', parallel=False,
     """
     Spatially convolves a single atmos variable.
     """
-    import multiprocessing
     import ctypes
+    import multiprocessing
     global result
 
     # some definitions
@@ -400,8 +403,8 @@ def imgspec_conv(spec, wave, xMm, psf, psfx, obs='hinode_sp', verbose=False,
 
     --Tiago, 20120105
     '''
-    import multiprocessing
     import ctypes
+    import multiprocessing
     global result
 
     # some definitions

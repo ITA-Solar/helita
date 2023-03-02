@@ -102,6 +102,7 @@ def sj_filter(wave, band='IRIS_MGII_CORE', norm=True):
     """
     from scipy import interpolate as interp
     from scipy.io.idl import readsav
+
     # File with IRIS effective area
     CFILE = resource_filename('helita', 'data/iris_sra_20130211.geny')
     ea = readsav(CFILE).p0
@@ -164,8 +165,9 @@ def make_fits_level3_skel(filename, dtype, naxis, times, waves, wsizes,
         Extra header information. This should be used to write important
         information such as CDELTx, CRVALx, CPIXx, XCEN, YCEN, DATE_OBS.
     """
-    from astropy.io import fits as pyfits
     from datetime import datetime
+
+    from astropy.io import fits as pyfits
     VERSION = '001'
     FITSBLOCK = 2880  # FITS blocksize in bytes
     # Consistency checks
@@ -344,10 +346,11 @@ def rh_to_fits_level3(filelist, outfile, windows, window_desc, times=None,
         array. Must be exact match. Useful to combine output files that
         have common wavelengths.
     """
-    from ..sim import rh15d
-    from specutils.utils.wcs_utils import air_to_vac
-    from astropy.io import fits as pyfits
     from astropy import units as u
+    from astropy.io import fits as pyfits
+    from specutils.utils.wcs_utils import air_to_vac
+
+    from ..sim import rh15d
     nt = len(filelist)
     robj = rh15d.Rh15dout()
     robj.read_ray(filelist[0])
@@ -397,7 +400,7 @@ def rh_to_fits_level3(filelist, outfile, windows, window_desc, times=None,
                     "CRVAL3": waves[0], "CRVAL4": times[0], "CDELT1": xres,
                     "CDELT2": xres, "CDELT3": np.median(np.diff(waves)),
                     "CDELT4": tres}
-    desc = "Calculated from %s" % (robj.ray.params['atmosID'])
+    "Calculated from %s" % (robj.ray.params['atmosID'])
     make_fits_level3_skel(outfile, robj.ray.intensity.dtype,
                           (ny, nx), times, waves, nwaves, descw=window_desc,
                           cwaves=cwaves, header_extra=header_extra)
