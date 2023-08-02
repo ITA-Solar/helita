@@ -946,7 +946,7 @@ def make_xarray_atmos(outfile, T, vz, z, nH=None, x=None, y=None, Bz=None, By=No
     vy : n-D array, optional
         y velocity in m/s. Same shape as T. Not in use by RH 1.5D.
     vturb : n-D array, optional
-        Turbulent velocity (Microturbulence) in km/s. Not usually needed
+        Turbulent velocity (Microturbulence) in m/s. Not usually needed
         for MHD models, and should only be used when a depth dependent
         microturbulence is needed (constant microturbulence can be added
         in RH).
