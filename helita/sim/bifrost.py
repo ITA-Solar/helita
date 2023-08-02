@@ -1308,7 +1308,8 @@ class BifrostData():
             pbar.update()
 
     def write_multi3d(self, outfile, mesh='mesh.dat', desc=None,
-                      sx=slice(None), sy=slice(None), sz=slice(None)):
+                      sx=slice(None), sy=slice(None), sz=slice(None),
+                      write_magnetic=False):
         """
         Writes snapshot in Multi3D format.
         Parameters
@@ -1323,12 +1324,14 @@ class BifrostData():
             Slice objects for x, y, and z dimensions, when not all points
             are needed. E.g. use slice(None) for all points, slice(0, 100, 2)
             for every second point up to 100.
+        write_magnetic - bool, optional
+            Whether to write a magnetic field file. Default is False.
         Returns
         -------
         None.
         """
         from .multi3d import Multi3dAtmos
-
+        from .multi3d import Multi3dMagnetic
         # unit conversion to cgs and km/s
         ul = self.params['u_l'][self.snapInd]   # to cm
         ur = self.params['u_r'][self.snapInd]   # to g/cm^3  (for ne_rt_table)
@@ -1379,6 +1382,20 @@ class BifrostData():
             fout2.write("\n%i\n" % nz)
             z.tofile(fout2, sep="  ", format="%11.5e")
             fout2.close()
+        if write_magnetic:
+            Bx = do_stagger(self.bx, 'xup', obj=self)[sx, sy, sz]
+            By = do_stagger(self.by, 'yup', obj=self)[sx, sy, sz]
+            Bz = do_stagger(self.bz, 'zup', obj=self)[sx, sy, sz]
+            # Change sign of Bz (because of height scale) and By
+            # (to make right-handed system)
+            Bx = Bx * ub
+            By = -By * ub # [M.Sz] Should By be inverted too  (Bz points downwards)?
+            Bz = -Bz * ub
+            fout3 = Multi3dMagnetic('magnetic.dat', nx, ny, nz, mode='w+')
+            fout3.Bx[:] = Bx
+            fout3.By[:] = By
+            fout3.Bz[:] = Bz
+            fout3.close()
 
     ## VALUES OVER TIME, and TIME DERIVATIVES ##
 
