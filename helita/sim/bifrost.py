@@ -1337,6 +1337,7 @@ class BifrostData():
         ur = self.params['u_r'][self.snapInd]   # to g/cm^3  (for ne_rt_table)
         ut = self.params['u_t'][self.snapInd]   # to seconds
         uv = ul / ut / 1e5        # to km/s
+        ub = self.params['u_b'][self.snapInd] # to G
         ue = self.params['u_ee'][self.snapInd]  # to erg/g
         nh = None
         if self.verbose:
