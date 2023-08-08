@@ -1356,7 +1356,7 @@ class BifrostData():
         vz *= -uv
         rho = rho * ur  # to cgs
         x = self.x[sx] * ul
-        y = self.y[sy] * ul
+        y = self.y[sy] * (-ul)
         z = self.z[sz] * (-ul)
         ne = self.get_electron_density(sx, sy, sz).to_value('1/cm3')
         # write to file
@@ -1390,13 +1390,12 @@ class BifrostData():
             # Change sign of Bz (because of height scale) and By
             # (to make right-handed system)
             Bx = Bx * ub
-            By = -By * ub # [M.Sz] Should By be inverted too  (Bz points downwards)?
+            By = -By * ub # [M.Sz] Should By be inverted too  (Bz points downwards)? [TEM] Yes, to preserve right-handedness the y-axis should change sign too
             Bz = -Bz * ub
             fout3 = Multi3dMagnetic('magnetic.dat', nx, ny, nz, mode='w+')
             fout3.Bx[:] = Bx
             fout3.By[:] = By
             fout3.Bz[:] = Bz
-            fout3.close()
 
     ## VALUES OVER TIME, and TIME DERIVATIVES ##
 
