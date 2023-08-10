@@ -551,9 +551,9 @@ class AtomFile:
                                        __level_str[line_i[1]]]
             line_dict['f_value'] = float(line_i[2])
             if line_i[ityp] == 'PRD':
-                line_dict['type_profile'] = 'PRD'
+                line_dict['profile_type'] = 'PRD'
             else:
-                line_dict['type_profile'] = (line_i[ityp][0] 
+                line_dict['profile_type'] = (line_i[ityp][0] 
                                                 + line_i[ityp][1:].lower())
             line_dict['broadening'] = []
             line_dict['broadening'].append({
