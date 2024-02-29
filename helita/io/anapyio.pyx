@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 cimport numpy as np
-from stdlib cimport free, malloc
+from libc.stdlib cimport malloc, free
 
 
 cdef extern from "stdlib.h":
