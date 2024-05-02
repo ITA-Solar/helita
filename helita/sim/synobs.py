@@ -133,7 +133,7 @@ def spec3d_conv(spec, wave, conv_type='IRIS', ww=None, wpts=200,
     # Spatial pixelisation
     coords = np.mgrid[0.: spec.shape[0]:cp[conv_type][1] / pix2asec,
                       0.: spec.shape[1]:cp[conv_type][1] / pix2asec]
-    nspec = np.empty(coords.shape[1:] + (nwave,), dtype='Float32')
+    nspec = np.empty(coords.shape[1:] + (nwave,), dtype=np.float32)
     for w in range(nwave):
         nspec[:, :, w] = ndimage.map_coordinates(
             spec[:, :, w], coords, order=1, mode='nearest')
@@ -366,7 +366,7 @@ def var_conv(var, xMm, psf, psfx, obs='iris_nuv', parallel=False,
     if pixelise:
         coords = np.mgrid[0.: var.shape[0]: obs_pix2Mm / pix2Mm,
                           0.: var.shape[1]: obs_pix2Mm / pix2Mm]
-        nvar = np.empty(coords.shape[1:] + (nwave,), dtype='Float32')
+        nvar = np.empty(coords.shape[1:] + (nwave,), dtype=np.float32)
         for w in range(nwave):
             nvar[:, :, w] = ndimage.map_coordinates(result[:, :, w], coords,
                                                     order=1, mode='nearest')
@@ -468,7 +468,7 @@ def imgspec_conv(spec, wave, xMm, psf, psfx, obs='hinode_sp', verbose=False,
             print('Spatial pixelisation...')
         coords = np.mgrid[0.: spec.shape[0]: obs_pix2Mm / pix2Mm,
                           0.: spec.shape[1]: obs_pix2Mm / pix2Mm]
-        nspec = np.empty(coords.shape[1:] + (nwave,), dtype='Float32')
+        nspec = np.empty(coords.shape[1:] + (nwave,), dtype=np.float32)
         for w in range(nwave):
             nspec[:, :, w] = ndimage.map_coordinates(result[:, :, w], coords,
                                                      order=1, mode='nearest')

@@ -377,12 +377,12 @@ class Multi3dOut:
         nlevel = self.atom.nlevel
         nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
         gs = nx * ny * nz * nlevel * 4
-        self.atom.n = np.memmap(fname, dtype='float32', mode='r',
+        self.atom.n = np.memmap(fname, dtype=np.float32, mode='r',
                                 shape=(nx, ny, nz, nlevel), order='F')
-        self.atom.nstar = np.memmap(fname, dtype='float32', mode='r', order='F',
+        self.atom.nstar = np.memmap(fname, dtype=np.float32, mode='r', order='F',
                                     shape=(nx, ny, nz, nlevel), offset=gs, )
 
-        self.atom.ntot = np.memmap(fname, dtype='float32', mode='r', order='F',
+        self.atom.ntot = np.memmap(fname, dtype=np.float32, mode='r', order='F',
                                    shape=(nx, ny, nz), offset=gs * 2)
         if self.printinfo:
             print("reading " + fname)
@@ -398,21 +398,21 @@ class Multi3dOut:
         nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
         s = (nx, ny, nz)
         gs = nx * ny * nz * 4
-        self.atmos.ne = np.memmap(fname, dtype='float32', mode='r',
+        self.atmos.ne = np.memmap(fname, dtype=np.float32, mode='r',
                                   shape=s, order='F')
-        self.atmos.tg = np.memmap(fname, dtype='float32', mode='r',
+        self.atmos.tg = np.memmap(fname, dtype=np.float32, mode='r',
                                   shape=s, offset=gs, order='F')
-        self.atmos.vx = np.memmap(fname, dtype='float32', mode='r',
+        self.atmos.vx = np.memmap(fname, dtype=np.float32, mode='r',
                                   shape=s, offset=gs*2, order='F')
-        self.atmos.vy = np.memmap(fname, dtype='float32', mode='r',
+        self.atmos.vy = np.memmap(fname, dtype=np.float32, mode='r',
                                   shape=s, offset=gs*3, order='F')
-        self.atmos.vz = np.memmap(fname, dtype='float32', mode='r',
+        self.atmos.vz = np.memmap(fname, dtype=np.float32, mode='r',
                                   shape=s, offset=gs*4, order='F')
-        self.atmos.rho = np.memmap(fname, dtype='float32', mode='r',
+        self.atmos.rho = np.memmap(fname, dtype=np.float32, mode='r',
                                    shape=s, offset=gs*5, order='F')
-        self.atmos.nh = np.memmap(fname, dtype='float32', mode='r', order='F',
+        self.atmos.nh = np.memmap(fname, dtype=np.float32, mode='r', order='F',
                                   shape=(nx, ny, nz, nhl), offset=gs * 6)
-        # self.atmos.vturb = np.memmap(fname, dtype='float32', mode='r',
+        # self.atmos.vturb = np.memmap(fname, dtype=np.float32, mode='r',
         #                             shape=s ,offset=gs*12, order='F' )
         if self.printinfo:
             print("reading " + fname)
@@ -429,13 +429,13 @@ class Multi3dOut:
         nx, ny, nz = self.geometry.nx, self.geometry.ny, self.geometry.nz
         s = (nx, ny, nz)
         gs = nx * ny * nz * 4
-        self.atmos.x500 = np.memmap(fname, dtype='float32', mode='r',
+        self.atmos.x500 = np.memmap(fname, dtype=np.float32, mode='r',
                                     shape=s, order='F')
-        self.atom.dopfac = np.memmap(fname, dtype='float32', mode='r',
+        self.atom.dopfac = np.memmap(fname, dtype=np.float32, mode='r',
                                      shape=s, offset=gs, order='F')
         i = 2
         for l in self.line:
-            l.adamp = np.memmap(fname, dtype='float32', mode='r',
+            l.adamp = np.memmap(fname, dtype=np.float32, mode='r',
                                 shape=s, offset=gs * i, order='F')
             i += 1
 
@@ -538,7 +538,7 @@ class Multi3dOut:
                 shape = (sg.nx, sg.ny, sg.nz)
                 offset = (4 * sg.nx * sg.ny * sg.nz *
                           np.where(self.outff == self.d.ff)[0])[0]
-        return np.memmap(fname, dtype='float32', mode='r',
+        return np.memmap(fname, dtype=np.float32, mode='r',
                          shape=shape, order='F', offset=offset)
 
 

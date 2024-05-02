@@ -122,7 +122,7 @@ class Multi_3dOut:
         ''' Reads the 3D cube output file, like n3d or b3d. '''
         self.check_basic()
         self.nk = os.path.getsize(outfile) // (self.nxyz * 4)
-        setattr(self, mode, np.memmap(outfile, dtype='Float32', mode='r',
+        setattr(self, mode, np.memmap(outfile, dtype=np.float32, mode='r',
                                       order='F', shape=(self.nx, self.ny,
                                                         self.ndep, self.nk)))
         if self.verbose:
@@ -347,7 +347,7 @@ def watmos_multi(filename, temp, ne, z=None, logtau=None, vz=None, vturb=None,
 
 
 def write_atmos3d(outfile, x, y, z, ne, temp, vz, vx=None, vy=None, rho=None,
-                  big_endian=False, length=4, prec='Float32'):
+                  big_endian=False, length=4, prec=np.float32):
     """
     Writes file with atmos3d atmosphere (format of 'old' multi3d and multi_3d).
 
@@ -378,7 +378,7 @@ def write_atmos3d(outfile, x, y, z, ne, temp, vz, vx=None, vy=None, rho=None,
     length : int, optional
         Length of fortran format pad. Should be 4 (default) in most cases.
     prec : str, optional
-        Precision ('Float32' or 'Float64')
+        Numpy datatype (usually np.float32 or np.float64)
 
     Returns
     -------
@@ -400,7 +400,7 @@ def write_atmos3d(outfile, x, y, z, ne, temp, vz, vx=None, vy=None, rho=None,
     ny = len(y)
     nz = len(z)
     ii = 3
-    ir = 5 if prec in ['Float64', 'd'] else 4
+    ir = 5 if prec in ['float64', 'd', np.float64] else 4
     ll = length
     be = big_endian
     if vx is None:

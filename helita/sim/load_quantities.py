@@ -802,10 +802,10 @@ def get_coulomb(obj, quant, COULOMB_COL_QUANT=None, **kwargs):
               np.sqrt(obj.uni.weightdic[elem] * obj.uni.amusi *
                       (2.0 * obj.uni.ksi_b) ** 3) + 1.0e-20))
 
-    return (const * nel.astype('Float64') *
-            np.log(12.0 * obj.uni.pi * nel.astype('Float64') *
-            obj.get_var('debye_ln').astype('Float64') + 1e-50) /
-            (np.sqrt(tg.astype('Float64')**3) + 1.0e-20))
+    return (const * nel.astype(np.float64) *
+            np.log(12.0 * obj.uni.pi * nel.astype(np.float64) *
+            obj.get_var('debye_ln').astype(np.float64) + 1e-50) /
+            (np.sqrt(tg.astype(np.float64)**3) + 1.0e-20))
 
 
 # default
@@ -1063,7 +1063,7 @@ def get_plasmaparam(obj, quant, PLASMA_QUANT=None, **kwargs):
 
     if quant == 'nr':
         r = obj.get_var('r')
-        r = r.astype('float64')  # if r close to 1, nr will be huge in simu units. use float64 to avoid infs.
+        r = r.astype(np.float64)  # if r close to 1, nr will be huge in simu units. use float64 to avoid infs.
         nr_H = r / obj.uni.simu_amu   # nr [simu. units] if only species is H.
         return nr_H * obj.uni.mu      # mu is correction factor since plasma isn't just H.
 
@@ -1272,8 +1272,8 @@ def get_debye_ln(obj, quant, DEBYE_LN_QUANT=None, **kwargs):
         part += 4.0 * obj.get_var('nhe3')
     # check units of n
     return np.sqrt(obj.uni.permsi / obj.uni.qsi_electron**2 /
-                   (obj.uni.ksi_b * tg.astype('float64') *
-                    part.astype('float64') + 1.0e-20))
+                   (obj.uni.ksi_b * tg.astype(np.float64) *
+                    part.astype(np.float64) + 1.0e-20))
 
 
 # default
