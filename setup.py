@@ -5,9 +5,7 @@ from itertools import chain
 
 import numpy
 from Cython.Build import cythonize
-from numpy.distutils import fcompiler
-from numpy.distutils.core import setup
-from numpy.distutils.extension import Extension
+from setuptools.extension import Extension
 
 try:
     # Recommended for setuptools 61.0.0+
