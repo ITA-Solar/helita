@@ -101,11 +101,11 @@ class HDF5Atmos:
             except ImportError:
                 raise ValueError("This function depents on rhpy, which is not"
                                  " installed in this system.")
-            nh = rhpy.nh_lte(self.temperature[nti, xi, yi, zcut:].astype('Float64'),
+            nh = rhpy.nh_lte(self.temperature[nti, xi, yi, zcut:].astype(np.float64),
                              self.electron_density[
-                                   nti, xi, yi, zcut:].astype('Float64'),
+                                   nti, xi, yi, zcut:].astype(np.float64),
                              self.hydrogen_populations[
-                                   nti, 0, xi, yi, zcut:].astype('Float64'))
+                                   nti, 0, xi, yi, zcut:].astype(np.float64))
         elif self.params['nhydr'] == 6:
             nh = self.hydrogen_populations[nti, :, xi, yi, zcut:]
         else:
@@ -377,7 +377,7 @@ class AtomFile:
             if key == 'END':
                 break
             elif key == 'TEMP':
-                temp_tmp = np.array(line[2:]).astype('float64')
+                temp_tmp = np.array(line[2:]).astype(np.float64)
                 self.collision_temperatures.append(temp_tmp)
             # Collision rates given as function of temperature
             elif key in self.COLLISION_KEYS_TEMP:
@@ -396,7 +396,7 @@ class AtomFile:
                 else:
                     result = {'type': key, 'level_start': int(line[1]),
                               'level_end': int(line[2]),
-                              'data': np.array(line[3:]).astype('float64')}
+                              'data': np.array(line[3:]).astype(np.float64)}
             elif key in ["AR85-CDI", "BADNELL"]:
                 assert len(line) >= 4, '%s must have >3 elements' % key
                 result = {'type': key, 'level_start': int(line[1]),
@@ -406,14 +406,14 @@ class AtomFile:
                 else:
                     rows = int(line[3])
                 if self.format == 'MULTI':  # All values in one line
-                    tmp = np.array(line[4:]).astype('float64')
+                    tmp = np.array(line[4:]).astype(np.float64)
                     assert tmp.shape[0] % rows == 0, ('Inconsistent number of'
                                                  ' data points for %s' % key)
                     result['data'] = tmp.reshape((rows, tmp.shape[0] // rows))
                     counter += 1
                 else:  # For RH, values written in matrix form
                     tmp = collision_data[counter + 1: counter + 1 + rows]
-                    result['data'] = np.array([l.split() for l in tmp]).astype('float64')
+                    result['data'] = np.array([l.split() for l in tmp]).astype(np.float64)
                     counter += rows
             elif key == "GENCOL":
                 pass

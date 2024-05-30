@@ -1186,7 +1186,7 @@ class BifrostData():
                 if slice_size == 0:
                     slice_size = n
                 shape.append(slice_size)
-            nh = np.empty(shape, dtype='Float32')
+            nh = np.empty(shape, dtype=np.float32)
             for k in range(6):
                 nv = self.get_var('n%i' % (k + 1))
                 nh[k] = nv[sx, sy, sz]
@@ -2104,7 +2104,7 @@ BifrostData.snaps_info = snaps_info
 
 def write_br_snap(rootname, r, px, py, pz, e, bx, by, bz):
     nx, ny, nz = r.shape
-    data = np.memmap(rootname, dtype='float32', mode='w+', order='f', shape=(nx, ny, nz, 8))
+    data = np.memmap(rootname, dtype=np.float32, mode='w+', order='f', shape=(nx, ny, nz, 8))
     data[..., 0] = r
     data[..., 1] = px
     data[..., 2] = py
