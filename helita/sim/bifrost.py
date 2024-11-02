@@ -535,12 +535,21 @@ class BifrostData():
                 self.ny = self.nyb
                 self.nz = self.nzb
         else:  # no mesh file
+            
             if self.dx == 0.0:
                 self.dx = 1.0
             if self.dy == 0.0:
                 self.dy = 1.0
             if self.dz == 0.0:
                 self.dz = 1.0
+
+            if self.dx < 0.0:
+                self.dx = -self.dx / self.nx
+            if self.dy < 0.0:
+                self.dy = -self.dy / self.ny
+            if self.dz < 0.0:
+                self.dz = -self.dz / self.nz 
+
             if self.verbose and firstime:
                 warnings.warn(('Mesh file {mf} does not exist. Creating uniform grid '
                                'with (dx,dy,dz)=({dx:.2e},{dy:.2e},{dz:.2e})').format(
