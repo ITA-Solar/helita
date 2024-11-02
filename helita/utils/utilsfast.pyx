@@ -68,8 +68,8 @@ def replace_nans(np.ndarray[DTYPEf_t, ndim=2] array, int max_iter, float tol,
                                                          2 * kernel_size + 1),
                                                         dtype=DTYPEf )
 
-    cdef np.ndarray[np.int_t, ndim=1] inans
-    cdef np.ndarray[np.int_t, ndim=1] jnans
+    cdef np.ndarray[DTYPEi_t, ndim=1] inans
+    cdef np.ndarray[DTYPEi_t, ndim=1] jnans
 
     # indices where array is NaN
     inans, jnans = np.nonzero( np.isnan(array) )
