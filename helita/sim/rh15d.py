@@ -1221,3 +1221,79 @@ def clean_var(data, only_positive=True):
         tmp[data[..., k].mask] = np.nan
         data[..., k] = utilsfast.replace_nans(tmp, 15, 0.1, 3, "localmean")
     return np.squeeze(data)
+
+
+def calc_wave_RH(wave0, nlambda, qcore, qwing, 
+                 vmicro_char=units.Quantity(2.5, unit='km/s'), asymm=True):
+    """
+    Calculate line wavelengths using recipe from RH.
+    """
+    q_to_λ = (wave0 * vmicro_char / const.c).to("nm")
+    if not asymm:
+        if nlambda % 2:
+            nλ = nlambda 
+        else:
+            nλ = nlambda + 1
+    else:
+        if nlambda % 2:
+            nλ = nlambda // 2
+        else:
+            nλ = (nlambda + 1) // 2
+    if qwing <= 2 * qcore:
+        β = 1
+    else:
+        β = qwing / (2 * qcore)
+    y = β + np.sqrt(β * β + (β - 1) * nλ + 2 - 3 * β)
+    b = 2 * np.log(y) / (nλ - 1)
+    a = qwing / (nλ - 2 + y*y)
+    q = np.zeros(nλ)
+    for la in range(nλ):
+        q[la] = a * (la + (np.exp(b * la) - 1.0))
+    if asymm:
+        wave = np.empty(2*nλ - 1) * wave0.unit
+        nmid = nλ - 1
+        wave[nmid] = wave0
+        for i in range(1, nλ):
+            Δλ = q_to_λ * q[i]
+            wave[nmid - i] = wave0 - Δλ
+            wave[nmid + i] = wave0 + Δλ
+    else:
+        wave = wave0 + q_to_λ * q
+    return np.sort(wave)
+
+
+def calc_wave_MULTI(wave0, nlambda, q0, qmax, 
+                    vmicro_char=units.Quantity(8, unit='km/s'), asymm=True):
+    """
+    Calculate line wavelengths using recipe from MULTI.
+    """
+    ν0 = (const.c / wave0).to("Hz")
+    q = np.empty(nlambda)
+    ten = 10.
+    half = 1 / 2
+    a = ten ** (q0 + half)
+    xmax = np.log10(a * max(half, qmax - q0 - half))
+    if qmax <= q0:
+        # Linear spacing
+        dq = 2 * qmax / (nlambda - 1)
+        q[0] = -qmax
+        for i in range(1, nlambda):
+            q[i] = q[i - 1] + dq
+    elif (qmax >= 0) and (q0 >=0):
+        if asymm:
+            dx = 2 * xmax / (nlambda - 1)
+            for i in range(nlambda):
+                x = -xmax + i * dx
+                x10 = ten ** x
+                q[i] = x + (x10 - 1 / x10) / a
+        else:
+            dx = xmax / (nlambda - 1)
+            for i in range(nlambda):
+                x = i * dx
+                x10 = ten ** x
+                # Set negative (contrary to MULTI) to ensure consistency
+                # with the RH values, which increase from line centre
+                q[i] = -(x + (x10 - 1) / a)
+    ν = ν0 * (1 + q * vmicro_char / const.c)
+    wave = np.sort(const.c / ν).to(wave0.unit)
+    return wave
