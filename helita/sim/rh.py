@@ -3,7 +3,7 @@ Set of programs and tools to read the outputs from RH (Han's version)
 """
 import io
 import os
-import xdrlib
+import xdrlib3
 
 import numpy as np
 
@@ -534,7 +534,7 @@ class RhAtmos:
         assert dx.shape[0] == nx
         assert z.shape[0] == nz
         # Pack as double
-        p = xdrlib.Packer()
+        p = xdrlib3.Packer()
         p.pack_int(nx)
         p.pack_int(nz)
         p.pack_int(nhydr)
@@ -567,7 +567,7 @@ def read_xdr_file(filename):  # ,var,cl=None,verbose=False):
     """
     Reads data from XDR file.
 
-    Because of the way xdrlib works, this reads the whole file to
+    Because of the way xdrlib3 works, this reads the whole file to
     memory at once. Avoid with very large files.
 
     Parameters
@@ -577,7 +577,7 @@ def read_xdr_file(filename):  # ,var,cl=None,verbose=False):
 
     Returns
     -------
-    result   : xdrlib.Unpacker object
+    result   : xdrlib3.Unpacker object
     """
     try:
         f = io.open(filename, 'rb')
@@ -587,16 +587,16 @@ def read_xdr_file(filename):  # ,var,cl=None,verbose=False):
         raise IOError(
             'read_xdr_file: problem reading {0}: {1}'.format(filename, e))
     # return XDR data
-    return xdrlib.Unpacker(data)
+    return xdrlib3.Unpacker(data)
 
 
 def close_xdr(buf, ofile='', verbose=False):
     """
-    Closes the xdrlib.Unpacker object, gives warning if not all data read.
+    Closes the xdrlib3.Unpacker object, gives warning if not all data read.
 
     Parameters
     ----------
-    buf : xdrlib.Unpacker object
+    buf : xdrlib3.Unpacker object
         data object.
     ofile : string, optional
         Original file from which data was read.
@@ -612,12 +612,12 @@ def close_xdr(buf, ofile='', verbose=False):
 
 def read_xdr_var(buf, var):
     """
-    Reads a single variable/array from a xdrlib.Unpack buffer.
+    Reads a single variable/array from a xdrlib3.Unpack buffer.
 
     Parameters
     ----------
 
-    buf:  xdrlib.Unpack object
+    buf:  xdrlib3.Unpack object
         Data buffer.
     var: tuple with (type[,shape]), where type is 'f', 'd', 'i', 'ui',
              or 's'. Shape is optional, and if true is shape of array.
@@ -729,7 +729,7 @@ def write_B(outfile, Bx, By, Bz):
     gamma_B = np.arccos(Bz / B)
     chi_B = np.arctan(By / Bx)
     # Pack as double
-    p = xdrlib.Packer()
+    p = xdrlib3.Packer()
     p.pack_farray(n, B.ravel().astype('d'), p.pack_double)
     p.pack_farray(n, gamma_B.ravel().astype('d'), p.pack_double)
     p.pack_farray(n, chi_B.ravel().astype('d'), p.pack_double)
