@@ -10,6 +10,7 @@ import h5py
 import netCDF4
 from io import StringIO
 from astropy import units
+from astropy import constants as const
 
 
 class Rh15dout:
@@ -1069,14 +1070,13 @@ def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
     """
     from scipy.integrate import cumtrapz
     import scipy.interpolate as interp
-    import astropy.constants as const
     ndep = len(height)
     # calculate optical depth from H-bf only
     taumax = 100
     grph = 2.26e-24   # grams per hydrogen atom
     crhmbf = 2.9256e-17
-    ee = constants.e.si.value * 1e7
-    bk = constants.k_B.cgs.value
+    ee = const.e.si.value * 1e7
+    bk = const.k_B.cgs.value
     xhbf = 1.03526e-16 * ne * crhmbf / temp**1.5 * \
         np.exp(0.754 * ee / bk / temp) * rho / grph
     tau = np.concatenate(([0.], cumtrapz(xhbf, -height)))
@@ -1148,7 +1148,7 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
         If true, will at the end convert the wavelengths into vacuum
         wavelengths.
     """
-    import xdrlib
+    import xdrlib3
     from specutils.utils.wcs_utils import air_to_vac
     if new_wave is None:
         new_wave = np.arange(start, end, step)
@@ -1169,7 +1169,7 @@ def make_wave_file(outfile, start=None, end=None, step=None, new_wave=None,
                               scheme='iteration').value
 
     # write file
-    p = xdrlib.Packer()
+    p = xdrlib3.Packer()
     nw = len(new_wave)
     p.pack_int(nw)
     p.pack_farray(nw, new_wave.astype('d'), p.pack_double)
@@ -1193,11 +1193,11 @@ def read_wave_file(infile):
     wave : array
         Wavelength from file.
     """
-    import xdrlib
+    import xdrlib3
     import io
     from .rh import read_xdr_var
     f = io.open(infile, 'rb')
-    buf = xdrlib.Unpacker(f.read())
+    buf = xdrlib3.Unpacker(f.read())
     f.close()
     nw = read_xdr_var(buf, 'i')
     return read_xdr_var(buf, ('d', (nw,)))
