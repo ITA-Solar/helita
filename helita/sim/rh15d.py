@@ -115,12 +115,12 @@ class HDF5Atmos:
         M_TO_CM3 = (units.m**-3).to('1 / cm3')
         M_TO_KM = units.m.to('km')
         temp = self.temperature[nti, xi, yi, zcut:].copy()
-        ne = self.electron_density[nti, xi, yi, zcut:].copy() / M_TO_CM3
+        ne = self.electron_density[nti, xi, yi, zcut:].copy() * M_TO_CM3
         if len(self.z.shape) > 2:
             self.z = self.z[:, xi, yi]
         z = self.z[nti, zcut:].copy() * M_TO_KM * 1.e5    # in cm
         vz = self.velocity_z[nti, xi, yi, zcut:].copy() * M_TO_KM
-        nh = nh / M_TO_CM3
+        nh = nh * M_TO_CM3
         if writeB:
             bx = self.B_x[nti, xi, yi, zcut:].copy()
             by = self.B_y[nti, xi, yi, zcut:].copy()
@@ -129,7 +129,7 @@ class HDF5Atmos:
             bx = by = bz = None
         if depth_optimise:
             rho = self.hydrogen_populations[
-                nti, 0, xi, yi, zcut:] * 2.380491e-24 / M_TO_CM3
+                nti, 0, xi, yi, zcut:] * 2.380491e-24 * M_TO_CM3
             res = depth_optim(z, temp, ne, vz, rho, nh=nh, bx=bx, by=by, bz=bz)
             z, temp, ne, vz, rho, nh = res[:6]
             if writeB:
