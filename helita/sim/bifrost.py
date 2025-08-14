@@ -412,22 +412,14 @@ class BifrostData():
                 except KeyError:
                     raise KeyError(('read_params: could not find '
                                     '%s in idl file!' % p))
+            self.nxb = self.nx
+            self.nyb = self.ny 
             try:
                 if ((params['boundarychk'] == 1) and (params['isnap'] != 0)):
                     self.nzb = self.nz + 2 * self.nb
                 else:
                     self.nzb = self.nz
-                if ((params['boundarychky'] == 1) and (params['isnap'] != 0)):
-                    self.nyb = self.ny + 2 * self.nb
-                else:
-                    self.nyb = self.ny
-                if ((params['boundarychkx'] == 1) and (params['isnap'] != 0)):
-                    self.nxb = self.nx + 2 * self.nb
-                else:
-                    self.nxb = self.nx
             except KeyError:
-                self.nzb = self.nz
-                self.nyb = self.ny
                 self.nxb = self.nx
             # check if units are there, if not use defaults and print warning
             unit_def = {'u_l': 1.e8, 'u_t': 1.e2, 'u_r': 1.e-7,
