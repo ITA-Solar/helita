@@ -1119,9 +1119,7 @@ class BifrostData():
             offset = self.nxb * self.nyb * self.nzb * idx * dsize
             ss = (self.nxb, self.nyb, self.nzb)
         else:
-            offset = ((self.nxb + (self.nxb - self.nx)) *
-                      (self.nyb + (self.nyb - self.ny)) *
-                      (self.nzb + (self.nzb - self.nz) // 2) * idx * dsize)
+            offset = self.nx * self.ny * self.nz * idx * dsize
             ss = (self.nx, self.ny, self.nz)
 
         if var in self.heliumvars:
