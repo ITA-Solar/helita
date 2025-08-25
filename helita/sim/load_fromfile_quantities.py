@@ -1,4 +1,5 @@
 # import builtins
+import os
 
 # import internal modules
 # import external public modules
@@ -58,7 +59,7 @@ def _get_simple_var_xy(obj, var, order='F', mode='r'):
 
     # memmap the variable
     if not os.path.isfile(filename):
-        raise FileNotFoundError('_get_simple_var_xy: variable {} should be in {} file, not found!'.format(var, filename))
+        raise FileNotFoundError(2, 'No such file or directory', filename)
     dsize = np.dtype(obj.dtype).itemsize    # size of the data type
     offset = obj.nx * obj.ny * idx * dsize  # offset in the file
     return np.memmap(filename, dtype=obj.dtype, order=order, mode=mode,

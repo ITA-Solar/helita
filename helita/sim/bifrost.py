@@ -499,7 +499,13 @@ class BifrostData():
             f = open(meshfile, 'r')
             for p in ['x', 'y', 'z']:
                 dim = int(f.readline().strip('\n').strip())
-                assert dim == getattr(self, 'n' + p)
+                # Skip assertion check if we auto-corrected ghost zones for Z dimension
+                if p == 'z' and hasattr(self, '_autocorrected_ghost') and self._autocorrected_ghost:
+                    # Mesh file has original dimension, but we've expanded to include ghost zones
+                    if self.verbose and dim != getattr(self, 'n' + p):
+                        print(f"(WWW) Mesh file has nz={dim}, but using auto-corrected nz={getattr(self, 'n' + p)} for ghost zones")
+                else:
+                    assert dim == getattr(self, 'n' + p)
                 # quantity
                 setattr(self, p, np.array(
                     [float(v) for v in f.readline().strip('\n').split()]))
@@ -644,6 +650,8 @@ class BifrostData():
                     if firstime:
                         print('(WWW) init_vars: could not read '
                               'variable {} due to {}'.format(var, err))
+        if not hasattr(self, 'r'):
+            raise ValueError("Failed to load any snap variables. Check ghost_analyse setting and file availability.")
         rdt = self.r.dtype
         if self.stagger_kind == 'cstagger':
             if (self.nz > 1):
@@ -1116,11 +1124,122 @@ class BifrostData():
                               '\n' + repr(self.simple_vars)))
         dsize = np.dtype(self.dtype).itemsize
         if self.ghost_analyse:
-            offset = self.nxb * self.nyb * self.nzb * idx * dsize
-            ss = (self.nxb, self.nyb, self.nzb)
+            # Check if we have auto-corrected dimensions
+            if hasattr(self, '_autocorrected_ghost') and self._autocorrected_ghost:
+                nzb_to_use = self._autocorrected_nzb
+            else:
+                nzb_to_use = self.nzb
+            # Ghost zones only in Z dimension: (nx, ny, nzb)
+            # Use np.int64 to avoid integer overflow for large offsets
+            offset = np.int64(self.nx) * np.int64(self.ny) * np.int64(nzb_to_use) * np.int64(idx) * np.int64(dsize)
+            ss = (self.nx, self.ny, nzb_to_use)
         else:
-            offset = self.nx * self.ny * self.nz * idx * dsize
+            offset = np.int64(self.nx) * np.int64(self.ny) * np.int64(self.nz) * np.int64(idx) * np.int64(dsize)
             ss = (self.nx, self.ny, self.nz)
+            
+            # Check if user set ghost_analyse=False but file actually contains ghost zones
+            if var in self.snapvars:  # Only check for snap variables
+                import os
+                nvars = len(self.snapvars)
+                expected_size_noghost = np.int64(nvars) * np.int64(self.nx) * np.int64(self.ny) * np.int64(self.nz) * np.int64(dsize)
+                actual_size = os.path.getsize(filename)
+                
+                # Calculate what the file actually contains
+                total_values = actual_size // dsize
+                values_per_var = total_values // nvars
+                actual_nz = values_per_var // (self.nx * self.ny)
+                
+                if actual_size != expected_size_noghost:
+                    # Check if it matches ghost zone pattern (actual_nz = nz + 2*nb)
+                    if actual_nz == (self.nz + 2 * self.nb):
+                        raise ValueError(f"File '{filename}' contains ghost zone data but ghost_analyse=False. "
+                                       f"File size: {actual_size} bytes contains {actual_nz} Z-points "
+                                       f"(expected {self.nz} without ghost zones, got {actual_nz} = {self.nz}+2×{self.nb}). "
+                                       f"Set ghost_analyse=True to read this data.")
+                    else:
+                        # File has unexpected size - provide debugging info
+                        expected_size_autodetect = np.int64(nvars) * np.int64(self.nx) * np.int64(self.ny) * np.int64(actual_nz) * np.int64(dsize)
+                        if actual_size == expected_size_autodetect:
+                            raise ValueError(f"File '{filename}' contains {actual_nz} Z-points but expected {self.nz}. "
+                                           f"File appears to contain ghost zone data. Set ghost_analyse=True to read this data.")
+                        else:
+                            raise ValueError(f"File '{filename}' has unexpected size: {actual_size} bytes. "
+                                           f"Expected {expected_size_noghost} for {self.nx}×{self.ny}×{self.nz} dimensions, "
+                                           f"but file contains {actual_nz} Z-points.")
+
+        # Check if file size matches expected size for ghost zones
+        if self.ghost_analyse and var in self.snapvars:
+            import os
+            # Ghost zones only exist in Z dimension: (mx, my, mz+2*mb)
+            # Use np.int64 to avoid integer overflow for large files
+            expected_size_ghost = np.int64(len(self.snapvars)) * np.int64(self.nx) * np.int64(self.ny) * np.int64(self.nzb) * np.int64(dsize)
+            # Non-ghost size: (mx, my, mz)  
+            expected_size_noghost = np.int64(len(self.snapvars)) * np.int64(self.nx) * np.int64(self.ny) * np.int64(self.nzb - 2 * self.nb) * np.int64(dsize)
+            actual_size = os.path.getsize(filename)
+            
+            if actual_size == expected_size_noghost:
+                raise ValueError(f"ghost_analyse=True but snap file '{filename}' contains no ghost zone data. "
+                               f"File size is {actual_size} bytes (expected {expected_size_ghost} for ghost zones). "
+                               f"Set ghost_analyse=False to read this data.")
+            elif actual_size != expected_size_ghost:
+                # Calculate what the file actually contains
+                nvars = len(self.snapvars)
+                total_values = actual_size // dsize
+                values_per_var = total_values // nvars
+                actual_nz = values_per_var // (self.nx * self.ny)
+                
+                # Check if file contains ghost zones by auto-detecting from file size
+                expected_nz_with_ghost = actual_nz
+                expected_size_autodetect = np.int64(nvars) * np.int64(self.nx) * np.int64(self.ny) * np.int64(actual_nz) * np.int64(dsize)
+                
+                if actual_size == expected_size_autodetect:
+                    # Store the auto-corrected value and mark that auto-correction happened
+                    if not hasattr(self, '_autocorrected_ghost') or not self._autocorrected_ghost:
+                        # First time auto-correction - print message and expand mesh
+                        if self.verbose:
+                            print(f"(WWW) Auto-detected ghost zones: correcting nzb from {self.nzb} to {actual_nz}")
+                        self._autocorrected_nzb = actual_nz
+                        self._autocorrected_ghost = True
+                        
+                        # Expand mesh to include ghost zones (same logic as in __read_mesh)
+                        self.z = np.concatenate((self.z[0] - np.linspace(
+                            self.dz * self.nb, self.dz, self.nb),
+                            self.z, self.z[-1] + np.linspace(
+                            self.dz, self.dz * self.nb, self.nb)))
+                        self.zdn = np.concatenate((self.zdn[0] - np.linspace(
+                            self.dz * self.nb, self.dz, self.nb),
+                            self.zdn, (self.zdn[-1] + np.linspace(
+                                self.dz, self.dz * self.nb, self.nb))))
+                        self.dzidzup = np.concatenate((
+                            np.repeat(self.dzidzup[0], self.nb),
+                            self.dzidzup,
+                            np.repeat(self.dzidzup[-1], self.nb)))
+                        self.dzidzdn = np.concatenate((
+                            np.repeat(self.dzidzdn[0], self.nb),
+                            self.dzidzdn,
+                            np.repeat(self.dzidzdn[-1], self.nb)))
+                        # Update dimensions to match expanded mesh
+                        self.nz = actual_nz
+                        if self.verbose:
+                            print(f"(WWW) Expanded mesh to include ghost zones: z.shape={self.z.shape}")
+                    
+                    # Use the corrected dimensions for reading this variable
+                    offset = np.int64(self.nx) * np.int64(self.ny) * np.int64(actual_nz) * np.int64(idx) * np.int64(dsize)
+                    ss = (self.nx, self.ny, actual_nz)
+                else:
+                    # Still doesn't match - report the issue
+                    var_size_ghost = np.int64(self.nx) * np.int64(self.ny) * np.int64(self.nzb) * np.int64(dsize)
+                    var_size_noghost = np.int64(self.nx) * np.int64(self.ny) * np.int64(self.nzb - 2 * self.nb) * np.int64(dsize)
+                    nz_orig = self.nzb - 2 * self.nb
+                    raise ValueError(f"Snap file '{filename}' has unexpected size: {actual_size} bytes.\n"
+                                   f"Current dimensions: nx={self.nx}, ny={self.ny}, nz={self.nz} (after ghost_analyse setting)\n"
+                                   f"Original dimensions: nx={self.nx}, ny={self.ny}, nz={nz_orig}, with ghost: nzb={self.nzb}, nb={self.nb}\n"
+                                   f"File actually contains: nx={self.nx}, ny={self.ny}, nz={actual_nz} (calculated from file size)\n"
+                                   f"Data type: {self.dtype} ({dsize} bytes per value)\n"
+                                   f"Variables expected: {nvars} ({self.snapvars})\n"
+                                   f"Expected for ghost zones: {expected_size_ghost} bytes ({nvars} vars × {var_size_ghost} bytes/var)\n"
+                                   f"Expected for no ghost zones: {expected_size_noghost} bytes ({nvars} vars × {var_size_noghost} bytes/var)\n"
+                                   f"BUG: nzb should be {actual_nz} but is {self.nzb}. Check boundary parameter calculation.")
 
         if var in self.heliumvars:
             return np.exp(np.memmap(filename, dtype=self.dtype, order=order,
