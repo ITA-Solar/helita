@@ -302,11 +302,24 @@ class BifrostData():
             self.snapvars += ['bx', 'by', 'bz']
         self.hionvars = []
         self.heliumvars = []
-        if self.get_param('do_hion', default=0) > 0:
+        def _param_to_int(param_name, default=0):
+            """Convert parameter to int, handling Fortran logicals"""
+            val = self.get_param(param_name, default=default)
+            if isinstance(val, (str, np.str_)):
+                val_str = str(val).strip().upper()
+                if val_str in ['T', 'TRUE', '.TRUE.']:
+                    return 1
+                elif val_str in ['F', 'FALSE', '.FALSE.']:
+                    return 0
+                else:
+                    return int(val_str)
+            return int(val)
+
+        if _param_to_int('do_hion') > 0:
             self.hionvars = ['hionne', 'hiontg', 'n1',
                              'n2', 'n3', 'n4', 'n5', 'n6', 'nh2']
             self.hion = True
-        if self.get_param('do_helium', default=0) > 0:
+        if _param_to_int('do_helium') > 0:
             self.heliumvars = ['nhe1', 'nhe2', 'nhe3']
             self.heion = True
         self.compvars = ['ux', 'uy', 'uz', 's', 'ee']
