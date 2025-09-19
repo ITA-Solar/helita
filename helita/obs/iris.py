@@ -119,7 +119,7 @@ def sj_filter(wave, band='IRIS_MGII_CORE', norm=True):
     elif band.upper() == 'IRIS_MGII_WING':
         widx = (wave > 281) & (wave < 285)
     if norm:
-        wfilt /= np.trapz(wfilt[widx], x=wave[widx])
+        wfilt /= np.trapezoid(wfilt[widx], x=wave[widx])
     wfilt[~widx] = 0.
     return wfilt
 

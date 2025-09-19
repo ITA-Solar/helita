@@ -39,5 +39,5 @@ def bfi_filter(wave, band='CAH', norm=True):
     wfilt = f(wave)
     if norm:
         widx = wfilt != 0
-        wfilt /= np.trapz(wfilt[widx], x=wave[widx])
+        wfilt /= np.trapezoid(wfilt[widx], x=wave[widx])
     return wfilt

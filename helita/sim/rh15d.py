@@ -1068,7 +1068,7 @@ def depth_optim(height, temp, ne, vz, rho, nh=None, bx=None, by=None, bz=None,
             tmax     [K] maximum temperature of the first point
 
     """
-    from scipy.integrate import cumtrapz
+    from scipy.integrate import cumulative_trapezoid as cumtrapz
     import scipy.interpolate as interp
     ndep = len(height)
     # calculate optical depth from H-bf only

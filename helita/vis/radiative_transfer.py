@@ -70,8 +70,8 @@ class Transp():
         self.source_function_line = f(self.tau500_line)[()]
         xq = xq[:, np.newaxis]
         tmp = source_function * np.exp(-xq * tau500 / self.mu) * xq * tau500
-        self.prof = np.log(10) / self.mu * np.trapz(tmp.T, np.log(tau500),
-                                                    axis=0)
+        self.prof = np.log(10) / self.mu * np.trapezoid(tmp.T, np.log(tau500),
+                                                        axis=0)
 
     def _make_plot(self):
         plt.close(1)

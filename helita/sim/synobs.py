@@ -205,12 +205,12 @@ def img_conv(spec, wave, psf, psfx, conv_type='IRIS_MgII_core', xMm=16.5491,
         # filtering function, here set to Gaussian
         wfilt = gaussian([wcent, wfwhm / (2 * math.sqrt(2 * math.log(2))),
                           1., 0.], wave[widx])
-        wfilt /= np.trapz(wfilt, x=wave[widx])
+        wfilt /= np.trapezoid(wfilt, x=wave[widx])
     else:
         widx = wfilt != 0
         wfilt = wfilt[widx]
     # multiply by filter and integrate
-    nspec = np.trapz(spec[:, :, widx] * wfilt, x=wave[widx], axis=-1)
+    nspec = np.trapezoid(spec[:, :, widx] * wfilt, x=wave[widx], axis=-1)
     if graph:
         vmin = np.min(nspec)
         vmax = np.max(nspec) * lscale
