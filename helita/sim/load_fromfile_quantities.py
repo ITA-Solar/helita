@@ -52,14 +52,30 @@ def _get_simple_var_xy(obj, var, order='F', mode='r'):
     if var not in obj.auxxyvars:
         return None
 
-    # determine the file
+    # determine the file - include snap number like other aux files
     fsuffix = '_XY.aux'
     idx = obj.auxxyvars.index(var)
-    filename = obj.file_root + fsuffix
+
+    # Handle snap string similar to _get_simple_var
+    if np.shape(obj.snap) != ():
+        currSnap = obj.snap[obj.snapInd]
+        currStr = obj.snap_str[obj.snapInd]
+    else:
+        currSnap = obj.snap
+        currStr = obj.snap_str
+
+    if currSnap <= 0:
+        filename = obj.file_root + fsuffix
+    else:
+        filename = obj.file_root + currStr + fsuffix
 
     # memmap the variable
     if not os.path.isfile(filename):
-        raise FileNotFoundError(2, 'No such file or directory', filename)
+        raise FileNotFoundError(
+            f"Cannot read variable '{var}': file '{filename}' not found. "
+            f"The variable '{var}' is declared in aux parameters but the _XY.aux file does not exist. "
+            f"This file should be created by the simulation if the variable is actually saved."
+        )
     dsize = np.dtype(obj.dtype).itemsize    # size of the data type
     offset = obj.nx * obj.ny * idx * dsize  # offset in the file
     return np.memmap(filename, dtype=obj.dtype, order=order, mode=mode,
