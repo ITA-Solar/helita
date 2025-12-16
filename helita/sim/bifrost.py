@@ -1274,6 +1274,7 @@ class BifrostData():
             raise ValueError(('_get_simple_var_xy: variable'
                               ' %s not available. Available vars:'
                               % (var) + '\n' + repr(self.auxxyvars)))
+        return val
 
     def _get_composite_var(self, *args, **kwargs):
         '''returns load_fromfile_quantities._get_composite_var(self, *args, **kwargs).
