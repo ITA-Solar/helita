@@ -329,6 +329,7 @@ class BifrostData():
         # special case for the ixy1 variable, lives in a separate file
         if 'ixy1' in self.auxvars:
             self.auxvars.remove('ixy1')
+            self.simple_vars.remove('ixy1')
             self.auxxyvars.append('ixy1')
         self.vars2d = []
         # special case for 2D variables, stored in a separate file
