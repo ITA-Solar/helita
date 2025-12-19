@@ -78,8 +78,13 @@ def _get_simple_var_xy(obj, var, order='F', mode='r'):
         )
     dsize = np.dtype(obj.dtype).itemsize    # size of the data type
     offset = obj.nx * obj.ny * idx * dsize  # offset in the file
-    return np.memmap(filename, dtype=obj.dtype, order=order, mode=mode,
-                     offset=offset, shape=(obj.nx, obj.ny))
+    # Use memmap to read, then copy to regular array and close file handle
+    # to avoid "too many files open" error when reading many snapshots
+    memmap_arr = np.memmap(filename, dtype=obj.dtype, order=order, mode=mode,
+                           offset=offset, shape=(obj.nx, obj.ny))
+    result = np.array(memmap_arr)  # copy data to regular numpy array
+    del memmap_arr  # close the file handle
+    return result
 
 
 # default
