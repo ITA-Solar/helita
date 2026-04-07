@@ -1010,7 +1010,10 @@ class BifrostData():
         var = self.get_var(varname, snap=snap, *args, **kwargs)
         var = sign * var
 
-        var = var[..., ::-1].copy()
+        # Bifrost is LHS (z down). Flip both y and z axes to obtain a RHS
+        # frame with z pointing up; the signs of y and z vector components
+        # are flipped above accordingly.
+        var = var[:, ::-1, ::-1].copy()
 
         return var
 
@@ -1023,8 +1026,8 @@ class BifrostData():
                 cte = self.uni.u_l  # not sure if this works, u_l seems to be 1.e8
             self.x = self.x*cte
             self.dx = self.dx*cte
-            self.y = self.y*cte
-            self.dy = self.dy*cte
+            self.y = self.y[::-1].copy()*cte
+            self.dy = self.dy[::-1].copy()*cte if np.ndim(self.dy) > 0 else self.dy*cte
             self.z = - self.z[::-1].copy()*cte
             self.dz = - self.dz1d[::-1].copy()*cte
 
@@ -1038,8 +1041,8 @@ class BifrostData():
                 cte = self.uni.u_l
             self.x = self.x/cte
             self.dx = self.dx/cte
-            self.y = self.y/cte
-            self.dy = self.dy/cte
+            self.y = self.y[::-1].copy()/cte
+            self.dy = self.dy[::-1].copy()/cte if np.ndim(self.dy) > 0 else self.dy/cte
             self.z = - self.z[::-1].copy()/cte
             self.dz = - self.dz1d[::-1].copy()/cte
 
