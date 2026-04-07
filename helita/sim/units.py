@@ -511,7 +511,7 @@ class HelitaUnits(object):
         self.uni['l'] = self.u_l
         self.uni['t'] = self.u_t
         self.uni['rho'] = self.u_r
-        self.uni['p'] = self.u_r * self.u_u  # self.u_p
+        self.uni['p'] = self.u_r * self.u_u**2  # = self.u_p (dyne/cm^2)
         self.uni['u'] = self.u_u
         self.uni['e'] = self.u_e
         self.uni['ee'] = self.u_ee
