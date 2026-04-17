@@ -313,10 +313,13 @@ class BifrostData():
         self.simple_vars = self.snapvars + self.auxvars + self.hionvars + \
             self.heliumvars
         self.auxxyvars = []
-        # special case for the ixy1 variable, lives in a separate file
-        if 'ixy1' in self.auxvars:
-            self.auxvars.remove('ixy1')
-            self.auxxyvars.append('ixy1')
+        # special cases for variables that live in a separate file (2D)
+        special_xy_vars = ['ixy1', 'pplw']
+        for var in special_xy_vars:
+            if var in self.auxvars:
+                self.auxvars.remove(var)
+                self.simple_vars.remove(var)
+                self.auxxyvars.append(var)
         self.vars2d = []
         # special case for 2D variables, stored in a separate file
         for var in self.auxvars:
