@@ -181,11 +181,10 @@ class Multi3dOut:
         data = Multi3dOut(directory='./output')
         data.readall()
 
-    If the run also wrote the optional tau500 file:
+    If present, the optional tau500 file is also loaded by readall() into
+    data.atmos.tau500, indexed as [x, y, z]. To read a different file:
 
-        tau500 = data.readtau500()
-
-    This is also saved in data.atmos.tau500, indexed as [x, y, z].
+        tau500 = data.readtau500('other_tau500')
 
     Now select transition (by upper / lower level):
 
@@ -220,7 +219,9 @@ class Multi3dOut:
 
     def readall(self):
         """
-        reads multi3d.input file and all the out_* files
+        Reads multi3d.input, all out_* files, and tau500 if present.
+
+        Sets atmos.tau500 to None when the optional tau500 file is absent.
         """
         self.readinput()
         self.readpar()
@@ -228,6 +229,10 @@ class Multi3dOut:
         self.readn()
         self.readatmos()
         self.readrtq()
+        if os.path.isfile(os.path.join(self.directory, 'tau500')):
+            self.readtau500()
+        else:
+            self.atmos.tau500 = None
 
     def readinput(self):
         """
@@ -447,8 +452,8 @@ class Multi3dOut:
 
         Notes
         -----
-        This optional file is not loaded by readall(). Unlike out_par, it has
-        no Fortran record markers; the array is stored in Fortran order.
+        readall() loads this optional file when present. Unlike out_par, it
+        has no Fortran record markers; the array is stored in Fortran order.
         """
         shape = (self.geometry.nx, self.geometry.ny, self.geometry.nz)
         if shape == (-1, -1, -1):

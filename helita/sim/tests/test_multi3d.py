@@ -99,6 +99,31 @@ def test_readtau500(tmp_path, precision, byte_order):
                         byte_order=byte_order), expected)
 
 
+def test_readall_tau500(tmp_path):
+    """Load optional optical depth and clear it if the file disappears."""
+    unpack_data(TEST_TARBALL, TEST_FILES, tmp_path)
+    data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
+    data.readall()
+    assert data.atmos.tau500 is None
+    shape = (data.geometry.nx, data.geometry.ny, data.geometry.nz)
+    expected = np.arange(np.prod(shape), dtype='float32').reshape(shape)
+    expected.ravel(order='F').tofile(tmp_path / 'tau500')
+    data.readall()
+    np.testing.assert_array_equal(data.atmos.tau500, expected)
+    (tmp_path / 'tau500').unlink()
+    data.readall()
+    assert data.atmos.tau500 is None
+
+
+def test_readtau500_filename(tmp_path):
+    """Resolve custom relative file names within the output directory."""
+    data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
+    data.geometry.nx, data.geometry.ny, data.geometry.nz = (2, 3, 4)
+    expected = np.arange(24, dtype='float32').reshape(2, 3, 4)
+    expected.ravel(order='F').tofile(tmp_path / 'custom_tau500')
+    np.testing.assert_array_equal(data.readtau500('custom_tau500'), expected)
+
+
 def test_readtau500_validation(tmp_path):
     data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
     data.geometry.nx, data.geometry.ny, data.geometry.nz = (2, 3, 4)
