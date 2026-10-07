@@ -78,6 +78,75 @@ def test_Multi3dOut():
                                 4.9833211e-06, 1.8675400e-05])).all()
 
 
+@pytest.mark.parametrize('precision', ['float32', 'float64'])
+@pytest.mark.parametrize('byte_order', ['native', 'little', 'big'])
+def test_readtau500(tmp_path, precision, byte_order):
+    """Read a non-cubic cube with distinct values along every axis."""
+    shape = (2, 3, 4)
+    expected = np.arange(24).reshape(shape) / 8.
+    orders = {'native': '=', 'little': '<', 'big': '>'}
+    dtype = np.dtype(precision).newbyteorder(orders[byte_order])
+    expected.astype(dtype).ravel(order='F').tofile(tmp_path / 'tau500')
+    (tmp_path / 'multi3d.input').write_text('nx=2\nny=3\nnz=4\n')
+    data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
+    assert data.atmos.tau500 is None
+    actual = data.readtau500(byte_order=byte_order)
+    assert isinstance(actual, np.memmap)
+    assert actual.mode == 'r'
+    assert not actual.flags.writeable
+    np.testing.assert_array_equal(actual, expected)
+    assert actual.dtype == dtype
+    assert actual is data.atmos.tau500
+    np.testing.assert_array_equal(
+        data.readtau500(tmp_path / 'tau500', precision=precision,
+                        byte_order=byte_order), expected)
+
+
+def test_readall_tau500(tmp_path):
+    """Load optional optical depth and clear it if the file disappears."""
+    unpack_data(TEST_TARBALL, TEST_FILES, tmp_path)
+    data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
+    data.readall()
+    assert data.atmos.tau500 is None
+    shape = (data.geometry.nx, data.geometry.ny, data.geometry.nz)
+    expected = np.arange(np.prod(shape), dtype='float32').reshape(shape)
+    expected.ravel(order='F').tofile(tmp_path / 'tau500')
+    data.readall()
+    np.testing.assert_array_equal(data.atmos.tau500, expected)
+    (tmp_path / 'tau500').unlink()
+    data.readall()
+    assert data.atmos.tau500 is None
+
+
+def test_readtau500_filename(tmp_path):
+    """Resolve custom relative file names within the output directory."""
+    data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
+    data.geometry.nx, data.geometry.ny, data.geometry.nz = (2, 3, 4)
+    expected = np.arange(24, dtype='float32').reshape(2, 3, 4)
+    expected.ravel(order='F').tofile(tmp_path / 'custom_tau500')
+    np.testing.assert_array_equal(data.readtau500('custom_tau500'), expected)
+
+
+def test_readtau500_validation(tmp_path):
+    data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
+    data.geometry.nx, data.geometry.ny, data.geometry.nz = (2, 3, 4)
+    with pytest.raises(FileNotFoundError):
+        data.readtau500()
+    np.arange(24, dtype='float32').tofile(tmp_path / 'tau500')
+    with pytest.raises(ValueError, match='expected 192 bytes'):
+        data.readtau500(precision='float64')
+    with pytest.raises(ValueError, match='precision must'):
+        data.readtau500(precision='float16')
+    with pytest.raises(ValueError, match='byte_order must'):
+        data.readtau500(byte_order='invalid')
+    (tmp_path / 'tau500').write_bytes(b'\x00' * 95)
+    with pytest.raises(ValueError, match='Check the geometry'):
+        data.readtau500()
+    data.geometry.nz = 0
+    with pytest.raises(ValueError, match='positive integers'):
+        data.readtau500()
+
+
 def test_clean():
     """Delete temporary directory and all its contents."""
     if os.path.isdir(TEST_DIR):

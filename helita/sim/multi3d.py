@@ -70,6 +70,7 @@ class Atmos:
         self.nh = None
         self.vturb = None
         self.x500 = None
+        self.tau500 = None
 
 
 class Spectrum:
@@ -180,6 +181,11 @@ class Multi3dOut:
         data = Multi3dOut(directory='./output')
         data.readall()
 
+    If present, the optional tau500 file is also loaded by readall() into
+    data.atmos.tau500, indexed as [x, y, z]. To read a different file:
+
+        tau500 = data.readtau500('other_tau500')
+
     Now select transition (by upper / lower level):
 
         data.set_transition(3, 2)
@@ -213,7 +219,9 @@ class Multi3dOut:
 
     def readall(self):
         """
-        reads multi3d.input file and all the out_* files
+        Reads multi3d.input, all out_* files, and tau500 if present.
+
+        Sets atmos.tau500 to None when the optional tau500 file is absent.
         """
         self.readinput()
         self.readpar()
@@ -221,6 +229,10 @@ class Multi3dOut:
         self.readn()
         self.readatmos()
         self.readrtq()
+        if os.path.isfile(os.path.join(self.directory, 'tau500')):
+            self.readtau500()
+        else:
+            self.atmos.tau500 = None
 
     def readinput(self):
         """
@@ -416,6 +428,67 @@ class Multi3dOut:
         #                             shape=s ,offset=gs*12, order='F' )
         if self.printinfo:
             print("reading " + fname)
+
+    def readtau500(self, filename='tau500', *, precision='auto',
+                   byte_order='native'):
+        """Read the headerless MPI-IO optical-depth cube at 500 nm.
+
+        Parameters
+        ----------
+        filename : str or path-like, optional
+            File name relative to self.directory, or an absolute path.
+        precision : {'auto', 'float32', 'float64'}, optional
+            Infer precision from file size by default. Compiler default-real
+            flags determine this file's precision, independently of spoutput.
+        byte_order : {'native', 'little', 'big'}, optional
+            Byte order of the machine that wrote the file.
+
+        Returns
+        -------
+        numpy.memmap
+            Read-only, memory-mapped dimensionless optical depth indexed as
+            [x, y, z], also stored in self.atmos.tau500. Geometry must describe
+            the global output grid.
+            If dimensions are not loaded, readinput() is called first.
+
+        Notes
+        -----
+        readall() loads this optional file when present. Unlike out_par, it
+        has no Fortran record markers; the array is stored in Fortran order.
+        """
+        shape = (self.geometry.nx, self.geometry.ny, self.geometry.nz)
+        if shape == (-1, -1, -1):
+            self.readinput()
+            shape = (self.geometry.nx, self.geometry.ny, self.geometry.nz)
+        if any(not isinstance(n, (int, np.integer)) or n <= 0 for n in shape):
+            raise ValueError('Geometry nx, ny and nz must be positive integers')
+        count = int(shape[0]) * int(shape[1]) * int(shape[2])
+        fname = os.path.join(self.directory, filename)
+        size = os.stat(fname).st_size
+        if precision == 'auto':
+            if size == count * 4:
+                precision = 'float32'
+            elif size == count * 8:
+                precision = 'float64'
+            else:
+                raise ValueError(
+                    f'{fname}: {size} bytes; grid {shape} requires '
+                    f'{count * 4} (float32) or {count * 8} (float64). '
+                    'Check the geometry and whether the file is complete.')
+        if precision not in ('float32', 'float64'):
+            raise ValueError('precision must be auto, float32 or float64')
+        orders = {'native': '=', 'little': '<', 'big': '>'}
+        if byte_order not in orders:
+            raise ValueError('byte_order must be native, little or big')
+        dtype = np.dtype(precision).newbyteorder(orders[byte_order])
+        if size != count * dtype.itemsize:
+            raise ValueError(
+                f'{fname}: expected {count * dtype.itemsize} bytes, got {size}')
+        if self.printinfo:
+            print('reading ' + fname)
+        self.atmos.tau500 = np.memmap(fname, dtype=dtype, mode='r',
+                                      shape=shape, order='F')
+        return self.atmos.tau500
 
     def readrtq(self):
         """
