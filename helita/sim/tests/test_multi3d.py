@@ -91,6 +91,9 @@ def test_readtau500(tmp_path, precision, byte_order):
     data = multi3d.Multi3dOut(directory=tmp_path, printinfo=False)
     assert data.atmos.tau500 is None
     actual = data.readtau500(byte_order=byte_order)
+    assert isinstance(actual, np.memmap)
+    assert actual.mode == 'r'
+    assert not actual.flags.writeable
     np.testing.assert_array_equal(actual, expected)
     assert actual.dtype == dtype
     assert actual is data.atmos.tau500

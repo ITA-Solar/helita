@@ -445,9 +445,10 @@ class Multi3dOut:
 
         Returns
         -------
-        numpy.ndarray
-            Dimensionless optical depth indexed as [x, y, z], also stored in
-            self.atmos.tau500. Geometry must describe the global output grid.
+        numpy.memmap
+            Read-only, memory-mapped dimensionless optical depth indexed as
+            [x, y, z], also stored in self.atmos.tau500. Geometry must describe
+            the global output grid.
             If dimensions are not loaded, readinput() is called first.
 
         Notes
@@ -485,10 +486,8 @@ class Multi3dOut:
                 f'{fname}: expected {count * dtype.itemsize} bytes, got {size}')
         if self.printinfo:
             print('reading ' + fname)
-        data = np.fromfile(fname, dtype=dtype)
-        if data.size != count:
-            raise ValueError('File size changed while reading; wait for the run to finish')
-        self.atmos.tau500 = data.reshape(shape, order='F')
+        self.atmos.tau500 = np.memmap(fname, dtype=dtype, mode='r',
+                                      shape=shape, order='F')
         return self.atmos.tau500
 
     def readrtq(self):
